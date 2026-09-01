@@ -312,11 +312,16 @@ export interface SessionInfo {
   path: string;
   id: string;
   cwd: string;
+  /** Transcript-derived display metadata is absent from the initial inventory
+   *  and filled only after this row is requested. */
   name?: string;
   created: string;
+  /** Filesystem mtime. This is the stable catalogue ordering key. */
   modified: string;
-  messageCount: number;
-  firstMessage: string;
+  /** File size paired with modified as the row-metadata fingerprint. */
+  fileSize?: number;
+  messageCount?: number;
+  firstMessage?: string;
   parentSessionId?: string; // source session for a fork, or parent session for a subagent
   /** How this session relates to another session. Forks remain top-level in the
    *  UI; only subagent relations form a visible parent/child tree. */

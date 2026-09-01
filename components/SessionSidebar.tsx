@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import type { SessionInfo } from "@/lib/types";
+import { SESSION_METADATA_BATCH_SIZE, type SessionRowMetadata } from "@/lib/session-metadata-types";
 import { listSessionFamilies } from "@/lib/session-family";
 import { loadExplorerOpen, saveExplorerOpen } from "@/lib/file-explorer-state";
 import { dispatchSessionRowContextMenu } from "@/lib/session-row-context-menu";
@@ -80,6 +81,8 @@ function ToolbarIconButton({
   );
 }
 
+export type SessionMetadataLoader = (sessions: SessionInfo[]) => void;
+
 interface Props {
   selectedSessionId: string | null;
   onSelectSession: (session: SessionInfo, isRestore?: boolean) => void;
@@ -105,6 +108,7 @@ interface Props {
   onBackgroundTaskDone?: () => void;
   onRunningSessionIdsChange?: (ids: Set<string>) => void;
   onSessionsChange?: (sessions: SessionInfo[]) => void;
+  onMetadataLoaderChange?: (loader: SessionMetadataLoader | null) => void;
 }
 
 interface WorktreeEntry {
@@ -142,6 +146,16 @@ interface ValidatedProject {
 const UNREAD_SESSIONS_STORAGE_KEY = "pi-web:unread-session-ids";
 const LAST_CUSTOM_CWD_STORAGE_KEY = "pi-web:last-custom-cwd";
 const RUNNING_SESSIONS_POLL_MS = 2500;
+const SESSION_ITEM_HEIGHT = 54;
+const SESSION_METADATA_OVERSCAN_PX = SESSION_ITEM_HEIGHT * 2;
+
+function sessionFingerprint(session: SessionInfo): string | null {
+  return session.fileSize === undefined ? null : `${session.modified}\0${session.fileSize}`;
+}
+
+function hasSessionRowMetadata(session: SessionInfo): boolean {
+  return typeof session.messageCount === "number" && typeof session.firstMessage === "string";
+}
 
 function loadLastCustomCwd(): string {
   if (typeof window === "undefined") return "";
@@ -351,9 +365,10 @@ function PiWebTitle() {
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onRunningSessionIdsChange, onSessionsChange }: Props) {
+export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onRunningSessionIdsChange, onSessionsChange, onMetadataLoaderChange }: Props) {
   const { t } = useI18n();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
+  const [inventoryRevision, setInventoryRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCwd, setSelectedCwd] = useState<string | null>(null);
@@ -397,6 +412,127 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const sessionRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const explorerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileExplorerRef = useRef<FileExplorerHandle>(null);
+  const sessionListRef = useRef<HTMLDivElement>(null);
+  const metadataQueueRef = useRef<Map<string, SessionInfo>>(new Map());
+  const metadataLoadedRef = useRef<Map<string, string>>(new Map());
+  const metadataRequestRunningRef = useRef(false);
+  const metadataAbortRef = useRef<AbortController | null>(null);
+  const metadataStaleRefreshRef = useRef<Set<string>>(new Set());
+  const refreshSessionInventoryRef = useRef<() => void>(() => {});
+  const allSessionsRef = useRef(allSessions);
+  allSessionsRef.current = allSessions;
+
+  const drainMetadataQueue = useCallback(async () => {
+    if (metadataRequestRunningRef.current) return;
+    metadataRequestRunningRef.current = true;
+    try {
+      while (metadataQueueRef.current.size > 0) {
+        const batch = [...metadataQueueRef.current.values()].slice(0, SESSION_METADATA_BATCH_SIZE);
+        for (const session of batch) metadataQueueRef.current.delete(session.id);
+        const requestSessions = batch.flatMap((session) => (
+          session.fileSize === undefined
+            ? []
+            : [{ id: session.id, fileSize: session.fileSize, modified: session.modified }]
+        ));
+        if (requestSessions.length === 0) continue;
+
+        const requeueCurrentBatch = (ids?: ReadonlySet<string>) => {
+          for (const requested of batch) {
+            if (ids && !ids.has(requested.id)) continue;
+            const current = allSessionsRef.current.find((session) => session.id === requested.id);
+            if (
+              current
+              && !hasSessionRowMetadata(current)
+              && sessionFingerprint(current) === sessionFingerprint(requested)
+            ) metadataQueueRef.current.set(current.id, current);
+          }
+        };
+
+        try {
+          const controller = metadataAbortRef.current ?? new AbortController();
+          metadataAbortRef.current = controller;
+          const response = await fetch("/api/sessions/metadata", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessions: requestSessions }),
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            requeueCurrentBatch();
+            return;
+          }
+          const body = await response.json() as {
+            metadata?: SessionRowMetadata[];
+            staleSessionIds?: string[];
+          };
+          const metadataById = new Map((body.metadata ?? []).map((item) => [item.id, item]));
+          const staleSessionIds = new Set(body.staleSessionIds ?? []);
+          setAllSessions((current) => current.map((session) => {
+            const metadata = metadataById.get(session.id);
+            if (
+              !metadata
+              || metadata.fileSize !== session.fileSize
+              || metadata.modified !== session.modified
+            ) return session;
+            const relation = session.relation?.kind === "subagent" && metadata.subagentStatus
+              ? { ...session.relation, status: metadata.subagentStatus }
+              : session.relation;
+            const hydrated = {
+              ...session,
+              name: metadata.name,
+              messageCount: metadata.messageCount,
+              firstMessage: metadata.firstMessage,
+              relation,
+            };
+            const fingerprint = sessionFingerprint(hydrated);
+            if (fingerprint) metadataLoadedRef.current.set(session.id, fingerprint);
+            metadataStaleRefreshRef.current.delete(session.id);
+            return hydrated;
+          }));
+          if (staleSessionIds.size > 0) {
+            requeueCurrentBatch(staleSessionIds);
+            const needsRefresh = [...staleSessionIds].some((id) => {
+              if (metadataStaleRefreshRef.current.has(id)) return false;
+              metadataStaleRefreshRef.current.add(id);
+              return true;
+            });
+            if (needsRefresh) refreshSessionInventoryRef.current();
+            return;
+          }
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          requeueCurrentBatch();
+          return;
+        }
+      }
+    } finally {
+      metadataRequestRunningRef.current = false;
+    }
+  }, []);
+
+  const queueSessionMetadata = useCallback<SessionMetadataLoader>((sessions) => {
+    for (const session of sessions) {
+      const fingerprint = sessionFingerprint(session);
+      if (!fingerprint || hasSessionRowMetadata(session)) continue;
+      if (metadataLoadedRef.current.get(session.id) === fingerprint) continue;
+      metadataQueueRef.current.set(session.id, session);
+    }
+    void drainMetadataQueue();
+  }, [drainMetadataQueue]);
+
+  useEffect(() => {
+    metadataAbortRef.current = new AbortController();
+    return () => {
+      metadataAbortRef.current?.abort();
+      metadataAbortRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    onMetadataLoaderChange?.(queueSessionMetadata);
+    return () => onMetadataLoaderChange?.(null);
+  }, [onMetadataLoaderChange, queueSessionMetadata]);
 
   const loadSessions = useCallback(async (showLoading = false, force = false) => {
     try {
@@ -410,7 +546,40 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         runningSessionIds?: string[];
         completionNotificationSuppressedSessionIds?: string[];
       };
-      setAllSessions(data.sessions);
+      setAllSessions((current) => {
+        const previousById = new Map(current.map((session) => [session.id, session]));
+        const nextById = new Map(data.sessions.map((session) => [session.id, session]));
+        const nextIds = new Set(nextById.keys());
+        for (const [id, fingerprint] of metadataLoadedRef.current) {
+          const next = nextById.get(id);
+          if (!next || sessionFingerprint(next) !== fingerprint) metadataLoadedRef.current.delete(id);
+        }
+        for (const id of metadataQueueRef.current.keys()) {
+          if (!nextIds.has(id)) metadataQueueRef.current.delete(id);
+        }
+        for (const id of metadataStaleRefreshRef.current) {
+          if (!nextIds.has(id)) metadataStaleRefreshRef.current.delete(id);
+        }
+        return data.sessions.map((session) => {
+          const previous = previousById.get(session.id);
+          const fingerprint = sessionFingerprint(session);
+          const preserveHydrated = previous
+            && fingerprint
+            && fingerprint === sessionFingerprint(previous)
+            && metadataLoadedRef.current.get(session.id) === fingerprint
+            && hasSessionRowMetadata(previous);
+          const preserveTransient = previous?.transient && session.transient && hasSessionRowMetadata(previous);
+          if (!preserveHydrated && !preserveTransient) return session;
+          return {
+            ...session,
+            name: previous.name,
+            messageCount: previous.messageCount,
+            firstMessage: previous.firstMessage,
+            relation: previous.relation ?? session.relation,
+          };
+        });
+      });
+      setInventoryRevision((revision) => revision + 1);
       // Treat the fetched running set as an initial fallback only. Once the
       // lightweight poll is live, a slow session-list fetch cannot overwrite it.
       if (!runningPollAuthoritativeRef.current) {
@@ -443,6 +612,11 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
       if (showLoading) setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    refreshSessionInventoryRef.current = () => void loadSessions(false, true);
+    return () => { refreshSessionInventoryRef.current = () => {}; };
+  }, [loadSessions]);
 
   const initialLoadDone = useRef(false);
   useEffect(() => {
@@ -710,7 +884,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         onInitialRestoreDone?.();
       }
       const projects = getRecentProjects(allSessions);
-      if (projects.length > 0) setSelectedCwd(projects[0].root);
+      if (projects.length > 0) setSelectedCwd(projects[0].cwd);
     }
   }, [allSessions, selectedCwd, initialSessionId, skipInitialProjectSelection, onSelectSession, onInitialRestoreDone]);
 
@@ -950,6 +1124,37 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
       : null);
 
   const sessionFamilies = listSessionFamilies(filteredSessions);
+  const observedInventoryKey = sessionFamilies
+    .map((family) => `${family.root.id}:${sessionFingerprint(family.root) ?? "transient"}`)
+    .join("|");
+
+  useEffect(() => {
+    const root = sessionListRef.current;
+    if (!root || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.flatMap((entry) => {
+        if (!entry.isIntersecting) return [];
+        const id = (entry.target as HTMLElement).dataset.sessionInventoryId;
+        const session = id ? allSessionsRef.current.find((candidate) => candidate.id === id) : undefined;
+        return session ? [session] : [];
+      });
+      if (visible.length > 0) queueSessionMetadata(visible);
+    }, {
+      root,
+      rootMargin: `${SESSION_METADATA_OVERSCAN_PX}px 0px`,
+    });
+    for (const row of root.querySelectorAll<HTMLElement>("[data-session-inventory-id]")) {
+      observer.observe(row);
+    }
+    return () => observer.disconnect();
+  }, [inventoryRevision, observedInventoryKey, queueSessionMetadata]);
+
+  const selectedInventory = selectedSessionId
+    ? allSessions.find((session) => session.id === selectedSessionId)
+    : undefined;
+  useEffect(() => {
+    if (selectedInventory) queueSessionMetadata([selectedInventory]);
+  }, [selectedInventory, queueSessionMetadata]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -1165,7 +1370,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                   <button
                     key={project.key}
                     onClick={() => {
-                      setSelectedCwd(project.root);
+                      setSelectedCwd(project.cwd);
                       setProjectFilter("");
                       setCustomPathOpen(false);
                       setCustomPathError(null);
@@ -1615,7 +1820,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
       </div>
 
       {/* Session list */}
-      <div style={{ flex: explorerOpen && (selectedCwdProp || selectedCwd) ? "1 1 0" : "1 1 auto", overflowY: "auto", padding: "0", minHeight: 80 }}>
+      <div ref={sessionListRef} style={{ flex: explorerOpen && (selectedCwdProp || selectedCwd) ? "1 1 0" : "1 1 auto", overflowY: "auto", padding: "0", minHeight: 80 }}>
         {loading && (
           <div style={{ padding: "16px 14px", color: "var(--text-muted)", fontSize: 12 }}>
             {t("sidebar.loading")}
@@ -1944,7 +2149,8 @@ function SessionItem({
   // A stored first message may be an SDK-expanded <skill> block; collapse it
   // back to the compact /skill:name args command the user typed before using
   // it as the auto-name fallback, mirroring MessageView's rendering.
-  const displayFirstMessage = skillExpansionToCommand(session.firstMessage) ?? session.firstMessage;
+  const storedFirstMessage = session.firstMessage ?? "";
+  const displayFirstMessage = skillExpansionToCommand(storedFirstMessage) ?? storedFirstMessage;
   const title = session.name || displayFirstMessage.slice(0, 50) || session.id.slice(0, 12);
 
   const startRename = useCallback((e: React.MouseEvent) => {
@@ -2020,17 +2226,16 @@ function SessionItem({
     e.stopPropagation();
   }, [onRenamed, session.cwd, session.id, session.name, session.path]);
 
-  // Fixed-height outer wrapper — content swaps in place so the list never reflows
-  const ITEM_HEIGHT = 54;
-
+  // Fixed-height outer wrapper — content swaps in place so the list never reflows.
   return (
     <div
+      data-session-inventory-id={session.id}
       onClick={confirmDelete || renaming ? undefined : onClick}
       onContextMenu={confirmDelete || renaming ? undefined : handleContextMenu}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); }}
       style={{
-        height: ITEM_HEIGHT,
+        height: SESSION_ITEM_HEIGHT,
         display: "flex",
         alignItems: "center",
         paddingLeft: depth > 0 ? depth * 12 + 14 : 14,
@@ -2149,7 +2354,11 @@ function SessionItem({
               ) : (
                 <span title={session.modified}>{formatRelativeTime(session.modified, locale)}</span>
               )}
-              <span>{t("sidebar.messagesCount", { count: session.messageCount })}</span>
+              {session.messageCount === undefined ? (
+                <span aria-label={t("sidebar.loading")}>…</span>
+              ) : (
+                <span>{t("sidebar.messagesCount", { count: session.messageCount })}</span>
+              )}
               {session.isWorktree && session.branch && (
                 <span
                   title={`Worktree: ${session.cwd}`}

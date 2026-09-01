@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useGlobalKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-import { SessionSidebar } from "./SessionSidebar";
+import { SessionSidebar, type SessionMetadataLoader } from "./SessionSidebar";
 import { ChatWindow } from "./ChatWindow";
 import { FileViewer } from "./FileViewer";
 import { TabBar, type Tab } from "./TabBar";
@@ -97,8 +97,29 @@ export function AppShell() {
   }, [playDoneSound, soundEnabledRef]);
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
   const [sessionCatalog, setSessionCatalog] = useState<SessionInfo[]>([]);
+  const sessionMetadataLoaderRef = useRef<SessionMetadataLoader | null>(null);
+  const handleMetadataLoaderChange = useCallback((loader: SessionMetadataLoader | null) => {
+    sessionMetadataLoaderRef.current = loader;
+  }, []);
   const handleSessionsChange = useCallback((sessions: SessionInfo[]) => {
     setSessionCatalog(sessions);
+    setSelectedSession((current) => {
+      if (!current) return current;
+      const updated = sessions.find((session) => session.id === current.id);
+      if (!updated) return current;
+      const hydrated = updated.messageCount !== undefined && updated.firstMessage !== undefined;
+      const sameFingerprint = updated.fileSize !== undefined
+        && updated.fileSize === current.fileSize
+        && updated.modified === current.modified;
+      return {
+        ...current,
+        ...updated,
+        name: hydrated ? updated.name : sameFingerprint ? current.name : undefined,
+        messageCount: hydrated ? updated.messageCount : sameFingerprint ? current.messageCount : undefined,
+        firstMessage: hydrated ? updated.firstMessage : sameFingerprint ? current.firstMessage : undefined,
+        relation: hydrated || !sameFingerprint ? updated.relation : current.relation ?? updated.relation,
+      };
+    });
   }, []);
   const sessionsWithSelection = useMemo(() => {
     if (!selectedSession) return sessionCatalog;
@@ -1012,6 +1033,7 @@ export function AppShell() {
         onBackgroundTaskDone={handleBackgroundTaskDone}
         onRunningSessionIdsChange={handleRunningSessionIdsChange}
         onSessionsChange={handleSessionsChange}
+        onMetadataLoaderChange={handleMetadataLoaderChange}
       />
       <div style={{ padding: "8px", flexShrink: 0, display: "flex", justifyContent: "space-between", gap: 4 }}>
         {([
@@ -1273,7 +1295,7 @@ export function AppShell() {
           // 上下文压缩后当前消息可能不再包含 user 消息，需同时参考会话文件的消息总数。
           const hasMessages = Boolean(
             selectedSession
-            && ((sessionStats?.userMessages ?? 0) > 0 || selectedSession.messageCount > 0),
+            && ((sessionStats?.userMessages ?? 0) > 0 || (selectedSession.messageCount ?? 0) > 0),
           );
           const disabled = !selectedSession || selectedSession.transient || !hasMessages || autoNameStatus.kind === "naming";
           const isSuccess = autoNameStatus.kind === "success";
@@ -2024,6 +2046,7 @@ export function AppShell() {
                   selectedSessionId={selectedSession.id}
                   runningSessionIds={runningSessionIds}
                   onSelectSession={handleSelectSession}
+                  onMetadataNeeded={(sessions) => sessionMetadataLoaderRef.current?.(sessions)}
                 />
               )}
               {activeTopPanel === "system" && (
