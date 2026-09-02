@@ -5,10 +5,7 @@ import test from "node:test";
 const panelSource = await readFile(new URL("./SettingsPanel.tsx", import.meta.url), "utf8");
 const cssSource = await readFile(new URL("../app/settings.css", import.meta.url), "utf8");
 const shellSource = await readFile(new URL("./AppShell.tsx", import.meta.url), "utf8");
-const sidebarSource = await readFile(new URL("./SessionSidebar.tsx", import.meta.url), "utf8");
 const themeSource = await readFile(new URL("../hooks/useTheme.ts", import.meta.url), "utf8");
-const enSource = await readFile(new URL("../lib/i18n/messages/en.ts", import.meta.url), "utf8");
-const zhSource = await readFile(new URL("../lib/i18n/messages/zh-CN.ts", import.meta.url), "utf8");
 
 test("opens one settings panel from direct sidebar shortcuts", () => {
   assert.match(shellSource, /<SettingsPanel/);
@@ -18,7 +15,7 @@ test("opens one settings panel from direct sidebar shortcuts", () => {
   assert.match(shellSource, /<SettingsSectionIcon section=\{section\} size=\{14\} strokeWidth=\{2\} \/>\s*<span>\{label\}<\/span>/);
   assert.match(shellSource, /<SettingsSectionIcon section="general" size=\{14\} strokeWidth=\{2\} \/>/);
   assert.doesNotMatch(shellSource, /\["plugins", translate\("common\.plugins"\)\]/);
-  assert.doesNotMatch(shellSource, /setModelsConfigOpen|setSkillsConfigOpen|setAgentsConfigOpen|setPluginsConfigOpen/);
+  assert.doesNotMatch(shellSource, /setModelsConfigOpen|setSkillsConfigOpen|setPluginsConfigOpen/);
 });
 
 test("keeps enabled configuration surfaces inside the settings panel", () => {
@@ -28,14 +25,13 @@ test("keeps enabled configuration surfaces inside the settings panel", () => {
   for (const component of ["ModelsConfig", "SkillsConfig", "PluginsConfig"]) {
     assert.match(panelSource, new RegExp(`<${component} embedded`));
   }
-  assert.doesNotMatch(panelSource, /id: "agents"|<AgentsConfig embedded/);
 });
 
 test("restores the settings section and each list detail selection", async () => {
   assert.match(shellSource, /getLastSettingsSection\(projectTrustCwd\)/);
   assert.match(panelSource, /setLastSettingsSection\(initialSection\)/);
   assert.match(panelSource, /setLastSettingsSection\(nextSection\)/);
-  for (const name of ["ModelsConfig", "SkillsConfig", "AgentsConfig", "PluginsConfig"]) {
+  for (const name of ["ModelsConfig", "SkillsConfig", "PluginsConfig"]) {
     assert.match(
       await readFile(new URL(`./${name}.tsx`, import.meta.url), "utf8"),
       /getLastSettingsSelection/,
@@ -83,21 +79,6 @@ test("uses top navigation on desktop and one compact section picker on mobile", 
   assert.match(panelSource, /<main className="settings-dialog-main">/);
   assert.doesNotMatch(panelSource, /<style>/);
   assert.doesNotMatch(panelSource, /style=\{\{/);
-});
-
-test("labels agent profiles as sub-agents", () => {
-  assert.match(enSource, /"common\.agents": "Sub-agents"/);
-  assert.match(enSource, /"agents\.new": "New sub-agent"/);
-  assert.match(zhSource, /"common\.agents": "子代理"/);
-  assert.match(zhSource, /"agents\.new": "新建子代理"/);
-});
-
-test("uses the child-session robot glyph for the sub-agents tab", () => {
-  const robotGlyph = /<rect x="5" y="7" width="14" height="11" rx="2" \/>\s*<path d="M9 11h\.01M15 11h\.01M9 15h6M12 7V4M10 4h4" \/>/;
-  assert.match(panelSource, robotGlyph);
-  assert.match(sidebarSource, robotGlyph);
-  assert.match(panelSource, /section === "agents"[\s\S]*?className="settings-section-icon is-agent"/);
-  assert.match(cssSource, /\.settings-section-icon\.is-agent \{[\s\S]*?transform: scale\(1\.25\)/);
 });
 
 test("uses the compact controls glyph for General", () => {

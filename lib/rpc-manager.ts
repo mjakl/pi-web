@@ -12,7 +12,7 @@ import {
   createProjectCommandBashOperations,
   preferUserBashExtension,
 } from "./project-command-env";
-import { cacheSessionPath, invalidateSessionListCache, resolveSessionPath } from "./session-reader";
+import { cacheSessionPath, invalidateSessionListCache } from "./session-reader";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
 import { persistExplicitStartupPreferences } from "./startup-preferences";
 import { notifySessionComplete } from "./web-push";
@@ -27,18 +27,6 @@ import type {
   SessionMessageEntry,
 } from "./types";
 import { createHeadlessCustomUiTui, DEFAULT_CUSTOM_UI_COLUMNS, type HeadlessCustomUiTui } from "./custom-ui-terminal";
-import {
-  createSubagentExtension,
-  preferPiWebSubagentExtension,
-} from "./subagent-extension";
-import {
-  listSubagentProfiles,
-  readSubagentRun,
-  readSubagentSessionResources,
-  SUBAGENT_CONTROL_TOOL_NAMES,
-} from "./subagents";
-import { createSubagentController } from "./subagent-runtime";
-import { isBuiltInSubagentsEnabled } from "./subagent-settings";
 import { resolveShellTools } from "./powershell-settings";
 import { CHAT_ONLY_RESOURCE_LOADER_OPTIONS, contextFilesSystemPrompt } from "./chat-only";
 import {
@@ -113,7 +101,6 @@ type AgentSessionWrapperOptions = {
   exactSystemPrompt?: () => string;
   chatOnly?: boolean;
   onAgentRunComplete?: AgentRunCompleteListener;
-  suppressCompletionNotifications?: boolean;
 };
 
 const IDLE_RESET_EVENT_TYPES = new Set([
@@ -210,7 +197,6 @@ export class AgentSessionWrapper {
   private readonly exactSystemPrompt?: () => string;
   private readonly chatOnly: boolean;
   private readonly onAgentRunComplete?: AgentRunCompleteListener;
-  private readonly suppressCompletionNotifications: boolean;
   private unsubscribe: (() => void) | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private onDestroyCallback: (() => void) | null = null;
@@ -226,7 +212,6 @@ export class AgentSessionWrapper {
     this.exactSystemPrompt = options.exactSystemPrompt;
     this.chatOnly = options.chatOnly ?? false;
     this.onAgentRunComplete = options.onAgentRunComplete;
-    this.suppressCompletionNotifications = options.suppressCompletionNotifications ?? false;
     this.installExactSystemPromptContinuation();
     this.applyExactSystemPrompt();
   }
@@ -263,10 +248,6 @@ export class AgentSessionWrapper {
     return this.chatOnly;
   }
 
-  hasSuppressedCompletionNotifications(): boolean {
-    return this.suppressCompletionNotifications;
-  }
-
   start(): void {
     this.unsubscribe = this.inner.subscribe((event: AgentEvent) => {
       if (event.type === "agent_start") this.agentRunNeedsCompletion = true;
@@ -283,7 +264,6 @@ export class AgentSessionWrapper {
   private notifyAgentRunCompleteIfIdle(): void {
     if (!this.agentRunNeedsCompletion || this.isRunning()) return;
     this.agentRunNeedsCompletion = false;
-    if (this.suppressCompletionNotifications) return;
     try {
       this.onAgentRunComplete?.(this.sessionId);
     } catch (error) {
@@ -1594,37 +1574,6 @@ function registerRpcWrapper(wrapper: AgentSessionWrapper): void {
   if (!wrapper.isChatOnly()) wrapper.beginExtensionBinding();
 }
 
-const SUBAGENT_CONTROLLER = createSubagentController({
-  getSession: (sessionId) => getRegistry().get(sessionId),
-  registerSession: (inner, options) => {
-    const wrapper = new AgentSessionWrapper(inner, {
-      ...(options?.exactSystemPrompt !== undefined
-        ? { exactSystemPrompt: () => options.exactSystemPrompt! }
-        : {}),
-      chatOnly: options?.chatOnly,
-      suppressCompletionNotifications: true,
-    });
-    registerRpcWrapper(wrapper);
-  },
-  reopenSession: async (sessionId, sessionFile) =>
-    (await startRpcSession(sessionId, sessionFile, undefined)).session,
-  resolveSessionPath,
-  invalidateSessionList: invalidateSessionListCache,
-  isBuiltInSubagentsEnabled,
-});
-
-export function getSubagentRun(sessionId: string) {
-  return SUBAGENT_CONTROLLER.get(sessionId);
-}
-
-export function steerSubagent(sessionId: string, message: string) {
-  return SUBAGENT_CONTROLLER.steer(sessionId, message);
-}
-
-export function abortSubagent(sessionId: string) {
-  return SUBAGENT_CONTROLLER.abort(sessionId);
-}
-
 function getLocks(): Map<string, Promise<{ session: AgentSessionWrapper; realSessionId: string }>> {
   if (!globalThis.__piStartLocks) globalThis.__piStartLocks = new Map();
   return globalThis.__piStartLocks;
@@ -1677,9 +1626,6 @@ export async function setRpcSessionTools(
   if (!existing?.isAlive()) {
     if (!sessionFile) throw new Error("Session not found");
     const manager = SessionManager.open(sessionFile, undefined);
-    if (readSubagentSessionResources(manager.getEntries() as unknown as SessionEntry[])) {
-      throw new Error("Subagent tool selection is fixed by its profile");
-    }
     appendSessionToolSelection(manager, toolNames);
     invalidateSessionListCache();
     const started = await startRpcSession(sessionId, sessionFile, undefined);
@@ -1687,9 +1633,6 @@ export async function setRpcSessionTools(
   }
 
   if (existing.isRunning()) throw new Error("Cannot change tools while the session is running");
-  if (readSubagentSessionResources(existing.inner.sessionManager.getEntries() as unknown as SessionEntry[])) {
-    throw new Error("Subagent tool selection is fixed by its profile");
-  }
 
   const hasCurrentResourcePolicy = typeof existing.isChatOnly === "function"
     && typeof existing.setActiveToolSelection === "function";
@@ -1763,7 +1706,6 @@ export function getRpcSessionInfos(): SessionInfo[] {
     const firstUserMessage = messages.find((entry) => entry.message.role === "user");
     const sessionFile = manager.getSessionFile() ?? session.sessionFile;
     const persisted = Boolean(sessionFile && existsSync(sessionFile));
-    const subagent = readSubagentRun(entries as unknown as SessionEntry[], header?.id ?? session.sessionId, sessionFile ?? "");
 
     // An ensure_session call creates an idle, empty runtime while the composer
     // loads commands. Do not leak it into history before a prompt is accepted.
@@ -1788,16 +1730,6 @@ export function getRpcSessionInfos(): SessionInfo[] {
       modified: new Date(lastActivityMs).toISOString(),
       messageCount: messages.length,
       firstMessage: firstUserMessage ? runtimeMessageText(firstUserMessage) || "(no messages)" : "(no messages)",
-      ...(subagent ? {
-        parentSessionId: subagent.parentSessionId,
-        relation: {
-          kind: "subagent" as const,
-          parentSessionId: subagent.parentSessionId,
-          profile: subagent.profile,
-          description: subagent.description,
-          status: session.isRunning() ? "running" as const : subagent.status,
-        },
-      } : {}),
       transient: !persisted,
     });
   }
@@ -1825,16 +1757,6 @@ export function getRunningRpcSessionIds(): string[] {
   const ids = new Set<string>();
   for (const [sessionId, session] of getRegistry()) {
     if (session.isRunning()) ids.add(session.sessionId || sessionId);
-  }
-  return [...ids];
-}
-
-export function getCompletionNotificationSuppressedRpcSessionIds(): string[] {
-  const ids = new Set<string>();
-  for (const [sessionId, session] of getRegistry()) {
-    if (session.isRunning() && session.hasSuppressedCompletionNotifications()) {
-      ids.add(session.sessionId || sessionId);
-    }
   }
   return [...ids];
 }
@@ -1873,22 +1795,14 @@ export async function startRpcSession(
     sessionManager = SessionManager.create(cwd, undefined);
   }
   const sessionCwd = sessionManager.getCwd();
-  const subagentResources = sessionFile
-    ? readSubagentSessionResources(
-        sessionManager.getEntries() as unknown as SessionEntry[],
-      )
-    : null;
-  const persistedToolNames = subagentResources
-    ? undefined
-    : readSessionToolSelection(sessionManager.getEntries() as unknown as SessionEntry[]);
-  const selectedToolNames = subagentResources?.tools ?? persistedToolNames ?? requestedToolNames;
-  if (!subagentResources && persistedToolNames === undefined && requestedToolNames !== undefined) {
+  const persistedToolNames = readSessionToolSelection(
+    sessionManager.getEntries() as unknown as SessionEntry[],
+  );
+  const selectedToolNames = persistedToolNames ?? requestedToolNames;
+  if (persistedToolNames === undefined && requestedToolNames !== undefined) {
     appendSessionToolSelection(sessionManager, requestedToolNames);
   }
-  const subagentLoadsResources = Boolean(
-    subagentResources?.loadExtensions || subagentResources?.loadSkills,
-  );
-  const chatOnly = selectedToolNames?.length === 0 && !subagentLoadsResources;
+  const chatOnly = selectedToolNames?.length === 0;
   const finishStartingSession = trackStartingSession(sessionCwd);
   const starting = (async () => {
     // Some extensions access the SDK's global theme even outside the terminal UI.
@@ -1897,64 +1811,35 @@ export async function startRpcSession(
 
     // Determine which tools to pass based on requested toolNames.
     // Since v0.68.0, session creation expects string[] tool names instead of Tool[] instances.
-    let toolsOption: string[] | undefined = subagentResources?.tools;
-    if (!subagentResources && selectedToolNames !== undefined) {
-      // toolNames === [] -> "all off" (an empty allow-list disables every tool).
-      // Otherwise DO NOT pass a builtin-only allow-list: passing CODING_TOOL_NAMES
-      // set allowedToolNames to coding builtins only, which filtered every
-      // extension/package-provided tool (e.g. subagents, web access) out of the
-      // tool registry — so they were unavailable in Pi Web sessions even though the
-      // `pi` CLI keeps them. Leaving the allow-list unset lets the SDK register all
-      // tools (and activate extension tools); we narrow the ACTIVE set below.
-      toolsOption = selectedToolNames.length === 0 ? [] : undefined;
-    }
+    // toolNames === [] -> "all off" (an empty allow-list disables every tool).
+    // Otherwise DO NOT pass a builtin-only allow-list: passing CODING_TOOL_NAMES
+    // set allowedToolNames to coding builtins only, which filtered every
+    // extension/package-provided tool out of the registry. Leaving the allow-list
+    // unset lets the SDK register all tools; we narrow the active set below.
+    const toolsOption = selectedToolNames?.length === 0 ? [] : undefined;
 
     // Build services first so extension-registered providers are available
     // before the SDK restores the saved model from the session file.
     // Gate untrusted project extensions so opening a repository does not run
     // its .pi/extensions code automatically (see lib/project-trust.ts, #236).
-    const trustReloadOptions = subagentResources
-      ? subagentLoadsResources
-        ? projectTrustReloadOptions(sessionCwd, agentDir)
-        : undefined
-      : chatOnly
-        ? undefined
-        : projectTrustReloadOptions(sessionCwd, agentDir);
+    const trustReloadOptions = chatOnly
+      ? undefined
+      : projectTrustReloadOptions(sessionCwd, agentDir);
     const settingsManager = SettingsManager.create(sessionCwd, agentDir);
     const services = await createAgentSessionServices({
       cwd: sessionCwd,
       agentDir,
       settingsManager,
-      resourceLoaderOptions: subagentResources
-        ? {
-            noExtensions: !subagentResources.loadExtensions,
-            noSkills: !subagentResources.loadSkills,
-            noPromptTemplates: true,
-            noThemes: true,
-            noContextFiles: true,
-            ...(chatOnly
-              ? {
-                  systemPrompt: " ",
-                  systemPromptOverride: () => undefined,
-                }
-              : {}),
-            appendSystemPrompt: subagentResources.appendSystemPrompt,
-          }
-        : chatOnly
-          ? CHAT_ONLY_RESOURCE_LOADER_OPTIONS
+      resourceLoaderOptions: chatOnly
+        ? CHAT_ONLY_RESOURCE_LOADER_OPTIONS
         : {
             extensionFactories: [
               createProjectCommandBashExtension({
                 cwd: sessionCwd,
                 settings: settingsManager,
               }),
-              createSubagentExtension(
-                SUBAGENT_CONTROLLER.extensionRuntime,
-                () => listSubagentProfiles(sessionCwd),
-                isBuiltInSubagentsEnabled,
-              ),
             ],
-            extensionsOverride: (base) => preferUserBashExtension(preferPiWebSubagentExtension(base)),
+            extensionsOverride: preferUserBashExtension,
           },
       ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
     });
@@ -1987,7 +1872,6 @@ export async function startRpcSession(
       ...(initial.thinkingLevel ? { thinkingLevel: initial.thinkingLevel } : {}),
       ...(initial.scopedModels.length > 0 ? { scopedModels: initial.scopedModels } : {}),
       ...(toolsOption !== undefined ? { tools: toolsOption } : {}),
-      ...(subagentResources ? { excludeTools: [...SUBAGENT_CONTROL_TOOL_NAMES] } : {}),
     });
 
     const persistedPreferences = await persistExplicitStartupPreferences(
@@ -2009,14 +1893,12 @@ export async function startRpcSession(
     // If specific tool names were requested (non-empty), set the active tools to the
     // requested builtin coding tools PLUS all extension/package tools, so installed
     // extensions stay usable in Pi Web just like in the `pi` CLI.
-    if (!subagentResources && !chatOnly) {
+    if (!chatOnly) {
       inner.setActiveToolsByName(withExtensionTools(inner, selectedToolNames ?? inner.getActiveToolNames()));
     }
 
     const exactSystemPrompt = chatOnly
-      ? subagentResources
-        ? () => subagentResources.appendSystemPrompt[0] ?? ""
-        : () => contextFilesSystemPrompt(inner.resourceLoader.getAgentsFiles().agentsFiles)
+      ? () => contextFilesSystemPrompt(inner.resourceLoader.getAgentsFiles().agentsFiles)
       : undefined;
     const wrapper = new AgentSessionWrapper(inner, {
       exactSystemPrompt,
@@ -2026,7 +1908,6 @@ export async function startRpcSession(
           console.error("[pi-web] failed to send completion push:", error instanceof Error ? error.message : error);
         });
       },
-      suppressCompletionNotifications: Boolean(subagentResources),
     });
     const realSessionId = inner.sessionId as string;
     registerRpcWrapper(wrapper);

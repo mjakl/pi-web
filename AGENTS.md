@@ -36,9 +36,9 @@ Next.js routes in app/api
   bounded JSONL metadata, while detail and context reads may use SDK
   `SessionManager` helpers. Neither path creates a live `AgentSession`.
 - Top-level live commands and turns enter through `app/api/agent/**` and are
-  owned by `lib/rpc-manager.ts`. Auto-naming and subagent control are additional
-  live callers under `app/api/sessions/**` and `app/api/subagents/**`; inspect
-  all runtime callers before changing startup or lifecycle behavior. Browser
+  owned by `lib/rpc-manager.ts`. Auto-naming under `app/api/sessions/**` is an
+  additional live caller; inspect all runtime callers before changing startup
+  or lifecycle behavior. Browser
   synchronization is owned by `hooks/useAgentSession.ts` and the
   `lib/agent-event-*` modules.
 - `globalThis` registries and caches survive Next.js hot reload but are
@@ -53,10 +53,10 @@ Start with these owners instead of a broad file inventory:
 | Change area | Start here |
 | --- | --- |
 | Persisted session reading, metadata, families, or context | `lib/session-reader.ts`, `lib/session-*.ts`, `app/api/sessions/**` |
-| Live session startup, commands, tools, fork/clone, or cleanup | `lib/rpc-manager.ts`, `app/api/agent/**`, `app/api/sessions/[id]/auto-name/route.ts`, `app/api/subagents/[id]/route.ts` |
+| Live session startup, commands, tools, fork/clone, or cleanup | `lib/rpc-manager.ts`, `app/api/agent/**`, `app/api/sessions/[id]/auto-name/route.ts` |
 | Browser streaming and reconciliation | `hooks/useAgentSession.ts`, `lib/agent-event-*.ts`, `lib/agent-client.ts` |
 | File access, path identity, Git, or worktrees | `lib/file-access.ts`, `lib/path-security.ts`, `lib/paths.ts`, `lib/worktree.ts` |
-| Project resources, trust, plugins, skills, or subagents | `lib/project-trust.ts`, `lib/chat-only.ts`, `lib/subagent-*.ts`, `app/api/{project-trust,plugins,skills,subagents}/**` |
+| Project resources, trust, plugins, or skills | `lib/project-trust.ts`, `lib/chat-only.ts`, `app/api/{project-trust,plugins,skills}/**` |
 | Models, startup preferences, or provider authentication | `lib/model-*.ts`, `lib/startup-preferences.ts`, `lib/provider-*.ts`, `app/api/{models,models-config,auth}/**` |
 | Application shell and session workspace UI | `components/AppShell.tsx`, `components/SessionSidebar.tsx`, `components/ChatWindow.tsx`, `components/ChatInput.tsx` |
 
@@ -112,10 +112,6 @@ Start with these owners instead of a broad file inventory:
   Keep Next host variables out of project commands, preserve the SDK-managed
   environment and agent-bin `PATH`, and let an earlier user extension that owns
   `bash` take precedence.
-- When changing built-in subagent enablement, reserved tools, resource loading,
-  or legacy-extension precedence, read
-  [`docs/adr/0003-built-in-subagent-toggle.md`](docs/adr/0003-built-in-subagent-toggle.md).
-  Recheck enablement at dispatch so stale tool calls cannot start new children.
 - Skill toggles edit only the `disable-model-invocation` frontmatter field.
   Preserve all unrelated user formatting and frontmatter.
 

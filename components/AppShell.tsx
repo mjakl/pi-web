@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from "react";
+import { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useGlobalKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-import { SessionSidebar, type SessionMetadataLoader } from "./SessionSidebar";
+import { SessionSidebar } from "./SessionSidebar";
 import { ChatWindow } from "./ChatWindow";
 import { FileViewer } from "./FileViewer";
 import { TabBar, type Tab } from "./TabBar";
@@ -13,7 +13,6 @@ import { ProjectTrustDialog } from "./ProjectTrustDialog";
 import { BranchNavigator, hasSessionBranches } from "./BranchNavigator";
 import { SystemPromptPanel } from "./SystemPromptPanel";
 import { ToolDefinitionsPanel } from "./ToolDefinitionsPanel";
-import { AgentSessionPanel } from "./AgentSessionPanel";
 import { useTheme } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
 import { useIsMobile, useIsNarrowMobile } from "@/hooks/useIsMobile";
@@ -53,7 +52,6 @@ import type { ChatInputHandle } from "./ChatInput";
 import type { SessionStatsInfo } from "@/lib/pi-types";
 import type { FileViewerState } from "@/lib/file-viewer-state";
 import type { ToolEntry } from "@/lib/tool-presets";
-import { getSessionFamily } from "@/lib/session-family";
 import { getLastSettingsSection, type SettingsSection } from "@/lib/settings-navigation";
 
 type SessionCopyField = "file" | "id" | "projectDir" | "gitBranch" | "gitWorktree";
@@ -65,7 +63,6 @@ type AutoNameStatus =
 
 const TOP_BAR_ICON_BUTTON_SIZE = 36;
 const LANGUAGE_MENU_WIDTH = 176;
-const AGENT_PANEL_WIDTH = 420;
 
 export function AppShell() {
   const router = useRouter();
@@ -96,13 +93,7 @@ export function AppShell() {
     if (soundEnabledRef.current) playDoneSound();
   }, [playDoneSound, soundEnabledRef]);
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
-  const [sessionCatalog, setSessionCatalog] = useState<SessionInfo[]>([]);
-  const sessionMetadataLoaderRef = useRef<SessionMetadataLoader | null>(null);
-  const handleMetadataLoaderChange = useCallback((loader: SessionMetadataLoader | null) => {
-    sessionMetadataLoaderRef.current = loader;
-  }, []);
   const handleSessionsChange = useCallback((sessions: SessionInfo[]) => {
-    setSessionCatalog(sessions);
     setSelectedSession((current) => {
       if (!current) return current;
       const updated = sessions.find((session) => session.id === current.id);
@@ -117,22 +108,9 @@ export function AppShell() {
         name: hydrated ? updated.name : sameFingerprint ? current.name : undefined,
         messageCount: hydrated ? updated.messageCount : sameFingerprint ? current.messageCount : undefined,
         firstMessage: hydrated ? updated.firstMessage : sameFingerprint ? current.firstMessage : undefined,
-        relation: hydrated || !sameFingerprint ? updated.relation : current.relation ?? updated.relation,
       };
     });
   }, []);
-  const sessionsWithSelection = useMemo(() => {
-    if (!selectedSession) return sessionCatalog;
-    return [
-      ...sessionCatalog.filter((session) => session.id !== selectedSession.id),
-      selectedSession,
-    ];
-  }, [selectedSession, sessionCatalog]);
-  const activeSessionFamily = useMemo(
-    () => getSessionFamily(sessionsWithSelection, selectedSession?.id),
-    [selectedSession?.id, sessionsWithSelection],
-  );
-  const hasSubagentSessions = Boolean(activeSessionFamily?.subagents.length);
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
   const handleRunningSessionIdsChange = useCallback((ids: Set<string>) => {
     setRunningSessionIds((previous) => {
@@ -303,7 +281,7 @@ export function AppShell() {
   }, []);
 
   // Single active panel — only one dropdown open at a time
-  const [activeTopPanel, setActiveTopPanel] = useState<"agents" | "branches" | "system" | "tools" | "session" | "language" | null>(null);
+  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "tools" | "session" | "language" | null>(null);
   const [topPanelPos, setTopPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
   useEffect(() => {
@@ -312,14 +290,8 @@ export function AppShell() {
     }
   }, [sessionHasBranches]);
 
-  useEffect(() => {
-    if (!hasSubagentSessions) {
-      setActiveTopPanel((panel) => panel === "agents" ? null : panel);
-    }
-  }, [hasSubagentSessions]);
-
   const toggleTopPanel = useCallback((
-    panel: "agents" | "branches" | "system" | "tools" | "session" | "language",
+    panel: "branches" | "system" | "tools" | "session" | "language",
     keepMobileToolbarOpen = false,
   ) => {
     if (isMobile) setSidebarOpen(false);
@@ -416,14 +388,6 @@ export function AppShell() {
           Math.max(topBarRect.left, topBarRect.right - width),
         );
         setTopPanelPos({ top: topBarRect.bottom, left, width });
-        return;
-      }
-      if (activeTopPanel === "agents") {
-        setTopPanelPos({
-          top: topBarRect.bottom,
-          left: topBarRect.left,
-          width: Math.min(AGENT_PANEL_WIDTH, topBarRect.width),
-        });
         return;
       }
       setTopPanelPos({ top: topBarRect.bottom, left: topBarRect.left, width: topBarRect.width });
@@ -716,17 +680,6 @@ export function AppShell() {
       .catch(() => {});
   }, []);
 
-  const handleOpenSession = useCallback(async (sessionId: string) => {
-    try {
-      const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, { cache: "no-store" });
-      const data = await response.json() as { info?: SessionInfo; error?: string };
-      if (!response.ok || !data.info) throw new Error(data.error ?? `HTTP ${response.status}`);
-      handleSelectSession(data.info);
-    } catch (error) {
-      console.error("[pi-web] failed to open session:", error instanceof Error ? error.message : error);
-    }
-  }, [handleSelectSession]);
-
   // Called by ChatWindow when a new session gets its real id from pi
   const handleSessionCreated = useCallback((session: SessionInfo, sourceDraftKey: string) => {
     setRefreshKey((k) => k + 1);
@@ -784,7 +737,6 @@ export function AppShell() {
     setExplorerRefreshKey((k) => k + 1);
     if (selectedSession) hydrateSelectedSession(selectedSession.id);
 
-    if (selectedSession?.relation?.kind === "subagent") return;
     if (!shouldShowBrowserNotification()) return;
     const targetSession = selectedSession;
     deliverSessionNotification({
@@ -796,7 +748,6 @@ export function AppShell() {
   }, [deliverSessionNotification, hydrateSelectedSession, selectedSession, translate]);
 
   const handleAttentionNeeded = useCallback((request: BlockingExtensionUiRequest) => {
-    if (selectedSession?.relation?.kind === "subagent") return;
     if (!shouldShowBrowserNotification()) return;
     if (!claimExtensionAttentionNotification(request, notifiedAttentionRequestIdsRef.current)) return;
 
@@ -1033,7 +984,6 @@ export function AppShell() {
         onBackgroundTaskDone={handleBackgroundTaskDone}
         onRunningSessionIdsChange={handleRunningSessionIdsChange}
         onSessionsChange={handleSessionsChange}
-        onMetadataLoaderChange={handleMetadataLoaderChange}
       />
       <div style={{ padding: "8px", flexShrink: 0, display: "flex", justifyContent: "space-between", gap: 4 }}>
         {([
@@ -1369,45 +1319,6 @@ export function AppShell() {
             </button>
           );
         })()}
-        {hasSubagentSessions && (
-          <button
-            type="button"
-            onClick={() => toggleTopPanel("agents", mobile)}
-            title={translate("agentSwitcher.title")}
-            aria-label={translate("agentSwitcher.title")}
-            aria-pressed={activeTopPanel === "agents"}
-            style={{
-              position: "relative",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              width: mobile ? TOP_BAR_ICON_BUTTON_SIZE : undefined,
-              height: "100%", padding: mobile ? 0 : "0 12px",
-              background: activeTopPanel === "agents" ? "var(--bg-selected)" : "none",
-              border: "none",
-              borderTop: activeTopPanel === "agents" ? "2px solid var(--accent)" : "2px solid transparent",
-              borderRight: "1px solid var(--border)",
-              color: activeTopPanel === "agents" ? "var(--text)" : "var(--text-muted)",
-              cursor: "pointer", flexShrink: 0, fontSize: 11, whiteSpace: "nowrap",
-              transition: "color 0.1s, background 0.1s",
-            }}
-            data-mobile-toolbar-action={mobile ? "agents" : undefined}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="5" y="7" width="14" height="11" rx="2" /><path d="M9 11h.01M15 11h.01M9 15h6M12 7V4M10 4h4" />
-            </svg>
-            {!mobile && <span>{translate("agentSwitcher.title")}</span>}
-            <span
-              aria-hidden="true"
-              style={{
-                minWidth: 15, height: 15, padding: "0 4px", display: "grid", placeItems: "center",
-                borderRadius: 7, background: "var(--bg-selected)", color: "var(--accent)",
-                fontSize: 10, lineHeight: 1, fontVariantNumeric: "tabular-nums",
-                ...(mobile ? { position: "absolute", top: 2, right: 2, minWidth: 13, height: 13, padding: "0 3px", fontSize: 9 } : {}),
-              }}
-            >
-              {activeSessionFamily!.subagents.length}
-            </span>
-          </button>
-        )}
         {sessionHasBranches && (mobile ? (
           <button
             type="button"
@@ -2039,16 +1950,6 @@ export function AppShell() {
                   ))}
                 </div>
               )}
-              {activeTopPanel === "agents" && activeSessionFamily && selectedSession && (
-                <AgentSessionPanel
-                  rootSession={activeSessionFamily.root}
-                  subagents={activeSessionFamily.subagents}
-                  selectedSessionId={selectedSession.id}
-                  runningSessionIds={runningSessionIds}
-                  onSelectSession={handleSelectSession}
-                  onMetadataNeeded={(sessions) => sessionMetadataLoaderRef.current?.(sessions)}
-                />
-              )}
               {activeTopPanel === "system" && (
                 <SystemPromptPanel
                   loading={systemInfoLoading}
@@ -2299,7 +2200,6 @@ export function AppShell() {
               onSessionStatsPanelOpen={openSessionStatsPanel}
               onContextUsageChange={handleContextUsageChange}
               onOpenFile={handleOpenLinkedFile}
-              onOpenSession={handleOpenSession}
               soundEnabled={soundEnabled}
               onSoundToggle={onSoundToggle}
               playDoneSound={playDoneSound}

@@ -356,23 +356,6 @@ test("plays the enabled sound once for each extension dialog", () => {
   assert.match(chatWindowSource, /playDoneSoundRef\.current\(\)/);
 });
 
-test("suppresses sounds and browser attention for the active subagent session", () => {
-  const completionSource = appShellSource.slice(
-    appShellSource.indexOf("  const handleAgentEnd = useCallback"),
-    appShellSource.indexOf("  const handleAttentionNeeded = useCallback"),
-  );
-  const attentionSource = appShellSource.slice(
-    appShellSource.indexOf("  const handleAttentionNeeded = useCallback"),
-    appShellSource.indexOf("  const handleAutoName = useCallback"),
-  );
-
-  assert.match(chatWindowSource, /completionNotificationsEnabled = session\?\.relation\?\.kind !== "subagent"/);
-  assert.match(chatWindowSource, /completionNotificationsEnabled && soundEnabledRef\.current/);
-  assert.match(chatWindowSource, /!completionNotificationsEnabled[\s\S]*?!extensionDialog/);
-  assert.match(completionSource, /selectedSession\?\.relation\?\.kind === "subagent"\) return/);
-  assert.match(attentionSource, /selectedSession\?\.relation\?\.kind === "subagent"\) return/);
-});
-
 test("routes blocking extension requests through deduplicated browser attention notifications", () => {
   const completionSource = appShellSource.slice(
     appShellSource.indexOf("  const handleAgentEnd = useCallback"),

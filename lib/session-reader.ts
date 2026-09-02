@@ -13,13 +13,10 @@ import { projectIdentityKey } from "./project-identity";
 import { sessionPathKey } from "./session-path";
 import { MAX_TOOL_RESULT_IMAGE_BYTES, TOOL_RESULT_IMAGE_MIMES } from "./tool-result-images";
 import { resolveProject, type ProjectInfo } from "./worktree";
-import { readSubagentRun } from "./subagents";
 
 export { getAgentDir };
 
 const SESSION_HEADER_MAX_BYTES = 64 * 1024;
-const SESSION_RELATION_MAX_BYTES = 256 * 1024;
-const SESSION_RELATION_MAX_LINES = 2;
 
 function readBoundedLines(filePath: string, maxBytes: number, maxLines: number): string[] {
   const fd = openSync(filePath, "r");
@@ -60,23 +57,6 @@ function readBoundedLines(filePath: string, maxBytes: number, maxLines: number):
   }
 }
 
-function parseSessionEntries(lines: readonly string[]): SessionEntry[] {
-  return lines.flatMap((line) => {
-    try {
-      const entry = JSON.parse(line) as SessionEntry;
-      return [entry];
-    } catch {
-      return [];
-    }
-  });
-}
-
-function readSessionRelationPrefix(filePath: string): SessionEntry[] {
-  return parseSessionEntries(
-    readBoundedLines(filePath, SESSION_RELATION_MAX_BYTES, SESSION_RELATION_MAX_LINES).slice(1),
-  );
-}
-
 export async function attachSessionProjectInfo(sessions: SessionInfo[]): Promise<SessionInfo[]> {
   const uniqueCwds = [...new Set(sessions.map((s) => s.cwd).filter(Boolean))];
   const projectByCwd = new Map<string, ProjectInfo>();
@@ -113,7 +93,6 @@ export function mergeSessionLists(
       name: runtime.name,
       messageCount: runtime.messageCount,
       firstMessage: runtime.firstMessage,
-      relation: runtime.relation ?? persisted.relation,
       transient: false,
     } : persisted);
   }
@@ -169,10 +148,6 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
       const stats = statSync(filePath);
       cacheSessionPath(header.id, filePath);
 
-      let subagent = null;
-      if (header.parentSession) {
-        subagent = readSubagentRun(readSessionRelationPrefix(filePath), header.id, filePath);
-      }
       inventory.push({
         path: filePath,
         id: header.id,
@@ -181,15 +156,6 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
         modified: stats.mtime.toISOString(),
         fileSize: stats.size,
         parentSessionPath: header.parentSession,
-        ...(subagent ? {
-          relation: {
-            kind: "subagent" as const,
-            parentSessionId: subagent.parentSessionId,
-            profile: subagent.profile,
-            description: subagent.description,
-            status: subagent.status,
-          },
-        } : {}),
         transient: false,
       });
     } catch {
@@ -200,14 +166,9 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
   const pathToId = new Map(inventory.map((session) => [sessionPathKey(session.path), session.id]));
   const sessions = inventory.map(({ parentSessionPath, ...session }) => {
     if (!parentSessionPath) return session;
-    const originSessionId = pathToId.get(sessionPathKey(parentSessionPath));
-    if (session.relation?.kind === "subagent") {
-      return { ...session, parentSessionId: originSessionId ?? session.relation.parentSessionId };
-    }
     return {
       ...session,
-      parentSessionId: originSessionId,
-      relation: { kind: "fork" as const, ...(originSessionId ? { originSessionId } : {}) },
+      parentSessionId: pathToId.get(sessionPathKey(parentSessionPath)),
     };
   });
   return attachSessionProjectInfo(sessions);

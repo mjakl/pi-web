@@ -35,18 +35,10 @@ test("exposes the loaded session catalog to the shell", () => {
   assert.match(source, /onSessionsChange\?\.\(allSessions\)/);
 });
 
-test("subagent completion stays silent and never becomes unread", () => {
-  assert.match(source, /completionNotificationSuppressedSessionIds\?: string\[\]/);
-  assert.match(
-    source,
-    /completedWithNotifications = completedInBackground\.filter\([\s\S]*?!previousSuppressedCompletionSessionIdsRef\.current\.has\(id\)[\s\S]*?!knownSubagentIds\.has\(id\)/,
-  );
-  assert.match(source, /completedWithNotifications\.forEach\(\(id\) => next\.add\(id\)\)/);
-  assert.match(source, /if \(completedWithNotifications\.length > 0\) \{\s*onBackgroundTaskDone\?\.\(\)/);
-  assert.match(
-    source,
-    /filter\(\(session\) => session\.relation\?\.kind !== "subagent"\)[\s\S]*?unreadEligibleIds\.has\(id\)/,
-  );
+test("background completion becomes unread and triggers notification", () => {
+  assert.match(source, /completedInBackground\.forEach\(\(id\) => next\.add\(id\)\)/);
+  assert.match(source, /if \(completedInBackground\.length > 0\) \{\s*onBackgroundTaskDone\?\.\(\)/);
+  assert.match(source, /data\.sessions\.map\(\(session\) => session\.id\)/);
 });
 
 test("includes project activity counts in accessible labels", () => {
@@ -118,9 +110,9 @@ test("does not expose disk-backed actions for transient sessions", () => {
   assert.match(sessionItemSource, /\{hovered && !session\.transient && \(/);
 });
 
-test("hides subagent rows and aggregates their state into the main session row", () => {
-  assert.match(source, /const sessionFamilies = listSessionFamilies\(filteredSessions\)/);
-  assert.match(source, /familySessions\.some\(\(session\) => session\.id === selectedSessionId\)/);
-  assert.match(source, /familySessions\.some\(\(session\) => runningSessionIds\.has\(session\.id\)\)/);
-  assert.doesNotMatch(source, /function SessionTreeItem/);
+test("renders every filtered session with its own activity state", () => {
+  assert.match(source, /filteredSessions\.map\(\(session\) => \(/);
+  assert.match(source, /isSelected=\{session\.id === selectedSessionId\}/);
+  assert.match(source, /isRunning=\{runningSessionIds\.has\(session\.id\)\}/);
+  assert.match(source, /isUnread=\{unreadSessionIds\.has\(session\.id\)\}/);
 });
