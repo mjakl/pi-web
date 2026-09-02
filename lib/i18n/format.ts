@@ -1,4 +1,7 @@
-import type { TranslationParams } from "./types";
+import { enMessages } from "./messages/en";
+
+/** Values inserted into English UI messages at runtime. */
+export type TranslationParams = Record<string, string | number>;
 
 /** Replaces simple interpolation placeholders in an English UI message. */
 export function interpolateMessage(message: string, params: TranslationParams = {}): string {
@@ -9,12 +12,8 @@ export function interpolateMessage(message: string, params: TranslationParams = 
 }
 
 /** Resolves and interpolates an English UI message, or returns its key. */
-export function translateMessage(
-  key: string,
-  messages: Record<string, string>,
-  params: TranslationParams = {},
-): string {
-  const message = messages[key];
+export function translateMessage(key: string, params: TranslationParams = {}): string {
+  const message = enMessages[key];
   if (message === undefined) {
     if (process.env.NODE_ENV !== "production") console.warn(`[i18n] Missing translation: ${key}`);
     return key;

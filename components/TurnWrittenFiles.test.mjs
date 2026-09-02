@@ -9,11 +9,10 @@ const jiti = createJiti(import.meta.url, {
 const React = await jiti.import("react");
 const { renderToStaticMarkup } = await jiti.import("react-dom/server");
 const { TurnWrittenFiles } = await jiti.import("./TurnWrittenFiles.tsx");
-const { I18nProvider } = await jiti.import("@/hooks/useI18n");
 
 function render(props) {
   return renderToStaticMarkup(
-    React.createElement(I18nProvider, null, React.createElement(TurnWrittenFiles, props)),
+    React.createElement(TurnWrittenFiles, props),
   );
 }
 
