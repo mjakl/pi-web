@@ -14,7 +14,9 @@ const { GET } = await jiti.import("./[...path]/route.ts");
 const { allowFileRoot } = await jiti.import("@/lib/file-access");
 const { NextRequest } = await jiti.import("next/server");
 
-async function readAllowedFile(t, name, content) {
+const SVG = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
+
+async function readAllowedFile(t, name, content, headers = {}) {
   const agentDir = await mkdtemp(join(tmpdir(), "pi-web-stream-route-agent-"));
   const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-web-stream-route-")));
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -34,23 +36,40 @@ async function readAllowedFile(t, name, content) {
   allowFileRoot(dir);
 
   const response = await GET(
-    new NextRequest(`http://localhost/api/files${filePath}?type=read`),
+    new NextRequest(`http://localhost/api/files${filePath}?type=read`, { headers }),
     { params: Promise.resolve({ path: filePath.split("/").filter(Boolean) }) },
   );
   return { response, body: Buffer.from(await response.arrayBuffer()) };
 }
 
-test("inline SVG previews carry a script-blocking content security policy", async (t) => {
-  const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
-  const { response, body } = await readAllowedFile(t, "probe.svg", svg);
-
-  assert.equal(response.status, 200);
+function assertSvgDocumentPolicy(response) {
   assert.equal(response.headers.get("Content-Type"), "image/svg+xml");
   assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
   assert.match(response.headers.get("Content-Security-Policy"), /^default-src 'none';/);
   assert.match(response.headers.get("Content-Security-Policy"), /frame-ancestors 'self'/);
   assert.equal(response.headers.get("Referrer-Policy"), "no-referrer");
-  assert.equal(body.toString("utf8"), svg);
+}
+
+test("inline SVG previews carry a script-blocking content security policy", async (t) => {
+  const { response, body } = await readAllowedFile(t, "probe.svg", SVG);
+
+  assert.equal(response.status, 200);
+  assertSvgDocumentPolicy(response);
+  assert.equal(body.toString("utf8"), SVG);
+});
+
+test("ranged and rejected-range SVG responses keep the same security headers", async (t) => {
+  const partial = await readAllowedFile(t, "probe.svg", SVG, { Range: "bytes=0-3" });
+  assert.equal(partial.response.status, 206);
+  assert.equal(partial.response.headers.get("Content-Range"), `bytes 0-3/${SVG.length}`);
+  assertSvgDocumentPolicy(partial.response);
+  assert.equal(partial.body.toString("utf8"), SVG.slice(0, 4));
+
+  const rejected = await readAllowedFile(t, "probe.svg", SVG, { Range: `bytes=${SVG.length}-` });
+  assert.equal(rejected.response.status, 416);
+  assert.equal(rejected.response.headers.get("Content-Range"), `bytes */${SVG.length}`);
+  assertSvgDocumentPolicy(rejected.response);
+  assert.equal(rejected.body.length, 0);
 });
 
 test("other streamed previews are nosniff without a document policy", async (t) => {

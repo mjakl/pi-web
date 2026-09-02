@@ -12,6 +12,7 @@ const jiti = createJiti(import.meta.url, {
 });
 const { DELETE: deleteSession, GET: getSessionDetail } = await jiti.import("./[id]/route.ts");
 const { GET: getSessionState } = await jiti.import("./[id]/state/route.ts");
+const { GET: getSessionContext } = await jiti.import("./[id]/context/route.ts");
 const {
   cacheSessionPath,
   invalidateSessionPathCache,
@@ -201,4 +202,64 @@ test("live detail and state routes work without a persisted JSONL file", async (
     running: true,
     state: { isStreaming: true },
   });
+});
+
+test("detail and context routes bound history to the tail window", async (t) => {
+  const previousRegistry = globalThis.__piSessions;
+  const id = "live-pagination-route-test";
+  const entries = [];
+  for (let i = 0; i < 5000; i++) {
+    entries.push({
+      id: `e${i}`,
+      parentId: i === 0 ? null : `e${i - 1}`,
+      type: "message",
+      timestamp: new Date(1000 + i * 1000).toISOString(),
+      message: { role: i % 2 === 0 ? "user" : "assistant", content: `m${i}` },
+    });
+  }
+  const sessionManager = {
+    getHeader: () => ({ type: "session", id, cwd: "/tmp", timestamp: entries[0].timestamp }),
+    getEntries: () => entries,
+    getLeafId: () => "e4999",
+    getTree: () => [],
+    getSessionName: () => undefined,
+    getSessionFile: () => `/tmp/pi-web-live-pagination-not-persisted-${process.pid}.jsonl`,
+  };
+  globalThis.__piSessions = new Map([[id, {
+    isAlive: () => true,
+    isRunning: () => false,
+    inner: { sessionManager },
+    sessionFile: sessionManager.getSessionFile(),
+    sessionId: id,
+    cwd: "/tmp",
+    send: async () => ({}),
+  }]]);
+  t.after(() => {
+    globalThis.__piSessions = previousRegistry;
+  });
+  const routeContext = { params: Promise.resolve({ id }) };
+  const detail = async (query = "") => (await getSessionDetail(
+    new Request(`http://localhost/api/sessions/${id}${query}`),
+    routeContext,
+  )).json();
+  const context = async (query = "") => (await getSessionContext(
+    new Request(`http://localhost/api/sessions/${id}/context${query}`),
+    routeContext,
+  )).json();
+
+  const defaultDetail = await detail();
+  assert.equal(defaultDetail.context.messages.length, 50);
+  assert.equal(defaultDetail.context.entryIds[0], "e4950");
+  assert.equal(defaultDetail.context.hasMore, true);
+  assert.equal(defaultDetail.stats.totalMessages, 5000);
+  assert.equal((await detail("?tail=5000")).context.messages.length, 1000);
+  assert.equal((await detail("?tail=abc")).context.messages.length, 50);
+
+  const defaultPage = await context();
+  assert.equal(defaultPage.tail, 50);
+  assert.equal(defaultPage.context.entryIds.length, 50);
+  const olderPage = await context("?tail=5&before=e4950");
+  assert.deepEqual(olderPage.context.entryIds, ["e4945", "e4946", "e4947", "e4948", "e4949"]);
+  assert.equal(olderPage.before, "e4950");
+  assert.equal((await context("?tail=5000&before=e4950")).context.entryIds.length, 1000);
 });
