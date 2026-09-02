@@ -1,22 +1,24 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createJiti } from "jiti";
 
+const source = await readFile(new URL("./ChatInput.tsx", import.meta.url), "utf8");
 const jiti = createJiti(import.meta.url, {
   jsx: { runtime: "automatic" },
   tsconfigPaths: true,
 });
 const { buildSlashCommandLayout } = await jiti.import("./ChatInput.tsx");
 
-test("uses the rendered slash command order for selection indices", () => {
-  const dormant = {
+test("keeps normal slash ordering and includes Manual skill commands", () => {
+  const manual = {
     name: "skill:alpha",
-    description: "Dormant skill",
+    description: "Manual skill",
     source: "skill",
   };
-  const active = {
+  const modelVisible = {
     name: "skill:beta",
-    description: "Active skill",
+    description: "Model-visible skill",
     source: "skill",
   };
   const builtin = {
@@ -26,16 +28,22 @@ test("uses the rendered slash command order for selection indices", () => {
   };
 
   const layout = buildSlashCommandLayout(
-    [dormant, active, builtin],
+    [manual, modelVisible, builtin],
     { alpha: true, beta: false },
   );
 
   assert.deepEqual(
     layout.commands.map((command) => command.name),
-    ["compact", "skill:beta", "skill:alpha"],
+    ["compact", "skill:alpha", "skill:beta"],
   );
   assert.deepEqual(
     layout.groups.flatMap((group) => group.items.map((item) => item.index)),
     [0, 1, 2],
   );
+});
+
+test("marks only Manual skill commands without muting their names", () => {
+  assert.match(source, /const manual = isManualSkillCommand\(command, skillModes\)/);
+  assert.match(source, /manual && \([\s\S]*?t\("skills\.mode\.manual"\)/);
+  assert.doesNotMatch(source, /color:\s*manual\s*\?/);
 });

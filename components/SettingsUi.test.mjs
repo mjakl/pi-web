@@ -164,10 +164,11 @@ test("subpanel footers share sizing while maintenance actions stay secondary", (
   assert.match(sources.PluginsConfig, /<ConfigButton variant="secondary" onClick=\{\(\) => void loadPlugins\(\)\}/);
 });
 
-test("skills and plugins share enabled and disabled controls", () => {
+test("skills and plugins share switches while only plugins use status dots", () => {
   const sources = Object.fromEntries(configSources);
   for (const name of ["SkillsConfig", "PluginsConfig"]) {
     assert.match(sources[name], /<ConfigSwitch/);
-    assert.match(sources[name], /<ConfigStatusDot/);
   }
+  assert.doesNotMatch(sources.SkillsConfig, /<ConfigStatusDot/);
+  assert.match(sources.PluginsConfig, /<ConfigStatusDot/);
 });
