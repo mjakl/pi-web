@@ -333,8 +333,9 @@ export class AgentSessionWrapper {
   }
 
   private async waitForExtensionsBound(): Promise<void> {
+    if (this.chatOnly) return;
     try {
-      if (this.extensionBindingPromise) await this.extensionBindingPromise;
+      await this.ensureExtensionsBound();
     } catch (err) {
       throw err instanceof Error ? err : new Error(String(err));
     }
