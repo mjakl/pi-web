@@ -1702,7 +1702,7 @@ export async function activateRpcSession(
   sessionFile: string,
 ): Promise<AgentSessionWrapper> {
   await assertRpcSessionOperationCurrent(operation);
-  const session = (await startRpcSession(operation.sessionId, sessionFile, undefined)).session;
+  const session = (await startRpcSession(operation.sessionId, sessionFile, undefined, {}, operation)).session;
   await assertRpcSessionOperationCurrent(operation);
   return session;
 }
@@ -1717,7 +1717,7 @@ export async function sendRpcSessionCommand(
   let session = getRpcSession(operation.sessionId);
   if (!session?.isActive()) {
     if (!sessionFile) throw new Error("Session not found");
-    session = (await startRpcSession(operation.sessionId, sessionFile, undefined, options)).session;
+    session = (await startRpcSession(operation.sessionId, sessionFile, undefined, options, operation)).session;
   }
   await assertRpcSessionOperationCurrent(operation);
   return session.send(command);
@@ -1739,7 +1739,7 @@ export async function setRpcSessionTools(
     const manager = SessionManager.open(sessionFile, undefined);
     appendSessionToolSelection(manager, toolNames);
     invalidateSessionListCache();
-    const started = await startRpcSession(sessionId, sessionFile, undefined);
+    const started = await startRpcSession(sessionId, sessionFile, undefined, {}, operation);
     await assertRpcSessionOperationCurrent(operation);
     return { session: started.session, sessionId: started.realSessionId, recreated: false };
   }
@@ -1768,7 +1768,7 @@ export async function setRpcSessionTools(
   await assertRpcSessionOperationCurrent(operation);
 
   if (persistedFile) {
-    const started = await startRpcSession(sessionId, persistedFile, undefined);
+    const started = await startRpcSession(sessionId, persistedFile, undefined, {}, operation);
     await assertRpcSessionOperationCurrent(operation);
     return { session: started.session, sessionId: started.realSessionId, recreated: true };
   }
@@ -1780,7 +1780,7 @@ export async function setRpcSessionTools(
     ...(currentThinkingLevel && THINKING_LEVEL_NAMES.has(currentThinkingLevel as ThinkingLevel)
       ? { thinkingLevel: currentThinkingLevel as ThinkingLevel }
       : {}),
-  });
+  }, operation);
   await assertRpcSessionOperationCurrent(operation);
   return { session: started.session, sessionId: started.realSessionId, recreated: true };
 }
@@ -1922,16 +1922,22 @@ export async function startRpcSession(
   sessionFile: string,
   cwd: string | undefined,
   options: RpcSessionStartOptions = {},
+  operation?: RpcSessionOperation,
 ): Promise<{ session: AgentSessionWrapper; realSessionId: string }> {
   const { initialModel, allowInitialModelFallback, thinkingLevel } = options;
   const requestedToolNames = options.toolNames === undefined
     ? undefined
     : validateSessionToolSelection(options.toolNames);
-  const lifecycle = getLifecycle(sessionId);
+  if (operation) await assertRpcSessionOperationCurrent(operation);
+  const lifecycleSessionId = operation?.sessionId ?? sessionId;
+  const lifecycle = getLifecycle(lifecycleSessionId);
   const priorStop = lifecycle.stopping;
-  const startGeneration = lifecycle.generation;
+  const startGeneration = operation?.generation ?? lifecycle.generation;
   if (priorStop) await priorStop;
-  if (lifecycle.generation !== startGeneration) {
+  if (
+    operation?.priorStop
+    || lifecycle.generation !== startGeneration
+  ) {
     throw new Error("Session was stopped before startup");
   }
   const registry = getRegistry();
@@ -2066,7 +2072,7 @@ export async function startRpcSession(
       },
     });
     const realSessionId = inner.sessionId as string;
-    if (getLifecycle(sessionId).generation !== startGeneration) {
+    if (lifecycle.generation !== startGeneration) {
       await wrapper.shutdown();
       throw new Error("Session was stopped during startup");
     }
@@ -2074,10 +2080,15 @@ export async function startRpcSession(
 
     return { session: wrapper, realSessionId };
   })().finally(() => {
-    locks.delete(sessionId);
+    if (locks.get(sessionId) === starting) locks.delete(sessionId);
+    if (
+      lifecycleSessionId !== sessionId
+      && locks.get(lifecycleSessionId) === starting
+    ) locks.delete(lifecycleSessionId);
     finishStartingSession();
   });
 
   locks.set(sessionId, starting);
+  if (lifecycleSessionId !== sessionId) locks.set(lifecycleSessionId, starting);
   return starting;
 }

@@ -2235,7 +2235,7 @@ function SessionItem({
   }, [renameValue, session.id, session.name, onRenamed, title]);
 
   const performStop = useCallback(async () => {
-    if (!isActive || session.transient) return;
+    if (!isActive) return;
     setConfirmStop(false);
     setStopping(true);
     try {
@@ -2243,9 +2243,11 @@ function SessionItem({
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       onStopped?.(session.id);
     } catch {
+      // The active marker remains, so the user can try again.
+    } finally {
       setStopping(false);
     }
-  }, [isActive, onStopped, session.id, session.transient]);
+  }, [isActive, onStopped, session.id]);
 
   const handleStopClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -2477,7 +2479,7 @@ function SessionItem({
           </div>
 
           {/* Action buttons — shown on hover */}
-          {hovered && !session.transient && (
+          {hovered && (isActive || !session.transient) && (
             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
               {isActive && (
                 <button
@@ -2505,6 +2507,8 @@ function SessionItem({
                   </svg>
                 </button>
               )}
+              {!session.transient && (
+                <>
               <button
                 onClick={startRename}
                 title={t("sidebar.rename")}
@@ -2560,6 +2564,8 @@ function SessionItem({
                   <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                 </svg>
               </button>
+                </>
+              )}
             </div>
           )}
         </>

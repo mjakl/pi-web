@@ -108,9 +108,17 @@ test("keeps transcript metadata optional until a row is hydrated", () => {
   assert.match(sessionItemSource, /session\.messageCount === undefined/);
 });
 
-test("does not expose disk-backed actions for transient sessions", () => {
+test("keeps disk-backed actions hidden while allowing active transient Stop", () => {
   assert.match(sessionItemSource, /if \(session\.transient\) return;/);
-  assert.match(sessionItemSource, /\{hovered && !session\.transient && \(/);
+  assert.match(sessionItemSource, /\{hovered && \(isActive \|\| !session\.transient\) && \(/);
+  assert.match(sessionItemSource, /\{!session\.transient && \(/);
+  assert.doesNotMatch(
+    sessionItemSource.slice(
+      sessionItemSource.indexOf("const performStop"),
+      sessionItemSource.indexOf("const handleStopClick"),
+    ),
+    /session\.transient/,
+  );
 });
 
 test("renders every filtered session with its own activity state", () => {
@@ -127,6 +135,7 @@ test("active persisted rows offer Stop with confirmation and Shift bypass", () =
   assert.match(sessionItemSource, /method: "DELETE"/);
   assert.match(sessionItemSource, /sidebar\.stopSessionWarning/);
   assert.match(sessionItemSource, /\{isActive && \(/);
+  assert.match(sessionItemSource, /finally \{\s*setStopping\(false\)/);
 });
 
 test("renders lifecycle and unread indicators independently", () => {
