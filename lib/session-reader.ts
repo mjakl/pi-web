@@ -139,7 +139,9 @@ export async function listSessionCwds(): Promise<string[]> {
   return [...cwds];
 }
 
-async function loadAllSessions(): Promise<SessionInfo[]> {
+/** A fresh bounded inventory is cheap enough that retaining catalogue metadata
+ *  globally would add invalidation complexity without helping cold startup. */
+export async function listAllSessions(): Promise<SessionInfo[]> {
   const inventory: Array<SessionInfo & { parentSessionPath?: string }> = [];
   for (const filePath of await discoverSessionFiles()) {
     try {
@@ -172,13 +174,6 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
     };
   });
   return attachSessionProjectInfo(sessions);
-}
-
-/** A fresh bounded inventory is cheap enough that retaining catalogue metadata
- *  globally would add invalidation complexity without helping cold startup. */
-export async function listAllSessions(options: { force?: boolean } = {}): Promise<SessionInfo[]> {
-  void options;
-  return loadAllSessions();
 }
 
 // ============================================================================
@@ -273,11 +268,6 @@ function findSessionIdByPath(filePath: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-export function invalidateSessionListCache(): void {
-  // Kept as a compatibility hook for mutation paths. The catalogue no longer
-  // retains server-side list metadata, so there is nothing to invalidate.
 }
 
 function getPathCache(): Map<string, string> {

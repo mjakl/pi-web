@@ -12,7 +12,7 @@ import {
   createProjectCommandBashOperations,
   preferUserBashExtension,
 } from "./project-command-env";
-import { cacheSessionPath, invalidateSessionListCache } from "./session-reader";
+import { cacheSessionPath } from "./session-reader";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
 import { persistExplicitStartupPreferences } from "./startup-preferences";
 import { notifySessionComplete } from "./web-push";
@@ -258,9 +258,6 @@ export class AgentSessionWrapper {
   start(): void {
     this.unsubscribe = this.inner.subscribe((event: AgentEvent) => {
       if (event.type === "agent_start") this.agentRunNeedsCompletion = true;
-      if (event.type === "agent_end") {
-        invalidateSessionListCache();
-      }
       if (IDLE_RESET_EVENT_TYPES.has(event.type)) this.resetIdleTimer();
       this.emit(event);
       if (event.type === "agent_settled") this.notifyAgentRunCompleteIfIdle();
@@ -600,7 +597,6 @@ export class AgentSessionWrapper {
           }, (error) => {
             rejectPreflight(error);
             finishPrompt();
-            invalidateSessionListCache();
             // A preflight rejection is returned by the POST itself. Only an
             // unexpected failure after acceptance needs the asynchronous event.
             if (preflightAccepted) {
@@ -672,7 +668,6 @@ export class AgentSessionWrapper {
         if (!model) throw new Error(`Model not found: ${provider}/${modelId}`);
         await this.inner.setModel(model);
         invalidateModelsCache();
-        invalidateSessionListCache();
         return { id: model.id, provider: model.provider };
       }
 
@@ -709,7 +704,6 @@ export class AgentSessionWrapper {
 
           const newSessionId = SessionManager.open(newSessionFile, sessionDir).getSessionId();
           cacheSessionPath(newSessionId, newSessionFile);
-          invalidateSessionListCache();
           await this.shutdownAfterSessionReplacement("fork");
           return { cancelled: false, newSessionId };
         });
@@ -737,7 +731,6 @@ export class AgentSessionWrapper {
 
           const newSessionId = SessionManager.open(clonedPath, sessionDir).getSessionId();
           cacheSessionPath(newSessionId, clonedPath);
-          invalidateSessionListCache();
           await this.shutdownAfterSessionReplacement("clone");
           return { cancelled: false, newSessionId };
         });
@@ -760,25 +753,19 @@ export class AgentSessionWrapper {
         if (level === "xhigh" && (this.inner.model as { compat?: { thinkingFormat?: string } } | null)?.compat?.thinkingFormat === "deepseek" && this.inner.agent?.state) {
           this.inner.agent.state.thinkingLevel = "xhigh";
         }
-        invalidateSessionListCache();
         return null;
       }
 
       case "compact": {
-        try {
-          return await this.withFinalIdleReset(() =>
-            this.inner.compact(command.customInstructions as string | undefined)
-          );
-        } finally {
-          invalidateSessionListCache();
-        }
+        return await this.withFinalIdleReset(() =>
+          this.inner.compact(command.customInstructions as string | undefined)
+        );
       }
 
       case "set_session_name": {
         const name = (command.name as string | undefined)?.trim();
         if (!name) throw new Error("Session name cannot be empty");
         this.inner.setSessionName(name);
-        invalidateSessionListCache();
         return null;
       }
 
@@ -916,7 +903,6 @@ export class AgentSessionWrapper {
           return result;
         } finally {
           this.resetIdleTimer();
-          invalidateSessionListCache();
         }
       }
 
@@ -1774,7 +1760,6 @@ export async function setRpcSessionTools(
       if (!sessionFile) throw new Error("Session not found");
       const manager = SessionManager.open(sessionFile, undefined);
       appendSessionToolSelection(manager, toolNames);
-      invalidateSessionListCache();
       const started = await startRpcSession(sessionId, sessionFile, undefined, {}, operation);
       await assertRpcSessionOperationCurrent(operation);
       return { session: started.session, sessionId: started.realSessionId, recreated: false };
@@ -1787,7 +1772,6 @@ export async function setRpcSessionTools(
     const crossesChatOnlyBoundary = !hasCurrentResourcePolicy
       || existing.isChatOnly() !== (toolNames.length === 0);
     appendSessionToolSelection(existing.inner.sessionManager, toolNames);
-    invalidateSessionListCache();
 
     if (!crossesChatOnlyBoundary) {
       existing.setActiveToolSelection(toolNames);
