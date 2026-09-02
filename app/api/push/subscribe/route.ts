@@ -4,7 +4,6 @@ export const dynamic = "force-dynamic";
 
 interface SubscribeRequestBody {
   subscription?: Partial<PushSubscriptionRecord>;
-  locale?: string;
 }
 
 function isValidSubscription(subscription: Partial<PushSubscriptionRecord> | undefined): subscription is PushSubscriptionRecord {
@@ -30,11 +29,9 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "Invalid push subscription" }, { status: 400 });
   }
 
-  const locale = body.locale === "zh-CN" ? "zh-CN" : "en";
   await addSubscription({
     endpoint: body.subscription.endpoint,
     keys: body.subscription.keys,
-    locale,
   });
   return Response.json({ ok: true });
 }

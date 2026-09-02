@@ -26,7 +26,7 @@ export function isPushSupported(): boolean {
     && "Notification" in window;
 }
 
-export async function setupPushSubscription(locale: string): Promise<boolean> {
+export async function setupPushSubscription(): Promise<boolean> {
   if (!isPushSupported() || Notification.permission !== "granted") return false;
   if (activeSubscriptionPromise) return activeSubscriptionPromise;
 
@@ -49,7 +49,7 @@ export async function setupPushSubscription(locale: string): Promise<boolean> {
       const response = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscription: subscription.toJSON(), locale }),
+        body: JSON.stringify({ subscription: subscription.toJSON() }),
       });
       return response.ok;
     } catch {

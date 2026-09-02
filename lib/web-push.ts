@@ -2,15 +2,14 @@ import { existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname, join } from "path";
 import webpush from "web-push";
 import { writePrivateFileAtomicSync } from "./atomic-file";
-import { enLocale } from "./i18n/messages/en";
-import { zhCNLocale } from "./i18n/messages/zh-CN";
+import { enMessages } from "./i18n/messages/en";
 import { readSessionRowMetadata } from "./session-metadata";
 import { getAgentDir, resolveSessionPath } from "./session-reader";
 
 export interface PushSubscriptionRecord {
   endpoint: string;
   keys: { p256dh: string; auth: string };
-  locale: string;
+  locale?: string;
 }
 
 interface PushStateFile {
@@ -89,19 +88,6 @@ function pushStatusCode(error: unknown): number | undefined {
   return typeof statusCode === "number" ? statusCode : undefined;
 }
 
-/**
- * Locale lookup for push payloads. The browser reports its UI locale when it
- * subscribes; unknown locales fall back to English.
- */
-export function localeText(locale: string, key: "sessionComplete" | "taskFinished"): string {
-  if (locale === "zh-CN") {
-    const message = zhCNLocale.messages[key === "sessionComplete" ? "i18n.sessionComplete" : "i18n.taskFinished"];
-    if (message) return message;
-  }
-  const message = enLocale.messages[key === "sessionComplete" ? "i18n.sessionComplete" : "i18n.taskFinished"];
-  return message ?? (key === "sessionComplete" ? "Session complete" : "Task finished.");
-}
-
 export function createWebPushNotifier(environment: WebPushEnvironment): WebPushNotifier {
   const state: PushStateFile = (() => {
     const loaded = environment.loadState();
@@ -127,9 +113,9 @@ export function createWebPushNotifier(environment: WebPushEnvironment): WebPushN
     async notifySessionComplete(sessionId) {
       if (state.subscriptions.length === 0) return;
       const sessionName = await environment.getSessionName(sessionId);
-      const payloadFor = (locale: string) => ({
-        title: sessionName ?? localeText(locale, "sessionComplete"),
-        body: localeText(locale, "taskFinished"),
+      const payload = JSON.stringify({
+        title: sessionName ?? enMessages["i18n.sessionComplete"] ?? "Session complete",
+        body: enMessages["i18n.taskFinished"] ?? "Task finished.",
         url: `/?session=${encodeURIComponent(sessionId)}`,
         tag: `pi-session-complete:${sessionId}`,
       });
@@ -137,11 +123,7 @@ export function createWebPushNotifier(environment: WebPushEnvironment): WebPushN
       let pruned = false;
       for (const subscription of [...state.subscriptions]) {
         try {
-          await environment.send(
-            subscription,
-            JSON.stringify(payloadFor(subscription.locale)),
-            state.vapidKeys,
-          );
+          await environment.send(subscription, payload, state.vapidKeys);
         } catch (error) {
           const statusCode = pushStatusCode(error);
           if (statusCode === 404 || statusCode === 410) {

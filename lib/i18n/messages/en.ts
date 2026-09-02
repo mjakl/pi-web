@@ -1,12 +1,6 @@
-import type { LocalePlugin } from "../types";
-
-/** Pi Web 内置英语语言包。 */
-export const enLocale: LocalePlugin = {
-  id: "en",
-  label: "English",
-  messages: {
+/** Pi Web's English UI messages. */
+export const enMessages: Record<string, string> = {
     "common.ok": "OK",
-    "common.language": "Language",
     "common.models": "Models",
     "common.skills": "Skills",
     "common.plugins": "Plugins",
@@ -18,7 +12,6 @@ export const enLocale: LocalePlugin = {
     "settings.themeLight": "Light",
     "settings.themeDark": "Dark",
     "settings.themeSystem": "System",
-    "settings.languageDescription": "Choose the language used throughout the interface.",
     "settings.shellTool": "Shell tool",
     "settings.shellToolDescription": "Choose which shell the model uses for commands. Direct ! and !! commands still use Bash.",
     "settings.usePowerShell": "Use PowerShell instead of Bash",
@@ -29,19 +22,9 @@ export const enLocale: LocalePlugin = {
     "appUpdate.releaseNotes": "Pi Web v{version} is available. View release notes",
     "sidebar.hide": "Hide sidebar",
     "sidebar.show": "Show sidebar",
-    "theme.light": "Light mode (click for dark)",
-    "theme.dark": "Dark mode (click for system)",
-    "theme.auto": "System theme (click for light)",
     "history.full": "Full history",
     "history.unsaved": "Full history is available after the session is saved",
     "history.label": "Full history",
-    "title.generating": "Generating...",
-    "title.updated": "Title updated",
-    "title.failed": "Generation failed",
-    "title.generate": "Generate title",
-    "title.unsaved": "Title generation is available after the session is saved",
-    "title.noMessages": "Send a message before naming this session",
-    "title.generateSession": "Generate a session title",
     "system.prompt": "System prompt",
     "system.empty": "System prompt is empty (tools are disabled)",
     "system.load": "System prompt has not loaded yet",
@@ -507,5 +490,4 @@ export const enLocale: LocalePlugin = {
     "i18n.taskFinished": "Task finished.",
     "i18n.attentionNeeded": "Pi needs your attention",
     "i18n.extensionInputNeeded": "An extension is waiting for your input.",
-  },
 };

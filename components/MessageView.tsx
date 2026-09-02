@@ -5,6 +5,7 @@ import { MarkdownBody } from "./MarkdownBody";
 import { ImagePreview } from "./ImagePreview";
 import { copyText } from "@/lib/clipboard";
 import { useI18n } from "@/hooks/useI18n";
+import { formatTimestamp } from "@/lib/i18n/format";
 import { parseCompactionSummary } from "@/lib/compaction-summary";
 import { getAssistantErrorMessage, isEmptyThinkingBlock } from "@/lib/message-display";
 import { parseUnifiedPatch, type SplitDiffCell } from "@/lib/patch";
@@ -200,17 +201,8 @@ interface Props {
   writtenFiles?: WrittenFile[];
 }
 
-function formatTime(ts?: number): string | null {
-  if (!ts) return null;
-  const d = new Date(ts);
-  const now = new Date();
-  const isToday = d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
-  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  if (isToday) return time;
-  const date = d.toLocaleDateString([], { month: "short", day: "numeric", year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined });
-  return `${date} ${time}`;
+function formatTime(timestamp?: number): string | null {
+  return timestamp ? formatTimestamp(timestamp) : null;
 }
 
 export function replaceUserMessageText(message: UserMessage, text: string): UserMessage {
@@ -1689,10 +1681,10 @@ function formatUsage(usage: {
   cost: { total: number };
 }): string {
   const parts = [];
-  if (usage.input) parts.push(`${usage.input.toLocaleString()} in`);
-  if (usage.output) parts.push(`${usage.output.toLocaleString()} out`);
-  if (usage.cacheRead) parts.push(`${usage.cacheRead.toLocaleString()} cache R`);
-  if (usage.cacheWrite) parts.push(`${usage.cacheWrite.toLocaleString()} cache W`);
+  if (usage.input) parts.push(`${usage.input.toLocaleString("en")} in`);
+  if (usage.output) parts.push(`${usage.output.toLocaleString("en")} out`);
+  if (usage.cacheRead) parts.push(`${usage.cacheRead.toLocaleString("en")} cache R`);
+  if (usage.cacheWrite) parts.push(`${usage.cacheWrite.toLocaleString("en")} cache W`);
   if (usage.cost?.total) parts.push(`$${usage.cost.total.toFixed(4)}`);
   return parts.join(" · ");
 }

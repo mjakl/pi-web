@@ -641,7 +641,7 @@ export async function GET(
       .sort((a, b) => {
         // Dirs first, then files, both alphabetically
         if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-        return a.name.localeCompare(b.name);
+        return a.name.localeCompare(b.name, "en");
       });
 
     return NextResponse.json({ entries, path: filePath });

@@ -13,7 +13,6 @@ import { ProjectTrustDialog } from "./ProjectTrustDialog";
 import { BranchNavigator, hasSessionBranches } from "./BranchNavigator";
 import { SystemPromptPanel } from "./SystemPromptPanel";
 import { ToolDefinitionsPanel } from "./ToolDefinitionsPanel";
-import { useTheme } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
 import { useIsMobile, useIsNarrowMobile } from "@/hooks/useIsMobile";
 import { useViewportHeight } from "@/hooks/useViewportHeight";
@@ -55,23 +54,13 @@ import type { ToolEntry } from "@/lib/tool-presets";
 import { getLastSettingsSection, type SettingsSection } from "@/lib/settings-navigation";
 
 type SessionCopyField = "file" | "id" | "projectDir" | "gitBranch" | "gitWorktree";
-type AutoNameStatus =
-  | { kind: "idle" }
-  | { kind: "naming" }
-  | { kind: "success" }
-  | { kind: "error"; message: string };
-
 const TOP_BAR_ICON_BUTTON_SIZE = 36;
-const LANGUAGE_MENU_WIDTH = 176;
 
 export function AppShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [initialNavigation] = useState(() => getInitialNavigation(searchParams));
-  const { preference, toggleTheme } = useTheme();
-  const themeLabelKey =
-    preference === "light" ? "theme.light" : preference === "dark" ? "theme.dark" : "theme.auto";
-  const { locale, setLocale, t: translate, supportedLocales } = useI18n();
+  const { t: translate } = useI18n();
   const isMobile = useIsMobile();
   const isNarrowMobile = useIsNarrowMobile();
   useViewportHeight();
@@ -82,8 +71,8 @@ export function AppShell() {
   useEffect(() => {
     if (typeof window === "undefined" || !("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
-    void setupPushSubscription(locale);
-  }, [locale]);
+    void setupPushSubscription();
+  }, []);
   // Audio ownership lives here (not in ChatWindow) so the completion tone can
   // also fire for tasks finishing in a non-active workspace whose ChatWindow
   // is not mounted. ChatWindow receives the audio callbacks as props.
@@ -208,7 +197,6 @@ export function AppShell() {
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
   const mobileToolbarRef = useRef<HTMLDivElement>(null);
-  const languageBtnRef = useRef<HTMLButtonElement>(null);
 
   // Branch navigator state — populated by ChatWindow via onBranchDataChange
   const [branchTree, setBranchTree] = useState<SessionTreeNode[]>([]);
@@ -250,10 +238,6 @@ export function AppShell() {
 
   // Session stats (tokens + cost) — populated by ChatWindow, displayed in top bar
   const [sessionStats, setSessionStats] = useState<SessionStatsInfo | null>(null);
-  const [autoNameStatus, setAutoNameStatus] = useState<AutoNameStatus>({ kind: "idle" });
-  const autoNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeSessionIdRef = useRef<string | null>(selectedSession?.id ?? null);
-  activeSessionIdRef.current = selectedSession?.id ?? null;
   const handleSessionStatsChange = useCallback((stats: SessionStatsInfo | null) => {
     setSessionStats(stats);
   }, []);
@@ -270,7 +254,6 @@ export function AppShell() {
   useEffect(() => {
     return () => {
       if (sessionCopyTimerRef.current) clearTimeout(sessionCopyTimerRef.current);
-      if (autoNameTimerRef.current) clearTimeout(autoNameTimerRef.current);
     };
   }, []);
 
@@ -281,7 +264,7 @@ export function AppShell() {
   }, []);
 
   // Single active panel — only one dropdown open at a time
-  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "tools" | "session" | "language" | null>(null);
+  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "tools" | "session" | null>(null);
   const [topPanelPos, setTopPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
   useEffect(() => {
@@ -291,7 +274,7 @@ export function AppShell() {
   }, [sessionHasBranches]);
 
   const toggleTopPanel = useCallback((
-    panel: "branches" | "system" | "tools" | "session" | "language",
+    panel: "branches" | "system" | "tools" | "session",
     keepMobileToolbarOpen = false,
   ) => {
     if (isMobile) setSidebarOpen(false);
@@ -380,22 +363,11 @@ export function AppShell() {
     if (!activeTopPanel || !topBarRef.current) return;
     const update = () => {
       const topBarRect = topBarRef.current!.getBoundingClientRect();
-      if (activeTopPanel === "language" && !isMobile && languageBtnRef.current) {
-        const buttonRect = languageBtnRef.current.getBoundingClientRect();
-        const width = Math.min(LANGUAGE_MENU_WIDTH, topBarRect.width);
-        const left = Math.min(
-          buttonRect.left - 1,
-          Math.max(topBarRect.left, topBarRect.right - width),
-        );
-        setTopPanelPos({ top: topBarRect.bottom, left, width });
-        return;
-      }
       setTopPanelPos({ top: topBarRect.bottom, left: topBarRect.left, width: topBarRect.width });
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(topBarRef.current);
-    if (languageBtnRef.current) ro.observe(languageBtnRef.current);
     return () => ro.disconnect();
   }, [activeTopPanel, isMobile]);
 
@@ -721,16 +693,16 @@ export function AppShell() {
 
     if (Notification.permission === "granted") {
       fire();
-      void setupPushSubscription(locale);
+      void setupPushSubscription();
     } else if (Notification.permission === "default") {
       void Notification.requestPermission().then((p) => {
         if (p === "granted") {
           fire();
-          void setupPushSubscription(locale);
+          void setupPushSubscription();
         }
       });
     }
-  }, [handleSelectSession, locale]);
+  }, [handleSelectSession]);
 
   const handleAgentEnd = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -760,42 +732,6 @@ export function AppShell() {
       tag: `pi-extension-ui:${request.id}`,
     });
   }, [deliverSessionNotification, selectedSession, translate]);
-
-  const handleAutoName = useCallback(async () => {
-    const sessionId = selectedSession?.id;
-    if (!sessionId || autoNameStatus.kind === "naming") return;
-    if (autoNameTimerRef.current) clearTimeout(autoNameTimerRef.current);
-    setActiveTopPanel(null);
-    setAutoNameStatus({ kind: "naming" });
-
-    try {
-      const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/auto-name`, {
-        method: "POST",
-      });
-      const body = (await response.json().catch(() => ({}))) as { title?: string; error?: string };
-      if (!response.ok || !body.title) {
-        throw new Error(body.error || `HTTP ${response.status}`);
-      }
-
-      const title = body.title.trim();
-      setRefreshKey((key) => key + 1);
-      if (activeSessionIdRef.current !== sessionId) return;
-      setSelectedSession((current) => current?.id === sessionId ? { ...current, name: title } : current);
-      setSessionStats((current) => current?.sessionId === sessionId ? { ...current, sessionName: title } : current);
-      setAutoNameStatus({ kind: "success" });
-      autoNameTimerRef.current = setTimeout(() => setAutoNameStatus({ kind: "idle" }), 1800);
-    } catch (error) {
-      if (activeSessionIdRef.current !== sessionId) return;
-      const message = error instanceof Error ? error.message : String(error);
-      setAutoNameStatus({ kind: "error", message });
-      autoNameTimerRef.current = setTimeout(() => setAutoNameStatus({ kind: "idle" }), 5000);
-    }
-  }, [autoNameStatus.kind, selectedSession?.id]);
-
-  useEffect(() => {
-    if (autoNameTimerRef.current) clearTimeout(autoNameTimerRef.current);
-    setAutoNameStatus({ kind: "idle" });
-  }, [selectedSession?.id]);
 
   const handleExplorerRefresh = useCallback(() => {
     setExplorerRefreshKey((k) => k + 1);
@@ -1035,93 +971,6 @@ export function AppShell() {
     </>
   );
 
-  const renderThemeButton = (mobile: boolean) => (
-    <button
-      type="button"
-      onClick={(event) => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        toggleTheme({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-        if (mobile && isNarrowMobile) setMobileToolbarMoreOpen(true);
-      }}
-      title={translate(themeLabelKey)}
-      aria-label={translate(themeLabelKey)}
-      style={{
-        display: "flex", alignItems: "center", justifyContent: "center",
-        width: TOP_BAR_ICON_BUTTON_SIZE, height: TOP_BAR_ICON_BUTTON_SIZE, padding: 0,
-        background: "none", border: "none", borderRight: "1px solid var(--border)",
-        color: "var(--text-muted)", cursor: "pointer", flexShrink: 0, transition: "color 0.12s",
-      }}
-      onMouseEnter={(event) => { event.currentTarget.style.color = "var(--text)"; }}
-      onMouseLeave={(event) => { event.currentTarget.style.color = "var(--text-muted)"; }}
-      data-mobile-toolbar-action={mobile ? "theme" : undefined}
-    >
-      {preference === "light" ? (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="5" />
-          <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-          <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-        </svg>
-      ) : preference === "dark" ? (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-        </svg>
-      ) : (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <rect x="2" y="3" width="20" height="14" rx="2" />
-          <line x1="8" y1="21" x2="16" y2="21" />
-          <line x1="12" y1="17" x2="12" y2="21" />
-        </svg>
-      )}
-    </button>
-  );
-
-  const renderLanguageButton = (mobile: boolean) => (
-    <button
-      ref={languageBtnRef}
-      type="button"
-      onClick={() => toggleTopPanel("language", mobile)}
-      title={translate("common.language")}
-      aria-label={translate("common.language")}
-      aria-haspopup="menu"
-      aria-expanded={activeTopPanel === "language"}
-      aria-pressed={activeTopPanel === "language"}
-      style={{
-        display: "flex", alignItems: "center", justifyContent: "center",
-        width: TOP_BAR_ICON_BUTTON_SIZE, height: TOP_BAR_ICON_BUTTON_SIZE, padding: 0,
-        background: activeTopPanel === "language" ? "var(--bg-selected)" : "none",
-        border: "none", borderRight: "1px solid var(--border)",
-        color: activeTopPanel === "language" ? "var(--text)" : "var(--text-muted)",
-        cursor: "pointer", flexShrink: 0, transition: "color 0.12s",
-      }}
-      onMouseEnter={(event) => { event.currentTarget.style.color = "var(--text)"; }}
-      onMouseLeave={(event) => {
-        event.currentTarget.style.color = activeTopPanel === "language" ? "var(--text)" : "var(--text-muted)";
-      }}
-      data-mobile-toolbar-action={mobile ? "language" : undefined}
-    >
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="m5 8 6 6" />
-        <path d="m4 14 6-6 2-3" />
-        <path d="M2 5h12" />
-        <path d="M7 2h1" />
-        <path d="m22 22-5-10-5 10" />
-        <path d="M14 18h6" />
-      </svg>
-    </button>
-  );
-
   const renderProjectTrustWarning = (mobileBanner: boolean) => {
     if (!showChat || !projectTrust?.requiresTrust || projectTrust.trusted) return null;
     return (
@@ -1241,84 +1090,6 @@ export function AppShell() {
           </svg>
           {!mobile && <span>{translate("history.label")}</span>}
         </button>
-        {(() => {
-          // 上下文压缩后当前消息可能不再包含 user 消息，需同时参考会话文件的消息总数。
-          const hasMessages = Boolean(
-            selectedSession
-            && ((sessionStats?.userMessages ?? 0) > 0 || (selectedSession.messageCount ?? 0) > 0),
-          );
-          const disabled = !selectedSession || selectedSession.transient || !hasMessages || autoNameStatus.kind === "naming";
-          const isSuccess = autoNameStatus.kind === "success";
-          const isError = autoNameStatus.kind === "error";
-          const label = autoNameStatus.kind === "naming"
-            ? translate("title.generating")
-            : isSuccess
-              ? translate("title.updated")
-              : isError
-                ? translate("title.failed")
-                : translate("title.generate");
-          const title = !selectedSession || selectedSession.transient
-            ? translate("title.unsaved")
-            : !hasMessages
-              ? translate("title.noMessages")
-              : isError
-                ? autoNameStatus.message
-                : translate("title.generateSession");
-
-          return (
-            <button
-              type="button"
-              onClick={() => {
-                void handleAutoName();
-                if (mobile && isNarrowMobile) setMobileToolbarMoreOpen(true);
-              }}
-              disabled={disabled}
-              title={title}
-              aria-label={label}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                width: mobile ? TOP_BAR_ICON_BUTTON_SIZE : undefined,
-                height: "100%", padding: mobile ? 0 : "0 12px",
-                background: "none", border: "none",
-                borderTop: "2px solid transparent",
-                borderRight: "1px solid var(--border)",
-                color: isError ? "#dc2626" : isSuccess ? "var(--accent)" : disabled ? "var(--text-dim)" : "var(--text-muted)",
-                cursor: disabled ? "not-allowed" : "pointer",
-                opacity: disabled && autoNameStatus.kind !== "naming" ? 0.45 : 1,
-                flexShrink: 0, fontSize: 11, whiteSpace: "nowrap",
-                transition: "color 0.1s, background 0.1s, opacity 0.1s",
-              }}
-              onMouseEnter={(event) => {
-                if (disabled) return;
-                event.currentTarget.style.color = isError ? "#dc2626" : "var(--text)";
-                event.currentTarget.style.background = "var(--bg-hover)";
-              }}
-              onMouseLeave={(event) => {
-                event.currentTarget.style.color = isError ? "#dc2626" : isSuccess ? "var(--accent)" : disabled ? "var(--text-dim)" : "var(--text-muted)";
-                event.currentTarget.style.background = "none";
-              }}
-              data-mobile-toolbar-action={mobile ? "name" : undefined}
-            >
-              {autoNameStatus.kind === "naming" ? (
-                <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-                  <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              ) : isSuccess ? (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="m15 4 5 5L7 22l-5-5Z" />
-                  <path d="m14 5 5 5" />
-                  <path d="M6 4V2M5 3H3M19 19v3M17.5 20.5h3" />
-                </svg>
-              )}
-              {!mobile && <span>{label}</span>}
-            </button>
-          );
-        })()}
         {sessionHasBranches && (mobile ? (
           <button
             type="button"
@@ -1429,8 +1200,6 @@ export function AppShell() {
           </svg>
           {!mobile && <span>{translate("tools.label")}</span>}
         </button>
-        {mobile && renderThemeButton(true)}
-        {mobile && renderLanguageButton(true)}
       </div>
     );
   };
@@ -1462,15 +1231,15 @@ export function AppShell() {
 
     const tooltipParts: string[] = [];
     if (tokens) {
-      tooltipParts.push(`in: ${tokens.input.toLocaleString(locale)}`);
-      tooltipParts.push(`out: ${tokens.output.toLocaleString(locale)}`);
-      tooltipParts.push(`cache read: ${tokens.cacheRead.toLocaleString(locale)}`);
-      tooltipParts.push(`cache write: ${tokens.cacheWrite.toLocaleString(locale)}`);
+      tooltipParts.push(`in: ${tokens.input.toLocaleString("en")}`);
+      tooltipParts.push(`out: ${tokens.output.toLocaleString("en")}`);
+      tooltipParts.push(`cache read: ${tokens.cacheRead.toLocaleString("en")}`);
+      tooltipParts.push(`cache write: ${tokens.cacheWrite.toLocaleString("en")}`);
       if (cost > 0) tooltipParts.push(`cost: $${cost.toFixed(4)}`);
     }
     if (contextUsage?.contextWindow) {
       const percent = contextUsage.percent;
-      tooltipParts.push(`context: ${percent !== null ? percent.toFixed(1) + "%" : "unknown"} of ${contextUsage.contextWindow.toLocaleString()} tokens`);
+      tooltipParts.push(`context: ${percent !== null ? percent.toFixed(1) + "%" : "unknown"} of ${contextUsage.contextWindow.toLocaleString("en")} tokens`);
     }
     const tooltip = tooltipParts.join("  |  ");
     const covered = mobile && isNarrowMobile && mobileToolbarMoreOpen;
@@ -1874,8 +1643,6 @@ export function AppShell() {
           )}
           {!isMobile && (
             <>
-              {renderThemeButton(false)}
-              {renderLanguageButton(false)}
               {renderProjectTrustWarning(false)}
               {renderChatToolbarActions(false)}
               {renderSessionStatsButton(false)}
@@ -1907,49 +1674,6 @@ export function AppShell() {
               overflowY: "auto",
               zIndex: 500,
             }}>
-              {activeTopPanel === "language" && (
-                <div
-                  role="menu"
-                  aria-label={translate("common.language")}
-                  style={{
-                    background: "var(--bg-panel)",
-                    borderLeft: "1px solid var(--border)",
-                    borderRight: "1px solid var(--border)",
-                    borderBottom: "1px solid var(--border)",
-                    overflow: "hidden",
-                    padding: 4,
-                  }}
-                >
-                  {supportedLocales.map((plugin) => (
-                    <button
-                      key={plugin.id}
-                      type="button"
-                      onClick={() => {
-                        setLocale(plugin.id as typeof locale);
-                        setActiveTopPanel(null);
-                      }}
-                      role="menuitemradio"
-                      aria-checked={locale === plugin.id}
-                      style={{
-                        display: "flex", alignItems: "center",
-                        width: "100%", height: 34, padding: "0 10px",
-                        border: "none", borderRadius: 4,
-                        background: locale === plugin.id ? "var(--bg-selected)" : "transparent",
-                        color: "var(--text)", cursor: "pointer", textAlign: "left", fontSize: 12,
-                        transition: "background 0.1s",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (locale !== plugin.id) e.currentTarget.style.background = "var(--bg-hover)";
-                      }}
-                      onMouseLeave={(e) => {
-                        if (locale !== plugin.id) e.currentTarget.style.background = "transparent";
-                      }}
-                    >
-                      <span>{plugin.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
               {activeTopPanel === "system" && (
                 <SystemPromptPanel
                   loading={systemInfoLoading}
@@ -1996,18 +1720,18 @@ export function AppShell() {
                       ...(ws?.isWorktree ? [{ label: translate("session.gitWorktree"), value: ws.cwd, copyField: "gitWorktree" as const }] : []),
                     ];
                     const messageRows = [
-                       [translate("session.user"), sessionStats.userMessages.toLocaleString(locale)],
-                       [translate("session.assistant"), sessionStats.assistantMessages.toLocaleString(locale)],
-                       [translate("session.toolCalls"), sessionStats.toolCalls.toLocaleString(locale)],
-                       [translate("session.toolResults"), sessionStats.toolResults.toLocaleString(locale)],
-                       [translate("session.total"), sessionStats.totalMessages.toLocaleString(locale)],
+                       [translate("session.user"), sessionStats.userMessages.toLocaleString("en")],
+                       [translate("session.assistant"), sessionStats.assistantMessages.toLocaleString("en")],
+                       [translate("session.toolCalls"), sessionStats.toolCalls.toLocaleString("en")],
+                       [translate("session.toolResults"), sessionStats.toolResults.toLocaleString("en")],
+                       [translate("session.total"), sessionStats.totalMessages.toLocaleString("en")],
                     ];
                     const tokenRows = [
-                       [translate("session.input"), sessionStats.tokens.input.toLocaleString(locale)],
-                       [translate("session.output"), sessionStats.tokens.output.toLocaleString(locale)],
-                       ...(sessionStats.tokens.cacheRead > 0 ? [[translate("session.cacheRead"), sessionStats.tokens.cacheRead.toLocaleString(locale)]] : []),
-                       ...(sessionStats.tokens.cacheWrite > 0 ? [[translate("session.cacheWrite"), sessionStats.tokens.cacheWrite.toLocaleString(locale)]] : []),
-                       [translate("session.total"), sessionStats.tokens.total.toLocaleString(locale)],
+                       [translate("session.input"), sessionStats.tokens.input.toLocaleString("en")],
+                       [translate("session.output"), sessionStats.tokens.output.toLocaleString("en")],
+                       ...(sessionStats.tokens.cacheRead > 0 ? [[translate("session.cacheRead"), sessionStats.tokens.cacheRead.toLocaleString("en")]] : []),
+                       ...(sessionStats.tokens.cacheWrite > 0 ? [[translate("session.cacheWrite"), sessionStats.tokens.cacheWrite.toLocaleString("en")]] : []),
+                       [translate("session.total"), sessionStats.tokens.total.toLocaleString("en")],
                     ];
                     const ctx = contextUsage ?? sessionStats.contextUsage;
                     const formatCompact = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(0)}k` : String(n);

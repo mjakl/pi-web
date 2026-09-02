@@ -71,7 +71,7 @@ export function buildEntriesFromFiles(files: string[]): FileIndexEntry[] {
     if (!f) continue;
     entries.push({ path: f, isDir: false });
   }
-  entries.sort((a, b) => pathDepth(a.path) - pathDepth(b.path) || a.path.localeCompare(b.path));
+  entries.sort((a, b) => pathDepth(a.path) - pathDepth(b.path) || a.path.localeCompare(b.path, "en"));
   return entries;
 }
 
@@ -133,7 +133,7 @@ export function filterFileEntries(
   scored.sort((a, b) =>
     b.score - a.score
     || pathDepth(a.entry.path) - pathDepth(b.entry.path)
-    || a.entry.path.localeCompare(b.entry.path));
+    || a.entry.path.localeCompare(b.entry.path, "en"));
   return scored.slice(0, limit).map((s) => s.entry);
 }
 

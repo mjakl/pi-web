@@ -53,7 +53,7 @@ function ThemeIcon({ preference }: { preference: ThemePreference }) {
 }
 
 function GeneralSettings({ sessionId, onSessionReloaded }: Pick<Props, "sessionId" | "onSessionReloaded">) {
-  const { locale, setLocale, supportedLocales, t } = useI18n();
+  const { t } = useI18n();
   const { preference, setThemePreference } = useTheme();
   const [shellSettings, setShellSettings] = useState<ShellToolSettingsResponse | null>(null);
   const [shellSaving, setShellSaving] = useState(false);
@@ -144,32 +144,6 @@ function GeneralSettings({ sessionId, onSessionReloaded }: Pick<Props, "sessionI
           {shellError && <p role="alert" className="settings-general-error">{shellError}</p>}
         </section>
       )}
-
-      <section className="settings-general-section">
-        <h3 className="settings-general-heading">{t("common.language")}</h3>
-        <p className="settings-general-description">{t("settings.languageDescription")}</p>
-        <div role="radiogroup" aria-label={t("common.language")} className="settings-language-options">
-          {supportedLocales.map((plugin) => {
-            const selected = locale === plugin.id;
-            return (
-              <button
-                key={plugin.id}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => setLocale(plugin.id as typeof locale)}
-                className="settings-language-option"
-              >
-                <span className="settings-language-radio">
-                  {selected && <span className="settings-language-radio-dot" />}
-                </span>
-                <span className="settings-language-label">{plugin.label}</span>
-                <span className="settings-language-code">{plugin.id}</span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
     </div>
   );
 }

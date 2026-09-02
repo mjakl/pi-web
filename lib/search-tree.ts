@@ -31,7 +31,7 @@ export function buildSearchTree(paths: string[]): SearchTreeNode[] {
     }
   }
   const sort = (nodes: SearchTreeNode[]) => {
-    nodes.sort((a, b) => (a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : a.name.localeCompare(b.name)));
+    nodes.sort((a, b) => (a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : a.name.localeCompare(b.name, "en")));
     nodes.forEach((n) => sort(n.children));
   };
   sort(roots);
