@@ -136,7 +136,7 @@ npm run lint
 
 Do not run `next build` or `npm run build` during normal development. It writes to `.next/` and can interfere with the development server; leave builds for release work.
 
-Contributor guides: [Internationalization](./docs/i18n.md) and [Release process](./docs/release.md).
+Contributor guide: [Internationalization](./docs/i18n.md).
 
 ## Repository Layout
 
