@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
+import { hasJsonContentType } from "@/lib/request-content-type";
 import {
   readPowerShellToolEnabled,
   writePowerShellToolEnabled,
@@ -22,9 +22,6 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  if (!isApiRequestAllowed(req)) {
-    return NextResponse.json({ error: "Untrusted API request" }, { status: 403 });
-  }
   if (!hasJsonContentType(req)) {
     return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
   }

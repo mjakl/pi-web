@@ -10,7 +10,7 @@ import {
   type ResolvedResource,
 } from "@earendil-works/pi-coding-agent";
 import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
-import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
+import { hasJsonContentType } from "@/lib/request-content-type";
 import { getProjectTrustStatus } from "@/lib/project-trust";
 import type {
   PluginDiagnostic,
@@ -296,9 +296,6 @@ export async function GET(req: Request) {
 
 // POST /api/plugins body: { action, source?, scope?, cwd }
 export async function POST(req: Request) {
-  if (!isApiRequestAllowed(req)) {
-    return NextResponse.json({ error: "Untrusted API request" }, { status: 403 });
-  }
   if (!hasJsonContentType(req)) {
     return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
   }
