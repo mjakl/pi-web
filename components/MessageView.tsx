@@ -717,52 +717,72 @@ function AssistantMessageView({
 
   if (blocks.length === 0 && !isStreaming && !providerError) return null;
 
+  const modelLabel = message.provider
+    ? modelNames?.[`${message.provider}:${message.model}`] ?? modelNames?.[message.model] ?? message.model
+    : null;
+  const roundedEstimatedTokens = Math.round(estimatedTokens);
+
   return (
     <div
       style={{ marginBottom: 16 }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Model label */}
+      {/* Model/status row */}
       <div
         style={{
           fontSize: 11,
           color: "var(--text-dim)",
           marginBottom: 4,
-          display: "flex",
+          display: "grid",
+          gridTemplateColumns: isStreaming ? "minmax(0, 1fr) 9ch 10ch" : "minmax(0, 1fr)",
           alignItems: "center",
-          gap: 6,
+          columnGap: 6,
         }}
       >
-        {message.provider && (
-          <span>{modelNames?.[`${message.provider}:${message.model}`] ?? modelNames?.[message.model] ?? message.model}</span>
-        )}
-        {isStreaming && (() => {
-          const est = Math.round(estimatedTokens);
-          return (
-            <>
-
-              {est > 0 && (
-                <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text)" }} title={t("i18n.estimatedTokens")}>
-                  <span style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, fontWeight: 400 }}>
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="5" y1="1.5" x2="5" y2="8.5" /><polyline points="2 6 5 8.5 8 6" />
-                    </svg>
-                    {est}
-                  </span>
-                  {tps !== null && (() => {
-                    const bg = tps >= 50 ? "#53b3cb" : tps >= 30 ? "#9bc53d" : tps >= 15 ? "#f9c22e" : "#e01a4f";
-                    return (
-                      <span style={{ marginLeft: 6, padding: "1px 6px", borderRadius: 4, background: bg, color: "#fff", fontSize: 11, fontWeight: 400 }}>
-                        {tps.toFixed(1)} t/s
-                      </span>
-                    );
-                  })()}
-                </span>
+        <span
+          title={modelLabel ?? undefined}
+          style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        >
+          {modelLabel}
+        </span>
+        {isStreaming && (
+          <>
+            <span
+              title={t("i18n.estimatedTokens")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                gap: 2,
+                color: "var(--text)",
+                fontVariantNumeric: "tabular-nums",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {roundedEstimatedTokens > 0 && (
+                <>
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="1.5" x2="5" y2="8.5" /><polyline points="2 6 5 8.5 8 6" />
+                  </svg>
+                  {roundedEstimatedTokens}
+                </>
               )}
-            </>
-          );
-        })()}
+            </span>
+            <span
+              style={{
+                textAlign: "right",
+                color: "var(--text-dim)",
+                fontSize: 11,
+                fontWeight: 400,
+                fontVariantNumeric: "tabular-nums",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {tps !== null ? `${tps.toFixed(1)} t/s` : ""}
+            </span>
+          </>
+        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

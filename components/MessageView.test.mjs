@@ -26,6 +26,33 @@ function renderMessage(message, props = {}) {
   );
 }
 
+test("keeps streaming metrics in reserved slots while the model label truncates", () => {
+  const modelLabel = "A deliberately long model name for narrow layouts";
+  const html = renderMessage({
+    role: "assistant",
+    provider: "anthropic",
+    model: "claude-test",
+    content: [{ type: "text", text: "streaming response" }],
+  }, {
+    isStreaming: true,
+    modelNames: { "anthropic:claude-test": modelLabel },
+  });
+
+  assert.match(html, /grid-template-columns:minmax\(0, 1fr\) 9ch 10ch/);
+  assert.match(
+    html,
+    new RegExp(`<span title="${modelLabel}" style="[^"]*min-width:0;[^"]*overflow:hidden;[^"]*text-overflow:ellipsis;[^"]*white-space:nowrap[^"]*">`),
+  );
+  assert.match(
+    html,
+    /<span title="Estimated token count while streaming" style="[^"]*justify-content:flex-end;[^"]*color:var\(--text\);[^"]*font-variant-numeric:tabular-nums;[^"]*white-space:nowrap[^"]*">/,
+  );
+  assert.match(
+    html,
+    /<span style="text-align:right;color:var\(--text-dim\);[^"]*font-variant-numeric:tabular-nums;[^"]*white-space:nowrap[^"]*"><\/span>/,
+  );
+});
+
 test("keeps streamed tool input out of collapsed markup while counting it", () => {
   const block = {
     type: "toolCall",
