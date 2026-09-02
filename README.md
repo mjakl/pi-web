@@ -1,12 +1,10 @@
 # Pi Web
 
-[中文文档](./README.zh-CN.md) | [日本語](./README.ja.md) | [Русский](./README.ru.md)
-
 > **Note:** This repository is a customized version of the original [agegr/pi-web](https://github.com/agegr/pi-web). This is probably not the version you are looking for.
 
 Local browser UI for the [pi coding agent](https://github.com/earendil-works/pi). Pi Web uses the same local configuration and session files as pi, so you can browse and resume conversations, run agent turns, configure models and resources, and inspect project files from a browser.
 
-![Pi Web displaying a pi session with structured Markdown, tool calls, and project navigation](https://raw.githubusercontent.com/agegr/pi-web/main/docs/screenshot2.png)
+![Pi Web displaying a pi session with structured Markdown, tool calls, and project navigation](./docs/screenshot2.png)
 
 ## Features
 
@@ -140,7 +138,7 @@ npm run lint
 
 Do not run `next build` or `npm run build` during normal development. It writes to `.next/` and can interfere with the development server; leave builds for release work.
 
-Contributor guides: [Internationalization](./docs/i18n.md) and [Release process](./docs/release.md).
+Contributor guide: [Internationalization](./docs/i18n.md).
 
 ## Repository Layout
 

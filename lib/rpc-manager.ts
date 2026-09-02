@@ -119,7 +119,6 @@ type AgentSessionWrapperOptions = {
 const IDLE_RESET_EVENT_TYPES = new Set([
   "agent_end",
   "agent_settled",
-  "auto_compaction_end",
   "compaction_end",
 ]);
 

@@ -35,9 +35,12 @@ Next.js routes in app/api
 - Persisted session access is owned by `lib/session-reader.ts`: listing scans
   bounded JSONL metadata, while detail and context reads may use SDK
   `SessionManager` helpers. Neither path creates a live `AgentSession`.
-- Live commands and turns enter through `app/api/agent/**` and are owned by
-  `lib/rpc-manager.ts`. Browser synchronization is owned by
-  `hooks/useAgentSession.ts` and the `lib/agent-event-*` modules.
+- Top-level live commands and turns enter through `app/api/agent/**` and are
+  owned by `lib/rpc-manager.ts`. Auto-naming and subagent control are additional
+  live callers under `app/api/sessions/**` and `app/api/subagents/**`; inspect
+  all runtime callers before changing startup or lifecycle behavior. Browser
+  synchronization is owned by `hooks/useAgentSession.ts` and the
+  `lib/agent-event-*` modules.
 - `globalThis` registries and caches survive Next.js hot reload but are
   process-local acceleration, not durable truth. Session JSONL and Pi's SDK
   stores remain authoritative.
@@ -50,7 +53,7 @@ Start with these owners instead of a broad file inventory:
 | Change area | Start here |
 | --- | --- |
 | Persisted session reading, metadata, families, or context | `lib/session-reader.ts`, `lib/session-*.ts`, `app/api/sessions/**` |
-| Live session startup, commands, tools, fork/clone, or cleanup | `lib/rpc-manager.ts`, `app/api/agent/**` |
+| Live session startup, commands, tools, fork/clone, or cleanup | `lib/rpc-manager.ts`, `app/api/agent/**`, `app/api/sessions/[id]/auto-name/route.ts`, `app/api/subagents/[id]/route.ts` |
 | Browser streaming and reconciliation | `hooks/useAgentSession.ts`, `lib/agent-event-*.ts`, `lib/agent-client.ts` |
 | File access, path identity, Git, or worktrees | `lib/file-access.ts`, `lib/path-security.ts`, `lib/paths.ts`, `lib/worktree.ts` |
 | Project resources, trust, plugins, skills, or subagents | `lib/project-trust.ts`, `lib/chat-only.ts`, `lib/subagent-*.ts`, `app/api/{project-trust,plugins,skills,subagents}/**` |
@@ -88,8 +91,8 @@ Start with these owners instead of a broad file inventory:
 - Preserve monotonic run identity when changing reconnect or reconciliation
   code. Late events and stale HTTP responses from an older run must not revive
   or complete a newer run.
-- Keep both current `compaction_*` and legacy `auto_compaction_*` event handling
-  unless Pi's supported SDK contract removes the compatibility need.
+- Keep `compaction_start` and `compaction_end` handling for both automatic and
+  manual compaction.
 
 ### Tools, resources, and project execution
 
@@ -146,9 +149,6 @@ Start with these owners instead of a broad file inventory:
   lifecycle behavior when changing interactions.
 - When adding or changing user-visible UI text or locale behavior, read
   [`docs/i18n.md`](docs/i18n.md) and update every built-in language package.
-- Release work is the only normal exception to the no-build rule; when the user
-  explicitly requests a release, read [`docs/release.md`](docs/release.md)
-  before running the release workflow.
 
 ## Development server
 
