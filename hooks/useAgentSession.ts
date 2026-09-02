@@ -1821,7 +1821,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         closeEvents();
         sessionIdRef.current = activeSessionId;
       }
-      if (result?.recreated) {
+      if (result?.recreated && sessionHookMountedRef.current) {
         await ensureEventsConnected(activeSessionId);
       }
       setSlashCommands([]);

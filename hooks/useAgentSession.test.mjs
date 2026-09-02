@@ -145,7 +145,7 @@ test("fresh sessions use the preference while persisted and live sessions restor
   );
   assert.match(
     changeSource,
-    /if \(result\?\.recreated\) \{\s*await ensureEventsConnected\(activeSessionId\)/,
+    /if \(result\?\.recreated && sessionHookMountedRef\.current\) \{\s*await ensureEventsConnected\(activeSessionId\)/,
   );
   assert.doesNotMatch(loadToolsSource, /setPreferredToolPreset/);
 });
