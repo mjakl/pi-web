@@ -23,7 +23,6 @@ export const enMessages: Record<string, string> = {
     "skills.action.switchToManual": "Switch to Manual",
     "skills.action.switchToModelVisible": "Switch to Model-visible",
     "skills.scope.path": "path",
-    "appUpdate.releaseNotes": "Pi Web v{version} is available. View release notes",
     "sidebar.hide": "Hide sidebar",
     "sidebar.show": "Show sidebar",
     "history.full": "Full history",

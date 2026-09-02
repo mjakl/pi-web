@@ -116,9 +116,10 @@ Start with these owners instead of a broad file inventory:
 ### Security, files, paths, and credentials
 
 - Preserve the `proxy.ts` and `lib/request-security.ts` boundary for every API
-  route: allowed-host checks, browser same-origin checks, and optional password
-  authentication must not be bypassed. Reuse `isApiRequestAllowed()` where a
-  route needs direct verification.
+  route: allowed-host and browser same-origin checks must not be bypassed. Reuse
+  `isApiRequestAllowed()` where a route needs direct verification. Pi Web has no
+  built-in authentication; non-loopback access requires a trusted network or an
+  external security layer.
 - Pi Web's file APIs are not a general filesystem browser. Keep containment and
   symlink-safe authorization centralized in `lib/path-security.ts`; add roots
   through the existing allowed-root flow rather than adding route-local path
