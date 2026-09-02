@@ -60,9 +60,10 @@ export function createAgentEventStream(
         enqueueText(`data: ${JSON.stringify(data)}\n\n`);
       };
       const forwardEvent = (event: AgentEventLike, snapshot: unknown) => {
-        if (isEventIncludedInSnapshot(event, snapshot)) return;
+        if (isEventIncludedInSnapshot(event, snapshot)) return false;
         const clientEvent = toClientAgentEvent(event);
         if (clientEvent) encode(clientEvent);
+        return clientEvent?.type === "session_stopped";
       };
 
       const publishSession = async () => {
@@ -77,7 +78,7 @@ export function createAgentEventStream(
               bufferedEvents.push(event);
               return;
             }
-            forwardEvent(event, snapshot);
+            if (forwardEvent(event, snapshot)) cleanup(true);
           };
 
           const stopListening = session.onEvent(handleEvent);
@@ -93,7 +94,12 @@ export function createAgentEventStream(
             sessionId,
             isStreaming: session.isStreaming,
           });
-          for (const event of bufferedEvents) forwardEvent(event, snapshot);
+          for (const event of bufferedEvents) {
+            if (forwardEvent(event, snapshot)) {
+              cleanup(true);
+              return;
+            }
+          }
           if (snapshot !== undefined && snapshot !== null) {
             encode({ type: "message_start", message: snapshot });
           }

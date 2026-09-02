@@ -5,6 +5,7 @@ import {
   mergeSessionLists,
 } from "@/lib/session-reader";
 import {
+  getActiveRpcSessionIds,
   getRpcSessionInfos,
   getRunningRpcSessionIds,
 } from "@/lib/rpc-manager";
@@ -29,6 +30,7 @@ export async function GET() {
     return NextResponse.json(
       {
         sessions,
+        activeSessionIds: getActiveRpcSessionIds(),
         runningSessionIds: getRunningRpcSessionIds(),
       },
       { headers: { "Cache-Control": "no-store" } },

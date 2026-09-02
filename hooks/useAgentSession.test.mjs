@@ -134,11 +134,19 @@ test("fresh sessions use the preference while persisted and live sessions restor
     preferenceSource,
     /const existingSessionId = session\?\.id;[\s\S]*?useLayoutEffect\(\(\) => \{\s*if \(!existingSessionId && \(!isNew \|\| sessionIdRef\.current\)\) return;\s*setToolPresetState\(getPreferredToolPreset\(\)\)/,
   );
-  assert.match(source, /if \(agentState\?\.running\) \{\s*loadTools\(session\.id\)/);
+  assert.match(source, /if \(agentState\?\.active\) \{\s*loadTools\(session\.id\)/);
   assert.match(source, /d\.toolNames !== undefined \? getPresetFromToolNames\(d\.toolNames\) : "default"/);
   assert.match(changeSource, /setPreferredToolPreset\(preset\)/);
   assert.match(changeSource, /\(sid, \{ type: "set_tools", toolNames \}\)/);
   assert.match(changeSource, /sessionIdRef\.current = activeSessionId/);
+  assert.match(
+    changeSource,
+    /if \(result\?\.recreated \|\| activeSessionId !== sid\) \{[\s\S]*?closeEvents\(\)[\s\S]*?sessionIdRef\.current = activeSessionId/,
+  );
+  assert.match(
+    changeSource,
+    /if \(result\?\.recreated && sessionHookMountedRef\.current\) \{\s*await ensureEventsConnected\(activeSessionId\)/,
+  );
   assert.doesNotMatch(loadToolsSource, /setPreferredToolPreset/);
 });
 
@@ -261,7 +269,7 @@ test("delegates event stream readiness and hides an empty agent phase", () => {
 
   assert.match(source, /new AgentEventConnection\(\{/);
   assert.match(source, /shouldMaintain: \(sid\)[\s\S]*?sessionIdRef\.current === sid/);
-  assert.match(ensureSource, /eventConnectionRef\.current!\.ensureConnected\(sid\)/);
+  assert.match(ensureSource, /eventConnectionRef\.current!\.ensureConnected\(sid, activate\)/);
   assert.match(ensureSource, /eventConnectionRef\.current!\.maintain\(sid\)/);
   assert.match(chatWindowSource, /const hasStreamingContent = Boolean\(streamState\.streamingMessage\?\.content\.length\)/);
   assert.match(chatWindowSource, /streamState\.isStreaming && hasStreamingContent && streamState\.streamingMessage/);
@@ -290,18 +298,62 @@ test("uses server pagination state instead of guessing from rendered rows", () =
   assert.doesNotMatch(chatWindowSource, /rendered\.length >= visibleCount/);
 });
 
-test("connects a selected session when another browser reports it running", () => {
-  assert.match(source, /sessionRunning\?: boolean/);
+test("connects a selected session when another browser reports it active", () => {
+  assert.match(source, /sessionActive\?: boolean/);
   assert.match(
     source,
-    /if \(!session\?\.id \|\| !sessionRunning\) return;[\s\S]*?maintainEventsConnected\(session\.id\)/,
+    /if \(!session\?\.id \|\| !runtimeActive\) return;[\s\S]*?maintainEventsConnected\(session\.id\)/,
   );
   assert.match(source, /maintainEventsConnected\(session\.id\)/);
   assert.doesNotMatch(source, /void connectEvents\(/);
-  assert.match(chatWindowSource, /sessionRunning\?: boolean/);
-  assert.match(chatWindowSource, /session, sessionRunning, newSessionCwd/);
-  assert.match(appShellSource, /runningSessionIds\.has\(selectedSession\.id\)/);
-  assert.match(appShellSource, /onRunningSessionIdsChange=\{handleRunningSessionIdsChange\}/);
+  assert.match(chatWindowSource, /sessionActive\?: boolean/);
+  assert.match(chatWindowSource, /session, sessionActive, sessionRunning, newSessionCwd/);
+  assert.match(appShellSource, /activeSessionIds\.has\(selectedSession\.id\)/);
+  assert.match(appShellSource, /onActiveSessionIdsChange=\{handleActiveSessionIdsChange\}/);
+});
+
+test("manual stop settles without completion effects and closes the stream", () => {
+  const stoppedSource = source.slice(
+    source.indexOf('case "session_stopped"'),
+    source.indexOf('case "prompt_error"'),
+  );
+  assert.match(stoppedSource, /settleUiStage\(\)/);
+  assert.match(stoppedSource, /closeEvents\(\)/);
+  assert.match(stoppedSource, /setBashRunning\(false\)/);
+  assert.match(stoppedSource, /setIsCompacting\(false\)/);
+  assert.doesNotMatch(stoppedSource, /onAgentEnd|notifyPromptStage|scheduleEventStreamClose/);
+});
+
+test("session loads are fenced by session and prompt run identity", () => {
+  const loadSource = source.slice(
+    source.indexOf("const loadSession = useCallback"),
+    source.indexOf("const loadContext = useCallback"),
+  );
+  const applyTranscript = loadSource.indexOf("setData(d)");
+  const applyRuntimeState = loadSource.indexOf("const liveState = agentState.state");
+
+  const transcriptFence = loadSource.indexOf("if (!isCurrentLoad()) return null;");
+  const runtimeFence = loadSource.indexOf("if (!isCurrentLoad()) return null;", applyTranscript);
+  assert.match(loadSource, /const loadRunId = promptRunIdRef\.current/);
+  assert.match(loadSource, /sessionIdRef\.current === sid && promptRunIdRef\.current === loadRunId/);
+  assert.ok(transcriptFence >= 0 && transcriptFence < applyTranscript);
+  assert.ok(runtimeFence >= 0 && runtimeFence < applyRuntimeState);
+});
+
+test("agent_end runtime reconciliation is fenced by session and prompt run identity", () => {
+  const agentEndSource = source.slice(
+    source.indexOf('case "agent_end"'),
+    source.indexOf('case "agent_settled"'),
+  );
+  const responseHandler = agentEndSource.indexOf('.then((d: { state?: AgentStateResponse }) => {');
+  const ownershipFence = agentEndSource.indexOf("sessionIdRef.current !== sid || promptRunIdRef.current !== runId");
+  const firstStateWrite = agentEndSource.indexOf("setContextUsage(");
+  const lastStateWrite = agentEndSource.indexOf("setQueuedMessages(");
+
+  assert.match(agentEndSource, /const sid = sessionIdRef\.current/);
+  assert.match(agentEndSource, /const runId = promptRunIdRef\.current/);
+  assert.ok(responseHandler >= 0 && ownershipFence > responseHandler);
+  assert.ok(ownershipFence < firstStateWrite && ownershipFence < lastStateWrite);
 });
 
 test("keeps one reducer-owned assistant partial and consumes Pi JSON deltas", () => {
