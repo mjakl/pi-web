@@ -1,31 +1,89 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { createJiti } from "jiti";
 
-const source = await readFile(new URL("./[...path]/route.ts", import.meta.url), "utf8");
-const start = source.indexOf('if (type === "watch")');
-const end = source.indexOf("// type === \"list\"", start);
-assert.notEqual(start, -1, "watch route not found");
-assert.notEqual(end, -1, "watch route end not found");
-const watchBlock = source.slice(start, end);
-
-test("file watching survives same-path replacement", () => {
-  assert.match(watchBlock, /watcher = fs\.watch\(watchedDirectory/);
-  assert.match(watchBlock, /samePath\(path\.join\(watchedDirectory, changedName\.toString\(\)\), filePath\)/);
-  assert.match(watchBlock, /s\.ctimeMs === lastCtimeMs/);
-  assert.match(watchBlock, /s\.ino === lastIno/);
-  assert.match(watchBlock, /lastExists/);
+const jiti = createJiti(import.meta.url, {
+  alias: { "@": process.cwd() },
+  interopDefault: true,
+  moduleCache: false,
 });
+const { GET } = await jiti.import("./[...path]/route.ts");
+const { allowFileRoot } = await jiti.import("@/lib/file-access");
+const { NextRequest } = await jiti.import("next/server");
 
-test("a missing target can be watched after its parent is authorized", () => {
-  assert.match(source, /if \(type !== "watch"\)[\s\S]*error: "Not found"/);
-  assert.match(source, /const existingAuthorizationPath = stat \? filePath : path\.dirname\(filePath\)/);
-  assert.match(watchBlock, /lastExists = stat !== undefined/);
-});
+function readServerSentEvents(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  return {
+    async next(timeoutMs = 5000) {
+      for (;;) {
+        const separator = buffered.indexOf("\n\n");
+        if (separator !== -1) {
+          const raw = buffered.slice(0, separator);
+          buffered = buffered.slice(separator + 2);
+          const data = /^data: (.*)$/m.exec(raw)?.[1];
+          return { event: /^event: (.*)$/m.exec(raw)?.[1], data: data ? JSON.parse(data) : undefined };
+        }
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise((_resolve, reject) => {
+            setTimeout(() => reject(new Error(`no SSE event within ${timeoutMs}ms`)), timeoutMs).unref();
+          }),
+        ]);
+        if (chunk.done) throw new Error("SSE stream ended");
+        buffered += decoder.decode(chunk.value, { stream: true });
+      }
+    },
+    cancel: () => reader.cancel(),
+  };
+}
 
-test("connected is emitted only after the watcher exists", () => {
-  const watcher = watchBlock.indexOf("watcher = fs.watch");
-  const connected = watchBlock.indexOf('send("connected"');
-  assert.ok(watcher >= 0, "watcher creation missing");
-  assert.ok(connected > watcher, "connected emitted before watcher creation");
+async function replaceAtomically(filePath, content) {
+  await writeFile(`${filePath}.tmp`, content);
+  await rename(`${filePath}.tmp`, filePath);
+}
+
+test("file watching keeps reporting changes across same-path replacements", async (t) => {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-web-watch-route-agent-"));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-web-watch-route-")));
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  const previousRoots = globalThis.__piAdditionalAllowedRoots;
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  globalThis.__piAdditionalAllowedRoots = undefined;
+  let events;
+  t.after(async () => {
+    await events?.cancel();
+    if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    globalThis.__piAdditionalAllowedRoots = previousRoots;
+    await rm(agentDir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
+  });
+  await mkdir(join(agentDir, "sessions"));
+  const filePath = join(dir, "watched.txt");
+  await writeFile(filePath, "first");
+  allowFileRoot(dir);
+
+  const response = await GET(
+    new NextRequest(`http://localhost/api/files${filePath}?type=watch`),
+    { params: Promise.resolve({ path: filePath.split("/").filter(Boolean) }) },
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream");
+  events = readServerSentEvents(response);
+  assert.equal((await events.next()).event, "connected");
+
+  await replaceAtomically(filePath, "second version");
+  const first = await events.next();
+  assert.equal(first.event, "change");
+  assert.equal(first.data.size, "second version".length);
+
+  await replaceAtomically(filePath, "third");
+  const second = await events.next();
+  assert.equal(second.event, "change");
+  assert.equal(second.data.size, "third".length);
 });

@@ -1,31 +1,84 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { createJiti } from "jiti";
 
-const source = await readFile(new URL("./[...path]/route.ts", import.meta.url), "utf8");
-const start = source.indexOf("function streamFile");
-const end = source.indexOf("function escapeHtml", start);
-assert.notEqual(start, -1, "streamFile not found");
-assert.notEqual(end, -1, "streamFile end not found");
-const streamBlock = source.slice(start, end);
+const jiti = createJiti(import.meta.url, {
+  alias: { "@": process.cwd() },
+  interopDefault: true,
+  moduleCache: false,
+});
+const { GET } = await jiti.import("./[...path]/route.ts");
+const { allowFileRoot } = await jiti.import("@/lib/file-access");
+const { NextRequest } = await jiti.import("next/server");
 
-test("streamed responses are not content-type sniffable", () => {
-  assert.match(streamBlock, /"X-Content-Type-Options": "nosniff"/);
+const SVG = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
+
+async function readAllowedFile(t, name, content, headers = {}) {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-web-stream-route-agent-"));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-web-stream-route-")));
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  const previousRoots = globalThis.__piAdditionalAllowedRoots;
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  globalThis.__piAdditionalAllowedRoots = undefined;
+  t.after(async () => {
+    if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    globalThis.__piAdditionalAllowedRoots = previousRoots;
+    await rm(agentDir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
+  });
+  await mkdir(join(agentDir, "sessions"));
+  const filePath = join(dir, name);
+  await writeFile(filePath, content);
+  allowFileRoot(dir);
+
+  const response = await GET(
+    new NextRequest(`http://localhost/api/files${filePath}?type=read`, { headers }),
+    { params: Promise.resolve({ path: filePath.split("/").filter(Boolean) }) },
+  );
+  return { response, body: Buffer.from(await response.arrayBuffer()) };
+}
+
+function assertSvgDocumentPolicy(response) {
+  assert.equal(response.headers.get("Content-Type"), "image/svg+xml");
+  assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
+  assert.match(response.headers.get("Content-Security-Policy"), /^default-src 'none';/);
+  assert.match(response.headers.get("Content-Security-Policy"), /frame-ancestors 'self'/);
+  assert.equal(response.headers.get("Referrer-Policy"), "no-referrer");
+}
+
+test("inline SVG previews carry a script-blocking content security policy", async (t) => {
+  const { response, body } = await readAllowedFile(t, "probe.svg", SVG);
+
+  assert.equal(response.status, 200);
+  assertSvgDocumentPolicy(response);
+  assert.equal(body.toString("utf8"), SVG);
 });
 
-test("inline SVG is served with a script-blocking content security policy", () => {
-  // SVG is the only inline preview type a browser executes as a document, so
-  // it must never be able to run script in the Pi Web origin.
-  assert.match(streamBlock, /contentType === "image\/svg\+xml"/);
-  assert.match(streamBlock, /Content-Security-Policy/);
-  assert.match(streamBlock, /default-src 'none'/);
-  assert.match(streamBlock, /style-src 'unsafe-inline'/);
-  assert.match(streamBlock, /frame-ancestors 'self'/);
+test("ranged and rejected-range SVG responses keep the same security headers", async (t) => {
+  const partial = await readAllowedFile(t, "probe.svg", SVG, { Range: "bytes=0-3" });
+  assert.equal(partial.response.status, 206);
+  assert.equal(partial.response.headers.get("Content-Range"), `bytes 0-3/${SVG.length}`);
+  assertSvgDocumentPolicy(partial.response);
+  assert.equal(partial.body.toString("utf8"), SVG.slice(0, 4));
+
+  const rejected = await readAllowedFile(t, "probe.svg", SVG, { Range: `bytes=${SVG.length}-` });
+  assert.equal(rejected.response.status, 416);
+  assert.equal(rejected.response.headers.get("Content-Range"), `bytes */${SVG.length}`);
+  assertSvgDocumentPolicy(rejected.response);
+  assert.equal(rejected.body.length, 0);
 });
 
-test("the restrictive headers are applied to every streamFile response shape", () => {
-  // The header object is shared by the full-body, 416, and 206 paths.
-  const headerObject = streamBlock.indexOf("const headers");
-  const firstReturn = streamBlock.indexOf("createFileBodyStream", headerObject);
-  assert.ok(headerObject !== -1 && firstReturn > headerObject, "headers must be built before any response");
+test("other streamed previews are nosniff without a document policy", async (t) => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const { response, body } = await readAllowedFile(t, "probe.png", png);
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Content-Type"), "image/png");
+  assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
+  assert.equal(response.headers.get("Content-Security-Policy"), null);
+  assert.deepEqual(body, png);
 });
