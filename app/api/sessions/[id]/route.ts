@@ -145,10 +145,17 @@ export async function DELETE(
     }
 
     // Read only the bounded header before deleting.
-    const parentSessionPath = readSessionHeader(filePath)?.parentSession;
-    const parentSessionId = parentSessionPath
-      ? readSessionHeader(parentSessionPath)?.id
-      : undefined;
+    let parentSessionPath = readSessionHeader(filePath)?.parentSession;
+    let parentSessionId: string | undefined;
+    if (parentSessionPath) {
+      try {
+        // The parent may have been deleted or moved already; treat it as absent.
+        parentSessionId = readSessionHeader(parentSessionPath)?.id;
+      } catch {
+        parentSessionPath = undefined;
+        parentSessionId = undefined;
+      }
+    }
 
     // Re-attach all direct children to this session's parent (cascade re-parent)
     // Scan sibling files in the same directory
