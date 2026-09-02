@@ -32,7 +32,6 @@ import {
   ConfigSidebarList,
   ConfigSidebarText,
   ConfigSplitView,
-  ConfigStatusDot,
   ConfigSwitch,
 } from "./SettingsUi";
 
@@ -47,15 +46,6 @@ function sourceLabel(skill: Skill): string {
   if (scope === "user" || src === "user") return "global";
   if (scope === "project" || src === "project") return "project";
   return "path";
-}
-
-export function orderSkillsByDormancy<
-  T extends Pick<Skill, "disableModelInvocation">,
->(skills: T[]): T[] {
-  return [
-    ...skills.filter((skill) => !skill.disableModelInvocation),
-    ...skills.filter((skill) => skill.disableModelInvocation),
-  ];
 }
 
 function updateKey(skill: Skill): string | null {
@@ -95,7 +85,7 @@ function SkillDetail({
 }) {
   const { t } = useI18n();
   const label = sourceLabel(skill);
-  const enabled = !skill.disableModelInvocation;
+  const manual = skill.disableModelInvocation;
 
   function displayPath(p: string): string {
     if (label === "project" && p.startsWith(cwd)) {
@@ -120,19 +110,17 @@ function SkillDetail({
           </ConfigDetailHeaderInfo>
           <ConfigDetailActions>
             <ConfigSwitch
-              checked={enabled}
+              checked={!manual}
               loading={toggling}
-              label={enabled ? t("i18n.visibleInPrompt") : t("i18n.hiddenFromPrompt")}
+              label={manual ? t("skills.action.switchToModelVisible") : t("skills.action.switchToManual")}
               onChange={() => onToggle(skill)}
             />
           </ConfigDetailActions>
         </ConfigDetailHeader>
         <div className="skill-detail-status-row">
-          {!enabled && (
-            <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
-              {t("i18n.hiddenButInvocable")}
-            </span>
-          )}
+          <span className="skill-mode-label">
+            {manual ? t("skills.mode.manual") : t("skills.mode.modelVisible")}
+          </span>
           {saveError && (
             <span style={{ fontSize: 12, color: "#f87171", overflowWrap: "anywhere" }}>
               {saveError}
@@ -587,8 +575,7 @@ export function SkillsConfig({
       setProjectResourcesLoaded(d.projectResourcesLoaded ?? true);
       setSelected((current) => {
         if (current && list.some((skill) => skill.filePath === current)) return current;
-        const initialSkill = list.find((skill) => !skill.disableModelInvocation) ?? list[0];
-        return initialSkill?.filePath ?? null;
+        return list[0]?.filePath ?? null;
       });
       return list;
     } catch (e) {
@@ -807,7 +794,7 @@ export function SkillsConfig({
                   const renderSkillRow = (skill: Skill) => {
                     const isSelected =
                       !addMode && selected === skill.filePath;
-                    const disabled = skill.disableModelInvocation;
+                    const manual = skill.disableModelInvocation;
                     return (
                       <ConfigSidebarItem
                         key={skill.filePath}
@@ -817,10 +804,14 @@ export function SkillsConfig({
                           setAddMode(false);
                         }}
                       >
-                        <ConfigStatusDot active={!disabled} />
-                        <ConfigSidebarText className={`is-grow${disabled ? " is-muted" : ""}`}>
+                        <ConfigSidebarText className="is-grow">
                           {skill.name}
                         </ConfigSidebarText>
+                        {manual && (
+                          <span className="skill-mode-badge">
+                            {t("skills.mode.manual")}
+                          </span>
+                        )}
                         {(() => {
                           const key = updateKey(skill);
                           const status = key ? updateStatuses[key] : undefined;
@@ -841,7 +832,7 @@ export function SkillsConfig({
                           <ConfigSidebarGroupLabel>
                             {grpLabel}
                           </ConfigSidebarGroupLabel>
-                          {orderSkillsByDormancy(grpSkills).map(renderSkillRow)}
+                          {grpSkills.map(renderSkillRow)}
                         </div>
                       );
                     },

@@ -199,31 +199,21 @@ function getSlashDescription(command: SlashCommandPaletteItem, t: (key: string) 
 }
 
 // Skill slash commands are named "skill:<skillName>"; look the skill up in the
-// dormancy map fetched from /api/skills. Unknown skills are treated as active.
-function isDormantSkillCommand(command: SlashCommandPaletteItem, dormancy: Record<string, boolean>): boolean {
+// mode map fetched from /api/skills. Unknown skills remain unannotated.
+function isManualSkillCommand(command: SlashCommandPaletteItem, skillModes: Record<string, boolean>): boolean {
   if (command.source !== "skill" || !command.name.startsWith("skill:")) return false;
-  return dormancy[command.name.slice("skill:".length)] === true;
+  return skillModes[command.name.slice("skill:".length)] === true;
 }
 
-export function buildSlashCommandLayout(
-  commands: SlashCommandPaletteItem[],
-  dormancy: Record<string, boolean>,
-) {
+export function buildSlashCommandLayout(commands: SlashCommandPaletteItem[]) {
   let index = 0;
   const groups = SLASH_SOURCES
-    .map((source) => {
-      const sourceCommands = commands.filter((command) => command.source === source);
-      const orderedCommands = source === "skill"
-        ? [
-            ...sourceCommands.filter((command) => !isDormantSkillCommand(command, dormancy)),
-            ...sourceCommands.filter((command) => isDormantSkillCommand(command, dormancy)),
-          ]
-        : sourceCommands;
-      return {
-        source,
-        items: orderedCommands.map((command) => ({ command, index: index++ })),
-      };
-    })
+    .map((source) => ({
+      source,
+      items: commands
+        .filter((command) => command.source === source)
+        .map((command) => ({ command, index: index++ })),
+    }))
     .filter((group) => group.items.length > 0);
 
   return {
@@ -469,12 +459,12 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const [fileIndex, setFileIndex] = useState<{ cwd: string; entries: FileIndexEntry[]; truncated: boolean } | null>(null);
   const [fileIndexLoading, setFileIndexLoading] = useState(false);
   const [atServerResult, setAtServerResult] = useState<{ cwd: string; query: string; matches: FileIndexEntry[] } | null>(null);
-  const [skillDormancyState, setSkillDormancyState] = useState<{
+  const [skillModeState, setSkillModeState] = useState<{
     cwd: string;
     values: Record<string, boolean>;
   } | null>(null);
-  const skillDormancy = cwd && skillDormancyState?.cwd === cwd
-    ? skillDormancyState.values
+  const skillModes = cwd && skillModeState?.cwd === cwd
+    ? skillModeState.values
     : {};
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -833,7 +823,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const {
     commands: displayedSlashCommands,
     groups: groupedSlashCommands,
-  } = buildSlashCommandLayout(filteredSlashCommands, skillDormancy);
+  } = buildSlashCommandLayout(filteredSlashCommands);
 
   const slashCommandCountLabel = filteredSlashCommands.length === 1
     ? t(slashQuery ? "chat.match" : "chat.command")
@@ -1259,14 +1249,14 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     }
   }, [slashQuery, onLoadSlashCommands]);
 
-  // Lazy-load skill dormancy (disable-model-invocation) each time the slash
-  // palette opens, so toggles made in the skills panel are reflected on the
-  // next open. Failures degrade silently to the unannotated palette.
+  // Lazy-load skill modes each time the slash palette opens, so changes made
+  // in Settings are reflected on the next open. Failures degrade silently to
+  // the unannotated palette.
   useEffect(() => {
     if (!slashMenuOpen || !cwd) return;
     const requestCwd = cwd;
     let cancelled = false;
-    setSkillDormancyState({ cwd: requestCwd, values: {} });
+    setSkillModeState({ cwd: requestCwd, values: {} });
     fetch(`/api/skills?cwd=${encodeURIComponent(requestCwd)}`)
       .then((res) => {
         if (!res.ok) throw new Error(`skills fetch failed: ${res.status}`);
@@ -1274,12 +1264,12 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       })
       .then((data) => {
         if (cancelled) return;
-        const dormancy: Record<string, boolean> = {};
-        for (const skill of data.skills ?? []) dormancy[skill.name] = skill.disableModelInvocation;
-        setSkillDormancyState({ cwd: requestCwd, values: dormancy });
+        const modes: Record<string, boolean> = {};
+        for (const skill of data.skills ?? []) modes[skill.name] = skill.disableModelInvocation;
+        setSkillModeState({ cwd: requestCwd, values: modes });
       })
       .catch(() => {
-        if (!cancelled) setSkillDormancyState({ cwd: requestCwd, values: {} });
+        if (!cancelled) setSkillModeState({ cwd: requestCwd, values: {} });
       });
     return () => {
       cancelled = true;
@@ -1732,7 +1722,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                       >
                         {group.items.map(({ command, index }) => {
                           const active = index === slashActiveIndex;
-                          const dormant = isDormantSkillCommand(command, skillDormancy);
+                          const manual = isManualSkillCommand(command, skillModes);
                           return (
                             <button
                               key={`${command.source}:${command.name}`}
@@ -1768,20 +1758,19 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                                 fontFamily: "var(--font-mono)",
                                 overflowWrap: "anywhere",
                                 wordBreak: "break-word",
-                                color: dormant ? "var(--text-dim)" : undefined,
                               }}>
                                 /{command.name}
-                                {dormant && (
+                                {manual && (
                                   <span style={{
                                     marginLeft: 6,
                                     padding: "0 4px",
                                     border: "1px solid var(--border)",
                                     borderRadius: 3,
                                     fontSize: 9,
-                                    color: "var(--text-dim)",
+                                    color: "var(--text-muted)",
                                     whiteSpace: "nowrap",
                                   }}>
-                                    {t("chat.dormant")}
+                                    {t("skills.mode.manual")}
                                   </span>
                                 )}
                               </span>
