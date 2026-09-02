@@ -36,11 +36,9 @@ Next.js routes in app/api
   bounded JSONL metadata, while detail and context reads may use SDK
   `SessionManager` helpers. Neither path creates a live `AgentSession`.
 - Top-level live commands and turns enter through `app/api/agent/**` and are
-  owned by `lib/rpc-manager.ts`. Auto-naming under `app/api/sessions/**` is an
-  additional live caller; inspect all runtime callers before changing startup
-  or lifecycle behavior. Browser
-  synchronization is owned by `hooks/useAgentSession.ts` and the
-  `lib/agent-event-*` modules.
+  owned by `lib/rpc-manager.ts`. Inspect all runtime callers before changing
+  startup or lifecycle behavior. Browser synchronization is owned by
+  `hooks/useAgentSession.ts` and the `lib/agent-event-*` modules.
 - `globalThis` registries and caches survive Next.js hot reload but are
   process-local acceleration, not durable truth. Session JSONL and Pi's SDK
   stores remain authoritative.
