@@ -34,7 +34,7 @@ type Connection = {
 };
 
 export interface AgentEventConnectionOptions {
-  createSource(sessionId: string): AgentEventSourceLike;
+  createSource(sessionId: string, activate: boolean): AgentEventSourceLike;
   onEvent(event: AgentEventLike): void;
   shouldMaintain(sessionId: string): boolean;
   readinessTimeoutMs: number;
@@ -71,11 +71,11 @@ export class AgentEventConnection {
     });
   }
 
-  async ensureConnected(sessionId: string): Promise<void> {
+  async ensureConnected(sessionId: string, activate = false): Promise<void> {
     while (true) {
       let connection = this.current;
       if (!connection || connection.sessionId !== sessionId) {
-        connection = this.open(sessionId);
+        connection = this.open(sessionId, activate);
       } else if (
         connection.attempt.ready
         && connection.source.readyState === EVENT_SOURCE_OPEN
@@ -95,12 +95,12 @@ export class AgentEventConnection {
     }
   }
 
-  private open(sessionId: string): Connection {
+  private open(sessionId: string, activate: boolean): Connection {
     if (this.current) this.discard(this.current, new AgentEventConnectionError("closed"));
 
     let source: AgentEventSourceLike;
     try {
-      source = this.options.createSource(sessionId);
+      source = this.options.createSource(sessionId, activate);
     } catch (error) {
       throw new AgentEventConnectionError(
         "closed",
@@ -156,6 +156,10 @@ export class AgentEventConnection {
         return;
       }
       this.options.onEvent(event);
+      if (event.type === "session_stopped" && this.current === connection) {
+        this.stopRetrying();
+        this.discard(connection, new AgentEventConnectionError("closed"));
+      }
     };
     source.onerror = () => {
       this.fail(connection, new AgentEventConnectionError("closed"));

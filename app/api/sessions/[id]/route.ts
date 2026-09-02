@@ -12,7 +12,7 @@ import {
   readSessionHeader,
 } from "@/lib/session-reader";
 import { sessionPathKey } from "@/lib/session-path";
-import { getRpcSession } from "@/lib/rpc-manager";
+import { getRpcSession, stopRpcSession } from "@/lib/rpc-manager";
 import { projectTreeForResponse } from "@/lib/project-tree";
 import { computeSessionTotalActiveMs } from "@/lib/session-timing";
 import { computeSessionStats } from "@/lib/session-stats";
@@ -147,6 +147,9 @@ export async function DELETE(
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
+    // Stop first so no live runtime can append while files are reparented and removed.
+    await stopRpcSession(id);
+
     // Read only the bounded header before deleting.
     let parentSessionPath = readSessionHeader(filePath)?.parentSession;
     if (parentSessionPath) {
@@ -190,7 +193,6 @@ export async function DELETE(
       }
     } catch { /* skip if dir unreadable */ }
 
-    await getRpcSession(id)?.shutdown();
     unlinkSync(filePath);
     invalidateSessionPathCache(id);
     invalidateSessionListCache();

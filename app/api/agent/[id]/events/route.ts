@@ -1,6 +1,10 @@
 import { createAgentEventStream } from "@/lib/agent-event-stream";
 import { resolveSessionPath } from "@/lib/session-reader";
-import { getRpcSession, startRpcSession } from "@/lib/rpc-manager";
+import {
+  activateRpcSession,
+  beginRpcSessionOperation,
+  getRpcSession,
+} from "@/lib/rpc-manager";
 
 export const dynamic = "force-dynamic";
 
@@ -10,20 +14,20 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const operation = beginRpcSessionOperation(id);
   if (req.signal.aborted) return new Response(null, { status: 204 });
 
-  // Fast path: already-running session
-  const session = getRpcSession(id);
+  const activeSession = getRpcSession(id);
   let sessionPromise;
-  if (session?.isAlive()) {
-    sessionPromise = Promise.resolve(session);
+  if (activeSession?.isActive()) {
+    sessionPromise = Promise.resolve(activeSession);
   } else {
     const filePath = await resolveSessionPath(id);
-    if (!filePath) {
-      return new Response("Session not found", { status: 404 });
-    }
+    if (!filePath) return new Response("Session not found", { status: 404 });
+    const activate = new URL(req.url).searchParams.has("activate");
+    if (!activate) return new Response("Session is stopped", { status: 409 });
     if (req.signal.aborted) return new Response(null, { status: 204 });
-    sessionPromise = startRpcSession(id, filePath, undefined).then((result) => result.session);
+    sessionPromise = activateRpcSession(operation, filePath);
   }
 
   const stream = createAgentEventStream(req, id, sessionPromise);

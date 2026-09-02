@@ -108,6 +108,7 @@ const IDLE_RESET_EVENT_TYPES = new Set([
   "agent_settled",
   "compaction_end",
 ]);
+const SESSION_SHUTDOWN_TIMEOUT_MS = 5_000;
 
 const SESSION_REPLACEMENT_COMMAND_TYPES = new Set(["fork", "clone"]);
 const COMMANDS_ALLOWED_DURING_SESSION_REPLACEMENT = new Set([
@@ -202,7 +203,9 @@ export class AgentSessionWrapper {
   private onDestroyCallback: (() => void) | null = null;
   private shutdownPromise: Promise<void> | null = null;
   private sessionShutdownEmitted = false;
+  private sessionStoppedEmitted = false;
   private forceShutdownOnIdle = false;
+  private _stopping = false;
   private _alive = true;
 
   constructor(
@@ -240,8 +243,12 @@ export class AgentSessionWrapper {
     return this._alive;
   }
 
+  isActive(): boolean {
+    return this._alive && !this._stopping;
+  }
+
   isRunning(): boolean {
-    return this._alive && (this.pendingPromptCount > 0 || this.inner.isStreaming || this.inner.isCompacting || this.inner.isBashRunning);
+    return this.isActive() && (this.pendingPromptCount > 0 || this.inner.isStreaming || this.inner.isCompacting || this.inner.isBashRunning);
   }
 
   isChatOnly(): boolean {
@@ -262,7 +269,7 @@ export class AgentSessionWrapper {
   }
 
   private notifyAgentRunCompleteIfIdle(): void {
-    if (!this.agentRunNeedsCompletion || this.isRunning()) return;
+    if (this._stopping || !this.agentRunNeedsCompletion || this.isRunning()) return;
     this.agentRunNeedsCompletion = false;
     try {
       this.onAgentRunComplete?.(this.sessionId);
@@ -410,17 +417,25 @@ export class AgentSessionWrapper {
     return release;
   }
 
+  private hasPersistedTranscript(): boolean {
+    const sessionFile = this.inner.sessionManager.getSessionFile?.() ?? this.sessionFile;
+    return Boolean(sessionFile && existsSync(sessionFile));
+  }
+
   private resetIdleTimer(): void {
     if (this.idleTimer) clearTimeout(this.idleTimer);
-    if (!this._alive) return;
+    this.idleTimer = null;
+    if (!this.isActive() || this.hasPersistedTranscript()) return;
     if (!this.isRunning()) this.forceShutdownOnIdle = false;
     this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      if (!this.isActive() || this.hasPersistedTranscript()) return;
       if (this.isRunning() && !this.forceShutdownOnIdle) {
         this.resetIdleTimer();
         return;
       }
       void this.shutdown().catch((error) => {
-        console.error("[pi-web] failed to shut down idle session:", error instanceof Error ? error.message : error);
+        console.error("[pi-web] failed to shut down abandoned draft:", error instanceof Error ? error.message : error);
       });
     }, 10 * 60 * 1000);
   }
@@ -490,6 +505,7 @@ export class AgentSessionWrapper {
   }
 
   async send(command: Record<string, unknown>): Promise<unknown> {
+    if (!this.isActive()) throw new Error("Session is stopped");
     const type = command.type as string;
     const allowedDuringReplacement = COMMANDS_ALLOWED_DURING_SESSION_REPLACEMENT.has(type);
     if (this.sessionReplacement && !allowedDuringReplacement) {
@@ -920,8 +936,11 @@ export class AgentSessionWrapper {
 
   destroy(): void {
     if (!this._alive) return;
+    this._stopping = true;
+    this.agentRunNeedsCompletion = false;
     this._alive = false;
     if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
     if (this.inner.isBashRunning) this.inner.abortBash();
     this.unsubscribe?.();
     for (const pending of this.pendingUiResponses.values()) pending.cancel();
@@ -966,25 +985,45 @@ export class AgentSessionWrapper {
       .finally(finishDispose);
   }
 
-  async shutdown(): Promise<void> {
+  async shutdown(options: { manual?: boolean } = {}): Promise<void> {
+    const emitStopped = options.manual && this._alive && !this.sessionStoppedEmitted;
+    this._stopping = true;
+    this.agentRunNeedsCompletion = false;
+    if (emitStopped) {
+      this.sessionStoppedEmitted = true;
+      this.emit({ type: "session_stopped" });
+    }
     if (this.shutdownPromise) return this.shutdownPromise;
     if (!this._alive) return;
 
     this.shutdownPromise = (async () => {
-      try {
-        try {
-          await this.waitForExtensionsBound();
-        } catch (error) {
-          console.error(
-            "[pi-web] extension binding failed before session shutdown:",
-            error instanceof Error ? error.message : error,
-          );
-        }
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const cleanup = (async () => {
+        await this.waitForExtensionsBound();
         if (!this.sessionShutdownEmitted) {
           this.sessionShutdownEmitted = true;
           await this.inner.extensionRunner.emit?.({ type: "session_shutdown", reason: "quit" });
         }
+      })();
+      try {
+        await Promise.race([
+          cleanup.catch((error) => {
+            console.error(
+              "[pi-web] session shutdown cleanup failed:",
+              error instanceof Error ? error.message : error,
+            );
+          }),
+          new Promise<void>((resolveTimeout) => {
+            timeout = setTimeout(() => {
+              console.error(`[pi-web] session shutdown cleanup timed out after ${SESSION_SHUTDOWN_TIMEOUT_MS}ms`);
+              resolveTimeout();
+            }, SESSION_SHUTDOWN_TIMEOUT_MS);
+          }),
+        ]);
       } finally {
+        if (timeout) clearTimeout(timeout);
+        // A timed-out binding must not make destroy() wait on a second hook.
+        this.sessionShutdownEmitted = true;
         this.destroy();
       }
     })();
@@ -1542,10 +1581,22 @@ export class AgentSessionWrapper {
 // Session registry
 // ============================================================================
 
+type RpcSessionLifecycle = {
+  generation: number;
+  stopping: Promise<boolean> | null;
+};
+
+export type RpcSessionOperation = {
+  sessionId: string;
+  generation: number;
+  priorStop: Promise<boolean> | null;
+};
+
 declare global {
   var __piSessions: Map<string, AgentSessionWrapper> | undefined;
   var __piStartLocks: Map<string, Promise<{ session: AgentSessionWrapper; realSessionId: string }>> | undefined;
   var __piStartingSessionCwds: Map<string, number> | undefined;
+  var __piSessionLifecycles: Map<string, RpcSessionLifecycle> | undefined;
 }
 
 function getRegistry(): Map<string, AgentSessionWrapper> {
@@ -1569,7 +1620,9 @@ function registerRpcWrapper(wrapper: AgentSessionWrapper): void {
   const registry = getRegistry();
   const sessionId = wrapper.sessionId;
   if (wrapper.sessionFile) cacheSessionPath(sessionId, wrapper.sessionFile);
-  wrapper.onDestroy(() => registry.delete(sessionId));
+  wrapper.onDestroy(() => {
+    if (registry.get(sessionId) === wrapper) registry.delete(sessionId);
+  });
   registry.set(sessionId, wrapper);
   wrapper.start();
   if (!wrapper.isChatOnly()) wrapper.beginExtensionBinding();
@@ -1578,6 +1631,35 @@ function registerRpcWrapper(wrapper: AgentSessionWrapper): void {
 function getLocks(): Map<string, Promise<{ session: AgentSessionWrapper; realSessionId: string }>> {
   if (!globalThis.__piStartLocks) globalThis.__piStartLocks = new Map();
   return globalThis.__piStartLocks;
+}
+
+function getLifecycle(sessionId: string): RpcSessionLifecycle {
+  if (!globalThis.__piSessionLifecycles) globalThis.__piSessionLifecycles = new Map();
+  let lifecycle = globalThis.__piSessionLifecycles.get(sessionId);
+  if (!lifecycle) {
+    lifecycle = { generation: 0, stopping: null };
+    globalThis.__piSessionLifecycles.set(sessionId, lifecycle);
+  }
+  return lifecycle;
+}
+
+export function beginRpcSessionOperation(sessionId: string): RpcSessionOperation {
+  const lifecycle = getLifecycle(sessionId);
+  return {
+    sessionId,
+    generation: lifecycle.generation,
+    priorStop: lifecycle.stopping,
+  };
+}
+
+async function assertRpcSessionOperationCurrent(operation: RpcSessionOperation): Promise<void> {
+  await operation.priorStop;
+  if (
+    operation.priorStop
+    || getLifecycle(operation.sessionId).generation !== operation.generation
+  ) {
+    throw new Error("Session was stopped");
+  }
 }
 
 function normalizeRpcCwd(cwd: string): string {
@@ -1615,12 +1697,40 @@ export interface SetRpcSessionToolsResult {
   recreated: boolean;
 }
 
+export async function activateRpcSession(
+  operation: RpcSessionOperation,
+  sessionFile: string,
+): Promise<AgentSessionWrapper> {
+  await assertRpcSessionOperationCurrent(operation);
+  const session = (await startRpcSession(operation.sessionId, sessionFile, undefined)).session;
+  await assertRpcSessionOperationCurrent(operation);
+  return session;
+}
+
+export async function sendRpcSessionCommand(
+  operation: RpcSessionOperation,
+  sessionFile: string | undefined,
+  command: Record<string, unknown>,
+  options: RpcSessionStartOptions = {},
+): Promise<unknown> {
+  await assertRpcSessionOperationCurrent(operation);
+  let session = getRpcSession(operation.sessionId);
+  if (!session?.isActive()) {
+    if (!sessionFile) throw new Error("Session not found");
+    session = (await startRpcSession(operation.sessionId, sessionFile, undefined, options)).session;
+  }
+  await assertRpcSessionOperationCurrent(operation);
+  return session.send(command);
+}
+
 /** Persist a normal session's tool selection and rebuild when resource policy changes. */
 export async function setRpcSessionTools(
-  sessionId: string,
+  operation: RpcSessionOperation,
   sessionFile: string | undefined,
   requestedToolNames: unknown,
 ): Promise<SetRpcSessionToolsResult> {
+  await assertRpcSessionOperationCurrent(operation);
+  const sessionId = operation.sessionId;
   const toolNames = validateSessionToolSelection(requestedToolNames);
   const existing = getRpcSession(sessionId);
 
@@ -1630,6 +1740,7 @@ export async function setRpcSessionTools(
     appendSessionToolSelection(manager, toolNames);
     invalidateSessionListCache();
     const started = await startRpcSession(sessionId, sessionFile, undefined);
+    await assertRpcSessionOperationCurrent(operation);
     return { session: started.session, sessionId: started.realSessionId, recreated: false };
   }
 
@@ -1654,9 +1765,11 @@ export async function setRpcSessionTools(
   const model = existing.inner.model;
   const currentThinkingLevel = existing.inner.agent.state?.thinkingLevel;
   await existing.shutdown();
+  await assertRpcSessionOperationCurrent(operation);
 
   if (persistedFile) {
     const started = await startRpcSession(sessionId, persistedFile, undefined);
+    await assertRpcSessionOperationCurrent(operation);
     return { session: started.session, sessionId: started.realSessionId, recreated: true };
   }
 
@@ -1668,6 +1781,7 @@ export async function setRpcSessionTools(
       ? { thinkingLevel: currentThinkingLevel as ThinkingLevel }
       : {}),
   });
+  await assertRpcSessionOperationCurrent(operation);
   return { session: started.session, sessionId: started.realSessionId, recreated: true };
 }
 
@@ -1754,12 +1868,46 @@ export async function destroyRpcSessionsForCwd(cwd: string): Promise<number> {
   return sessions.length;
 }
 
+export function getActiveRpcSessionIds(): string[] {
+  const ids = new Set<string>();
+  for (const [sessionId, session] of getRegistry()) {
+    if (session.isActive()) ids.add(session.sessionId || sessionId);
+  }
+  return [...ids];
+}
+
 export function getRunningRpcSessionIds(): string[] {
   const ids = new Set<string>();
   for (const [sessionId, session] of getRegistry()) {
     if (session.isRunning()) ids.add(session.sessionId || sessionId);
   }
   return [...ids];
+}
+
+export async function stopRpcSession(sessionId: string): Promise<boolean> {
+  const lifecycle = getLifecycle(sessionId);
+  const priorStop = lifecycle.stopping;
+  const registry = getRegistry();
+  const locks = getLocks();
+  const hadRuntime = Boolean(registry.get(sessionId)?.isAlive() || locks.has(sessionId));
+  lifecycle.generation += 1;
+  const stopping = (async () => {
+    await priorStop;
+    try {
+      await locks.get(sessionId);
+    } catch {
+      // Failed startup has no runtime left to stop.
+    }
+    const session = registry.get(sessionId);
+    if (session?.isAlive()) await session.shutdown({ manual: true });
+    return hadRuntime;
+  })();
+  lifecycle.stopping = stopping;
+  try {
+    return await stopping;
+  } finally {
+    if (lifecycle.stopping === stopping) lifecycle.stopping = null;
+  }
 }
 
 /**
@@ -1779,11 +1927,18 @@ export async function startRpcSession(
   const requestedToolNames = options.toolNames === undefined
     ? undefined
     : validateSessionToolSelection(options.toolNames);
+  const lifecycle = getLifecycle(sessionId);
+  const priorStop = lifecycle.stopping;
+  const startGeneration = lifecycle.generation;
+  if (priorStop) await priorStop;
+  if (lifecycle.generation !== startGeneration) {
+    throw new Error("Session was stopped before startup");
+  }
   const registry = getRegistry();
   const locks = getLocks();
 
   const existing = registry.get(sessionId);
-  if (existing?.isAlive()) return { session: existing, realSessionId: sessionId };
+  if (existing?.isActive()) return { session: existing, realSessionId: sessionId };
 
   const inflight = locks.get(sessionId);
   if (inflight) return inflight;
@@ -1911,6 +2066,10 @@ export async function startRpcSession(
       },
     });
     const realSessionId = inner.sessionId as string;
+    if (getLifecycle(sessionId).generation !== startGeneration) {
+      await wrapper.shutdown();
+      throw new Error("Session was stopped during startup");
+    }
     registerRpcWrapper(wrapper);
 
     return { session: wrapper, realSessionId };

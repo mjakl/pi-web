@@ -48,7 +48,7 @@ test("live agent state is available before the session file is persisted", () =>
   const pathLookup = stateRoute.indexOf("resolveSessionPath(id)");
   assert.ok(liveLookup >= 0);
   assert.ok(pathLookup > liveLookup);
-  assert.match(stateRoute, /if \(rpc\?\.isAlive\(\)\)/);
+  assert.match(stateRoute, /if \(rpc\?\.isActive\(\)\)/);
 });
 
 test("deleting a parent preserves legacy subagent bytes and reparents generic children", async (t) => {
@@ -202,6 +202,7 @@ test("live detail and state routes work without a persisted JSONL file", async (
   };
   globalThis.__piSessions = new Map([[id, {
     isAlive: () => true,
+    isActive: () => true,
     isRunning: () => true,
     inner: { sessionManager },
     sessionFile: sessionManager.getSessionFile(),
@@ -231,6 +232,7 @@ test("live detail and state routes work without a persisted JSONL file", async (
   assert.deepEqual(detail.context.messages.map((message) => message.content), ["hello live"]);
   assert.equal(stateResponse.status, 200);
   assert.deepEqual(await stateResponse.json(), {
+    active: true,
     running: true,
     state: { isStreaming: true },
   });

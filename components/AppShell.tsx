@@ -100,6 +100,13 @@ export function AppShell() {
       };
     });
   }, []);
+  const [activeSessionIds, setActiveSessionIds] = useState<Set<string>>(() => new Set());
+  const handleActiveSessionIdsChange = useCallback((ids: Set<string>) => {
+    setActiveSessionIds((previous) => {
+      if (previous.size === ids.size && [...ids].every((id) => previous.has(id))) return previous;
+      return ids;
+    });
+  }, []);
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
   const handleRunningSessionIdsChange = useCallback((ids: Set<string>) => {
     setRunningSessionIds((previous) => {
@@ -918,6 +925,7 @@ export function AppShell() {
         onAtMention={handleAtMention}
         onAtMentions={handleAtMentions}
         onBackgroundTaskDone={handleBackgroundTaskDone}
+        onActiveSessionIdsChange={handleActiveSessionIdsChange}
         onRunningSessionIdsChange={handleRunningSessionIdsChange}
         onSessionsChange={handleSessionsChange}
       />
@@ -1907,6 +1915,7 @@ export function AppShell() {
             <ChatWindow
               key={sessionKey}
               session={selectedSession}
+              sessionActive={Boolean(selectedSession && activeSessionIds.has(selectedSession.id))}
               sessionRunning={Boolean(selectedSession && runningSessionIds.has(selectedSession.id))}
               newSessionCwd={effectiveNewSessionCwd}
               newSessionDraftKey={newSessionDraftKey}

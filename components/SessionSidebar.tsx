@@ -103,6 +103,7 @@ interface Props {
   /** Fired when a session that is not currently selected finishes running.
    *  Lets the app play a cross-workspace completion tone. */
   onBackgroundTaskDone?: () => void;
+  onActiveSessionIdsChange?: (ids: Set<string>) => void;
   onRunningSessionIdsChange?: (ids: Set<string>) => void;
   onSessionsChange?: (sessions: SessionInfo[]) => void;
 }
@@ -362,7 +363,7 @@ function PiWebTitle() {
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onRunningSessionIdsChange, onSessionsChange }: Props) {
+export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, onSessionsChange }: Props) {
   const { t } = useI18n();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [inventoryRevision, setInventoryRevision] = useState(0);
@@ -398,6 +399,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const [changesCollapsed, setChangesCollapsed] = useState(true);
   const [sessionRefreshDone, setSessionRefreshDone] = useState(false);
   const [explorerRefreshDone, setExplorerRefreshDone] = useState(false);
+  const [activeSessionIds, setActiveSessionIds] = useState<Set<string>>(() => new Set());
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
   const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(() => loadUnreadSessionIds());
   const previousRunningSessionIdsRef = useRef<Set<string>>(new Set());
@@ -557,6 +559,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json() as {
         sessions: SessionInfo[];
+        activeSessionIds?: string[];
         runningSessionIds?: string[];
       };
       setAllSessions((current) => {
@@ -598,6 +601,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
       // Treat the fetched running set as an initial fallback only. Once the
       // lightweight poll is live, a slow session-list fetch cannot overwrite it.
       if (!runningPollAuthoritativeRef.current) {
+        setActiveSessionIds(new Set(data.activeSessionIds ?? []));
         setRunningSessionIds(new Set(data.runningSessionIds ?? []));
       }
       // Drop markers for deleted sessions.
@@ -672,10 +676,12 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         });
         if (!res.ok) return;
         const data = await res.json() as {
+          activeSessionIds?: string[];
           runningSessionIds?: string[];
         };
         if (stopped || controller !== current) return;
         runningPollAuthoritativeRef.current = true;
+        setActiveSessionIds(new Set(data.activeSessionIds ?? []));
         setRunningSessionIds(new Set(data.runningSessionIds ?? []));
       } catch {
         // Keep the last known state; the next visible-tab poll retries.
@@ -706,6 +712,10 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   }, []);
 
   useEffect(() => {
+    onActiveSessionIdsChange?.(activeSessionIds);
+  }, [activeSessionIds, onActiveSessionIdsChange]);
+
+  useEffect(() => {
     onRunningSessionIdsChange?.(runningSessionIds);
   }, [onRunningSessionIdsChange, runningSessionIds]);
 
@@ -715,7 +725,11 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
 
   useEffect(() => {
     const previous = previousRunningSessionIdsRef.current;
-    const completedInBackground = [...previous].filter((id) => !runningSessionIds.has(id) && id !== selectedSessionId);
+    const completedInBackground = [...previous].filter((id) => (
+      !runningSessionIds.has(id)
+      && activeSessionIds.has(id)
+      && id !== selectedSessionId
+    ));
     const newlyRunning = [...runningSessionIds].filter((id) => !previous.has(id));
 
     if (completedInBackground.length > 0 || newlyRunning.length > 0) {
@@ -737,7 +751,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     }
 
     previousRunningSessionIdsRef.current = runningSessionIds;
-  }, [runningSessionIds, selectedSessionId, allSessions, loadSessions, onBackgroundTaskDone]);
+  }, [activeSessionIds, runningSessionIds, selectedSessionId, allSessions, loadSessions, onBackgroundTaskDone]);
 
   useEffect(() => {
     if (!selectedSessionId) return;
@@ -1830,10 +1844,23 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
             key={session.id}
             session={session}
             isSelected={session.id === selectedSessionId}
+            isActive={activeSessionIds.has(session.id)}
             isRunning={runningSessionIds.has(session.id)}
             isUnread={unreadSessionIds.has(session.id)}
             onClick={() => handleSelectSessionFromList(session)}
             onRenamed={loadSessions}
+            onStopped={(id) => {
+              setActiveSessionIds((current) => {
+                const next = new Set(current);
+                next.delete(id);
+                return next;
+              });
+              setRunningSessionIds((current) => {
+                const next = new Set(current);
+                next.delete(id);
+                return next;
+              });
+            }}
             onDeleted={(id) => {
               onSessionDeleted?.(id);
               loadSessions();
@@ -2018,6 +2045,52 @@ function RunningSessionIndicator() {
   );
 }
 
+function ActiveSessionIndicator() {
+  const { t } = useI18n();
+  return (
+    <span
+      title={t("sidebar.sessionActive")}
+      aria-label={t("sidebar.sessionActive")}
+      style={{
+        width: 14,
+        height: 14,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        color: "#16a34a",
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="3" fill="currentColor" />
+      </svg>
+    </span>
+  );
+}
+
+function StoppedSessionIndicator() {
+  const { t } = useI18n();
+  return (
+    <span
+      title={t("sidebar.sessionStopped")}
+      aria-label={t("sidebar.sessionStopped")}
+      style={{
+        width: 14,
+        height: 14,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        color: "var(--text-dim)",
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <rect x="4" y="4" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    </span>
+  );
+}
+
 function UnreadSessionIndicator() {
   const { t } = useI18n();
   return (
@@ -2090,25 +2163,31 @@ function showProjectActivity(
 function SessionItem({
   session,
   isSelected,
+  isActive,
   isRunning,
   isUnread,
   onClick,
   onRenamed,
+  onStopped,
   onDeleted,
 }: {
   session: SessionInfo;
   isSelected: boolean;
+  isActive?: boolean;
   isRunning?: boolean;
   isUnread?: boolean;
   onClick: () => void;
   onRenamed?: () => void;
+  onStopped?: (id: string) => void;
   onDeleted?: (id: string) => void;
 }) {
   const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
+  const [confirmStop, setConfirmStop] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -2154,6 +2233,35 @@ function SessionItem({
       // ignore
     }
   }, [renameValue, session.id, session.name, onRenamed, title]);
+
+  const performStop = useCallback(async () => {
+    if (!isActive || session.transient) return;
+    setConfirmStop(false);
+    setStopping(true);
+    try {
+      const response = await fetch(`/api/agent/${encodeURIComponent(session.id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      onStopped?.(session.id);
+    } catch {
+      setStopping(false);
+    }
+  }, [isActive, onStopped, session.id, session.transient]);
+
+  const handleStopClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (e.shiftKey) void performStop();
+    else setConfirmStop(true);
+  }, [performStop]);
+
+  const handleStopConfirm = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    void performStop();
+  }, [performStop]);
+
+  const handleStopCancel = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConfirmStop(false);
+  }, []);
 
   const performDelete = useCallback(async () => {
     if (session.transient) return;
@@ -2205,8 +2313,8 @@ function SessionItem({
   return (
     <div
       data-session-inventory-id={session.id}
-      onClick={confirmDelete || renaming ? undefined : onClick}
-      onContextMenu={confirmDelete || renaming ? undefined : handleContextMenu}
+      onClick={confirmStop || confirmDelete || renaming ? undefined : onClick}
+      onContextMenu={confirmStop || confirmDelete || renaming ? undefined : handleContextMenu}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); }}
       style={{
@@ -2215,20 +2323,48 @@ function SessionItem({
         alignItems: "center",
         paddingLeft: 14,
         paddingRight: 8,
-        cursor: confirmDelete || renaming ? "default" : "pointer",
-        background: confirmDelete
+        cursor: confirmStop || confirmDelete || renaming ? "default" : "pointer",
+        background: confirmStop
+          ? "rgba(239,68,68,0.06)"
+          : confirmDelete
           ? "rgba(239,68,68,0.06)"
           : isSelected ? "var(--bg-selected)" : hovered ? "var(--bg-hover)" : "transparent",
-        borderLeft: confirmDelete
+        borderLeft: confirmStop || confirmDelete
           ? "2px solid #ef4444"
           : isSelected ? "2px solid var(--accent)" : "2px solid transparent",
         transition: "background 0.1s",
-        opacity: deleting ? 0.5 : 1,
+        opacity: stopping || deleting ? 0.5 : 1,
         gap: 6,
         overflow: "hidden",
       }}
     >
-      {confirmDelete ? (
+      {confirmStop ? (
+        <>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 10, lineHeight: 1.25, color: "var(--text)", overflowWrap: "anywhere" }}>
+            {t("sidebar.stopSessionWarning")}
+          </div>
+          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            <button
+              onClick={handleStopConfirm}
+              style={{
+                height: 30, padding: "0 9px", background: "#ef4444", border: "none",
+                borderRadius: 6, color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 600,
+              }}
+            >
+              {t("sidebar.stop")}
+            </button>
+            <button
+              onClick={handleStopCancel}
+              style={{
+                height: 30, padding: "0 8px", background: "var(--bg)", border: "1px solid var(--border)",
+                borderRadius: 6, color: "var(--text-muted)", cursor: "pointer", fontSize: 11, fontWeight: 500,
+              }}
+            >
+              {t("sidebar.cancel")}
+            </button>
+          </div>
+        </>
+      ) : confirmDelete ? (
         /* ── Delete confirmation: same height, two flat buttons ── */
         <>
           <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -2315,13 +2451,9 @@ function SessionItem({
               </span>
             </div>
             <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 8, color: "var(--text-dim)", fontSize: 11, minWidth: 0 }}>
-              {isRunning ? (
-                <RunningSessionIndicator />
-              ) : isUnread ? (
-                <UnreadSessionIndicator />
-              ) : (
-                <span title={session.modified}>{formatRelativeTime(session.modified)}</span>
-              )}
+              {isRunning ? <RunningSessionIndicator /> : isActive ? <ActiveSessionIndicator /> : <StoppedSessionIndicator />}
+              {isUnread && <UnreadSessionIndicator />}
+              <span title={session.modified}>{formatRelativeTime(session.modified)}</span>
               {session.messageCount === undefined ? (
                 <span aria-label={t("sidebar.loading")}>…</span>
               ) : (
@@ -2347,6 +2479,32 @@ function SessionItem({
           {/* Action buttons — shown on hover */}
           {hovered && !session.transient && (
             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+              {isActive && (
+                <button
+                  onClick={handleStopClick}
+                  title={t("sidebar.stopWithShiftClick")}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 32, height: 32, padding: 0,
+                    background: "var(--bg-hover)", border: "1px solid var(--border)",
+                    borderRadius: 7, color: "var(--text-muted)", cursor: "pointer", flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "rgba(239,68,68,0.08)";
+                    e.currentTarget.style.color = "#ef4444";
+                    e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                    e.currentTarget.style.color = "var(--text-muted)";
+                    e.currentTarget.style.borderColor = "var(--border)";
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <rect x="6" y="6" width="12" height="12" rx="1" />
+                  </svg>
+                </button>
+              )}
               <button
                 onClick={startRename}
                 title={t("sidebar.rename")}

@@ -25,7 +25,9 @@ test("polls running sessions only while the tab is visible", () => {
   assert.match(source, /document\.addEventListener\("visibilitychange", onVisibilityChange\)/);
 });
 
-test("exposes the polled running-session set to the shell", () => {
+test("exposes distinct active and running session sets to the shell", () => {
+  assert.match(source, /onActiveSessionIdsChange\?: \(ids: Set<string>\) => void/);
+  assert.match(source, /onActiveSessionIdsChange\?\.\(activeSessionIds\)/);
   assert.match(source, /onRunningSessionIdsChange\?: \(ids: Set<string>\) => void/);
   assert.match(source, /onRunningSessionIdsChange\?\.\(runningSessionIds\)/);
 });
@@ -35,7 +37,8 @@ test("exposes the loaded session catalog to the shell", () => {
   assert.match(source, /onSessionsChange\?\.\(allSessions\)/);
 });
 
-test("background completion becomes unread and triggers notification", () => {
+test("background completion becomes unread while stopped sessions stay quiet", () => {
+  assert.match(source, /completedInBackground[\s\S]*?activeSessionIds\.has\(id\)/);
   assert.match(source, /completedInBackground\.forEach\(\(id\) => next\.add\(id\)\)/);
   assert.match(source, /if \(completedInBackground\.length > 0\) \{\s*onBackgroundTaskDone\?\.\(\)/);
   assert.match(source, /data\.sessions\.map\(\(session\) => session\.id\)/);
@@ -69,7 +72,7 @@ test("offers the downstream context-menu hook only on a normal session row", () 
   assert.match(sessionItemSource, /const handleContextMenu[\s\S]*?dispatchSessionRowContextMenu\(\{/);
   assert.match(
     sessionItemSource,
-    /onContextMenu=\{confirmDelete \|\| renaming \? undefined : handleContextMenu\}/,
+    /onContextMenu=\{confirmStop \|\| confirmDelete \|\| renaming \? undefined : handleContextMenu\}/,
   );
 });
 
@@ -113,6 +116,20 @@ test("does not expose disk-backed actions for transient sessions", () => {
 test("renders every filtered session with its own activity state", () => {
   assert.match(source, /filteredSessions\.map\(\(session\) => \(/);
   assert.match(source, /isSelected=\{session\.id === selectedSessionId\}/);
+  assert.match(source, /isActive=\{activeSessionIds\.has\(session\.id\)\}/);
   assert.match(source, /isRunning=\{runningSessionIds\.has\(session\.id\)\}/);
   assert.match(source, /isUnread=\{unreadSessionIds\.has\(session\.id\)\}/);
+});
+
+test("active persisted rows offer Stop with confirmation and Shift bypass", () => {
+  assert.match(sessionItemSource, /if \(e\.shiftKey\) void performStop\(\)/);
+  assert.match(sessionItemSource, /setConfirmStop\(true\)/);
+  assert.match(sessionItemSource, /method: "DELETE"/);
+  assert.match(sessionItemSource, /sidebar\.stopSessionWarning/);
+  assert.match(sessionItemSource, /\{isActive && \(/);
+});
+
+test("renders lifecycle and unread indicators independently", () => {
+  assert.match(sessionItemSource, /isRunning \? <RunningSessionIndicator \/> : isActive \? <ActiveSessionIndicator \/> : <StoppedSessionIndicator \/>/);
+  assert.match(sessionItemSource, /\{isUnread && <UnreadSessionIndicator \/>\}/);
 });
