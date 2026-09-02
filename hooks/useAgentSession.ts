@@ -21,6 +21,7 @@ import type { SessionStatsInfo } from "@/lib/pi-types";
 import { mergeSessionStats, type SessionFileStats } from "@/lib/session-stats";
 import { userMessageKey } from "@/lib/prompt-recovery";
 import { AgentEventConnection } from "@/lib/agent-event-connection";
+import type { AgentEventLike } from "@/lib/agent-event-wire";
 import { getToolExecutionProgress } from "@/lib/tool-execution-progress";
 import {
   CHAT_SCROLL_REATTACH_TOLERANCE,
@@ -50,11 +51,6 @@ export interface SessionData {
   };
   /** Cumulative usage over ALL session-file entries (incl. compacted history). */
   stats?: SessionFileStats;
-}
-
-interface AgentEvent {
-  type: string;
-  [key: string]: unknown;
 }
 
 interface CompactCommandResult {
@@ -336,7 +332,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const notifiedPromptRunIdRef = useRef(-1);
   const bashRunningRef = useRef(false);
   const bashRecoveryIdRef = useRef(0);
-  const handleAgentEventRef = useRef<((event: AgentEvent) => void) | null>(null);
+  const handleAgentEventRef = useRef<((event: AgentEventLike) => void) | null>(null);
   const initialScrollDoneRef = useRef(false);
   const lastUserMsgRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollToUserRef = useRef(false);
@@ -364,7 +360,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       createSource: (sid, activate) => new EventSource(
         `/api/agent/${encodeURIComponent(sid)}/events${activate ? "?activate=1" : ""}`,
       ),
-      onEvent: (event) => handleAgentEventRef.current?.(event as AgentEvent),
+      onEvent: (event) => handleAgentEventRef.current?.(event as AgentEventLike),
       shouldMaintain: (sid) => (
         sessionHookMountedRef.current
         && sessionIdRef.current === sid
@@ -1070,7 +1066,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     agentRunningRef.current = agentRunning;
   }, [agentRunning]);
 
-  const handleAgentEvent = useCallback((event: AgentEvent) => {
+  const handleAgentEvent = useCallback((event: AgentEventLike) => {
     switch (event.type) {
       case "connected": {
         dispatch({ type: "end" });
@@ -2058,10 +2054,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   return {
     // State
-    data, loading, error, activeLeafId, messages, entryIds, historyCursor, hasEarlierMessages, streamState,
-    agentRunning, modelNames, modelList, modelError, modelScopeWarnings, modelThinkingLevels, modelThinkingLevelMaps, newSessionModel, toolPreset, thinkingLevel,
-    retryInfo, contextUsage, systemPrompt, forkingEntryId,
-    isCompacting, compactError, compactResult, currentModel, displayModel, modelSwitching, sessionStats,
+    loading, error, activeLeafId, messages, entryIds, historyCursor, hasEarlierMessages, streamState,
+    agentRunning, modelNames, modelList, modelError, modelScopeWarnings, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
+    retryInfo, contextUsage, forkingEntryId,
+    isCompacting, compactError, compactResult, displayModel, modelSwitching, sessionStats,
     slashCommands, slashCommandsLoading, queuedMessages,
     notices: noticeState.visible, extensionDialog, extensionCustomUi, extensionStatuses, extensionWidgets, respondToExtensionUi, sendExtensionCustomInput,
     isAutoModelSelection: isNew && newSessionModel === null,
@@ -2069,19 +2065,15 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     isNew,
     promptAnchorActive,
     // Refs
-    sessionIdRef, messagesEndRef, scrollContainerRef,
-    lastUserMsgRef, pendingScrollToUserRef, initialScrollDoneRef,
+    sessionIdRef, messagesEndRef, scrollContainerRef, lastUserMsgRef,
     // Actions
     handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
     handleCompact, handleSteer, handleFollowUp, handlePromptWithStreamingBehavior, handleAbortCompaction,
     handleRecallQueue,
     handleBuiltinSlashCommand,
     setNoticePaused: setPausedNoticeId,
-    handleToolPresetChange, handleThinkingLevelChange, loadTools, loadSlashCommands, setActiveLeafId, setData, setMessages, loadContext,
-    scrollToBottom, scrollUserMsgToTop,
-    dispatch, setAgentRunning, setForkingEntryId,
+    handleToolPresetChange, handleThinkingLevelChange, loadSlashCommands, loadContext,
+    scrollUserMsgToTop,
     bashRunning, pendingBash,
-    // Subscriptions
-    handleAgentEventRef,
   };
 }
