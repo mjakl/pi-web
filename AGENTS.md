@@ -167,6 +167,8 @@ Start with these owners instead of a broad file inventory:
 - Add or update the nearest `*.test.mjs` regression test for changed behavior.
   Use a focused `node --experimental-strip-types --test <file>` command while
   iterating.
+- Regression tests exercise exported behavior or rendered output. Never read a
+  source file and assert on its text.
 - Before implementation handoff, run `npm test`,
   `node_modules/.bin/tsc --noEmit`, and `npm run lint`. If dependencies are not
   installed or a check cannot run, report that explicitly rather than claiming

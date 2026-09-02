@@ -5,10 +5,6 @@ import { join } from "node:path";
 import test from "node:test";
 import { createJiti } from "jiti";
 
-const listRoute = await readFile(new URL("./route.ts", import.meta.url), "utf8");
-const detailRoute = await readFile(new URL("./[id]/route.ts", import.meta.url), "utf8");
-const contextRoute = await readFile(new URL("./[id]/context/route.ts", import.meta.url), "utf8");
-const stateRoute = await readFile(new URL("./[id]/state/route.ts", import.meta.url), "utf8");
 const jiti = createJiti(import.meta.url, {
   alias: { "@": process.cwd() },
   interopDefault: true,
@@ -20,36 +16,6 @@ const {
   cacheSessionPath,
   invalidateSessionPathCache,
 } = await jiti.import("../../../lib/session-reader.ts");
-
-test("session listing merges live registry identity into the uncached inventory", () => {
-  assert.match(listRoute, /listAllSessions\(\)/);
-  assert.doesNotMatch(listRoute, /SessionManager\.listAll/);
-  assert.doesNotMatch(listRoute, /allowFileRoot/);
-  assert.match(listRoute, /attachSessionProjectInfo\(getRpcSessionInfos\(\)\)/);
-  assert.match(listRoute, /mergeSessionLists\(persistedSessions, runtimeSessions\)/);
-  assert.match(listRoute, /if \(!inventory\.transient\)/);
-  assert.match(listRoute, /delete inventory\.firstMessage/);
-  assert.match(listRoute, /delete inventory\.messageCount/);
-  assert.match(listRoute, /"Cache-Control": "no-store"/);
-});
-
-test("session reads use the live SessionManager before requiring a JSONL path", () => {
-  for (const source of [detailRoute, contextRoute]) {
-    const liveLookup = source.indexOf("getRpcSession(id)");
-    const pathLookup = source.indexOf("resolveSessionPath(id)");
-    assert.ok(liveLookup >= 0);
-    assert.ok(pathLookup > liveLookup);
-    assert.match(source, /liveRpc\?\.inner\.sessionManager \?\? SessionManager\.open/);
-  }
-});
-
-test("live agent state is available before the session file is persisted", () => {
-  const liveLookup = stateRoute.indexOf("getRpcSession(id)");
-  const pathLookup = stateRoute.indexOf("resolveSessionPath(id)");
-  assert.ok(liveLookup >= 0);
-  assert.ok(pathLookup > liveLookup);
-  assert.match(stateRoute, /if \(rpc && isRpcSessionActive\(rpc\)\)/);
-});
 
 test("deleting a parent preserves legacy subagent bytes and reparents generic children", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "pi-web-delete-reparent-"));
