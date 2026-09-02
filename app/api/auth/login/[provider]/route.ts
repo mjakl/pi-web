@@ -2,8 +2,6 @@ import type { AuthEvent, AuthPrompt } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { invalidateModelsCache } from "@/lib/models-cache";
 
-export const dynamic = "force-dynamic";
-
 // In-memory registry: loginToken -> resolve/reject for the manualCodeInput promise
 declare global {
   var __piLoginCallbacks: Map<string, { resolve: (v: string) => void; reject: (e: Error) => void }> | undefined;

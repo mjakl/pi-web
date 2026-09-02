@@ -1,7 +1,5 @@
 import { addSubscription, type PushSubscriptionRecord } from "@/lib/web-push";
 
-export const dynamic = "force-dynamic";
-
 interface SubscribeRequestBody {
   subscription?: Partial<PushSubscriptionRecord>;
 }

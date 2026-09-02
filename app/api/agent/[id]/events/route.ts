@@ -7,8 +7,6 @@ import {
   isRpcSessionActive,
 } from "@/lib/rpc-manager";
 
-export const dynamic = "force-dynamic";
-
 // GET /api/agent/[id]/events - SSE stream of agent events
 export async function GET(
   req: Request,

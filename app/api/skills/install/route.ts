@@ -5,8 +5,6 @@ import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-acces
 import { hasJsonContentType } from "@/lib/request-content-type";
 import { getProjectTrustStatus } from "@/lib/project-trust";
 
-export const dynamic = "force-dynamic";
-
 const ANSI_RE = /\x1B\[[0-9;]*m/g;
 
 // POST /api/skills/install  body: { package: string; scope: "global" | "project"; cwd?: string }
