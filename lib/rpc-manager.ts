@@ -1584,6 +1584,7 @@ export class AgentSessionWrapper {
 type RpcSessionLifecycle = {
   generation: number;
   stopping: Promise<boolean> | null;
+  toolChangeTail: Promise<void>;
 };
 
 export type RpcSessionOperation = {
@@ -1637,7 +1638,7 @@ function getLifecycle(sessionId: string): RpcSessionLifecycle {
   if (!globalThis.__piSessionLifecycles) globalThis.__piSessionLifecycles = new Map();
   let lifecycle = globalThis.__piSessionLifecycles.get(sessionId);
   if (!lifecycle) {
-    lifecycle = { generation: 0, stopping: null };
+    lifecycle = { generation: 0, stopping: null, toolChangeTail: Promise.resolve() };
     globalThis.__piSessionLifecycles.set(sessionId, lifecycle);
   }
   return lifecycle;
@@ -1659,6 +1660,23 @@ async function assertRpcSessionOperationCurrent(operation: RpcSessionOperation):
     || getLifecycle(operation.sessionId).generation !== operation.generation
   ) {
     throw new Error("Session was stopped");
+  }
+}
+
+async function acquireRpcSessionToolChange(operation: RpcSessionOperation): Promise<() => void> {
+  await assertRpcSessionOperationCurrent(operation);
+  const lifecycle = getLifecycle(operation.sessionId);
+  const previous = lifecycle.toolChangeTail;
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  lifecycle.toolChangeTail = previous.then(() => current);
+  await previous;
+  try {
+    await assertRpcSessionOperationCurrent(operation);
+    return release;
+  } catch (error) {
+    release();
+    throw error;
   }
 }
 
@@ -1729,60 +1747,64 @@ export async function setRpcSessionTools(
   sessionFile: string | undefined,
   requestedToolNames: unknown,
 ): Promise<SetRpcSessionToolsResult> {
-  await assertRpcSessionOperationCurrent(operation);
-  const sessionId = operation.sessionId;
-  const toolNames = validateSessionToolSelection(requestedToolNames);
-  const existing = getRpcSession(sessionId);
+  const releaseToolChange = await acquireRpcSessionToolChange(operation);
+  try {
+    const sessionId = operation.sessionId;
+    const toolNames = validateSessionToolSelection(requestedToolNames);
+    const existing = getRpcSession(sessionId);
 
-  if (!existing?.isAlive()) {
-    if (!sessionFile) throw new Error("Session not found");
-    const manager = SessionManager.open(sessionFile, undefined);
-    appendSessionToolSelection(manager, toolNames);
+    if (!existing?.isAlive()) {
+      if (!sessionFile) throw new Error("Session not found");
+      const manager = SessionManager.open(sessionFile, undefined);
+      appendSessionToolSelection(manager, toolNames);
+      invalidateSessionListCache();
+      const started = await startRpcSession(sessionId, sessionFile, undefined, {}, operation);
+      await assertRpcSessionOperationCurrent(operation);
+      return { session: started.session, sessionId: started.realSessionId, recreated: false };
+    }
+
+    if (existing.isRunning()) throw new Error("Cannot change tools while the session is running");
+
+    const hasCurrentResourcePolicy = typeof existing.isChatOnly === "function"
+      && typeof existing.setActiveToolSelection === "function";
+    const crossesChatOnlyBoundary = !hasCurrentResourcePolicy
+      || existing.isChatOnly() !== (toolNames.length === 0);
+    appendSessionToolSelection(existing.inner.sessionManager, toolNames);
     invalidateSessionListCache();
-    const started = await startRpcSession(sessionId, sessionFile, undefined, {}, operation);
+
+    if (!crossesChatOnlyBoundary) {
+      existing.setActiveToolSelection(toolNames);
+      return { session: existing, sessionId, recreated: false };
+    }
+
+    const persistedFile = existing.sessionFile && existsSync(existing.sessionFile)
+      ? existing.sessionFile
+      : undefined;
+    const sessionCwd = existing.cwd;
+    const model = existing.inner.model;
+    const currentThinkingLevel = existing.inner.agent.state?.thinkingLevel;
+    await existing.shutdown();
     await assertRpcSessionOperationCurrent(operation);
-    return { session: started.session, sessionId: started.realSessionId, recreated: false };
-  }
 
-  if (existing.isRunning()) throw new Error("Cannot change tools while the session is running");
+    if (persistedFile) {
+      const started = await startRpcSession(sessionId, persistedFile, undefined, {}, operation);
+      await assertRpcSessionOperationCurrent(operation);
+      return { session: started.session, sessionId: started.realSessionId, recreated: true };
+    }
 
-  const hasCurrentResourcePolicy = typeof existing.isChatOnly === "function"
-    && typeof existing.setActiveToolSelection === "function";
-  const crossesChatOnlyBoundary = !hasCurrentResourcePolicy
-    || existing.isChatOnly() !== (toolNames.length === 0);
-  appendSessionToolSelection(existing.inner.sessionManager, toolNames);
-  invalidateSessionListCache();
-
-  if (!crossesChatOnlyBoundary) {
-    existing.setActiveToolSelection(toolNames);
-    return { session: existing, sessionId, recreated: false };
-  }
-
-  const persistedFile = existing.sessionFile && existsSync(existing.sessionFile)
-    ? existing.sessionFile
-    : undefined;
-  const sessionCwd = existing.cwd;
-  const model = existing.inner.model;
-  const currentThinkingLevel = existing.inner.agent.state?.thinkingLevel;
-  await existing.shutdown();
-  await assertRpcSessionOperationCurrent(operation);
-
-  if (persistedFile) {
-    const started = await startRpcSession(sessionId, persistedFile, undefined, {}, operation);
+    const started = await startRpcSession(`__recreate__${randomUUID()}`, "", sessionCwd, {
+      toolNames,
+      ...(model ? { initialModel: { provider: model.provider, modelId: model.id } } : {}),
+      allowInitialModelFallback: true,
+      ...(currentThinkingLevel && THINKING_LEVEL_NAMES.has(currentThinkingLevel as ThinkingLevel)
+        ? { thinkingLevel: currentThinkingLevel as ThinkingLevel }
+        : {}),
+    }, operation);
     await assertRpcSessionOperationCurrent(operation);
     return { session: started.session, sessionId: started.realSessionId, recreated: true };
+  } finally {
+    releaseToolChange();
   }
-
-  const started = await startRpcSession(`__recreate__${randomUUID()}`, "", sessionCwd, {
-    toolNames,
-    ...(model ? { initialModel: { provider: model.provider, modelId: model.id } } : {}),
-    allowInitialModelFallback: true,
-    ...(currentThinkingLevel && THINKING_LEVEL_NAMES.has(currentThinkingLevel as ThinkingLevel)
-      ? { thinkingLevel: currentThinkingLevel as ThinkingLevel }
-      : {}),
-  }, operation);
-  await assertRpcSessionOperationCurrent(operation);
-  return { session: started.session, sessionId: started.realSessionId, recreated: true };
 }
 
 function runtimeMessageText(entry: SessionMessageEntry): string {
