@@ -934,6 +934,16 @@ export class AgentSessionWrapper {
     }
   }
 
+  private cancelActiveWork(): void {
+    if (this.inner.isBashRunning) this.inner.abortBash();
+    if (this.inner.isCompacting) this.inner.abortCompaction();
+    if (this.pendingPromptCount > 0 || this.inner.isStreaming) {
+      void this.inner.abort().catch((error) => {
+        console.error("[pi-web] failed to cancel active session work:", error instanceof Error ? error.message : error);
+      });
+    }
+  }
+
   destroy(): void {
     if (!this._alive) return;
     this._stopping = true;
@@ -989,6 +999,7 @@ export class AgentSessionWrapper {
     const emitStopped = options.manual && this._alive && !this.sessionStoppedEmitted;
     this._stopping = true;
     this.agentRunNeedsCompletion = false;
+    if (options.manual) this.cancelActiveWork();
     if (emitStopped) {
       this.sessionStoppedEmitted = true;
       this.emit({ type: "session_stopped" });
@@ -1709,6 +1720,12 @@ export function getRpcSession(sessionId: string): AgentSessionWrapper | undefine
   return getRegistry().get(sessionId);
 }
 
+export function isRpcSessionActive(session: AgentSessionWrapper | undefined): boolean {
+  if (!session) return false;
+  const isActive = (session as { isActive?: () => boolean }).isActive;
+  return typeof isActive === "function" ? isActive.call(session) : session.isAlive();
+}
+
 export interface SetRpcSessionToolsResult {
   session: AgentSessionWrapper;
   sessionId: string;
@@ -1733,7 +1750,7 @@ export async function sendRpcSessionCommand(
 ): Promise<unknown> {
   await assertRpcSessionOperationCurrent(operation);
   let session = getRpcSession(operation.sessionId);
-  if (!session?.isActive()) {
+  if (!session || !isRpcSessionActive(session)) {
     if (!sessionFile) throw new Error("Session not found");
     session = (await startRpcSession(operation.sessionId, sessionFile, undefined, options, operation)).session;
   }
@@ -1893,7 +1910,7 @@ export async function destroyRpcSessionsForCwd(cwd: string): Promise<number> {
 export function getActiveRpcSessionIds(): string[] {
   const ids = new Set<string>();
   for (const [sessionId, session] of getRegistry()) {
-    if (session.isActive()) ids.add(session.sessionId || sessionId);
+    if (isRpcSessionActive(session)) ids.add(session.sessionId || sessionId);
   }
   return [...ids];
 }
@@ -1915,12 +1932,13 @@ export async function stopRpcSession(sessionId: string): Promise<boolean> {
   lifecycle.generation += 1;
   const stopping = (async () => {
     await priorStop;
+    let startedSession: AgentSessionWrapper | undefined;
     try {
-      await locks.get(sessionId);
+      startedSession = (await locks.get(sessionId))?.session;
     } catch {
       // Failed startup has no runtime left to stop.
     }
-    const session = registry.get(sessionId);
+    const session = registry.get(sessionId) ?? startedSession;
     if (session?.isAlive()) await session.shutdown({ manual: true });
     return hadRuntime;
   })();
@@ -1966,7 +1984,8 @@ export async function startRpcSession(
   const locks = getLocks();
 
   const existing = registry.get(sessionId);
-  if (existing?.isActive()) return { session: existing, realSessionId: sessionId };
+  if (existing && isRpcSessionActive(existing)) return { session: existing, realSessionId: sessionId };
+  if (existing?.isAlive()) throw new Error("Session is stopping");
 
   const inflight = locks.get(sessionId);
   if (inflight) return inflight;

@@ -110,7 +110,7 @@ test("runtime snapshot exposes active IDs separately from running IDs", async (t
   globalThis.__piSessions = new Map([
     ["idle", {
       sessionId: "idle",
-      isActive: () => true,
+      isAlive: () => true,
       isRunning: () => false,
     }],
     ["running", {

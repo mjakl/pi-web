@@ -3,6 +3,7 @@ import { resolveSessionPath } from "@/lib/session-reader";
 import {
   beginRpcSessionOperation,
   getRpcSession,
+  isRpcSessionActive,
   sendRpcSessionCommand,
   setRpcSessionTools,
   stopRpcSession,
@@ -33,7 +34,7 @@ export async function POST(
     const filePath = existing?.sessionFile || await resolveSessionPath(id) || undefined;
 
     if (body.type === "set_tools") {
-      if (!existing?.isActive() && !filePath) {
+      if (!isRpcSessionActive(existing) && !filePath) {
         return NextResponse.json({ error: "Session not found" }, { status: 404 });
       }
       const changed = await setRpcSessionTools(operation, filePath, toolNames);
@@ -43,7 +44,7 @@ export async function POST(
       });
     }
 
-    if (!existing?.isActive() && !filePath) {
+    if (!isRpcSessionActive(existing) && !filePath) {
       return NextResponse.json({
         error: "Session not found",
         ...(body.type === "prompt"
@@ -76,7 +77,7 @@ export async function GET(
 
   try {
     const session = getRpcSession(id);
-    if (!session?.isActive()) {
+    if (!session || !isRpcSessionActive(session)) {
       return NextResponse.json({ active: false, running: false });
     }
 

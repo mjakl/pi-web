@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRpcSession } from "@/lib/rpc-manager";
+import { getRpcSession, isRpcSessionActive } from "@/lib/rpc-manager";
 import { resolveSessionPath } from "@/lib/session-reader";
 
 export async function GET(
@@ -9,7 +9,7 @@ export async function GET(
   const { id } = await params;
   try {
     const rpc = getRpcSession(id);
-    if (rpc?.isActive()) {
+    if (rpc && isRpcSessionActive(rpc)) {
       const state = await rpc.send({ type: "get_state" });
       return NextResponse.json({ active: true, running: rpc.isRunning(), state });
     }

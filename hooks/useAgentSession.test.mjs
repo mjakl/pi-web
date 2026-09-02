@@ -324,6 +324,38 @@ test("manual stop settles without completion effects and closes the stream", () 
   assert.doesNotMatch(stoppedSource, /onAgentEnd|notifyPromptStage|scheduleEventStreamClose/);
 });
 
+test("session loads are fenced by session and prompt run identity", () => {
+  const loadSource = source.slice(
+    source.indexOf("const loadSession = useCallback"),
+    source.indexOf("const loadContext = useCallback"),
+  );
+  const applyTranscript = loadSource.indexOf("setData(d)");
+  const applyRuntimeState = loadSource.indexOf("const liveState = agentState.state");
+
+  const transcriptFence = loadSource.indexOf("if (!isCurrentLoad()) return null;");
+  const runtimeFence = loadSource.indexOf("if (!isCurrentLoad()) return null;", applyTranscript);
+  assert.match(loadSource, /const loadRunId = promptRunIdRef\.current/);
+  assert.match(loadSource, /sessionIdRef\.current === sid && promptRunIdRef\.current === loadRunId/);
+  assert.ok(transcriptFence >= 0 && transcriptFence < applyTranscript);
+  assert.ok(runtimeFence >= 0 && runtimeFence < applyRuntimeState);
+});
+
+test("agent_end runtime reconciliation is fenced by session and prompt run identity", () => {
+  const agentEndSource = source.slice(
+    source.indexOf('case "agent_end"'),
+    source.indexOf('case "agent_settled"'),
+  );
+  const responseHandler = agentEndSource.indexOf('.then((d: { state?: AgentStateResponse }) => {');
+  const ownershipFence = agentEndSource.indexOf("sessionIdRef.current !== sid || promptRunIdRef.current !== runId");
+  const firstStateWrite = agentEndSource.indexOf("setContextUsage(");
+  const lastStateWrite = agentEndSource.indexOf("setQueuedMessages(");
+
+  assert.match(agentEndSource, /const sid = sessionIdRef\.current/);
+  assert.match(agentEndSource, /const runId = promptRunIdRef\.current/);
+  assert.ok(responseHandler >= 0 && ownershipFence > responseHandler);
+  assert.ok(ownershipFence < firstStateWrite && ownershipFence < lastStateWrite);
+});
+
 test("keeps one reducer-owned assistant partial and consumes Pi JSON deltas", () => {
   const connectedSource = source.slice(
     source.indexOf('case "connected"'),

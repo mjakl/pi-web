@@ -9,6 +9,7 @@ test("agent SSE activates only explicit live connections and disables response b
   assert.match(agentEventsSource, /createAgentEventStream\(req, id, sessionPromise\)/);
   assert.match(agentEventsSource, /searchParams\.has\("activate"\)/);
   assert.match(agentEventsSource, /if \(!activate\) return new Response\("Session is stopped", \{ status: 409 \}\)/);
+  assert.match(agentEventsSource, /isRpcSessionActive\(activeSession\)/);
   assert.match(agentEventsSource, /sessionPromise = activateRpcSession\(operation, filePath\)/);
   assert.doesNotMatch(agentEventsSource, /await activateRpcSession\(/);
   assert.match(agentEventsSource, /if \(req\.signal\.aborted\) return new Response\(null, \{ status: 204 \}\)/);

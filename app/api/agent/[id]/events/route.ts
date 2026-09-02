@@ -4,6 +4,7 @@ import {
   activateRpcSession,
   beginRpcSessionOperation,
   getRpcSession,
+  isRpcSessionActive,
 } from "@/lib/rpc-manager";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export async function GET(
 
   const activeSession = getRpcSession(id);
   let sessionPromise;
-  if (activeSession?.isActive()) {
+  if (activeSession && isRpcSessionActive(activeSession)) {
     sessionPromise = Promise.resolve(activeSession);
   } else {
     const filePath = await resolveSessionPath(id);
