@@ -64,13 +64,6 @@ export interface ProjectTrustStatus {
   trusted: boolean;
 }
 
-export interface AppUpdateResponse {
-  currentVersion: string;
-  latestVersion: string;
-  updateAvailable: boolean;
-  releaseUrl: string;
-}
-
 export interface PushConfigResponse {
   publicKey: string;
 }

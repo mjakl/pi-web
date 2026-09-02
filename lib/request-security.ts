@@ -44,11 +44,8 @@ function isLoopbackHostname(hostname: string): boolean {
   return hostname === "localhost" || hostname.endsWith(".localhost");
 }
 
-function configuredHostnamesFromEnvironment(): string[] {
-  return [
-    process.env.PI_WEB_HOSTNAME,
-    ...(process.env.PI_WEB_ALLOWED_HOSTS?.split(",") ?? []),
-  ].filter((value): value is string => Boolean(value?.trim()));
+function configuredHostnameFromEnvironment(): string | undefined {
+  return process.env.PI_WEB_HOSTNAME;
 }
 
 function canonicalOrigin(value: string): string | null {
@@ -89,16 +86,14 @@ function isUserInitiatedSessionExportNavigation(request: Request): boolean {
  */
 export function isApiRequestHostAllowed(
   request: Request,
-  configuredHostnames = configuredHostnamesFromEnvironment(),
+  configuredHostname = configuredHostnameFromEnvironment(),
 ): boolean {
   const host = request.headers.get("host");
   const hostname = host ? hostnameFromAuthority(host) : null;
   if (!hostname) return false;
   if (isLoopbackHostname(hostname) || isIP(hostname)) return true;
 
-  return configuredHostnames.some(
-    (configured) => normalizeConfiguredHostname(configured) === hostname,
-  );
+  return normalizeConfiguredHostname(configuredHostname) === hostname;
 }
 
 /**
@@ -147,9 +142,9 @@ export function shouldCheckApiRequestOrigin(request: Request): boolean {
 
 export function isApiRequestAllowed(
   request: Request,
-  configuredHostnames = configuredHostnamesFromEnvironment(),
+  configuredHostname = configuredHostnameFromEnvironment(),
 ): boolean {
-  if (!isApiRequestHostAllowed(request, configuredHostnames)) return false;
+  if (!isApiRequestHostAllowed(request, configuredHostname)) return false;
   if (isUserInitiatedSessionExportNavigation(request)) return true;
   return !shouldCheckApiRequestOrigin(request) || isApiRequestOriginAllowed(request);
 }

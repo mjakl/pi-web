@@ -36,7 +36,7 @@ if (launchOptions.help) {
   process.exit(0);
 }
 
-const { port, hostname, openBrowser } = launchOptions;
+const { port, hostname } = launchOptions;
 
 const pkgDir = path.join(__dirname, "..");
 const nextDir = path.join(pkgDir, ".next");
@@ -57,7 +57,6 @@ try {
 }
 
 const loopbackHostnames = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
-const passwordEnabled = Boolean(process.env.PI_WEB_PASSWORD);
 
 if (!fs.existsSync(nextDir)) {
   console.error("Build artifacts not found. Please report this issue.");
@@ -65,15 +64,9 @@ if (!fs.existsSync(nextDir)) {
 }
 
 if (!loopbackHostnames.has(hostname)) {
-  if (passwordEnabled) {
-    console.warn(
-      `Warning: pi-web is listening on ${hostname} with Basic Auth over HTTP. Use HTTPS or a trusted VPN to protect the password in transit.`,
-    );
-  } else {
-    console.warn(
-      `Warning: pi-web is listening on ${hostname} without authentication. Only use this on a trusted network.`,
-    );
-  }
+  console.warn(
+    `Warning: pi-web is listening on ${hostname} without built-in authentication. Only use this on a trusted network or behind an external security layer.`,
+  );
 }
 
 const nextArgs = ["start", "-p", port];
@@ -83,50 +76,7 @@ nextArgs.push("-H", hostname);
 // and path-with-spaces problems on Windows when shell: true is used.
 const child = spawn(process.execPath, [nextBin, ...nextArgs], {
   cwd: pkgDir,
-  stdio: ["inherit", "pipe", "inherit"],
+  stdio: "inherit",
   env: { ...process.env, PI_WEB_HOSTNAME: hostname },
 });
 wireChildProcessLifecycle(child);
-
-let browserOpened = false;
-const url = `http://${hostname}:${port}`;
-
-child.stdout.on("data", (chunk) => {
-  const text = chunk.toString();
-  process.stdout.write(text);
-  if (openBrowser && !browserOpened && text.includes("Ready")) {
-    browserOpened = true;
-    const isWindows = process.platform === "win32";
-    const isMac = process.platform === "darwin";
-    // Avoid `shell: true` to suppress Node.js DEP0190 deprecation
-    // ("Passing args to a child process with shell option true can lead to
-    // security vulnerabilities, as the arguments are not escaped").
-    // Pass a structured argv so Node.js handles escaping instead of
-    // concatenating the args into a shell command string.
-    let opener;
-    if (isWindows) {
-      // `start` is a cmd.exe built-in, so invoke cmd directly. The empty
-      // title argument is required by `start` before the target URL.
-      opener = spawn(process.env.ComSpec || "cmd.exe", ["/c", "start", "", url], {
-        stdio: "ignore",
-        detached: true,
-      });
-    } else if (isMac) {
-      opener = spawn("open", [url], {
-        stdio: "ignore",
-        detached: true,
-      });
-    } else {
-      opener = spawn("xdg-open", [url], {
-        stdio: "ignore",
-        detached: true,
-      });
-    }
-
-    opener.on("error", (error) => {
-      console.warn(`Could not open browser automatically: ${error.message}`);
-    });
-
-    opener.unref();
-  }
-});
