@@ -1,11 +1,11 @@
-import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname, join } from "path";
 import webpush from "web-push";
 import { writePrivateFileAtomicSync } from "./atomic-file";
 import { enLocale } from "./i18n/messages/en";
 import { zhCNLocale } from "./i18n/messages/zh-CN";
-import { getAgentDir } from "./session-reader";
+import { readSessionRowMetadata } from "./session-metadata";
+import { getAgentDir, resolveSessionPath } from "./session-reader";
 
 export interface PushSubscriptionRecord {
   endpoint: string;
@@ -27,7 +27,7 @@ interface WebPushEnvironment {
   loadState: () => PushStateFile | null;
   saveState: (state: PushStateFile) => void;
   generateVapidKeys: () => PushStateFile["vapidKeys"];
-  listSessionNames: () => Promise<Map<string, string>>;
+  getSessionName: (sessionId: string) => Promise<string | undefined>;
 }
 
 export interface WebPushNotifier {
@@ -70,16 +70,15 @@ function getDefaultEnvironment(): WebPushEnvironment {
       writePrivateFileAtomicSync(path, JSON.stringify(state));
     },
     generateVapidKeys: () => webpush.generateVAPIDKeys(),
-    async listSessionNames() {
-      const names = new Map<string, string>();
+    async getSessionName(sessionId) {
       try {
-        for (const session of await SessionManager.listAll()) {
-          if (session.name) names.set(session.id, session.name);
-        }
+        const filePath = await resolveSessionPath(sessionId);
+        if (!filePath) return undefined;
+        return (await readSessionRowMetadata(filePath, sessionId))?.name;
       } catch {
-        // Session list is best-effort; fall back to the generic title.
+        // Session naming is best-effort; fall back to the generic title.
+        return undefined;
       }
-      return names;
     },
   };
 }
@@ -127,7 +126,7 @@ export function createWebPushNotifier(environment: WebPushEnvironment): WebPushN
     },
     async notifySessionComplete(sessionId) {
       if (state.subscriptions.length === 0) return;
-      const sessionName = (await environment.listSessionNames()).get(sessionId);
+      const sessionName = await environment.getSessionName(sessionId);
       const payloadFor = (locale: string) => ({
         title: sessionName ?? localeText(locale, "sessionComplete"),
         body: localeText(locale, "taskFinished"),

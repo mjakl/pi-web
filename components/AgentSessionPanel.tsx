@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import type { SessionInfo, SubagentSessionStatus } from "@/lib/types";
 
@@ -10,6 +10,7 @@ interface Props {
   selectedSessionId: string;
   runningSessionIds: ReadonlySet<string>;
   onSelectSession: (session: SessionInfo) => void;
+  onMetadataNeeded?: (sessions: SessionInfo[]) => void;
 }
 
 function sessionTitle(session: SessionInfo): string {
@@ -150,7 +151,7 @@ function AgentRow({
   );
 }
 
-export function AgentSessionPanel({ rootSession, subagents, selectedSessionId, runningSessionIds, onSelectSession }: Props) {
+export function AgentSessionPanel({ rootSession, subagents, selectedSessionId, runningSessionIds, onSelectSession, onMetadataNeeded }: Props) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const sortedSubagents = useMemo(() => [...subagents].sort((a, b) => {
@@ -160,13 +161,25 @@ export function AgentSessionPanel({ rootSession, subagents, selectedSessionId, r
     return b.modified.localeCompare(a.modified);
   }), [runningSessionIds, subagents]);
   const normalizedQuery = query.trim().toLowerCase();
-  const visibleSubagents = normalizedQuery
+  useEffect(() => {
+    if (normalizedQuery) onMetadataNeeded?.([rootSession, ...subagents]);
+  }, [normalizedQuery, onMetadataNeeded, rootSession, subagents]);
+  const visibleSubagents = useMemo(() => normalizedQuery
     ? sortedSubagents.filter((session) => {
         const relation = session.relation?.kind === "subagent" ? session.relation : null;
         return [relation?.description, relation?.profile, session.name, session.firstMessage]
           .some((value) => value?.toLowerCase().includes(normalizedQuery));
       })
-    : sortedSubagents;
+    : sortedSubagents, [normalizedQuery, sortedSubagents]);
+  const requestVisibleMetadata = useCallback((scrollTop = 0, viewportHeight = 480) => {
+    const rows = [rootSession, ...visibleSubagents];
+    const first = Math.max(0, Math.floor(scrollTop / 56) - 2);
+    const last = Math.min(rows.length, Math.ceil((scrollTop + viewportHeight) / 56) + 2);
+    onMetadataNeeded?.(rows.slice(first, last));
+  }, [onMetadataNeeded, rootSession, visibleSubagents]);
+  useEffect(() => {
+    requestVisibleMetadata();
+  }, [requestVisibleMetadata]);
   const runningCount = subagents.filter((session) => runningSessionIds.has(session.id)).length;
 
   return (
@@ -211,7 +224,13 @@ export function AgentSessionPanel({ rootSession, subagents, selectedSessionId, r
             />
           </div>
         )}
-        <div style={{ maxHeight: "min(58dvh, 480px)", overflowY: "auto" }}>
+        <div
+          style={{ maxHeight: "min(58dvh, 480px)", overflowY: "auto" }}
+          onScroll={(event) => requestVisibleMetadata(
+            event.currentTarget.scrollTop,
+            event.currentTarget.clientHeight,
+          )}
+        >
           <AgentRow
             session={rootSession}
             main

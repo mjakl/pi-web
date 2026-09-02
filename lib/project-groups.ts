@@ -4,25 +4,31 @@ import { workspaceKeyOf } from "./workspace-memory";
 export interface RecentProject {
   /** Stable server-provided identity used for comparison and Map keys. */
   key: string;
-  /** Original project path used for display and filesystem operations. */
+  /** Original project path used for display. */
   root: string;
+  /** Most recently active authorized session cwd used to enter the project. */
+  cwd: string;
 }
 
 /** Projects sorted by most recent activity and deduplicated by stable key. */
 export function getRecentProjects(sessions: readonly SessionInfo[]): RecentProject[] {
-  const latestByProject = new Map<string, { root: string; modified: string }>();
+  const latestByProject = new Map<string, { root: string; cwd: string; modified: string }>();
   for (const session of sessions) {
     const root = session.projectRoot ?? session.cwd;
     if (!root) continue;
     const key = workspaceKeyOf(session);
     const previous = latestByProject.get(key);
     if (!previous || session.modified > previous.modified) {
-      latestByProject.set(key, { root, modified: session.modified });
+      latestByProject.set(key, {
+        root,
+        cwd: session.projectEntryPath ?? session.cwd,
+        modified: session.modified,
+      });
     }
   }
   return [...latestByProject.entries()]
     .sort((a, b) => b[1].modified.localeCompare(a[1].modified))
-    .map(([key, { root }]) => ({ key, root }));
+    .map(([key, { root, cwd }]) => ({ key, root, cwd }));
 }
 
 export function getProjectActivity(

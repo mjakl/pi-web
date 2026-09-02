@@ -12,14 +12,21 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
-    const force = new URL(req.url).searchParams.get("force") === "1";
     const [persistedSessions, runtimeSessions] = await Promise.all([
-      listAllSessions({ force }),
+      listAllSessions(),
       attachSessionProjectInfo(getRpcSessionInfos()),
     ]);
-    const sessions = mergeSessionLists(persistedSessions, runtimeSessions);
+    const sessions = mergeSessionLists(persistedSessions, runtimeSessions).map((session) => {
+      const inventory = { ...session };
+      if (!inventory.transient) {
+        delete inventory.name;
+        delete inventory.messageCount;
+        delete inventory.firstMessage;
+      }
+      return inventory;
+    });
     return NextResponse.json(
       {
         sessions,

@@ -21,11 +21,15 @@ const {
   invalidateSessionPathCache,
 } = await jiti.import("../../../lib/session-reader.ts");
 
-test("session listing merges live registry snapshots and honors force refresh", () => {
-  assert.match(listRoute, /searchParams\.get\("force"\) === "1"/);
-  assert.match(listRoute, /listAllSessions\(\{ force \}\)/);
+test("session listing merges live registry identity into the uncached inventory", () => {
+  assert.match(listRoute, /listAllSessions\(\)/);
+  assert.doesNotMatch(listRoute, /SessionManager\.listAll/);
+  assert.doesNotMatch(listRoute, /allowFileRoot/);
   assert.match(listRoute, /attachSessionProjectInfo\(getRpcSessionInfos\(\)\)/);
   assert.match(listRoute, /mergeSessionLists\(persistedSessions, runtimeSessions\)/);
+  assert.match(listRoute, /if \(!inventory\.transient\)/);
+  assert.match(listRoute, /delete inventory\.firstMessage/);
+  assert.match(listRoute, /delete inventory\.messageCount/);
   assert.match(listRoute, /"Cache-Control": "no-store"/);
 });
 

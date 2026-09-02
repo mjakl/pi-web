@@ -81,12 +81,36 @@ test("offers the downstream context-menu hook only on a normal session row", () 
   );
 });
 
-test("manual and lifecycle refreshes bypass the server session-list cache", () => {
+test("manual and lifecycle refreshes request a fresh uncached inventory", () => {
   assert.match(source, /force \? "\/api\/sessions\?force=1" : "\/api\/sessions"/);
   assert.match(source, /cache: "no-store"/);
   assert.match(source, /loadSessions\(isFirst, !isFirst\)/);
   assert.match(source, /onClick=\{\(\) => loadSessions\(false, true\)\}/);
   assert.match(source, /loadSessions\(false, true\);[\s\S]*?onBackgroundTaskDone/);
+});
+
+test("hydrates only observed rows through one bounded serialized batch queue", () => {
+  assert.match(source, /new IntersectionObserver/);
+  assert.match(source, /root,\s*rootMargin: `\$\{SESSION_METADATA_OVERSCAN_PX\}px 0px`/);
+  assert.match(source, /slice\(0, SESSION_METADATA_BATCH_SIZE\)/);
+  assert.match(source, /metadataRequestRunningRef\.current/);
+  assert.match(source, /fetch\("\/api\/sessions\/metadata"/);
+  assert.match(source, /setInventoryRevision\(\(revision\) => revision \+ 1\)/);
+  assert.match(source, /requeueCurrentBatch\(staleSessionIds\)/);
+  assert.match(source, /refreshSessionInventoryRef\.current\(\)/);
+  assert.match(sessionItemSource, /data-session-inventory-id=\{session\.id\}/);
+});
+
+test("retries a failed metadata batch once per inventory fingerprint", () => {
+  assert.match(source, /metadataRetriedFingerprintRef = useRef<Map<string, string>>/);
+  assert.match(source, /metadataRetriedFingerprintRef\.current\.get\(session\.id\) === fingerprint/);
+  assert.match(source, /setTimeout\(\(\) => \{[\s\S]*?drainMetadataQueueRef\.current\(\)/);
+  assert.equal((source.match(/scheduleMetadataRetry\(batch\)/g) ?? []).length, 2);
+});
+
+test("keeps transcript metadata optional until a row is hydrated", () => {
+  assert.match(sessionItemSource, /const storedFirstMessage = session\.firstMessage \?\? ""/);
+  assert.match(sessionItemSource, /session\.messageCount === undefined/);
 });
 
 test("does not expose disk-backed actions for transient sessions", () => {

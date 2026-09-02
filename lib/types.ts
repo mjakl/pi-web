@@ -312,11 +312,16 @@ export interface SessionInfo {
   path: string;
   id: string;
   cwd: string;
+  /** Transcript-derived display metadata is absent from the initial inventory
+   *  and filled only after this row is requested. */
   name?: string;
   created: string;
+  /** Filesystem mtime. This is the stable catalogue ordering key. */
   modified: string;
-  messageCount: number;
-  firstMessage: string;
+  /** File size paired with modified as the row-metadata fingerprint. */
+  fileSize?: number;
+  messageCount?: number;
+  firstMessage?: string;
   parentSessionId?: string; // source session for a fork, or parent session for a subagent
   /** How this session relates to another session. Forks remain top-level in the
    *  UI; only subagent relations form a visible parent/child tree. */
@@ -333,6 +338,8 @@ export interface SessionInfo {
    *  Always set by the server; optional because the client builds transient
    *  SessionInfo objects before the first refresh. Fall back to cwd. */
   projectRoot?: string;
+  /** Existing path used to enter a project when its newest session cwd was removed. */
+  projectEntryPath?: string;
   /** Stable server-computed project identity for grouping and comparison.
    *  Unlike projectRoot, Windows keys are case- and separator-insensitive.
    *  Internal only: use projectRoot/cwd for display and filesystem operations. */
