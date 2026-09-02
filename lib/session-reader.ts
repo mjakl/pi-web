@@ -3,7 +3,7 @@ import {
   buildContextEntries as piBuildContextEntries,
   getAgentDir,
 } from "@earendil-works/pi-coding-agent";
-import { closeSync, type Dirent, openSync, readSync, statSync } from "fs";
+import { closeSync, type Dirent, existsSync, openSync, readSync, statSync } from "fs";
 import { readdir } from "fs/promises";
 import { isAbsolute, join, normalize as normalizePath, relative, resolve as resolvePath, sep } from "path";
 import type { AgentMessage, ImageContent, SessionEntry, SessionHeader, SessionInfo, SessionContext } from "./types";
@@ -87,9 +87,13 @@ export async function attachSessionProjectInfo(sessions: SessionInfo[]): Promise
   return sessions.map((session) => {
     const project = session.cwd ? projectByCwd.get(session.cwd) : undefined;
     const projectRoot = project?.projectRoot ?? session.cwd;
+    const projectEntryPath = project?.isWorktree && !existsSync(session.cwd)
+      ? projectRoot
+      : session.cwd;
     return {
       ...session,
       projectRoot,
+      ...(projectEntryPath !== session.cwd ? { projectEntryPath } : {}),
       projectKey: projectIdentityKey(projectRoot),
       ...(project?.branch ? { branch: project.branch } : {}),
       ...(project?.isWorktree ? { isWorktree: true } : {}),

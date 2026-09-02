@@ -19,7 +19,11 @@ export function getRecentProjects(sessions: readonly SessionInfo[]): RecentProje
     const key = workspaceKeyOf(session);
     const previous = latestByProject.get(key);
     if (!previous || session.modified > previous.modified) {
-      latestByProject.set(key, { root, cwd: session.cwd, modified: session.modified });
+      latestByProject.set(key, {
+        root,
+        cwd: session.projectEntryPath ?? session.cwd,
+        modified: session.modified,
+      });
     }
   }
   return [...latestByProject.entries()]

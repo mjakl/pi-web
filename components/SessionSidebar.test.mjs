@@ -101,6 +101,13 @@ test("hydrates only observed rows through one bounded serialized batch queue", (
   assert.match(sessionItemSource, /data-session-inventory-id=\{session\.id\}/);
 });
 
+test("retries a failed metadata batch once per inventory fingerprint", () => {
+  assert.match(source, /metadataRetriedFingerprintRef = useRef<Map<string, string>>/);
+  assert.match(source, /metadataRetriedFingerprintRef\.current\.get\(session\.id\) === fingerprint/);
+  assert.match(source, /setTimeout\(\(\) => \{[\s\S]*?drainMetadataQueueRef\.current\(\)/);
+  assert.equal((source.match(/scheduleMetadataRetry\(batch\)/g) ?? []).length, 2);
+});
+
 test("keeps transcript metadata optional until a row is hydrated", () => {
   assert.match(sessionItemSource, /const storedFirstMessage = session\.firstMessage \?\? ""/);
   assert.match(sessionItemSource, /session\.messageCount === undefined/);

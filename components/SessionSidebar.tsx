@@ -146,6 +146,7 @@ interface ValidatedProject {
 const UNREAD_SESSIONS_STORAGE_KEY = "pi-web:unread-session-ids";
 const LAST_CUSTOM_CWD_STORAGE_KEY = "pi-web:last-custom-cwd";
 const RUNNING_SESSIONS_POLL_MS = 2500;
+const SESSION_METADATA_RETRY_DELAY_MS = 1000;
 const SESSION_ITEM_HEIGHT = 54;
 const SESSION_METADATA_OVERSCAN_PX = SESSION_ITEM_HEIGHT * 2;
 
@@ -418,9 +419,27 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const metadataRequestRunningRef = useRef(false);
   const metadataAbortRef = useRef<AbortController | null>(null);
   const metadataStaleRefreshRef = useRef<Set<string>>(new Set());
+  const metadataRetriedFingerprintRef = useRef<Map<string, string>>(new Map());
+  const metadataRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drainMetadataQueueRef = useRef<() => void>(() => {});
   const refreshSessionInventoryRef = useRef<() => void>(() => {});
   const allSessionsRef = useRef(allSessions);
   allSessionsRef.current = allSessions;
+
+  const scheduleMetadataRetry = useCallback((sessions: SessionInfo[]) => {
+    let needsRetry = false;
+    for (const session of sessions) {
+      const fingerprint = sessionFingerprint(session);
+      if (!fingerprint || metadataRetriedFingerprintRef.current.get(session.id) === fingerprint) continue;
+      metadataRetriedFingerprintRef.current.set(session.id, fingerprint);
+      needsRetry = true;
+    }
+    if (!needsRetry || metadataRetryTimerRef.current) return;
+    metadataRetryTimerRef.current = setTimeout(() => {
+      metadataRetryTimerRef.current = null;
+      drainMetadataQueueRef.current();
+    }, SESSION_METADATA_RETRY_DELAY_MS);
+  }, []);
 
   const drainMetadataQueue = useCallback(async () => {
     if (metadataRequestRunningRef.current) return;
@@ -460,6 +479,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
           });
           if (!response.ok) {
             requeueCurrentBatch();
+            scheduleMetadataRetry(batch);
             return;
           }
           const body = await response.json() as {
@@ -487,6 +507,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
             };
             const fingerprint = sessionFingerprint(hydrated);
             if (fingerprint) metadataLoadedRef.current.set(session.id, fingerprint);
+            metadataRetriedFingerprintRef.current.delete(session.id);
             metadataStaleRefreshRef.current.delete(session.id);
             return hydrated;
           }));
@@ -503,13 +524,14 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         } catch (error) {
           if (error instanceof DOMException && error.name === "AbortError") return;
           requeueCurrentBatch();
+          scheduleMetadataRetry(batch);
           return;
         }
       }
     } finally {
       metadataRequestRunningRef.current = false;
     }
-  }, []);
+  }, [scheduleMetadataRetry]);
 
   const queueSessionMetadata = useCallback<SessionMetadataLoader>((sessions) => {
     for (const session of sessions) {
@@ -526,8 +548,15 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     return () => {
       metadataAbortRef.current?.abort();
       metadataAbortRef.current = null;
+      if (metadataRetryTimerRef.current) clearTimeout(metadataRetryTimerRef.current);
+      metadataRetryTimerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    drainMetadataQueueRef.current = () => void drainMetadataQueue();
+    return () => { drainMetadataQueueRef.current = () => {}; };
+  }, [drainMetadataQueue]);
 
   useEffect(() => {
     onMetadataLoaderChange?.(queueSessionMetadata);
@@ -559,6 +588,9 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         }
         for (const id of metadataStaleRefreshRef.current) {
           if (!nextIds.has(id)) metadataStaleRefreshRef.current.delete(id);
+        }
+        for (const id of metadataRetriedFingerprintRef.current.keys()) {
+          if (!nextIds.has(id)) metadataRetriedFingerprintRef.current.delete(id);
         }
         return data.sessions.map((session) => {
           const previous = previousById.get(session.id);
