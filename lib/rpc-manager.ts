@@ -16,7 +16,7 @@ import { cacheSessionPath } from "./session-reader";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
 import { persistExplicitStartupPreferences } from "./startup-preferences";
 import { notifySessionComplete } from "./web-push";
-import type { SlashCommandInfo } from "@earendil-works/pi-coding-agent";
+import type { ExtensionCommandContextActions, SlashCommandInfo } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionLike, ExtensionUiContextLike, ToolInfo } from "./pi-types";
 import type {
   ExtensionUiRequest,
@@ -86,15 +86,6 @@ type ExtensionUiRequestBody = Record<string, unknown> & {
   method: ExtensionUiRequest["method"];
   timeout?: number;
   expiresAt?: number;
-};
-
-type ExtensionCommandContextActionsLike = {
-  waitForIdle: () => Promise<void>;
-  newSession: () => Promise<{ cancelled: boolean }>;
-  fork: () => Promise<{ cancelled: boolean }>;
-  navigateTree: (targetId: string, options?: { summarize?: boolean }) => Promise<{ cancelled: boolean }>;
-  switchSession: () => Promise<{ cancelled: boolean }>;
-  reload: () => Promise<void>;
 };
 
 type AgentSessionWrapperOptions = {
@@ -295,36 +286,24 @@ export class AgentSessionWrapper {
     this.extensionBindingError = null;
     this.extensionBindingPromise = (async () => {
       if (!this._alive) return;
-      const uiContext = this.createExtensionUiContext();
-      if (typeof this.inner.bindExtensions === "function") {
-        const bindExtensions = this.inner.bindExtensions as (bindings: {
-          uiContext?: ExtensionUiContextLike;
-          mode?: "rpc";
-          commandContextActions?: ExtensionCommandContextActionsLike;
-          shutdownHandler?: () => void;
-          onError?: (error: { extensionPath: string; event: string; error: string }) => void;
-        }) => Promise<void>;
-        await bindExtensions.call(this.inner, {
-          uiContext,
-          mode: "rpc",
-          commandContextActions: this.createExtensionCommandContextActions(),
-          shutdownHandler: () => this.emit({
-            type: "extension_ui_request",
-            id: randomUUID(),
-            method: "notify",
-            notifyType: "warning",
-            message: "Extension requested shutdown, but shutdown is not supported in Pi Web.",
-          } as ExtensionUiRequest as AgentEvent),
-          onError: (error) => this.emit({
-            type: "extension_error",
-            extensionPath: error.extensionPath,
-            event: error.event,
-            error: error.error,
-          }),
-        });
-      } else {
-        this.inner.extensionRunner.setUIContext?.(uiContext, "rpc");
-      }
+      await this.inner.bindExtensions({
+        uiContext: this.createExtensionUiContext(),
+        mode: "rpc",
+        commandContextActions: this.createExtensionCommandContextActions(),
+        shutdownHandler: () => this.emit({
+          type: "extension_ui_request",
+          id: randomUUID(),
+          method: "notify",
+          notifyType: "warning",
+          message: "Extension requested shutdown, but shutdown is not supported in Pi Web.",
+        } as ExtensionUiRequest as AgentEvent),
+        onError: (error) => this.emit({
+          type: "extension_error",
+          extensionPath: error.extensionPath,
+          event: error.event,
+          error: error.error,
+        }),
+      });
       this.extensionsBound = true;
       this.applyExactSystemPrompt();
       console.log(`[pi-web] session_start dispatched to extensions for session ${this.inner.sessionId}`);
@@ -415,7 +394,7 @@ export class AgentSessionWrapper {
   }
 
   private hasPersistedTranscript(): boolean {
-    const sessionFile = this.inner.sessionManager.getSessionFile?.() ?? this.sessionFile;
+    const sessionFile = this.inner.sessionManager.getSessionFile() ?? this.sessionFile;
     return Boolean(sessionFile && existsSync(sessionFile));
   }
 
@@ -855,9 +834,6 @@ export class AgentSessionWrapper {
         this.syncProjectTrust();
         await this.inner.reload();
         this.setActiveToolSelection(activeToolNames);
-        if (typeof this.inner.bindExtensions !== "function") {
-          this.inner.extensionRunner.setUIContext?.(this.createExtensionUiContext(), "rpc");
-        }
         this.applyExactSystemPrompt();
         invalidateModelsCache();
         return { success: true };
@@ -962,16 +938,7 @@ export class AgentSessionWrapper {
     }
 
     this.sessionShutdownEmitted = true;
-    const emit = this.inner.extensionRunner?.emit;
-    if (typeof emit !== "function") {
-      finishDispose();
-      return;
-    }
-
-    void (async () => emit.call(
-      this.inner.extensionRunner,
-      { type: "session_shutdown", reason: "quit" },
-    ))()
+    void (async () => this.inner.extensionRunner.emit({ type: "session_shutdown", reason: "quit" }))()
       .catch((error) => {
         console.error(
           "[pi-web] session_shutdown before dispose failed:",
@@ -999,7 +966,7 @@ export class AgentSessionWrapper {
         await this.waitForExtensionsBound();
         if (!this.sessionShutdownEmitted) {
           this.sessionShutdownEmitted = true;
-          await this.inner.extensionRunner.emit?.({ type: "session_shutdown", reason: "quit" });
+          await this.inner.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
         }
       })();
       try {
@@ -1541,12 +1508,9 @@ export class AgentSessionWrapper {
     };
   }
 
-  private createExtensionCommandContextActions(): ExtensionCommandContextActionsLike {
+  private createExtensionCommandContextActions(): ExtensionCommandContextActions {
     return {
-      waitForIdle: async () => {
-        const agent = this.inner.agent as { waitForIdle?: () => Promise<void> };
-        await agent.waitForIdle?.();
-      },
+      waitForIdle: () => this.inner.agent.waitForIdle(),
       newSession: async () => ({ cancelled: true }),
       fork: async () => ({ cancelled: true }),
       navigateTree: async (targetId, options) => {
@@ -1560,7 +1524,7 @@ export class AgentSessionWrapper {
         this.syncProjectTrust();
         await this.inner.reload({
           beforeSessionStart: () => {
-            this.inner.extensionRunner.setUIContext?.(this.createExtensionUiContext(), "rpc");
+            this.inner.extensionRunner.setUIContext(this.createExtensionUiContext(), "rpc");
           },
         });
         this.applyExactSystemPrompt();
@@ -1707,9 +1671,7 @@ export function getRpcSession(sessionId: string): AgentSessionWrapper | undefine
 }
 
 export function isRpcSessionActive(session: AgentSessionWrapper | undefined): boolean {
-  if (!session) return false;
-  const isActive = (session as { isActive?: () => boolean }).isActive;
-  return typeof isActive === "function" ? isActive.call(session) : session.isAlive();
+  return session?.isActive() ?? false;
 }
 
 export interface SetRpcSessionToolsResult {
@@ -1767,10 +1729,7 @@ export async function setRpcSessionTools(
 
     if (existing.isRunning()) throw new Error("Cannot change tools while the session is running");
 
-    const hasCurrentResourcePolicy = typeof existing.isChatOnly === "function"
-      && typeof existing.setActiveToolSelection === "function";
-    const crossesChatOnlyBoundary = !hasCurrentResourcePolicy
-      || existing.isChatOnly() !== (toolNames.length === 0);
+    const crossesChatOnlyBoundary = existing.isChatOnly() !== (toolNames.length === 0);
     appendSessionToolSelection(existing.inner.sessionManager, toolNames);
 
     if (!crossesChatOnlyBoundary) {

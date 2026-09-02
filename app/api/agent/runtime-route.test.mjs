@@ -111,6 +111,7 @@ test("runtime snapshot exposes active IDs separately from running IDs", async (t
     ["idle", {
       sessionId: "idle",
       isAlive: () => true,
+      isActive: () => true,
       isRunning: () => false,
     }],
     ["running", {

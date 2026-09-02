@@ -169,6 +169,7 @@ test("live detail and state routes work without a persisted JSONL file", async (
   };
   globalThis.__piSessions = new Map([[id, {
     isAlive: () => true,
+    isActive: () => true,
     isRunning: () => true,
     inner: { sessionManager },
     sessionFile: sessionManager.getSessionFile(),
@@ -227,6 +228,7 @@ test("detail and context routes bound history to the tail window", async (t) => 
   };
   globalThis.__piSessions = new Map([[id, {
     isAlive: () => true,
+    isActive: () => true,
     isRunning: () => false,
     inner: { sessionManager },
     sessionFile: sessionManager.getSessionFile(),
