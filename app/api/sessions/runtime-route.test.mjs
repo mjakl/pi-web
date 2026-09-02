@@ -109,6 +109,34 @@ test("deleting an intermediate subagent reparents both relation representations"
   });
 });
 
+test("deleting a session succeeds when its parent file is missing", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-web-delete-missing-parent-"));
+  const sessionPath = join(dir, "child.jsonl");
+  const missingParentPath = join(dir, "missing-parent.jsonl");
+  const sessionId = "delete-missing-parent-child";
+  await writeFile(sessionPath, `${JSON.stringify({
+    type: "session",
+    version: 3,
+    id: sessionId,
+    timestamp: "2026-01-01T00:00:00.000Z",
+    cwd: dir,
+    parentSession: missingParentPath,
+  })}\n`);
+  cacheSessionPath(sessionId, sessionPath);
+  t.after(async () => {
+    invalidateSessionPathCache(sessionId);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const response = await deleteSession(
+    new Request(`http://localhost/api/sessions/${sessionId}`, { method: "DELETE" }),
+    { params: Promise.resolve({ id: sessionId }) },
+  );
+
+  assert.equal(response.status, 200);
+  await assert.rejects(readFile(sessionPath), { code: "ENOENT" });
+});
+
 test("live detail and state routes work without a persisted JSONL file", async (t) => {
   const previousRegistry = globalThis.__piSessions;
   const id = "live-route-test";
