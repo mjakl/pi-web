@@ -44,10 +44,6 @@ class HttpError extends Error {
   }
 }
 
-export function skillUpdateKey(install: Pick<SkillInstallInfo, "scope" | "package">): string {
-  return `${install.scope}\0${install.package}`;
-}
-
 export function buildSkillUpdateArgs(install: SkillInstallInfo): string[] {
   const folder = skillFolder(install.skillPath ?? "");
   const source = folder ? `${install.source}/${folder}` : install.source;
