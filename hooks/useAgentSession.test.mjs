@@ -139,6 +139,14 @@ test("fresh sessions use the preference while persisted and live sessions restor
   assert.match(changeSource, /setPreferredToolPreset\(preset\)/);
   assert.match(changeSource, /\(sid, \{ type: "set_tools", toolNames \}\)/);
   assert.match(changeSource, /sessionIdRef\.current = activeSessionId/);
+  assert.match(
+    changeSource,
+    /if \(result\?\.recreated \|\| activeSessionId !== sid\) \{[\s\S]*?closeEvents\(\)[\s\S]*?sessionIdRef\.current = activeSessionId/,
+  );
+  assert.match(
+    changeSource,
+    /if \(result\?\.recreated\) \{\s*await ensureEventsConnected\(activeSessionId\)/,
+  );
   assert.doesNotMatch(loadToolsSource, /setPreferredToolPreset/);
 });
 
