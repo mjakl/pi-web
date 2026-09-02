@@ -145,13 +145,14 @@ export async function DELETE(
     }
 
     // Read only the bounded header before deleting.
-    const parentSessionPath = readSessionHeader(filePath)?.parentSession;
+    let parentSessionPath = readSessionHeader(filePath)?.parentSession;
     let parentSessionId: string | undefined;
     if (parentSessionPath) {
       try {
         // The parent may have been deleted or moved already; treat it as absent.
         parentSessionId = readSessionHeader(parentSessionPath)?.id;
       } catch {
+        parentSessionPath = undefined;
         parentSessionId = undefined;
       }
     }

@@ -109,11 +109,13 @@ test("deleting an intermediate subagent reparents both relation representations"
   });
 });
 
-test("deleting a session succeeds when its parent file is missing", async (t) => {
+test("deleting a session with a missing parent promotes its direct child to a root", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "pi-web-delete-missing-parent-"));
   const sessionPath = join(dir, "child.jsonl");
+  const directChildPath = join(dir, "direct-child.jsonl");
   const missingParentPath = join(dir, "missing-parent.jsonl");
   const sessionId = "delete-missing-parent-child";
+  const directChildId = "delete-missing-parent-direct-child";
   await writeFile(sessionPath, `${JSON.stringify({
     type: "session",
     version: 3,
@@ -122,6 +124,31 @@ test("deleting a session succeeds when its parent file is missing", async (t) =>
     cwd: dir,
     parentSession: missingParentPath,
   })}\n`);
+  await writeFile(directChildPath, [
+    JSON.stringify({
+      type: "session",
+      version: 3,
+      id: directChildId,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      cwd: dir,
+      parentSession: sessionPath,
+    }),
+    JSON.stringify({
+      type: "custom",
+      customType: "pi-web:subagent",
+      id: "meta",
+      parentId: null,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      data: {
+        version: 1,
+        parentSessionId: sessionId,
+        parentSessionPath: sessionPath,
+        profile: "Explore",
+        description: "Inspect parser",
+      },
+    }),
+    "",
+  ].join("\n"));
   cacheSessionPath(sessionId, sessionPath);
   t.after(async () => {
     invalidateSessionPathCache(sessionId);
@@ -135,6 +162,8 @@ test("deleting a session succeeds when its parent file is missing", async (t) =>
 
   assert.equal(response.status, 200);
   await assert.rejects(readFile(sessionPath), { code: "ENOENT" });
+  const [directChildHeaderLine] = (await readFile(directChildPath, "utf8")).split("\n");
+  assert.equal("parentSession" in JSON.parse(directChildHeaderLine), false);
 });
 
 test("live detail and state routes work without a persisted JSONL file", async (t) => {
