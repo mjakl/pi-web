@@ -7,7 +7,7 @@ import { copyText } from "@/lib/clipboard";
 import { useI18n } from "@/hooks/useI18n";
 import { formatTimestamp } from "@/lib/i18n/format";
 import { parseCompactionSummary } from "@/lib/compaction-summary";
-import { getAssistantErrorMessage, isEmptyThinkingBlock } from "@/lib/message-display";
+import { getAssistantErrorMessage, isEmptyAssistantBlock } from "@/lib/message-display";
 import { parseUnifiedPatch, type SplitDiffCell } from "@/lib/patch";
 import { isEditToolName } from "@/lib/tool-names";
 import { TurnWrittenFiles } from "./TurnWrittenFiles";
@@ -587,7 +587,7 @@ function AssistantMessageView({
   const time = showTimestamp ? formatTime(message.timestamp) : null;
   const blockItems = useMemo(() => (message.content ?? [])
     .map((block, originalIndex) => ({ block, originalIndex }))
-    .filter(({ block }) => !isEmptyThinkingBlock(block, { isStreaming })), [message.content, isStreaming]);
+    .filter(({ block }) => !isEmptyAssistantBlock(block, { isStreaming })), [message.content, isStreaming]);
   const blocks = useMemo(() => blockItems.map(({ block }) => block), [blockItems]);
   const providerError = getAssistantErrorMessage(message, { isStreaming });
   const [hovered, setHovered] = useState(false);
@@ -861,6 +861,9 @@ function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCal
   if (block.type === "text") {
     return <TextBlock block={block as TextContent} isStreaming={isStreaming} cwd={cwd} onOpenFile={onOpenFile} />;
   }
+  if (block.type === "image") {
+    return <AssistantImageBlock block={block as ImageContent} />;
+  }
   if (block.type === "thinking") {
     return <ThinkingBlock block={block as ThinkingContent} duration={streamingDuration} sessionId={sessionId} entryId={entryId} blockIndex={blockIndex} />;
   }
@@ -875,6 +878,30 @@ function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCal
 
 function TextBlock({ block, isStreaming, cwd, onOpenFile }: { block: TextContent; isStreaming?: boolean; cwd?: string; onOpenFile?: (filePath: string) => void }) {
   return <SafeMarkdownBody isStreaming={isStreaming} cwd={cwd} onOpenFile={onOpenFile}>{block.text}</SafeMarkdownBody>;
+}
+
+function AssistantImageBlock({ block }: { block: ImageContent }) {
+  const src = imageSource(block);
+  if (!src) return null;
+
+  return (
+    <ImagePreview src={src} style={{ maxWidth: "100%" }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        style={{
+          display: "block",
+          maxWidth: "min(100%, 720px)",
+          maxHeight: 520,
+          borderRadius: 6,
+          objectFit: "contain",
+          border: "1px solid var(--border)",
+        }}
+      />
+    </ImagePreview>
+  );
 }
 
 function ThinkingBlock({ block, duration, sessionId, entryId, blockIndex }: {

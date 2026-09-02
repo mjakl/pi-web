@@ -139,6 +139,17 @@ test("renders partial assistant content before the provider error", () => {
   assert.match(html, /Error: Connection closed/);
 });
 
+test("does not render completed assistant messages with only empty text", () => {
+  const html = renderMessage({
+    role: "assistant",
+    provider: "openai",
+    model: "gpt-test",
+    content: [{ type: "text", text: "   " }],
+  });
+
+  assert.equal(html, "");
+});
+
 test("renders a complete SDK skill expansion as a compact command", () => {
   const html = renderMessage({
     role: "user",
@@ -175,6 +186,21 @@ test("keeps attached images when restoring a compact command for editing", () =>
     { type: "text", text: "/skill:review src/main.ts" },
     image,
   ]);
+});
+
+test("renders assistant images as buttons that open a larger preview", () => {
+  const html = renderMessage({
+    role: "assistant",
+    provider: "openai",
+    model: "gpt-test",
+    content: [{
+      type: "image",
+      source: { type: "base64", media_type: "image/png", data: "YWJj" },
+    }],
+  });
+
+  assert.match(html, /<button[^>]+aria-label="Preview image"[^>]*>/);
+  assert.match(html, /<img[^>]+src="data:image\/png;base64,YWJj"/);
 });
 
 test("renders user-message images as buttons that open a larger preview", () => {
