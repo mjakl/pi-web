@@ -8,8 +8,6 @@ import {
   type SessionRowMetadata,
 } from "./session-metadata-types";
 
-export { SESSION_TITLE_MAX_CHARS } from "./session-metadata-types";
-
 function extractTextContent(message: unknown): string {
   if (!message || typeof message !== "object") return "";
   const content = (message as { content?: unknown }).content;

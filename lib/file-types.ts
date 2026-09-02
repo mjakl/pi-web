@@ -4,7 +4,7 @@ export const DOCX_PREVIEW_MAX_BYTES = 10 * 1024 * 1024;
 
 export type DocumentPreviewKind = "pdf" | "docx";
 
-export const IMAGE_EXT_TO_MIME: Record<string, string> = {
+const IMAGE_EXT_TO_MIME: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",

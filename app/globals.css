@@ -1355,9 +1355,6 @@ span.token.table {
 
 /* Mobile sidebar: slide in/out as overlay */
 @media (max-width: 640px) {
-  .chat-stats-center {
-    display: none !important;
-  }
   .sidebar-container {
     position: fixed !important;
     top: 0;

@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 
-export const UPLOAD_CONFLICT_STRATEGIES = ["error", "overwrite", "skip"] as const;
+const UPLOAD_CONFLICT_STRATEGIES = ["error", "overwrite", "skip"] as const;
 export type UploadConflictStrategy = typeof UPLOAD_CONFLICT_STRATEGIES[number];
 
 const UPLOAD_CONFLICT_STRATEGY_SET = new Set<string>(UPLOAD_CONFLICT_STRATEGIES);

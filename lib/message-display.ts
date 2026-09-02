@@ -13,7 +13,7 @@ export function isMessageGroupAnchor(message: { role?: AgentMessage["role"]; cus
     || (message.role === "custom" && message.customType === "compaction");
 }
 
-export function isEmptyThinkingBlock(block: AssistantContentBlock, options: DisplayOptions = {}): block is ThinkingContent {
+function isEmptyThinkingBlock(block: AssistantContentBlock, options: DisplayOptions = {}): block is ThinkingContent {
   return block.type === "thinking" && !block.deferred && !options.isStreaming && block.thinking.trim() === "";
 }
 

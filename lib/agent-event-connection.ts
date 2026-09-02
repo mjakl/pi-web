@@ -9,7 +9,7 @@ export interface AgentEventSourceLike {
 
 export type AgentEventConnectionStatus = "ready_timeout" | "startup_error" | "closed";
 
-export class AgentEventConnectionError extends Error {
+class AgentEventConnectionError extends Error {
   constructor(public readonly status: AgentEventConnectionStatus, message?: string) {
     super(message ?? (
       status === "ready_timeout"

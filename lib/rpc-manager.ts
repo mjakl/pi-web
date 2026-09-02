@@ -112,7 +112,7 @@ const COMMANDS_ALLOWED_DURING_SESSION_REPLACEMENT = new Set([
   "extension_ui_input",
 ]);
 
-export interface RpcSessionStartOptions {
+interface RpcSessionStartOptions {
   toolNames?: string[];
   initialModel?: { provider: string; modelId: string };
   allowInitialModelFallback?: boolean;
@@ -1674,7 +1674,7 @@ export function isRpcSessionActive(session: AgentSessionWrapper | undefined): bo
   return session?.isActive() ?? false;
 }
 
-export interface SetRpcSessionToolsResult {
+interface SetRpcSessionToolsResult {
   session: AgentSessionWrapper;
   sessionId: string;
   recreated: boolean;

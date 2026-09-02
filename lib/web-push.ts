@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname, join } from "path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import webpush from "web-push";
 import { writePrivateFileAtomicSync } from "./atomic-file";
 import { enMessages } from "./i18n/messages/en";
 import { readSessionRowMetadata } from "./session-metadata";
-import { getAgentDir, resolveSessionPath } from "./session-reader";
+import { resolveSessionPath } from "./session-reader";
 
 export interface PushSubscriptionRecord {
   endpoint: string;

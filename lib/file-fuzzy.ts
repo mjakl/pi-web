@@ -115,7 +115,7 @@ function scoreEntry(entry: FileIndexEntry, lowerQuery: string): number {
   return score;
 }
 
-export const AT_RESULT_LIMIT = 20;
+const AT_RESULT_LIMIT = 20;
 
 export function filterFileEntries(
   entries: FileIndexEntry[],

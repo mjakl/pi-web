@@ -57,7 +57,7 @@ function sanitizeModelsConfig(data: Record<string, unknown>): Record<string, unk
   return { ...data, providers };
 }
 
-export function getModelsConfigPath(): string {
+function getModelsConfigPath(): string {
   return join(getAgentDir(), "models.json");
 }
 
