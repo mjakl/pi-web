@@ -51,11 +51,12 @@ test("live agent state is available before the session file is persisted", () =>
   assert.match(stateRoute, /if \(rpc\?\.isAlive\(\)\)/);
 });
 
-test("deleting an intermediate subagent reparents both relation representations", async (t) => {
+test("deleting a parent preserves legacy subagent bytes and reparents generic children", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "pi-web-delete-reparent-"));
   const grandparentPath = join(dir, "grandparent.jsonl");
   const parentPath = join(dir, "parent.jsonl");
-  const childPath = join(dir, "child.jsonl");
+  const legacyChildPath = join(dir, "legacy-child.jsonl");
+  const genericChildPath = join(dir, "generic-child.jsonl");
   const parentId = "delete-reparent-parent";
   const header = (id, parentSession) => JSON.stringify({
     type: "session",
@@ -65,10 +66,8 @@ test("deleting an intermediate subagent reparents both relation representations"
     cwd: dir,
     ...(parentSession ? { parentSession } : {}),
   });
-  await writeFile(grandparentPath, `${header("delete-reparent-grandparent")}\n`);
-  await writeFile(parentPath, `${header(parentId, grandparentPath)}\n`);
-  await writeFile(childPath, [
-    header("delete-reparent-child", parentPath),
+  const legacyContent = [
+    header("delete-reparent-legacy-child", parentPath),
     JSON.stringify({
       type: "custom",
       customType: "pi-web:subagent",
@@ -84,7 +83,11 @@ test("deleting an intermediate subagent reparents both relation representations"
       },
     }),
     "",
-  ].join("\n"));
+  ].join("\n");
+  await writeFile(grandparentPath, `${header("delete-reparent-grandparent")}\n`);
+  await writeFile(parentPath, `${header(parentId, grandparentPath)}\n`);
+  await writeFile(legacyChildPath, legacyContent);
+  await writeFile(genericChildPath, `${header("delete-reparent-generic-child", parentPath)}\n`);
   cacheSessionPath(parentId, parentPath);
   t.after(async () => {
     invalidateSessionPathCache(parentId);
@@ -98,15 +101,44 @@ test("deleting an intermediate subagent reparents both relation representations"
 
   assert.equal(response.status, 200);
   await assert.rejects(readFile(parentPath), { code: "ENOENT" });
-  const [childHeaderLine, childMetadataLine] = (await readFile(childPath, "utf8")).trim().split("\n");
-  assert.equal(JSON.parse(childHeaderLine).parentSession, grandparentPath);
-  assert.deepEqual(JSON.parse(childMetadataLine).data, {
-    version: 1,
-    parentSessionId: "delete-reparent-grandparent",
-    parentSessionPath: grandparentPath,
-    profile: "Explore",
-    description: "Inspect parser",
+  assert.equal(await readFile(legacyChildPath, "utf8"), legacyContent);
+  const genericHeader = JSON.parse((await readFile(genericChildPath, "utf8")).trim());
+  assert.equal(genericHeader.parentSession, grandparentPath);
+});
+
+test("directly deleting a legacy subagent session still removes it", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-web-delete-legacy-"));
+  const parentPath = join(dir, "parent.jsonl");
+  const childPath = join(dir, "legacy-child.jsonl");
+  const childId = "delete-legacy-child";
+  const header = (id, parentSession) => JSON.stringify({
+    type: "session",
+    version: 3,
+    id,
+    timestamp: "2026-01-01T00:00:00.000Z",
+    cwd: dir,
+    ...(parentSession ? { parentSession } : {}),
   });
+  await writeFile(parentPath, `${header("delete-legacy-parent")}\n`);
+  await writeFile(childPath, [
+    header(childId, parentPath),
+    JSON.stringify({ type: "custom", customType: "pi-web:subagent", data: { version: 1 } }),
+    "",
+  ].join("\n"));
+  cacheSessionPath(childId, childPath);
+  t.after(async () => {
+    invalidateSessionPathCache(childId);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const response = await deleteSession(
+    new Request(`http://localhost/api/sessions/${childId}`, { method: "DELETE" }),
+    { params: Promise.resolve({ id: childId }) },
+  );
+
+  assert.equal(response.status, 200);
+  await assert.rejects(readFile(childPath), { code: "ENOENT" });
+  assert.equal(typeof await readFile(parentPath, "utf8"), "string");
 });
 
 test("deleting a session with a missing parent promotes its direct child to a root", async (t) => {
@@ -124,31 +156,14 @@ test("deleting a session with a missing parent promotes its direct child to a ro
     cwd: dir,
     parentSession: missingParentPath,
   })}\n`);
-  await writeFile(directChildPath, [
-    JSON.stringify({
-      type: "session",
-      version: 3,
-      id: directChildId,
-      timestamp: "2026-01-01T00:00:00.000Z",
-      cwd: dir,
-      parentSession: sessionPath,
-    }),
-    JSON.stringify({
-      type: "custom",
-      customType: "pi-web:subagent",
-      id: "meta",
-      parentId: null,
-      timestamp: "2026-01-01T00:00:00.000Z",
-      data: {
-        version: 1,
-        parentSessionId: sessionId,
-        parentSessionPath: sessionPath,
-        profile: "Explore",
-        description: "Inspect parser",
-      },
-    }),
-    "",
-  ].join("\n"));
+  await writeFile(directChildPath, `${JSON.stringify({
+    type: "session",
+    version: 3,
+    id: directChildId,
+    timestamp: "2026-01-01T00:00:00.000Z",
+    cwd: dir,
+    parentSession: sessionPath,
+  })}\n`);
   cacheSessionPath(sessionId, sessionPath);
   t.after(async () => {
     invalidateSessionPathCache(sessionId);

@@ -3,7 +3,6 @@
 import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import type { SessionInfo } from "@/lib/types";
 import { SESSION_METADATA_BATCH_SIZE, type SessionRowMetadata } from "@/lib/session-metadata-types";
-import { listSessionFamilies } from "@/lib/session-family";
 import { loadExplorerOpen, saveExplorerOpen } from "@/lib/file-explorer-state";
 import { dispatchSessionRowContextMenu } from "@/lib/session-row-context-menu";
 import { skillExpansionToCommand } from "@/lib/slash-display";
@@ -81,8 +80,6 @@ function ToolbarIconButton({
   );
 }
 
-export type SessionMetadataLoader = (sessions: SessionInfo[]) => void;
-
 interface Props {
   selectedSessionId: string | null;
   onSelectSession: (session: SessionInfo, isRestore?: boolean) => void;
@@ -108,7 +105,6 @@ interface Props {
   onBackgroundTaskDone?: () => void;
   onRunningSessionIdsChange?: (ids: Set<string>) => void;
   onSessionsChange?: (sessions: SessionInfo[]) => void;
-  onMetadataLoaderChange?: (loader: SessionMetadataLoader | null) => void;
 }
 
 interface WorktreeEntry {
@@ -366,7 +362,7 @@ function PiWebTitle() {
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onRunningSessionIdsChange, onSessionsChange, onMetadataLoaderChange }: Props) {
+export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onRunningSessionIdsChange, onSessionsChange }: Props) {
   const { t } = useI18n();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [inventoryRevision, setInventoryRevision] = useState(0);
@@ -405,8 +401,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
   const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(() => loadUnreadSessionIds());
   const previousRunningSessionIdsRef = useRef<Set<string>>(new Set());
-  const currentSuppressedCompletionSessionIdsRef = useRef<Set<string>>(new Set());
-  const previousSuppressedCompletionSessionIdsRef = useRef<Set<string>>(new Set());
   // Once polling has delivered a snapshot it is the source of truth for
   // running state; late /api/sessions responses must not overwrite it.
   const runningPollAuthoritativeRef = useRef(false);
@@ -495,15 +489,11 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
               || metadata.fileSize !== session.fileSize
               || metadata.modified !== session.modified
             ) return session;
-            const relation = session.relation?.kind === "subagent" && metadata.subagentStatus
-              ? { ...session.relation, status: metadata.subagentStatus }
-              : session.relation;
             const hydrated = {
               ...session,
               name: metadata.name,
               messageCount: metadata.messageCount,
               firstMessage: metadata.firstMessage,
-              relation,
             };
             const fingerprint = sessionFingerprint(hydrated);
             if (fingerprint) metadataLoadedRef.current.set(session.id, fingerprint);
@@ -533,7 +523,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     }
   }, [scheduleMetadataRetry]);
 
-  const queueSessionMetadata = useCallback<SessionMetadataLoader>((sessions) => {
+  const queueSessionMetadata = useCallback((sessions: SessionInfo[]) => {
     for (const session of sessions) {
       const fingerprint = sessionFingerprint(session);
       if (!fingerprint || hasSessionRowMetadata(session)) continue;
@@ -558,11 +548,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     return () => { drainMetadataQueueRef.current = () => {}; };
   }, [drainMetadataQueue]);
 
-  useEffect(() => {
-    onMetadataLoaderChange?.(queueSessionMetadata);
-    return () => onMetadataLoaderChange?.(null);
-  }, [onMetadataLoaderChange, queueSessionMetadata]);
-
   const loadSessions = useCallback(async (showLoading = false, force = false) => {
     try {
       if (showLoading) setLoading(true);
@@ -573,7 +558,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
       const data = await res.json() as {
         sessions: SessionInfo[];
         runningSessionIds?: string[];
-        completionNotificationSuppressedSessionIds?: string[];
       };
       setAllSessions((current) => {
         const previousById = new Map(current.map((session) => [session.id, session]));
@@ -607,7 +591,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
             name: previous.name,
             messageCount: previous.messageCount,
             firstMessage: previous.firstMessage,
-            relation: previous.relation ?? session.relation,
           };
         });
       });
@@ -615,18 +598,10 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
       // Treat the fetched running set as an initial fallback only. Once the
       // lightweight poll is live, a slow session-list fetch cannot overwrite it.
       if (!runningPollAuthoritativeRef.current) {
-        currentSuppressedCompletionSessionIdsRef.current = new Set(
-          data.completionNotificationSuppressedSessionIds ?? [],
-        );
         setRunningSessionIds(new Set(data.runningSessionIds ?? []));
       }
-      // Drop markers for deleted sessions and for subagents, whose completion
-      // is intentionally silent even if an older client marked them unread.
-      const unreadEligibleIds = new Set(
-        data.sessions
-          .filter((session) => session.relation?.kind !== "subagent")
-          .map((session) => session.id),
-      );
+      // Drop markers for deleted sessions.
+      const unreadEligibleIds = new Set(data.sessions.map((session) => session.id));
       setUnreadSessionIds((prev) => {
         if (prev.size === 0) return prev;
         const next = new Set([...prev].filter((id) => unreadEligibleIds.has(id)));
@@ -698,13 +673,9 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         if (!res.ok) return;
         const data = await res.json() as {
           runningSessionIds?: string[];
-          completionNotificationSuppressedSessionIds?: string[];
         };
         if (stopped || controller !== current) return;
         runningPollAuthoritativeRef.current = true;
-        currentSuppressedCompletionSessionIdsRef.current = new Set(
-          data.completionNotificationSuppressedSessionIds ?? [],
-        );
         setRunningSessionIds(new Set(data.runningSessionIds ?? []));
       } catch {
         // Keep the last known state; the next visible-tab poll retries.
@@ -745,21 +716,13 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   useEffect(() => {
     const previous = previousRunningSessionIdsRef.current;
     const completedInBackground = [...previous].filter((id) => !runningSessionIds.has(id) && id !== selectedSessionId);
-    const knownSubagentIds = new Set(
-      allSessions
-        .filter((session) => session.relation?.kind === "subagent")
-        .map((session) => session.id),
-    );
-    const completedWithNotifications = completedInBackground.filter(
-      (id) => !previousSuppressedCompletionSessionIdsRef.current.has(id) && !knownSubagentIds.has(id),
-    );
     const newlyRunning = [...runningSessionIds].filter((id) => !previous.has(id));
 
-    if (completedWithNotifications.length > 0 || newlyRunning.length > 0) {
+    if (completedInBackground.length > 0 || newlyRunning.length > 0) {
       setUnreadSessionIds((prev) => {
         const next = new Set(prev);
         runningSessionIds.forEach((id) => next.delete(id));
-        completedWithNotifications.forEach((id) => next.add(id));
+        completedInBackground.forEach((id) => next.add(id));
         return next;
       });
     }
@@ -769,16 +732,11 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     if (completedInBackground.length > 0 || hasUnlistedRunningSession) {
       loadSessions(false, true);
     }
-    if (completedWithNotifications.length > 0) {
+    if (completedInBackground.length > 0) {
       onBackgroundTaskDone?.();
     }
 
     previousRunningSessionIdsRef.current = runningSessionIds;
-    previousSuppressedCompletionSessionIdsRef.current = new Set(
-      [...runningSessionIds].filter(
-        (id) => currentSuppressedCompletionSessionIdsRef.current.has(id) || knownSubagentIds.has(id),
-      ),
-    );
   }, [runningSessionIds, selectedSessionId, allSessions, loadSessions, onBackgroundTaskDone]);
 
   useEffect(() => {
@@ -1155,9 +1113,8 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         }
       : null);
 
-  const sessionFamilies = listSessionFamilies(filteredSessions);
-  const observedInventoryKey = sessionFamilies
-    .map((family) => `${family.root.id}:${sessionFingerprint(family.root) ?? "transient"}`)
+  const observedInventoryKey = filteredSessions
+    .map((session) => `${session.id}:${sessionFingerprint(session) ?? "transient"}`)
     .join("|");
 
   useEffect(() => {
@@ -1863,32 +1820,26 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
             {error}
           </div>
         )}
-        {!loading && !error && sessionFamilies.length === 0 && (
+        {!loading && !error && filteredSessions.length === 0 && (
           <div style={{ padding: "16px 14px", color: "var(--text-muted)", fontSize: 12 }}>
             {t("sidebar.noSessions")}
           </div>
         )}
-        {sessionFamilies.map((family) => {
-          const familySessions = [family.root, ...family.subagents];
-          const displaySession = family.latestModified === family.root.modified
-            ? family.root
-            : { ...family.root, modified: family.latestModified };
-          return (
-            <SessionItem
-              key={family.root.id}
-              session={displaySession}
-              isSelected={familySessions.some((session) => session.id === selectedSessionId)}
-              isRunning={familySessions.some((session) => runningSessionIds.has(session.id))}
-              isUnread={familySessions.some((session) => unreadSessionIds.has(session.id))}
-              onClick={() => handleSelectSessionFromList(family.root)}
-              onRenamed={loadSessions}
-              onDeleted={(id) => {
-                onSessionDeleted?.(id);
-                loadSessions();
-              }}
-            />
-          );
-        })}
+        {filteredSessions.map((session) => (
+          <SessionItem
+            key={session.id}
+            session={session}
+            isSelected={session.id === selectedSessionId}
+            isRunning={runningSessionIds.has(session.id)}
+            isUnread={unreadSessionIds.has(session.id)}
+            onClick={() => handleSelectSessionFromList(session)}
+            onRenamed={loadSessions}
+            onDeleted={(id) => {
+              onSessionDeleted?.(id);
+              loadSessions();
+            }}
+          />
+        ))}
       </div>
 
       {/* File Explorer section */}
@@ -2144,10 +2095,6 @@ function SessionItem({
   onClick,
   onRenamed,
   onDeleted,
-  depth = 0,
-  hasChildren = false,
-  collapsed = false,
-  onToggleCollapse,
 }: {
   session: SessionInfo;
   isSelected: boolean;
@@ -2156,10 +2103,6 @@ function SessionItem({
   onClick: () => void;
   onRenamed?: () => void;
   onDeleted?: (id: string) => void;
-  depth?: number;
-  hasChildren?: boolean;
-  collapsed?: boolean;
-  onToggleCollapse?: () => void;
 }) {
   const { locale, t } = useI18n();
   const [hovered, setHovered] = useState(false);
@@ -2270,7 +2213,7 @@ function SessionItem({
         height: SESSION_ITEM_HEIGHT,
         display: "flex",
         alignItems: "center",
-        paddingLeft: depth > 0 ? depth * 12 + 14 : 14,
+        paddingLeft: 14,
         paddingRight: 8,
         cursor: confirmDelete || renaming ? "default" : "pointer",
         background: confirmDelete
@@ -2353,13 +2296,6 @@ function SessionItem({
       ) : (
         /* ── Normal view ── */
         <>
-          {/* Subagent indicator for child sessions */}
-          {depth > 0 && (
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-              <rect x="5" y="7" width="14" height="11" rx="2" />
-              <path d="M9 11h.01M15 11h.01M9 15h6M12 7V4M10 4h4" />
-            </svg>
-          )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
@@ -2407,26 +2343,6 @@ function SessionItem({
               )}
             </div>
           </div>
-
-          {/* Collapse toggle — always visible when has children */}
-          {hasChildren && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onToggleCollapse?.(); }}
-              title={t(collapsed ? "sidebar.expandSubagents" : "sidebar.collapseSubagents")}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                width: 20, height: 20, padding: 0, flexShrink: 0,
-                background: "none", border: "none",
-                color: "var(--text-dim)", cursor: "pointer",
-                transform: collapsed ? "rotate(-90deg)" : "none",
-                transition: "transform 0.15s",
-              }}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="2 3.5 5 6.5 8 3.5" />
-              </svg>
-            </button>
-          )}
 
           {/* Action buttons — shown on hover */}
           {hovered && !session.transient && (

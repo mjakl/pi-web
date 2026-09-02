@@ -48,30 +48,18 @@ test("keeps streamed tool input out of collapsed markup while counting it", () =
   assert.equal(getTokenEstimateText(block), block.rawInput);
 });
 
-test("renders subagents as standard tool calls with only an extra session button", () => {
+test("renders an extension Agent tool as a standard tool call", () => {
   const block = {
     type: "toolCall",
     toolCallId: "call-agent-1",
     toolName: "Agent",
-    input: {
-      subagent_type: "Explore",
-      prompt: "Find the parser",
-      description: "Find parser",
-    },
+    input: { task: "Find the parser" },
   };
   const result = {
     role: "toolResult",
     toolCallId: block.toolCallId,
     content: [{ type: "text", text: "Parser is in lib/parser.ts" }],
-    details: {
-      kind: "pi-web-subagent",
-      sessionId: "child-session",
-      profile: "Explore",
-      description: "Find parser",
-      status: "completed",
-      runInBackground: false,
-      createdAt: "2026-01-01T00:00:00.000Z",
-    },
+    details: { sessionId: "extension-session" },
   };
   const html = renderMessage({
     role: "assistant",
@@ -80,26 +68,11 @@ test("renders subagents as standard tool calls with only an extra session button
     content: [block],
   }, {
     toolResults: new Map([[block.toolCallId, result]]),
-    onOpenSession() {},
   });
 
   assert.match(html, /border:1px solid rgba\(34,197,94,0\.25\)/);
   assert.match(html, />Agent</);
-  assert.match(html, />Explore</);
-  assert.match(html, /aria-label="Open sub-agent session"/);
-  assert.doesNotMatch(html, />completed</);
-  assert.doesNotMatch(html, />Find parser</);
-
-  const ordinaryHtml = renderMessage({
-    role: "assistant",
-    provider: "anthropic",
-    model: "claude-test",
-    content: [{ ...block, toolCallId: "call-extension-1", toolName: "extension_tool" }],
-  }, {
-    toolResults: new Map(),
-    onOpenSession() {},
-  });
-  assert.doesNotMatch(ordinaryHtml, /Open sub-agent session/);
+  assert.doesNotMatch(html, /extension-session/);
 });
 
 const COMPLETE_SKILL_EXPANSION = `<skill name="review" location="/skills/review/SKILL.md">

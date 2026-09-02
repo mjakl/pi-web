@@ -5,7 +5,6 @@ import {
   mergeSessionLists,
 } from "@/lib/session-reader";
 import {
-  getCompletionNotificationSuppressedRpcSessionIds,
   getRpcSessionInfos,
   getRunningRpcSessionIds,
 } from "@/lib/rpc-manager";
@@ -31,7 +30,6 @@ export async function GET() {
       {
         sessions,
         runningSessionIds: getRunningRpcSessionIds(),
-        completionNotificationSuppressedSessionIds: getCompletionNotificationSuppressedRpcSessionIds(),
       },
       { headers: { "Cache-Control": "no-store" } },
     );

@@ -17,8 +17,20 @@ import { projectTreeForResponse } from "@/lib/project-tree";
 import { computeSessionTotalActiveMs } from "@/lib/session-timing";
 import { computeSessionStats } from "@/lib/session-stats";
 import type { SessionEntry } from "@/lib/types";
-import { readSubagentRun, readSubagentSessionResources, SUBAGENT_META_TYPE } from "@/lib/subagents";
 import { readSessionToolSelection } from "@/lib/session-tool-selection";
+
+const LEGACY_BUILT_IN_SUBAGENT_META_TYPE = "pi-web:subagent";
+
+function hasLegacyBuiltInSubagentMetadata(lines: readonly string[]): boolean {
+  return lines.slice(1).some((line) => {
+    try {
+      const entry = JSON.parse(line) as { type?: string; customType?: string };
+      return entry.type === "custom" && entry.customType === LEGACY_BUILT_IN_SUBAGENT_META_TYPE;
+    } catch {
+      return false;
+    }
+  });
+}
 
 export async function GET(
   req: Request,
@@ -64,11 +76,7 @@ export async function GET(
     const parentSessionId = header?.parentSession
       ? await resolveSessionIdByPath(header.parentSession)
       : undefined;
-    const subagent = header
-      ? readSubagentRun(entries as never, header.id, filePath)
-      : null;
-    const toolNames = readSubagentSessionResources(entries as never)?.tools
-      ?? readSessionToolSelection(entries as never);
+    const toolNames = readSessionToolSelection(entries as never);
     const info = header ? (await attachSessionProjectInfo([{
       path: filePath,
       id: header.id,
@@ -84,11 +92,6 @@ export async function GET(
           })()
         : "(no messages)",
       parentSessionId,
-      ...(subagent
-        ? { relation: { kind: "subagent" as const, parentSessionId: subagent.parentSessionId, profile: subagent.profile, description: subagent.description, status: liveRpc?.isRunning() ? "running" as const : subagent.status } }
-        : header.parentSession
-          ? { relation: { kind: "fork" as const, ...(parentSessionId ? { originSessionId: parentSessionId } : {}) } }
-          : {}),
       transient: !filePath || !existsSync(filePath),
     }]))[0] : null;
 
@@ -146,14 +149,12 @@ export async function DELETE(
 
     // Read only the bounded header before deleting.
     let parentSessionPath = readSessionHeader(filePath)?.parentSession;
-    let parentSessionId: string | undefined;
     if (parentSessionPath) {
       try {
         // The parent may have been deleted or moved already; treat it as absent.
-        parentSessionId = readSessionHeader(parentSessionPath)?.id;
+        readSessionHeader(parentSessionPath);
       } catch {
         parentSessionPath = undefined;
-        parentSessionId = undefined;
       }
     }
 
@@ -176,33 +177,13 @@ export async function DELETE(
             header.parentSession &&
             sessionPathKey(header.parentSession) === targetPathKey
           ) {
-            // Rewrite header with new parentSession
+            // Legacy built-in subagent transcripts are historical user data.
+            // Leave them byte-for-byte unchanged when their parent is deleted.
+            if (hasLegacyBuiltInSubagentMetadata(lines)) continue;
+
+            // Rewrite only the generic child header with the new parentSession.
             header.parentSession = parentSessionPath;
             lines[0] = JSON.stringify(header);
-            if (parentSessionPath && parentSessionId) {
-              for (let index = 1; index < lines.length; index += 1) {
-                let entry: { type?: string; customType?: string; data?: unknown };
-                try {
-                  entry = JSON.parse(lines[index]);
-                } catch {
-                  continue;
-                }
-                if (
-                  entry.type !== "custom"
-                  || entry.customType !== SUBAGENT_META_TYPE
-                  || typeof entry.data !== "object"
-                  || entry.data === null
-                  || Array.isArray(entry.data)
-                ) continue;
-                entry.data = {
-                  ...entry.data,
-                  parentSessionId,
-                  parentSessionPath,
-                };
-                lines[index] = JSON.stringify(entry);
-                break;
-              }
-            }
             writeFileSync(childPath, lines.join("\n"));
           }
         } catch { /* skip malformed */ }

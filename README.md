@@ -1,6 +1,6 @@
 # Pi Web
 
-> **Note:** This repository is a customized version of the original [agegr/pi-web](https://github.com/agegr/pi-web). This is probably not the version you are looking for.
+> **Warning:** This fork is incompatible with the original [agegr/pi-web](https://github.com/agegr/pi-web).
 
 Local browser UI for the [pi coding agent](https://github.com/earendil-works/pi). Pi Web uses the same local configuration and session files as pi, so you can browse and resume conversations, run agent turns, configure models and resources, and inspect project files from a browser.
 

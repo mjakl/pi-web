@@ -2,13 +2,11 @@ import { createReadStream } from "fs";
 import { stat } from "fs/promises";
 import { createInterface } from "readline";
 import { skillExpansionToCommand } from "./slash-display";
-import { SUBAGENT_RESULT_TYPE } from "./subagents";
 import {
   SESSION_TITLE_MAX_CHARS,
   type SessionMetadataFingerprint,
   type SessionRowMetadata,
 } from "./session-metadata-types";
-import type { SubagentSessionStatus } from "./types";
 
 export { SESSION_TITLE_MAX_CHARS } from "./session-metadata-types";
 
@@ -64,7 +62,6 @@ export async function readSessionRowMetadata(
   let name: string | undefined;
   let messageCount = 0;
   let firstMessage = "";
-  let subagentStatus: SubagentSessionStatus | undefined;
   const input = createReadStream(filePath, { encoding: "utf8" });
   const lines = createInterface({ input, crlfDelay: Infinity });
 
@@ -81,16 +78,6 @@ export async function readSessionRowMetadata(
         name = typeof entry.name === "string" && entry.name.trim()
           ? entry.name.trim()
           : undefined;
-        continue;
-      }
-      if (entry.type === "custom" && entry.customType === SUBAGENT_RESULT_TYPE) {
-        const data = entry.data;
-        if (data && typeof data === "object") {
-          const status = (data as { status?: unknown }).status;
-          if (status === "completed" || status === "failed" || status === "aborted") {
-            subagentStatus = status;
-          }
-        }
         continue;
       }
       if (entry.type !== "message") continue;
@@ -114,6 +101,5 @@ export async function readSessionRowMetadata(
     name,
     messageCount,
     firstMessage: sessionTitleFromFirstMessage(firstMessage),
-    ...(subagentStatus ? { subagentStatus } : {}),
   };
 }

@@ -1,5 +1,3 @@
-import type { SubagentSessionStatus } from "./types";
-
 export const SESSION_METADATA_BATCH_SIZE = 10;
 export const SESSION_TITLE_MAX_CHARS = 512;
 
@@ -13,5 +11,4 @@ export interface SessionRowMetadata extends SessionMetadataFingerprint {
   name?: string;
   messageCount: number;
   firstMessage: string;
-  subagentStatus?: SubagentSessionStatus;
 }
