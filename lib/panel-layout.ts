@@ -1,5 +1,5 @@
-export const MOBILE_MAX_WIDTH = 640;
-export const SPLIT_PANEL_MIN_WIDTH = 960;
+const MOBILE_MAX_WIDTH = 640;
+const SPLIT_PANEL_MIN_WIDTH = 960;
 
 export const SIDEBAR_DEFAULT_WIDTH = 260;
 export const SIDEBAR_MIN_WIDTH = 180;

@@ -178,10 +178,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
   const { t } = useI18n();
   const isMobile = useIsMobile();
 
-  // Wrap onAgentEnd to play the completion sound. This is more reliable than
-  // wrapping handleAgentEventRef because useAgentSession overwrites that ref
-  // on every render (it syncs the latest callback), which would blow away an
-  // externally-installed wrapper after the first re-render.
+  // Wrap onAgentEnd to play the completion sound.
   const playDoneSoundRef = useRef(playDoneSound);
   playDoneSoundRef.current = playDoneSound;
   const soundEnabledRef = useRef(soundEnabled);

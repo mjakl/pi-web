@@ -1,6 +1,8 @@
 import type {
   AgentSessionEvent,
   BashOperations,
+  ExtensionCommandContextActions,
+  ExtensionError,
   SessionManager,
   SettingsManager,
   SlashCommandInfo,
@@ -83,8 +85,8 @@ interface ExtensionRunnerLike {
     description?: string;
     sourceInfo: SlashCommandInfo["sourceInfo"];
   }>;
-  emit?(event: { type: "session_shutdown"; reason: "quit" }): Promise<unknown>;
-  setUIContext?(uiContext?: unknown, mode?: "tui" | "rpc" | "json" | "print"): void;
+  emit(event: { type: "session_shutdown"; reason: "quit" }): Promise<unknown>;
+  setUIContext(uiContext?: unknown, mode?: "tui" | "rpc" | "json" | "print"): void;
 }
 
 type DialogOptionsLike = {
@@ -151,12 +153,20 @@ export interface AgentSessionLike {
       context: PrepareNextTurnContext,
       signal?: AbortSignal,
     ) => Promise<AgentLoopTurnUpdate | undefined> | AgentLoopTurnUpdate | undefined;
+    waitForIdle(): Promise<void>;
   };
   readonly extensionRunner: ExtensionRunnerLike;
   readonly promptTemplates: readonly PromptTemplateLike[];
   readonly resourceLoader: ResourceLoaderLike;
 
-  readonly bindExtensions?: unknown;
+  bindExtensions(bindings: {
+    uiContext?: unknown;
+    mode?: "tui" | "rpc" | "json" | "print";
+    commandContextActions?: ExtensionCommandContextActions;
+    abortHandler?: () => void;
+    shutdownHandler?: () => void;
+    onError?: (error: ExtensionError) => void;
+  }): Promise<void>;
   dispose(): void;
   reload(options?: { beforeSessionStart?: () => void | Promise<void> }): Promise<void>;
   subscribe(listener: (event: AgentSessionEvent) => void): () => void;

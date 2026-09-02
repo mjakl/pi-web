@@ -14,15 +14,10 @@ const {
   getToolCallInputText,
   replaceUserMessageText,
 } = await jiti.import("./MessageView.tsx");
-const { I18nProvider } = await jiti.import("@/hooks/useI18n");
 
 function renderMessage(message, props = {}) {
   return renderToStaticMarkup(
-    React.createElement(
-      I18nProvider,
-      null,
-      React.createElement(MessageView, { message, ...props }),
-    ),
+    React.createElement(MessageView, { message, ...props }),
   );
 }
 

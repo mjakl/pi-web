@@ -16,15 +16,10 @@ const {
   getUpdatedExtensionWidgetKeys,
   snapshotExtensionWidgetContents,
 } = await jiti.import("./ExtensionWidgets.tsx");
-const { I18nProvider } = await jiti.import("@/hooks/useI18n");
 
 function renderWidgets(props) {
   return renderToStaticMarkup(
-    React.createElement(
-      I18nProvider,
-      null,
-      React.createElement(ExtensionWidgets, props),
-    ),
+    React.createElement(ExtensionWidgets, props),
   );
 }
 

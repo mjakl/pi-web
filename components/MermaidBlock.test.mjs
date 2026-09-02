@@ -9,7 +9,6 @@ const jiti = createJiti(import.meta.url, {
 const React = await jiti.import("react");
 const { renderToStaticMarkup } = await jiti.import("react-dom/server");
 const { MermaidBlock, CodeBlock } = await jiti.import("./MermaidBlock.tsx");
-const { I18nProvider } = await jiti.import("@/hooks/useI18n");
 
 // Simple sequenceDiagram for testing
 const mermaidSrc = `sequenceDiagram
@@ -18,11 +17,7 @@ const mermaidSrc = `sequenceDiagram
 
 function renderMermaid(props) {
   return renderToStaticMarkup(
-    React.createElement(
-      I18nProvider,
-      null,
-      React.createElement(MermaidBlock, props),
-    ),
+    React.createElement(MermaidBlock, props),
   );
 }
 
@@ -60,11 +55,7 @@ test("MermaidBlock renders empty graph without error", () => {
 
 function renderCode(props) {
   return renderToStaticMarkup(
-    React.createElement(
-      I18nProvider,
-      null,
-      React.createElement(CodeBlock, props),
-    ),
+    React.createElement(CodeBlock, props),
   );
 }
 

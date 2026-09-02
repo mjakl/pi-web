@@ -45,7 +45,7 @@ function getProjectCache(): Map<string, { info: ProjectInfo; expiresAt: number }
   return globalThis.__piProjectCache;
 }
 
-export function invalidateProjectCache(): void {
+function invalidateProjectCache(): void {
   globalThis.__piProjectCache?.clear();
 }
 

@@ -1,4 +1,4 @@
-export const SETTINGS_SECTION_VALUES = [
+const SETTINGS_SECTION_VALUES = [
   "general",
   "models",
   "skills",

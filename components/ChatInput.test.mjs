@@ -11,7 +11,6 @@ const { renderToStaticMarkup } = await jiti.import("react-dom/server");
 const { ChatInput, ModelErrorBanner, ModelScopeWarningBanner, canClearBuiltinCommandInput, canRestoreUserMessage, canRunBuiltinSlashCommandWhileStreaming, compressImageFile, filterModelOptions, getUpwardMenuMaxHeight, getUserMessageText, getUserMessageDraftImages, isExactSlashCommand, shouldCompressImageFile } = await jiti.import("./ChatInput.tsx");
 const { ModelSelector } = await jiti.import("./ModelSelector.tsx");
 const { clearDraft, getDraft, mergeRestoredSubmissionDraft, mergeRestoredSubmissionText, rekeyDraft, setDraft } = await jiti.import("@/lib/draft-store.ts");
-const { I18nProvider } = await jiti.import("@/hooks/useI18n");
 
 test("renders the upstream model error", () => {
   const html = renderToStaticMarkup(
@@ -43,19 +42,15 @@ test("renders enabledModels scope warnings", () => {
 
 test("keeps the model selector visible when a model error leaves no options", () => {
   const html = renderToStaticMarkup(
-    React.createElement(
-      I18nProvider,
-      null,
-      React.createElement(ChatInput, {
-        onSend() {},
-        onAbort() {},
-        onModelChange() {},
-        isStreaming: false,
-        modelError: "Invalid models.json schema",
-        modelList: [],
-        modelNames: {},
-      }),
-    ),
+    React.createElement(ChatInput, {
+      onSend() {},
+      onAbort() {},
+      onModelChange() {},
+      isStreaming: false,
+      modelError: "Invalid models.json schema",
+      modelList: [],
+      modelNames: {},
+    }),
   );
 
   assert.match(html, />No models</);
@@ -64,17 +59,13 @@ test("keeps the model selector visible when a model error leaves no options", ()
 
 test("renders the read-only tool preset as the active selection", () => {
   const html = renderToStaticMarkup(
-    React.createElement(
-      I18nProvider,
-      null,
-      React.createElement(ChatInput, {
-        onSend() {},
-        onAbort() {},
-        onToolPresetChange() {},
-        isStreaming: false,
-        toolPreset: "read-only",
-      }),
-    ),
+    React.createElement(ChatInput, {
+      onSend() {},
+      onAbort() {},
+      onToolPresetChange() {},
+      isStreaming: false,
+      toolPreset: "read-only",
+    }),
   );
 
   assert.match(html, /title="Change tool preset: read-only"/);
@@ -83,17 +74,13 @@ test("renders the read-only tool preset as the active selection", () => {
 
 test("renders the empty tool preset as Chat only", () => {
   const html = renderToStaticMarkup(
-    React.createElement(
-      I18nProvider,
-      null,
-      React.createElement(ChatInput, {
-        onSend() {},
-        onAbort() {},
-        onToolPresetChange() {},
-        isStreaming: false,
-        toolPreset: "none",
-      }),
-    ),
+    React.createElement(ChatInput, {
+      onSend() {},
+      onAbort() {},
+      onToolPresetChange() {},
+      isStreaming: false,
+      toolPreset: "none",
+    }),
   );
 
   assert.match(html, /title="Change tool preset: Chat only"/);
@@ -102,19 +89,15 @@ test("renders the empty tool preset as Chat only", () => {
 
 test("shows and locks the optimistic model while a switch is pending", () => {
   const html = renderToStaticMarkup(
-    React.createElement(
-      I18nProvider,
-      null,
-      React.createElement(ChatInput, {
-        onSend() {},
-        onAbort() {},
-        onModelChange() {},
-        isStreaming: false,
-        model: { provider: "deepseek", modelId: "deepseek-v4-flash" },
-        modelList: [{ provider: "deepseek", id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" }],
-        modelSwitching: true,
-      }),
-    ),
+    React.createElement(ChatInput, {
+      onSend() {},
+      onAbort() {},
+      onModelChange() {},
+      isStreaming: false,
+      model: { provider: "deepseek", modelId: "deepseek-v4-flash" },
+      modelList: [{ provider: "deepseek", id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" }],
+      modelSwitching: true,
+    }),
   );
 
   assert.match(html, /title="Switching model"/);
@@ -141,20 +124,16 @@ test("filters model options by name and id", () => {
 
 test("renders the shared field model selector as a disabled gray control", () => {
   const html = renderToStaticMarkup(
-    React.createElement(
-      I18nProvider,
-      null,
-      React.createElement(ModelSelector, {
-        options: [{ provider: "openai", modelId: "gpt-5.6-sol", name: "GPT-5.6 Sol" }],
-        value: null,
-        onChange() {},
-        onClear() {},
-        emptyLabel: "Parent default",
-        ariaLabel: "Model override",
-        disabled: true,
-        variant: "field",
-      }),
-    ),
+    React.createElement(ModelSelector, {
+      options: [{ provider: "openai", modelId: "gpt-5.6-sol", name: "GPT-5.6 Sol" }],
+      value: null,
+      onChange() {},
+      onClear() {},
+      emptyLabel: "Parent default",
+      ariaLabel: "Model override",
+      disabled: true,
+      variant: "field",
+    }),
   );
 
   assert.match(html, /aria-label="Model override"/);
@@ -368,17 +347,13 @@ test("rekey keeps a synchronously restored draft when React state is still empty
 test("renders compact errors above the input as a wrapping alert", () => {
   const error = "Compaction failed: OpenAI API error (403): <html>request forbidden</html>";
   const html = renderToStaticMarkup(
-    React.createElement(
-      I18nProvider,
-      null,
-      React.createElement(ChatInput, {
-        onSend() {},
-        onAbort() {},
-        onCompact() {},
-        isStreaming: false,
-        compactError: error,
-      }),
-    ),
+    React.createElement(ChatInput, {
+      onSend() {},
+      onAbort() {},
+      onCompact() {},
+      isStreaming: false,
+      compactError: error,
+    }),
   );
 
   assert.match(html, /role="alert"/);

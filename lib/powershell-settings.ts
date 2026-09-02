@@ -19,7 +19,7 @@ export function isPowerShellToolEnabled(
     && !defaultTools.includes("bash");
 }
 
-export function replaceShellTool(
+function replaceShellTool(
   toolNames: readonly string[],
   usePowerShell: boolean,
 ): string[] {
@@ -40,7 +40,7 @@ export function resolveShellTools(
   return replaceShellTool(toolNames, isPowerShellToolEnabled(defaultTools, platform));
 }
 
-export function getPowerShellSettingsPath(agentDir = getAgentDir()): string {
+function getPowerShellSettingsPath(agentDir = getAgentDir()): string {
   return join(agentDir, "settings.json");
 }
 

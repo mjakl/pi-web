@@ -13,15 +13,10 @@ const {
   formatExtensionStatusLine,
   sanitizeExtensionStatusText,
 } = await jiti.import("./ExtensionStatusBar.tsx");
-const { I18nProvider } = await jiti.import("@/hooks/useI18n");
 
 function renderStatusBar(props) {
   return renderToStaticMarkup(
-    React.createElement(
-      I18nProvider,
-      null,
-      React.createElement(ExtensionStatusBar, props),
-    ),
+    React.createElement(ExtensionStatusBar, props),
   );
 }
 

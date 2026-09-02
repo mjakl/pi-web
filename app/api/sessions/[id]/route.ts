@@ -7,7 +7,6 @@ import {
   resolveSessionPath,
   resolveSessionIdByPath,
   invalidateSessionPathCache,
-  invalidateSessionListCache,
   buildSessionContext,
   readSessionHeader,
 } from "@/lib/session-reader";
@@ -128,7 +127,6 @@ export async function PATCH(
     }
     const sm = SessionManager.open(filePath);
     sm.appendSessionInfo(name.trim());
-    invalidateSessionListCache();
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
@@ -195,7 +193,6 @@ export async function DELETE(
 
     unlinkSync(filePath);
     invalidateSessionPathCache(id);
-    invalidateSessionListCache();
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
