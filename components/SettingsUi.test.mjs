@@ -7,7 +7,6 @@ const cssSource = await readFile(new URL("../app/settings.css", import.meta.url)
 const globalCssSource = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 const layoutSource = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
 const enSource = await readFile(new URL("../lib/i18n/messages/en.ts", import.meta.url), "utf8");
-const zhSource = await readFile(new URL("../lib/i18n/messages/zh-CN.ts", import.meta.url), "utf8");
 const configSources = await Promise.all(
   ["ModelsConfig", "SkillsConfig", "PluginsConfig"].map(async (name) => [
     name,
@@ -101,15 +100,12 @@ test("plugin sidebar rows omit detail metadata", () => {
   assert.doesNotMatch(sidebarSource, /resourceSummary\(pkg|versionSummary\(pkg/);
 });
 
-test("skill scope group labels are localized", () => {
+test("skill scope group labels use English message keys", () => {
   const skillsSource = Object.fromEntries(configSources).SkillsConfig;
   for (const scope of ["global", "project", "path"]) {
     assert.match(skillsSource, new RegExp(`t\\("skills\\.scope\\.${scope}"\\)`));
     assert.match(enSource, new RegExp(`"skills\\.scope\\.${scope}":`));
-    assert.match(zhSource, new RegExp(`"skills\\.scope\\.${scope}":`));
   }
-  assert.match(zhSource, /"skills\.scope\.global": "全局"/);
-  assert.match(zhSource, /"skills\.scope\.project": "项目"/);
 });
 
 test("all subpanel detail panes share one content hierarchy", () => {

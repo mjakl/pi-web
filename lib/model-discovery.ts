@@ -48,7 +48,7 @@ export function parseDiscoveredModels(value: unknown): DiscoveredModel[] {
     seen.add(model.id);
     models.push(model);
   }
-  return models.sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id, undefined, {
+  return models.sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id, "en", {
     numeric: true,
     sensitivity: "base",
   }));

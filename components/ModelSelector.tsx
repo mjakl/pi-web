@@ -26,7 +26,7 @@ interface ModelSelectorProps {
 }
 
 const MODEL_FILTER_THRESHOLD = 8;
-const MODEL_OPTION_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+const MODEL_OPTION_COLLATOR = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
 function compareModelOptions(a: ModelSelectorOption, b: ModelSelectorOption): number {
   return MODEL_OPTION_COLLATOR.compare(a.name || a.modelId, b.name || b.modelId)
@@ -35,12 +35,12 @@ function compareModelOptions(a: ModelSelectorOption, b: ModelSelectorOption): nu
 }
 
 export function filterModelOptions(options: ModelSelectorOption[], query: string): ModelSelectorOption[] {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return options;
 
   return options.filter((option) => (
     `${option.name} ${option.modelId}`
-      .toLocaleLowerCase()
+      .toLowerCase()
       .includes(normalizedQuery)
   ));
 }

@@ -79,5 +79,5 @@ export async function listDirectories(directory: string): Promise<BrowsableDirec
 
   return candidates
     .filter((entry): entry is BrowsableDirectory => entry !== null)
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .sort((left, right) => left.name.localeCompare(right.name, "en"));
 }

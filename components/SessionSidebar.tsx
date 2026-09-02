@@ -2104,7 +2104,7 @@ function SessionItem({
   onRenamed?: () => void;
   onDeleted?: (id: string) => void;
 }) {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -2123,7 +2123,7 @@ function SessionItem({
 
   // A stored first message may be an SDK-expanded <skill> block; collapse it
   // back to the compact /skill:name args command the user typed before using
-  // it as the auto-name fallback, mirroring MessageView's rendering.
+  // it as the display fallback, mirroring MessageView's rendering.
   const storedFirstMessage = session.firstMessage ?? "";
   const displayFirstMessage = skillExpansionToCommand(storedFirstMessage) ?? storedFirstMessage;
   const title = session.name || displayFirstMessage.slice(0, 50) || session.id.slice(0, 12);
@@ -2320,7 +2320,7 @@ function SessionItem({
               ) : isUnread ? (
                 <UnreadSessionIndicator />
               ) : (
-                <span title={session.modified}>{formatRelativeTime(session.modified, locale)}</span>
+                <span title={session.modified}>{formatRelativeTime(session.modified)}</span>
               )}
               {session.messageCount === undefined ? (
                 <span aria-label={t("sidebar.loading")}>…</span>

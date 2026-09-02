@@ -14,7 +14,7 @@ import { projectTrustReloadOptions } from "@/lib/project-trust";
 
 export const dynamic = "force-dynamic";
 
-const modelNameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+const modelNameCollator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
 function compareModelEntries(
   a: { id: string; name: string; provider: string },

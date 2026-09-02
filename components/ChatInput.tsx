@@ -98,7 +98,7 @@ const TOOL_PRESET_MAP: Record<ToolPresetLabel, ToolPreset> = {
   full: "full",
 };
 const COMPOSITION_END_ENTER_GRACE_MS = 100;
-const TEXT_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+const TEXT_COLLATOR = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 const ANCHORED_MENU_GAP = 8;
 
 export function getUpwardMenuMaxHeight(menuBottom: number, visibleTop: number, gap = ANCHORED_MENU_GAP): number {
@@ -127,7 +127,7 @@ const THINKING_LEVEL_DESC_KEYS: Record<typeof THINKING_LEVELS[number], string> =
 function formatTokenCount(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
   if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}k`;
-  return tokens.toLocaleString();
+  return tokens.toLocaleString("en");
 }
 
 type BuiltinSlashCommand = {

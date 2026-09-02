@@ -53,7 +53,7 @@ Start with these owners instead of a broad file inventory:
 | Change area | Start here |
 | --- | --- |
 | Persisted session reading, metadata, families, or context | `lib/session-reader.ts`, `lib/session-*.ts`, `app/api/sessions/**` |
-| Live session startup, commands, tools, fork/clone, or cleanup | `lib/rpc-manager.ts`, `app/api/agent/**`, `app/api/sessions/[id]/auto-name/route.ts` |
+| Live session startup, commands, tools, fork/clone, or cleanup | `lib/rpc-manager.ts`, `app/api/agent/**` |
 | Browser streaming and reconciliation | `hooks/useAgentSession.ts`, `lib/agent-event-*.ts`, `lib/agent-client.ts` |
 | File access, path identity, Git, or worktrees | `lib/file-access.ts`, `lib/path-security.ts`, `lib/paths.ts`, `lib/worktree.ts` |
 | Project resources, trust, plugins, or skills | `lib/project-trust.ts`, `lib/chat-only.ts`, `app/api/{project-trust,plugins,skills}/**` |
@@ -143,8 +143,8 @@ Start with these owners instead of a broad file inventory:
 - Follow existing components and CSS variables in source rather than a copied
   token inventory. Preserve keyboard, focus, scroll, mobile, and browser
   lifecycle behavior when changing interactions.
-- When adding or changing user-visible UI text or locale behavior, read
-  [`docs/i18n.md`](docs/i18n.md) and update every built-in language package.
+- When adding or changing user-visible UI text or English formatting, read
+  [`docs/i18n.md`](docs/i18n.md) and update the English message package.
 
 ## Development server
 

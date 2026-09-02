@@ -16,7 +16,7 @@ export function sanitizeExtensionStatusText(text: string): string {
 
 export function formatExtensionStatusLine(statuses: ExtensionStatusItem[]): string {
   return [...statuses]
-    .sort((a, b) => a.key.localeCompare(b.key))
+    .sort((a, b) => a.key.localeCompare(b.key, "en"))
     .map(({ text }) => sanitizeExtensionStatusText(text))
     .join(" ");
 }

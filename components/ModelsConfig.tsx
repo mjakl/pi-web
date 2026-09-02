@@ -341,10 +341,10 @@ function ProviderDetail({ name, provider, onChange, onRename, onDelete, onAddMod
 
   const existingModelIds = new Set((provider.models ?? []).map((model) => model.id));
   const discoveredModels = discoveryState.phase === "success" ? discoveryState.models : [];
-  const normalizedDiscoveryQuery = discoveryQuery.trim().toLocaleLowerCase();
+  const normalizedDiscoveryQuery = discoveryQuery.trim().toLowerCase();
   const filteredDiscoveredModels = discoveredModels.filter((model) => !normalizedDiscoveryQuery
-    || model.id.toLocaleLowerCase().includes(normalizedDiscoveryQuery)
-    || model.name?.toLocaleLowerCase().includes(normalizedDiscoveryQuery));
+    || model.id.toLowerCase().includes(normalizedDiscoveryQuery)
+    || model.name?.toLowerCase().includes(normalizedDiscoveryQuery));
   const shownDiscoveredModels = filteredDiscoveredModels.slice(0, 300);
   const selectableShownIds = shownDiscoveredModels
     .filter((model) => !existingModelIds.has(model.id))

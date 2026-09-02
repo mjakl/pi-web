@@ -367,7 +367,7 @@ test("routes blocking extension requests through deduplicated browser attention 
   );
   const attentionSource = appShellSource.slice(
     appShellSource.indexOf("  const handleAttentionNeeded = useCallback"),
-    appShellSource.indexOf("  const handleAutoName = useCallback"),
+    appShellSource.indexOf("  const handleExplorerRefresh = useCallback"),
   );
 
   assert.match(

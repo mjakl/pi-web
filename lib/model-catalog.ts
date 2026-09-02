@@ -406,9 +406,9 @@ export function searchModelCatalog(
     .map((entry) => ({ entry, rank: matchRank(entry, normalizedQuery, normalizedProvider) }))
     .filter(({ rank }) => !normalizedQuery || rank < 20)
     .sort((a, b) => a.rank - b.rank
-      || a.entry.providerName.localeCompare(b.entry.providerName, undefined, { sensitivity: "base" })
-      || a.entry.name.localeCompare(b.entry.name, undefined, { numeric: true, sensitivity: "base" })
-      || a.entry.id.localeCompare(b.entry.id, undefined, { numeric: true, sensitivity: "base" }))
+      || a.entry.providerName.localeCompare(b.entry.providerName, "en", { sensitivity: "base" })
+      || a.entry.name.localeCompare(b.entry.name, "en", { numeric: true, sensitivity: "base" })
+      || a.entry.id.localeCompare(b.entry.id, "en", { numeric: true, sensitivity: "base" }))
     .slice(0, cappedLimit)
     .map(({ entry }) => entry);
 }
