@@ -45,7 +45,7 @@ Use `npm run dev:lan` only when you intend to accept connections from other mach
 
 ## Security
 
-Pi Web can run agent tools and project commands. It has no built-in authentication and listens only on `127.0.0.1` in the default development setup. If you bind it to a non-loopback address, use a trusted network or an external security layer that restricts access. Host and Origin checks do not provide access control.
+Pi Web can run agent tools and project commands. It has no built-in authentication and does not restrict request Host or Origin headers. The default development setup listens only on `127.0.0.1`; if you bind it to a non-loopback address, use a trusted network or an external security layer that restricts access.
 
 Project resources can run local code. Pi Web leaves project extensions, skills, and other trust-requiring resources disabled until you trust the project. Only trust repositories you control or have reviewed.
 

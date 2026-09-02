@@ -77,6 +77,5 @@ nextArgs.push("-H", hostname);
 const child = spawn(process.execPath, [nextBin, ...nextArgs], {
   cwd: pkgDir,
   stdio: "inherit",
-  env: { ...process.env, PI_WEB_HOSTNAME: hostname },
 });
 wireChildProcessLifecycle(child);
