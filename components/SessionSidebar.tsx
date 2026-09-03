@@ -471,7 +471,6 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
   const loadSessions = useCallback(async (
     showLoading = false,
     force = false,
-    showSuccess = !showLoading,
   ): Promise<boolean> => {
     const inventoryAttempt = beginSessionInventoryAttempt();
     latestInventoryAttemptRef.current = inventoryAttempt;
@@ -539,7 +538,6 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
       });
       setError(null);
       setLoading(false);
-      if (showSuccess) showSessionRefreshSuccess();
       return true;
     } catch (e) {
       if (inventoryAttempt !== latestInventoryAttemptRef.current) return false;
@@ -547,14 +545,17 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
       setLoading(false);
       return false;
     }
-  }, [beginSessionInventoryAttempt, showSessionRefreshSuccess]);
+  }, [beginSessionInventoryAttempt]);
 
   const handleSessionRefresh = useCallback(() => {
     const requestId = ++sessionRefreshRequestIdRef.current;
     setSessionRefreshDone(false);
-    const inventoryRefresh = loadSessions(false, true, false);
-    const selectedTranscriptRefresh = selectedSessionId ? onRefreshSelectedSession?.() : null;
-    void (selectedTranscriptRefresh ?? inventoryRefresh).then((succeeded) => {
+    const refreshes = [loadSessions(false, true)];
+    if (selectedSessionId) {
+      refreshes.push(onRefreshSelectedSession?.() ?? Promise.resolve(false));
+    }
+    void Promise.allSettled(refreshes).then((results) => {
+      const succeeded = results.every((result) => result.status === "fulfilled" && result.value);
       if (succeeded && sessionRefreshRequestIdRef.current === requestId) {
         showSessionRefreshSuccess();
       }

@@ -7,12 +7,14 @@ export interface PersistedAuthority {
   acceptedTranscriptOrder: number;
   sessionId: string;
   runId: number;
+  observedActivityEpoch: number;
 }
 
 export interface PersistedSnapshotRequest {
   order: number;
   sessionId: string;
   runId: number;
+  observedActivityEpoch: number;
 }
 
 export interface PaginationRequest {
@@ -109,6 +111,15 @@ export function canAcceptInventoryResult(attempt: number, acceptedAttempt: numbe
   return attempt > acceptedAttempt;
 }
 
+export function observedActivityEpochAfter(epoch: number, boundary: string): number {
+  return boundary === "agent_start"
+    || boundary === "bash_admission"
+    || boundary === "compaction_admission"
+    || boundary === "compaction_start"
+    ? epoch + 1
+    : epoch;
+}
+
 export function canAcceptPersistedSnapshot(
   request: PersistedSnapshotRequest,
   current: PersistedAuthority,
@@ -117,6 +128,7 @@ export function canAcceptPersistedSnapshot(
   return request.order === latestRequestOrder
     && request.sessionId === current.sessionId
     && request.runId === current.runId
+    && request.observedActivityEpoch === current.observedActivityEpoch
     && request.order >= current.acceptedSnapshotOrder
     && request.order >= current.acceptedTranscriptOrder;
 }

@@ -28,6 +28,7 @@ import {
   canAcceptPersistedSnapshot,
   enqueuePersistedWrite,
   mergeTranscriptRefreshMessages,
+  observedActivityEpochAfter,
   projectPersistedSnapshot,
   runSessionLoadPhases,
   runTranscriptNavigation,
@@ -292,6 +293,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const newSessionModelOverrideRef = useRef<SelectedModel | null>(null);
   const thinkingLevelOverrideRef = useRef<Exclude<ThinkingLevelOption, "auto"> | null>(null);
   const promptRunIdRef = useRef(0);
+  const observedActivityEpochRef = useRef(0);
   const persistedOrderRef = useRef(0);
   const acceptedSnapshotOrderRef = useRef(0);
   const acceptedTranscriptOrderRef = useRef(0);
@@ -409,7 +411,15 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     acceptedTranscriptOrder: acceptedTranscriptOrderRef.current,
     sessionId: sessionIdRef.current ?? "",
     runId: promptRunIdRef.current,
+    observedActivityEpoch: observedActivityEpochRef.current,
   }), []);
+
+  const observeActivity = useCallback((boundary: string) => {
+    observedActivityEpochRef.current = observedActivityEpochAfter(
+      observedActivityEpochRef.current,
+      boundary,
+    );
+  }, []);
 
   const commitPersistedSnapshot = useCallback((order: number) => {
     acceptedSnapshotOrderRef.current = order;
@@ -451,6 +461,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       order: ++persistedOrderRef.current,
       sessionId: sid,
       runId: promptRunIdRef.current,
+      observedActivityEpoch: observedActivityEpochRef.current,
     };
     latestCanonicalOrderRef.current = request.order;
     const precedingWrites = persistedWriteTailRef.current;
@@ -811,6 +822,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       order: ++persistedOrderRef.current,
       sessionId: sid,
       runId: promptRunIdRef.current,
+      observedActivityEpoch: observedActivityEpochRef.current,
     };
     latestRefreshOrderRef.current = request.order;
     const precedingWrites = persistedWriteTailRef.current;
@@ -1139,6 +1151,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, [agentRunning]);
 
   const handleAgentEvent = useCallback((event: AgentEventLike) => {
+    observeActivity(event.type);
     switch (event.type) {
       case "connected": {
         dispatch({ type: "end" });
@@ -1389,7 +1402,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         handleExtensionUiRequest(event as ExtensionUiRequest);
         break;
     }
-  }, [addNotice, cancelEventStreamGrace, closeEvents, handleExtensionUiRequest, loadSession, notifyPromptStage, onAgentEnd, scheduleEventStreamClose, scrollToBottom, settleUiStage, t]);
+  }, [addNotice, cancelEventStreamGrace, closeEvents, handleExtensionUiRequest, loadSession, notifyPromptStage, observeActivity, onAgentEnd, scheduleEventStreamClose, scrollToBottom, settleUiStage, t]);
   handleAgentEventRef.current = handleAgentEvent;
 
   const handleSend = useCallback(async (message: string, images?: AttachedImage[]) => {
@@ -1522,6 +1535,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     try {
       const sid = sessionIdRef.current ?? session?.id ?? await ensureNewSession();
       if (!sid) throw new Error(t("chat.shellSessionUnavailable"));
+      observeActivity("bash_admission");
       await sendAgentCommand(sid, {
         type: "bash",
         command,
@@ -1538,7 +1552,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setPendingBash(null);
       setBashRunning(false);
     }
-  }, [addNotice, composerDraftKey, ensureNewSession, loadSession, promoteNewSession, restoreSubmission, session, t]);
+  }, [addNotice, composerDraftKey, ensureNewSession, loadSession, observeActivity, promoteNewSession, restoreSubmission, session, t]);
   executeBashRef.current = executeBash;
 
   const handleAbort = useCallback(async () => {
@@ -1666,6 +1680,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     setCompactError(null);
     setCompactResult(null);
     try {
+      observeActivity("compaction_admission");
       const result = await sendAgentCommand<CompactCommandResult>(sid, { type: "compact" });
       setCompactResult(readCompactResult(result, "manual"));
       await loadSession(sid, true);
@@ -1675,7 +1690,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } finally {
       setIsCompacting(false);
     }
-  }, [isCompacting, loadSession]);
+  }, [isCompacting, loadSession, observeActivity]);
 
   const loadModels = useCallback(async (signal?: AbortSignal) => {
     const modelCwd = newSessionCwd ?? session?.cwd ?? "";
@@ -1730,6 +1745,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           setIsCompacting(true);
           setCompactError(null);
           setCompactResult(null);
+          observeActivity("compaction_admission");
           const result = await sendAgentCommand<CompactCommandResult>(sid, {
             type: "compact",
             ...(args ? { customInstructions: args } : {}),
@@ -1803,7 +1819,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } finally {
       if (commandName === "compact") setIsCompacting(false);
     }
-  }, [activeLeafId, addNotice, ensureNewSession, isCompacting, loadModels, loadSession, loadSlashCommands, loadTools, promoteNewSession, onSessionForked, onSessionStatsPanelOpen, t]);
+  }, [activeLeafId, addNotice, ensureNewSession, isCompacting, loadModels, loadSession, loadSlashCommands, loadTools, observeActivity, promoteNewSession, onSessionForked, onSessionStatsPanelOpen, t]);
 
   // Let AgentSession.prompt decide atomically whether to queue against the
   // current run or start a new turn if it settled while the request was in

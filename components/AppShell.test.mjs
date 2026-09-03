@@ -116,6 +116,74 @@ function emptyInventoryResponse() {
   return Response.json({ sessions: [], activeSessionIds: [], runningSessionIds: [] });
 }
 
+function refreshSucceeded(container) {
+  return container.querySelector('button[title="Refresh"] polyline') !== null;
+}
+
+function createRefreshHarness({ selected = true, provideTranscriptRefresh = true } = {}) {
+  const originalFetch = globalThis.fetch;
+  const inventoryRequests = [];
+  const transcriptRequests = [];
+  globalThis.fetch = async (url) => {
+    if (String(url).startsWith("/api/sessions")) {
+      const request = deferred();
+      inventoryRequests.push(request);
+      return request.promise;
+    }
+    if (url === "/api/home") return Response.json({ home: "/tmp" });
+    if (url === "/api/agent/running") return emptyInventoryResponse();
+    return Response.json({});
+  };
+
+  let nextAttempt = 0;
+  let refreshKey = 0;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = () => act(async () => {
+    root.render(React.createElement(SessionSidebar, {
+      piVersion: "test",
+      selectedSessionId: selected ? sidebarSession.id : null,
+      onSelectSession() {},
+      beginSessionInventoryAttempt: () => ++nextAttempt,
+      refreshKey,
+      actionsAvailable: true,
+      ...(provideTranscriptRefresh ? {
+        onRefreshSelectedSession: () => {
+          const request = deferred();
+          transcriptRequests.push(request);
+          return request.promise;
+        },
+      } : {}),
+    }));
+    await Promise.resolve();
+  });
+
+  return {
+    inventoryRequests,
+    transcriptRequests,
+    container,
+    render,
+    clickRefresh: () => click(container.querySelector('button[title="Refresh"]')),
+    triggerBackgroundLoad: async () => {
+      refreshKey += 1;
+      await render();
+    },
+    cleanup: async () => {
+      await act(() => root.unmount());
+      container.remove();
+      globalThis.fetch = originalFetch;
+    },
+  };
+}
+
+async function settle(request, value) {
+  await act(async () => {
+    request.resolve(value);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
 function createInventoryHarness(onSessionsChange) {
   const originalFetch = globalThis.fetch;
   const requests = [];
@@ -337,6 +405,117 @@ test("the current inventory abort finishes loading without reporting an error", 
     });
     assert.equal(harness.container.textContent.includes("current abort"), false);
     assert.equal(harness.container.textContent.includes("Loading..."), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+for (const firstCompletion of ["inventory", "transcript"]) {
+  test(`manual Refresh waits when ${firstCompletion} completes first`, async () => {
+    const harness = createRefreshHarness();
+    try {
+      await harness.render();
+      await settle(harness.inventoryRequests[0], emptyInventoryResponse());
+      await harness.clickRefresh();
+
+      if (firstCompletion === "inventory") {
+        await settle(harness.inventoryRequests[1], emptyInventoryResponse());
+      } else {
+        await settle(harness.transcriptRequests[0], true);
+      }
+      assert.equal(refreshSucceeded(harness.container), false);
+
+      if (firstCompletion === "inventory") {
+        await settle(harness.transcriptRequests[0], true);
+      } else {
+        await settle(harness.inventoryRequests[1], emptyInventoryResponse());
+      }
+      assert.equal(refreshSucceeded(harness.container), true);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+}
+
+for (const failedPhase of ["inventory", "transcript"]) {
+  test(`manual Refresh does not show success when ${failedPhase} fails`, async () => {
+    const harness = createRefreshHarness();
+    try {
+      await harness.render();
+      await settle(harness.inventoryRequests[0], emptyInventoryResponse());
+      await harness.clickRefresh();
+
+      await settle(
+        harness.inventoryRequests[1],
+        failedPhase === "inventory"
+          ? new Response(null, { status: 500 })
+          : emptyInventoryResponse(),
+      );
+      await settle(harness.transcriptRequests[0], failedPhase !== "transcript");
+      assert.equal(refreshSucceeded(harness.container), false);
+      assert.equal(
+        harness.container.textContent.includes("HTTP 500"),
+        failedPhase === "inventory",
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+}
+
+test("manual Refresh needs only inventory success when no session is selected", async () => {
+  const harness = createRefreshHarness({ selected: false });
+  try {
+    await harness.render();
+    await settle(harness.inventoryRequests[0], emptyInventoryResponse());
+    await harness.clickRefresh();
+    await settle(harness.inventoryRequests[1], emptyInventoryResponse());
+    assert.equal(harness.transcriptRequests.length, 0);
+    assert.equal(refreshSucceeded(harness.container), true);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("manual Refresh does not show success when the selected transcript callback is unavailable", async () => {
+  const harness = createRefreshHarness({ provideTranscriptRefresh: false });
+  try {
+    await harness.render();
+    await settle(harness.inventoryRequests[0], emptyInventoryResponse());
+    await harness.clickRefresh();
+    await settle(harness.inventoryRequests[1], emptyInventoryResponse());
+    assert.equal(refreshSucceeded(harness.container), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("a superseded manual Refresh cannot publish late success", async () => {
+  const harness = createRefreshHarness();
+  try {
+    await harness.render();
+    await settle(harness.inventoryRequests[0], emptyInventoryResponse());
+    await harness.clickRefresh();
+    await harness.clickRefresh();
+
+    await settle(harness.inventoryRequests[2], new Response(null, { status: 500 }));
+    await settle(harness.transcriptRequests[1], true);
+    await settle(harness.transcriptRequests[0], true);
+    await settle(harness.inventoryRequests[1], emptyInventoryResponse());
+    assert.equal(refreshSucceeded(harness.container), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("background inventory completion does not show manual Refresh success", async () => {
+  const harness = createRefreshHarness({ selected: false });
+  try {
+    await harness.render();
+    await settle(harness.inventoryRequests[0], emptyInventoryResponse());
+    await harness.triggerBackgroundLoad();
+    await settle(harness.inventoryRequests[1], emptyInventoryResponse());
+    assert.equal(refreshSucceeded(harness.container), false);
   } finally {
     await harness.cleanup();
   }
