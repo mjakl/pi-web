@@ -581,38 +581,57 @@ test("popup scrolling stays open and focused while outside scrolling closes with
   }
 });
 
-test("resize dismissal restores focus when the popup owned it", async () => {
-  const view = await mountItem(baseSession);
+test("a resize keeps the popup mounted so a press already under way still lands", async () => {
+  // A phone fires resize for every URL-bar and keyboard animation. Unmounting
+  // the popup mid-tap sent the press through to the row underneath instead of
+  // running Stop.
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push([String(url), init?.method]);
+    return new Response(null, { status: 200 });
+  };
+  const view = await mountItem(baseSession, { isActive: true });
   try {
     const trigger = view.container.querySelector("button[aria-controls]");
     await click(trigger);
-    document.querySelector('[role="group"] button').focus();
+    const group = document.querySelector('[role="group"]');
+    const stop = [...group.querySelectorAll("button")].find((button) => button.textContent === "Stop");
+    stop.focus();
+
     await act(() => window.dispatchEvent(new Event("resize")));
-    assert.equal(document.querySelector('[role="group"]') === null, true);
-    assert.equal(document.activeElement === trigger, true);
+    assert.equal(document.querySelector('[role="group"]') === group, true);
+    assert.equal(document.activeElement === stop, true);
+
+    await click(stop);
+    assert.deepEqual(requests, [["/api/agent/abcdef1234567890", "DELETE"]]);
   } finally {
     await view.unmount();
+    globalThis.fetch = originalFetch;
   }
 });
 
-test("anchor movement closes the popup before paint while an unchanged anchor keeps it open", async () => {
+test("the popup follows a moved anchor before paint and holds still for an unchanged one", async () => {
   const view = await mountItem(baseSession);
   try {
     const trigger = view.container.querySelector("button[aria-controls]");
     let top = 20;
     trigger.getBoundingClientRect = () => ({ top, right: 200, bottom: top + 28, left: 172, width: 28, height: 28 });
     await click(trigger);
-    const action = document.querySelector('[role="group"] button');
+    const group = document.querySelector('[role="group"]');
+    const action = group.querySelector("button");
     action.focus();
 
     await view.rerender({ ...baseSession });
-    assert.ok(document.querySelector('[role="group"]'));
+    assert.equal(document.querySelector('[role="group"]') === group, true);
+    assert.equal(group.style.top, "52px");
     assert.equal(document.activeElement === action, true);
 
     top = 74;
     await view.rerender({ ...baseSession });
-    assert.equal(document.querySelector('[role="group"]') === null, true);
-    assert.equal(document.activeElement === trigger, true);
+    assert.equal(document.querySelector('[role="group"]') === group, true);
+    assert.equal(group.style.top, "106px");
+    assert.equal(document.activeElement === action, true);
   } finally {
     await view.unmount();
   }

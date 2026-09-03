@@ -28,6 +28,24 @@ type FocusPolicy = "none" | "trigger" | "trigger-if-owned" | "surface" | HTMLEle
 
 const IDLE_ACTION_SURFACE: ActionSurface = { kind: "idle" };
 
+/** Place the fixed-position popup under its trigger, clamped to the viewport. */
+function menuPositionFor(
+  rect: Pick<DOMRect, "top" | "bottom" | "left" | "right">,
+  isActive: boolean,
+  transient: boolean,
+): MenuPosition {
+  const width = 144;
+  const height = (Number(isActive) + (transient ? 0 : 2)) * 34 + 8;
+  return {
+    left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
+    top: rect.bottom + 4 + height <= window.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4),
+    anchorTop: rect.top,
+    anchorLeft: rect.left,
+    isActive,
+    transient,
+  };
+}
+
 const menuItemStyle: React.CSSProperties = {
   display: "block",
   width: "100%",
@@ -210,15 +228,24 @@ export function SessionItem({
     }
   }, [actionSurface, actionsAvailable, renderedSurface, transitionActionSurface]);
 
+  // Follow the trigger rather than tearing the popup down when it moves. A
+  // phone fires resize for every URL-bar and on-screen-keyboard animation, and
+  // an unmount mid-tap drops the press the user already started.
+  const repositionMenu = useCallback(() => {
+    const rect = menuTriggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const position = menuPositionFor(rect, Boolean(isActive), Boolean(session.transient));
+    setActionSurface((current) => (current.kind === "menu" ? { kind: "menu", position } : current));
+  }, [isActive, session.transient]);
+
   useLayoutEffect(() => {
     if (!menuPosition) return;
     const rect = menuTriggerRef.current?.getBoundingClientRect();
-    const anchorMoved = !rect
-      || rect.top !== menuPosition.anchorTop
-      || rect.left !== menuPosition.anchorLeft;
-    if (!menuEligibilityValid || anchorMoved) {
+    if (!rect || !menuEligibilityValid) {
       transitionActionSurface(IDLE_ACTION_SURFACE, rect ? "trigger-if-owned" : "none");
+      return;
     }
+    if (rect.top !== menuPosition.anchorTop || rect.left !== menuPosition.anchorLeft) repositionMenu();
   });
 
   useEffect(() => {
@@ -236,7 +263,6 @@ export function SessionItem({
       event.stopPropagation();
       transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     };
-    const dismissOnResize = () => transitionActionSurface(IDLE_ACTION_SURFACE, "trigger-if-owned");
     const dismissOnScroll = (event: Event) => {
       const target = event.target;
       if (target instanceof Node && menuRef.current?.contains(target)) return;
@@ -245,15 +271,15 @@ export function SessionItem({
 
     document.addEventListener("pointerdown", dismissOutside, true);
     document.addEventListener("keydown", dismissOnEscape);
-    window.addEventListener("resize", dismissOnResize);
+    window.addEventListener("resize", repositionMenu);
     window.addEventListener("scroll", dismissOnScroll, true);
     return () => {
       document.removeEventListener("pointerdown", dismissOutside, true);
       document.removeEventListener("keydown", dismissOnEscape);
-      window.removeEventListener("resize", dismissOnResize);
+      window.removeEventListener("resize", repositionMenu);
       window.removeEventListener("scroll", dismissOnScroll, true);
     };
-  }, [menuEligibilityValid, menuPosition, transitionActionSurface]);
+  }, [menuEligibilityValid, menuPosition, repositionMenu, transitionActionSurface]);
 
   const firstMessage = session.firstMessage ?? "";
   const title = session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12);
@@ -351,20 +377,12 @@ export function SessionItem({
       return;
     }
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const width = 144;
-    const height = (Number(Boolean(isActive)) + (session.transient ? 0 : 2)) * 34 + 8;
-    transitionActionSurface({
-      kind: "menu",
-      position: {
-        left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
-        top: rect.bottom + 4 + height <= window.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4),
-        anchorTop: rect.top,
-        anchorLeft: rect.left,
-        isActive: Boolean(isActive),
-        transient: Boolean(session.transient),
-      },
-    }, "surface");
+    const position = menuPositionFor(
+      e.currentTarget.getBoundingClientRect(),
+      Boolean(isActive),
+      Boolean(session.transient),
+    );
+    transitionActionSurface({ kind: "menu", position }, "surface");
   }, [actionPending, isActive, menuPosition, session.transient, transitionActionSurface]);
 
   const chooseMenuAction = useCallback((e: React.MouseEvent, action: "stop" | "rename" | "delete") => {
