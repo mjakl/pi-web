@@ -21,6 +21,11 @@ import { getPresetFromToolNames, getToolNamesForPreset, type ToolEntry, type Too
 import type { SessionStatsInfo } from "@/lib/pi-types";
 import { mergeSessionStats, type SessionFileStats } from "@/lib/session-stats";
 import { userMessageKey } from "@/lib/prompt-recovery";
+import {
+  isCurrentTranscriptRefresh,
+  mergeTranscriptRefreshMessages,
+  type TranscriptRefreshVersion,
+} from "@/lib/transcript-refresh";
 import { AgentEventConnection } from "@/lib/agent-event-connection";
 import { useI18n } from "@/hooks/useI18n";
 import type { AgentEventLike } from "@/lib/agent-event-wire";
@@ -39,6 +44,7 @@ import {
 export interface SessionData {
   sessionId: string;
   filePath: string;
+  info?: SessionInfo | null;
   totalActiveMs: number;
   tree: SessionTreeNode[];
   leafId: string | null;
@@ -135,6 +141,9 @@ export interface UseAgentSessionOptions {
   onSystemToolsChange?: (tools: ToolEntry[] | null) => void;
   /** Registers an action that lazily starts the session and loads its prompt and tools. */
   onSystemInfoLoaderChange?: (loader: (() => Promise<void>) | null) => void;
+  /** Registers an in-place persisted transcript refresh for the selected session. */
+  onTranscriptRefreshChange?: (refresh: (() => Promise<boolean>) | null) => void;
+  onSessionMetadataChange?: (session: SessionInfo) => void;
   onSessionStatsPanelOpen?: () => void;
   setToolPreset?: (preset: ToolPreset) => void;
 }
@@ -200,7 +209,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const { t } = useI18n();
   const {
     session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked,
-    modelsRefreshKey, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsPanelOpen,
+    modelsRefreshKey, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange,
+    onTranscriptRefreshChange, onSessionMetadataChange, onSessionStatsPanelOpen,
   } = opts;
 
   const isNew = session === null && newSessionCwd !== null;
@@ -279,11 +289,15 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const newSessionModelOverrideRef = useRef<SelectedModel | null>(null);
   const thinkingLevelOverrideRef = useRef<Exclude<ThinkingLevelOption, "auto"> | null>(null);
   const promptRunIdRef = useRef(0);
+  const sessionLoadRequestIdRef = useRef(0);
+  const transcriptRevisionRef = useRef(0);
   const optimisticUserMessageKeyRef = useRef<string | null>(null);
   const modelSwitchPendingRef = useRef(false);
   const draftKeyAliasesRef = useRef(new Map<string, string>());
   const sessionHookMountedRef = useRef(true);
 
+  const dataRef = useRef(data);
+  dataRef.current = data;
   sessionPropIdRef.current = session?.id ?? null;
   sessionActiveRef.current = runtimeActive;
 
@@ -384,8 +398,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const loadSession = useCallback(async (sid: string, showLoading = false, includeState = false) => {
     const loadRunId = promptRunIdRef.current;
+    const requestId = ++sessionLoadRequestIdRef.current;
     const isCurrentLoad = () => (
-      sessionIdRef.current === sid && promptRunIdRef.current === loadRunId
+      sessionHookMountedRef.current
+      && sessionIdRef.current === sid
+      && promptRunIdRef.current === loadRunId
+      && sessionLoadRequestIdRef.current === requestId
     );
     let messagesLoaded = false;
     try {
@@ -409,6 +427,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       const d = await res.json() as SessionData;
       if (!isCurrentLoad()) return null;
       const persistedMessages = d.context.messages;
+      transcriptRevisionRef.current += 1;
+      dataRef.current = d;
       setData(d);
       setActiveLeafId(d.leafId);
       setMessages(persistedMessages);
@@ -457,6 +477,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, [setToolPresetState]);
 
   const loadContext = useCallback(async (sid: string, leafId: string | null, before?: string | null) => {
+    const transcriptRevision = transcriptRevisionRef.current;
     try {
       const params = new URLSearchParams({ deferThinking: "1", deferMedia: "1" });
       if (leafId) params.set("leafId", leafId);
@@ -467,7 +488,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const d = await res.json() as { context: SessionData["context"] };
-      if (sessionIdRef.current !== sid) return;
+      if (sessionIdRef.current !== sid || transcriptRevisionRef.current !== transcriptRevision) return;
+      transcriptRevisionRef.current += 1;
       setHistoryCursor(d.context.oldestEntryId);
       setHasEarlierMessages(d.context.hasMore);
       setData((prev) => {
@@ -706,6 +728,57 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       },
     });
   }, []);
+
+  const refreshTranscript = useCallback(async (): Promise<boolean> => {
+    const sid = sessionPropIdRef.current;
+    if (!sid || sessionIdRef.current !== sid) return false;
+
+    const previousPersistedCount = dataRef.current?.context.messages.length ?? 0;
+    const request: TranscriptRefreshVersion = {
+      requestId: ++sessionLoadRequestIdRef.current,
+      sessionId: sid,
+      runId: promptRunIdRef.current,
+      transcriptRevision: transcriptRevisionRef.current,
+    };
+    const currentVersion = (): TranscriptRefreshVersion => ({
+      requestId: sessionLoadRequestIdRef.current,
+      sessionId: sessionPropIdRef.current ?? "",
+      runId: promptRunIdRef.current,
+      transcriptRevision: transcriptRevisionRef.current,
+    });
+
+    try {
+      const params = new URLSearchParams({ deferThinking: "1", deferMedia: "1" });
+      const response = await fetch(`/api/sessions/${encodeURIComponent(sid)}?${params}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const refreshed = await response.json() as SessionData;
+      if (!sessionHookMountedRef.current || !isCurrentTranscriptRefresh(request, currentVersion())) return false;
+
+      transcriptRevisionRef.current += 1;
+      dataRef.current = refreshed;
+      setData(refreshed);
+      setActiveLeafId(refreshed.leafId);
+      setMessages((current) => mergeTranscriptRefreshMessages(
+        refreshed.context.messages,
+        current,
+        previousPersistedCount,
+      ));
+      setEntryIds(refreshed.context.entryIds ?? []);
+      setHistoryCursor(refreshed.context.oldestEntryId);
+      setHasEarlierMessages(refreshed.context.hasMore);
+      setSessionStatsOverride(null);
+      if (refreshed.info) onSessionMetadataChange?.(refreshed.info);
+      return true;
+    } catch (refreshError) {
+      if (sessionHookMountedRef.current && isCurrentTranscriptRefresh(request, currentVersion())) {
+        const detail = refreshError instanceof Error ? refreshError.message : String(refreshError);
+        addNotice({ type: "error", message: t("chat.transcriptRefreshFailed", { error: detail }) });
+      }
+      return false;
+    }
+  }, [addNotice, onSessionMetadataChange, t]);
 
   const handleExtensionUiRequest = useCallback((request: ExtensionUiRequest) => {
     if (isBlockingExtensionUiRequest(request)) onAttentionNeeded?.(request);
@@ -1886,6 +1959,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     onSystemInfoLoaderChange?.(loadSystemInfo);
     return () => onSystemInfoLoaderChange?.(null);
   }, [loadSystemInfo, onSystemInfoLoaderChange]);
+
+  useEffect(() => {
+    onTranscriptRefreshChange?.(session ? refreshTranscript : null);
+    return () => onTranscriptRefreshChange?.(null);
+  }, [onTranscriptRefreshChange, refreshTranscript, session]);
 
   useEffect(() => {
     if (!onBranchDataChange) return;

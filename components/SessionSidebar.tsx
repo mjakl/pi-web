@@ -105,6 +105,7 @@ interface Props {
   onActiveSessionIdsChange?: (ids: Set<string>) => void;
   onRunningSessionIdsChange?: (ids: Set<string>) => void;
   onSessionsChange?: (sessions: SessionInfo[]) => void;
+  onRefreshSelectedSession?: () => Promise<boolean>;
 }
 
 interface WorktreeEntry {
@@ -271,7 +272,7 @@ function AnimatedDropdown({ open, children, style }: { open: boolean; children: 
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, onSessionsChange }: Props) {
+export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, onSessionsChange, onRefreshSelectedSession }: Props) {
   const { t } = useI18n();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [inventoryRevision, setInventoryRevision] = useState(0);
@@ -315,6 +316,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   // running state; late /api/sessions responses must not overwrite it.
   const runningPollAuthoritativeRef = useRef(false);
   const sessionRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionRefreshRequestIdRef = useRef(0);
   const explorerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileExplorerRef = useRef<FileExplorerHandle>(null);
   const sessionListRef = useRef<HTMLDivElement>(null);
@@ -458,7 +460,17 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     return () => { drainMetadataQueueRef.current = () => {}; };
   }, [drainMetadataQueue]);
 
-  const loadSessions = useCallback(async (showLoading = false, force = false) => {
+  const showSessionRefreshSuccess = useCallback(() => {
+    setSessionRefreshDone(true);
+    if (sessionRefreshTimerRef.current) clearTimeout(sessionRefreshTimerRef.current);
+    sessionRefreshTimerRef.current = setTimeout(() => setSessionRefreshDone(false), 2000);
+  }, []);
+
+  const loadSessions = useCallback(async (
+    showLoading = false,
+    force = false,
+    showSuccess = !showLoading,
+  ): Promise<boolean> => {
     try {
       if (showLoading) setLoading(true);
       const res = await fetch(force ? "/api/sessions?force=1" : "/api/sessions", {
@@ -520,17 +532,27 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         return next.size === prev.size ? prev : next;
       });
       setError(null);
-      if (!showLoading) {
-        setSessionRefreshDone(true);
-        if (sessionRefreshTimerRef.current) clearTimeout(sessionRefreshTimerRef.current);
-        sessionRefreshTimerRef.current = setTimeout(() => setSessionRefreshDone(false), 2000);
-      }
+      if (showSuccess) showSessionRefreshSuccess();
+      return true;
     } catch (e) {
       setError(String(e));
+      return false;
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, []);
+  }, [showSessionRefreshSuccess]);
+
+  const handleSessionRefresh = useCallback(() => {
+    const requestId = ++sessionRefreshRequestIdRef.current;
+    setSessionRefreshDone(false);
+    const inventoryRefresh = loadSessions(false, true, false);
+    const selectedTranscriptRefresh = selectedSessionId ? onRefreshSelectedSession?.() : null;
+    void (selectedTranscriptRefresh ?? inventoryRefresh).then((succeeded) => {
+      if (succeeded && sessionRefreshRequestIdRef.current === requestId) {
+        showSessionRefreshSuccess();
+      }
+    });
+  }, [loadSessions, onRefreshSelectedSession, selectedSessionId, showSessionRefreshSuccess]);
 
   useEffect(() => {
     refreshSessionInventoryRef.current = () => void loadSessions(false, true);
@@ -1131,7 +1153,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
               {t("sidebar.new")}
             </button>
             <button
-              onClick={() => loadSessions(false, true)}
+              onClick={handleSessionRefresh}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
                 background: sessionRefreshDone ? "rgba(74,222,128,0.18)" : "var(--bg-hover)",

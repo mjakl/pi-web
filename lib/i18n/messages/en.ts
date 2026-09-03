@@ -188,6 +188,7 @@ export const enMessages: Record<string, string> = {
     "files.audioLoadFailed": "Failed to load audio",
     "files.docxTooLarge": "DOCX too large for preview (>10MB)",
     "chat.loadingSession": "Loading session...",
+    "chat.transcriptRefreshFailed": "Could not refresh transcript: {error}",
     "chat.runningTool": "Running tool...",
     "chat.generatingToolInput": "Generating parameters...",
     "chat.runningNamedTool": "Running {name}...",

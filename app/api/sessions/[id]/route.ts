@@ -56,7 +56,12 @@ export async function GET(
 
     const header = sm.getHeader();
     let modified = header?.timestamp ?? new Date().toISOString();
-    try { modified = statSync(filePath).mtime.toISOString(); } catch { /* use header timestamp */ }
+    let fileSize: number | undefined;
+    try {
+      const fileStat = statSync(filePath);
+      modified = fileStat.mtime.toISOString();
+      fileSize = fileStat.size;
+    } catch { /* use header timestamp */ }
     const parentSessionId = header?.parentSession
       ? await resolveSessionIdByPath(header.parentSession)
       : undefined;
@@ -68,6 +73,7 @@ export async function GET(
       name: sessionName,
       created: header.timestamp,
       modified,
+      fileSize,
       messageCount: stats.totalMessages,
       firstMessage: firstUserMessage
         ? (() => {

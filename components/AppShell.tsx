@@ -100,6 +100,9 @@ export function AppShell() {
       };
     });
   }, []);
+  const handleSessionMetadataChange = useCallback((updated: SessionInfo) => {
+    setSelectedSession((current) => current?.id === updated.id ? { ...current, ...updated } : current);
+  }, []);
   const [activeSessionIds, setActiveSessionIds] = useState<Set<string>>(() => new Set());
   const handleActiveSessionIdsChange = useCallback((ids: Set<string>) => {
     setActiveSessionIds((previous) => {
@@ -225,6 +228,7 @@ export function AppShell() {
   const [systemTools, setSystemTools] = useState<ToolEntry[] | null>(null);
   const [systemInfoLoading, setSystemInfoLoading] = useState(false);
   const systemInfoLoaderRef = useRef<(() => Promise<void>) | null>(null);
+  const transcriptRefreshRef = useRef<(() => Promise<boolean>) | null>(null);
   const systemInfoLoadIdRef = useRef(0);
   const systemBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -242,6 +246,14 @@ export function AppShell() {
     systemInfoLoaderRef.current = loader;
     setSystemInfoLoading(false);
   }, []);
+
+  const handleTranscriptRefreshChange = useCallback((refresh: (() => Promise<boolean>) | null) => {
+    transcriptRefreshRef.current = refresh;
+  }, []);
+
+  const handleRefreshSelectedSession = useCallback(() => (
+    transcriptRefreshRef.current?.() ?? Promise.resolve(false)
+  ), []);
 
   // Session stats — populated by ChatWindow, displayed in the top bar and info panel
   const [sessionStats, setSessionStats] = useState<SessionStatsInfo | null>(null);
@@ -928,6 +940,7 @@ export function AppShell() {
         onActiveSessionIdsChange={handleActiveSessionIdsChange}
         onRunningSessionIdsChange={handleRunningSessionIdsChange}
         onSessionsChange={handleSessionsChange}
+        onRefreshSelectedSession={handleRefreshSelectedSession}
       />
       <div style={{ padding: "8px", flexShrink: 0, display: "flex", justifyContent: "space-between", gap: 4 }}>
         {([
@@ -1908,6 +1921,8 @@ export function AppShell() {
               onSystemPromptChange={handleSystemPromptChange}
               onSystemToolsChange={handleSystemToolsChange}
               onSystemInfoLoaderChange={handleSystemInfoLoaderChange}
+              onTranscriptRefreshChange={handleTranscriptRefreshChange}
+              onSessionMetadataChange={handleSessionMetadataChange}
               onSessionStatsChange={handleSessionStatsChange}
               onSessionStatsPanelOpen={openSessionStatsPanel}
               onContextUsageChange={handleContextUsageChange}
