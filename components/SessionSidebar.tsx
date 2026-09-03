@@ -107,6 +107,7 @@ interface Props {
   onRunningSessionIdsChange?: (ids: Set<string>) => void;
   onSessionsChange?: (sessions: SessionInfo[]) => void;
   onRefreshSelectedSession?: () => Promise<boolean>;
+  actionsAvailable: boolean;
 }
 
 interface WorktreeEntry {
@@ -273,7 +274,7 @@ function AnimatedDropdown({ open, children, style }: { open: boolean; children: 
   );
 }
 
-export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, onSessionsChange, onRefreshSelectedSession }: Props) {
+export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, onSessionsChange, onRefreshSelectedSession, actionsAvailable }: Props) {
   const { t } = useI18n();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [inventoryRevision, setInventoryRevision] = useState(0);
@@ -1778,6 +1779,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
             isActive={activeSessionIds.has(session.id)}
             isRunning={runningSessionIds.has(session.id)}
             isUnread={unreadSessionIds.has(session.id)}
+            actionsAvailable={actionsAvailable}
             onClick={() => handleSelectSessionFromList(session)}
             onRenamed={loadSessions}
             onStopped={(id) => {

@@ -1,12 +1,49 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { SessionInfo } from "@/lib/types";
 import { dispatchSessionRowContextMenu } from "@/lib/session-row-context-menu";
 import { formatRelativeTime } from "@/lib/i18n/format";
 import { useI18n } from "@/hooks/useI18n";
 
 export const SESSION_ITEM_HEIGHT = 54;
+
+const TABBABLE_SELECTOR = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
+type MenuPosition = {
+  top: number;
+  left: number;
+  anchorTop: number;
+  anchorLeft: number;
+  isActive: boolean;
+  transient: boolean;
+};
+
+type ActionSurface =
+  | { kind: "idle" }
+  | { kind: "menu"; position: MenuPosition }
+  | { kind: "rename" }
+  | { kind: "confirm-stop" }
+  | { kind: "confirm-delete" };
+
+type FocusPolicy = "none" | "trigger" | "trigger-if-owned" | "surface" | HTMLElement;
+
+const IDLE_ACTION_SURFACE: ActionSurface = { kind: "idle" };
+
+const menuItemStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  height: 34,
+  padding: "0 10px",
+  border: 0,
+  borderRadius: 5,
+  background: "transparent",
+  color: "var(--text)",
+  cursor: "pointer",
+  textAlign: "left",
+  fontSize: 12,
+};
 
 const SESSION_INDICATORS = {
   running: {
@@ -98,6 +135,7 @@ export function SessionItem({
   isActive,
   isRunning,
   isUnread,
+  actionsAvailable,
   onClick,
   onRenamed,
   onStopped,
@@ -108,6 +146,7 @@ export function SessionItem({
   isActive?: boolean;
   isRunning?: boolean;
   isUnread?: boolean;
+  actionsAvailable: boolean;
   onClick: () => void;
   onRenamed?: () => void;
   onStopped?: (id: string) => void;
@@ -115,114 +154,247 @@ export function SessionItem({
 }) {
   const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
-  const [renaming, setRenaming] = useState(false);
+  const [actionSurface, setActionSurface] = useState<ActionSurface>(IDLE_ACTION_SURFACE);
   const [renameValue, setRenameValue] = useState("");
-  const [confirmStop, setConfirmStop] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const confirmationRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const menuHadFocusRef = useRef(false);
+  const pendingFocusRef = useRef<FocusPolicy>("none");
+  const renderedSurfaceRef = useRef(actionSurface);
+  const actionsAvailableRef = useRef(actionsAvailable);
+  const hasActionsRef = useRef(false);
+  const menuId = useId();
+  const stopDescriptionId = `${menuId}-stop-description`;
+  const deleteDescriptionId = `${menuId}-delete-description`;
+  const eligibleForActions = isActive || !session.transient;
+  const hasActions = actionsAvailable && eligibleForActions;
+  const renderedSurface = actionsAvailable ? actionSurface : IDLE_ACTION_SURFACE;
+  actionsAvailableRef.current = actionsAvailable;
+  hasActionsRef.current = hasActions;
+  renderedSurfaceRef.current = renderedSurface;
+  const menuPosition = renderedSurface.kind === "menu" ? renderedSurface.position : undefined;
+  const menuEligibilityValid = !menuPosition
+    || (menuPosition.isActive === Boolean(isActive)
+      && menuPosition.transient === Boolean(session.transient));
 
-  // Select the whole name once the rename input is mounted (startRename's
-  // immediate setTimeout can fire before the input exists).
-  useEffect(() => {
-    if (renaming) {
-      const id = requestAnimationFrame(() => inputRef.current?.select());
-      return () => cancelAnimationFrame(id);
+  const transitionActionSurface = useCallback((next: ActionSurface, focus: FocusPolicy) => {
+    const actionsAvailableNow = actionsAvailableRef.current;
+    const hasActionsNow = hasActionsRef.current;
+    renderedSurfaceRef.current = actionsAvailableNow ? next : IDLE_ACTION_SURFACE;
+    if (!actionsAvailableNow || (focus === "trigger" && !hasActionsNow)) {
+      pendingFocusRef.current = "none";
+    } else if (focus === "trigger-if-owned") {
+      pendingFocusRef.current = menuHadFocusRef.current && hasActionsNow ? "trigger" : "none";
+    } else {
+      pendingFocusRef.current = focus;
     }
-  }, [renaming]);
+    menuHadFocusRef.current = false;
+    setActionSurface(next);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!actionsAvailable) {
+      pendingFocusRef.current = "none";
+      if (actionSurface.kind !== "idle") transitionActionSurface(IDLE_ACTION_SURFACE, "none");
+      return;
+    }
+
+    const focus = pendingFocusRef.current;
+    pendingFocusRef.current = "none";
+    if (typeof focus === "object") {
+      if (focus.isConnected) focus.focus();
+    } else if (focus === "trigger") {
+      menuTriggerRef.current?.focus();
+    } else if (focus === "surface") {
+      if (renderedSurface.kind === "menu") menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+      else if (renderedSurface.kind === "rename") {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+      else confirmationRef.current?.focus();
+    }
+  }, [actionSurface, actionsAvailable, renderedSurface, transitionActionSurface]);
+
+  useLayoutEffect(() => {
+    if (!menuPosition) return;
+    const rect = menuTriggerRef.current?.getBoundingClientRect();
+    const anchorMoved = rect
+      && (rect.top !== menuPosition.anchorTop || rect.left !== menuPosition.anchorLeft);
+    if (!menuEligibilityValid || anchorMoved) transitionActionSurface(IDLE_ACTION_SURFACE, "trigger-if-owned");
+  });
+
+  useEffect(() => {
+    if (!menuPosition || !menuEligibilityValid) return;
+
+    const dismissOutside = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!menuRef.current?.contains(target) && !menuTriggerRef.current?.contains(target)) {
+        transitionActionSurface(IDLE_ACTION_SURFACE, "none");
+      }
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
+    };
+    const dismissOnResize = () => transitionActionSurface(IDLE_ACTION_SURFACE, "trigger-if-owned");
+    const dismissOnScroll = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) return;
+      transitionActionSurface(IDLE_ACTION_SURFACE, "trigger-if-owned");
+    };
+
+    document.addEventListener("pointerdown", dismissOutside, true);
+    document.addEventListener("keydown", dismissOnEscape);
+    window.addEventListener("resize", dismissOnResize);
+    window.addEventListener("scroll", dismissOnScroll, true);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside, true);
+      document.removeEventListener("keydown", dismissOnEscape);
+      window.removeEventListener("resize", dismissOnResize);
+      window.removeEventListener("scroll", dismissOnScroll, true);
+    };
+  }, [menuEligibilityValid, menuPosition, transitionActionSurface]);
 
   const firstMessage = session.firstMessage ?? "";
   const title = session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12);
+  const actionsLabel = t("sidebar.sessionActions", { title });
 
-  const startRename = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const startRename = useCallback(() => {
     if (session.transient) return;
     setRenameValue(session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12));
-    setRenaming(true);
-  }, [session.name, session.transient, firstMessage, session.id]);
+    transitionActionSurface({ kind: "rename" }, "surface");
+  }, [session.name, session.transient, firstMessage, session.id, transitionActionSurface]);
 
-  const commitRename = useCallback(async () => {
+  const commitRename = useCallback(async (restoreFocus = false) => {
     const name = renameValue.trim();
-    setRenaming(false);
+    transitionActionSurface(IDLE_ACTION_SURFACE, restoreFocus ? "trigger" : "none");
     // No-op when unchanged: the fallback title (first message / id) isn't a
     // real stored name, so don't persist it as one. (The rename input seeds
     // from the same server-collapsed firstMessage, so an untouched rename of
     // a skill-invoked session stays a no-op instead of persisting raw XML.)
     if (renameValue === title || name === (session.name ?? "")) return;
     try {
-      await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, {
+      const response = await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       onRenamed?.();
     } catch {
       // ignore
     }
-  }, [renameValue, session.id, session.name, onRenamed, title]);
+  }, [renameValue, session.id, session.name, onRenamed, title, transitionActionSurface]);
 
   const performStop = useCallback(async () => {
     if (!isActive) return;
-    setConfirmStop(false);
+    if (!session.transient) transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     setStopping(true);
     try {
       const response = await fetch(`/api/agent/${encodeURIComponent(session.id)}`, { method: "DELETE" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (session.transient) transitionActionSurface(IDLE_ACTION_SURFACE, "none");
       onStopped?.(session.id);
     } catch {
-      // The active marker remains, so the user can try again.
+      // Transient sessions keep their trigger only when Stop fails.
+      if (session.transient) transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     } finally {
       setStopping(false);
     }
-  }, [isActive, onStopped, session.id]);
-
-  const handleStopClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (e.shiftKey) void performStop();
-    else setConfirmStop(true);
-  }, [performStop]);
+  }, [isActive, onStopped, session.id, session.transient, transitionActionSurface]);
 
   const handleStopConfirm = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     void performStop();
   }, [performStop]);
 
-  const handleStopCancel = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setConfirmStop(false);
-  }, []);
-
   const performDelete = useCallback(async () => {
     if (session.transient) return;
-    setConfirmDelete(false);
     setDeleting(true);
     try {
-      await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "DELETE" });
+      const response = await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      transitionActionSurface(IDLE_ACTION_SURFACE, "none");
       onDeleted?.(session.id);
     } catch {
       setDeleting(false);
+      transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     }
-  }, [session.id, session.transient, onDeleted]);
-
-  const handleDeleteClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (e.shiftKey) {
-      void performDelete();
-    } else {
-      setConfirmDelete(true);
-    }
-  }, [performDelete]);
+  }, [session.id, session.transient, onDeleted, transitionActionSurface]);
 
   const handleDeleteConfirm = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     void performDelete();
   }, [performDelete]);
 
-  const handleDeleteCancel = useCallback((e: React.MouseEvent) => {
+  const handleCancel = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    setConfirmDelete(false);
-  }, []);
+    transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
+  }, [transitionActionSurface]);
+
+  const closeWhenFocusLeaves = useCallback((e: React.FocusEvent) => {
+    if (renderedSurfaceRef.current.kind !== "menu") return;
+    const next = e.relatedTarget as Node | null;
+    if (menuRef.current?.contains(next) || menuTriggerRef.current?.contains(next)) return;
+    transitionActionSurface(IDLE_ACTION_SURFACE, "none");
+  }, [transitionActionSurface]);
+
+  const handleMenuKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+    const buttons = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+    const leavingBackward = e.shiftKey && e.target === buttons[0];
+    const leavingForward = !e.shiftKey && e.target === buttons.at(-1);
+    if (!leavingBackward && !leavingForward) return;
+
+    e.preventDefault();
+    const trigger = menuTriggerRef.current;
+    let destination: HTMLElement | null = trigger;
+    if (leavingForward && trigger) {
+      const tabbable = [...document.querySelectorAll<HTMLElement>(TABBABLE_SELECTOR)]
+        .filter((element) => element.tabIndex >= 0 && !element.closest("[hidden], [inert]") && !menuRef.current?.contains(element));
+      destination = tabbable[tabbable.indexOf(trigger) + 1] ?? trigger;
+    }
+    transitionActionSurface(IDLE_ACTION_SURFACE, destination ?? "none");
+  }, [transitionActionSurface]);
+
+  const toggleMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (menuPosition) {
+      transitionActionSurface(IDLE_ACTION_SURFACE, "none");
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const width = 144;
+    const height = (Number(Boolean(isActive)) + (session.transient ? 0 : 2)) * 34 + 8;
+    transitionActionSurface({
+      kind: "menu",
+      position: {
+        left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
+        top: rect.bottom + 4 + height <= window.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4),
+        anchorTop: rect.top,
+        anchorLeft: rect.left,
+        isActive: Boolean(isActive),
+        transient: Boolean(session.transient),
+      },
+    }, "surface");
+  }, [isActive, menuPosition, session.transient, transitionActionSurface]);
+
+  const chooseMenuAction = useCallback((e: React.MouseEvent, action: "stop" | "rename" | "delete") => {
+    e.stopPropagation();
+    if (action === "rename") startRename();
+    else if (action === "stop") {
+      if (e.shiftKey) void performStop();
+      else transitionActionSurface({ kind: "confirm-stop" }, "surface");
+    } else if (e.shiftKey) void performDelete();
+    else transitionActionSurface({ kind: "confirm-delete" }, "surface");
+  }, [performDelete, performStop, startRename, transitionActionSurface]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const handled = dispatchSessionRowContextMenu({
@@ -243,8 +415,8 @@ export function SessionItem({
   return (
     <div
       data-session-inventory-id={session.id}
-      onClick={confirmStop || confirmDelete || renaming ? undefined : onClick}
-      onContextMenu={confirmStop || confirmDelete || renaming ? undefined : handleContextMenu}
+      onClick={renderedSurface.kind === "idle" || renderedSurface.kind === "menu" ? onClick : undefined}
+      onContextMenu={renderedSurface.kind === "idle" || renderedSurface.kind === "menu" ? handleContextMenu : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); }}
       style={{
@@ -253,13 +425,11 @@ export function SessionItem({
         alignItems: "center",
         paddingLeft: 14,
         paddingRight: 8,
-        cursor: confirmStop || confirmDelete || renaming ? "default" : "pointer",
-        background: confirmStop
-          ? "rgba(239,68,68,0.06)"
-          : confirmDelete
+        cursor: renderedSurface.kind === "idle" || renderedSurface.kind === "menu" ? "pointer" : "default",
+        background: renderedSurface.kind === "confirm-stop" || renderedSurface.kind === "confirm-delete"
           ? "rgba(239,68,68,0.06)"
           : isSelected ? "var(--bg-selected)" : hovered ? "var(--bg-hover)" : "transparent",
-        borderLeft: confirmStop || confirmDelete
+        borderLeft: renderedSurface.kind === "confirm-stop" || renderedSurface.kind === "confirm-delete"
           ? "2px solid #ef4444"
           : isSelected ? "2px solid var(--accent)" : "2px solid transparent",
         transition: "background 0.1s",
@@ -268,13 +438,15 @@ export function SessionItem({
         overflow: "hidden",
       }}
     >
-      {confirmStop ? (
+      {renderedSurface.kind === "confirm-stop" ? (
         <>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 10, lineHeight: 1.25, color: "var(--text)", overflowWrap: "anywhere" }}>
+          <div id={stopDescriptionId} style={{ flex: 1, minWidth: 0, fontSize: 10, lineHeight: 1.25, color: "var(--text)", overflowWrap: "anywhere" }}>
             {t("sidebar.stopSessionWarning")}
           </div>
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
             <button
+              ref={confirmationRef}
+              aria-describedby={stopDescriptionId}
               onClick={handleStopConfirm}
               style={{
                 height: 30, padding: "0 9px", background: "#ef4444", border: "none",
@@ -284,7 +456,8 @@ export function SessionItem({
               {t("sidebar.stop")}
             </button>
             <button
-              onClick={handleStopCancel}
+              aria-describedby={stopDescriptionId}
+              onClick={handleCancel}
               style={{
                 height: 30, padding: "0 8px", background: "var(--bg)", border: "1px solid var(--border)",
                 borderRadius: 6, color: "var(--text-muted)", cursor: "pointer", fontSize: 11, fontWeight: 500,
@@ -294,14 +467,16 @@ export function SessionItem({
             </button>
           </div>
         </>
-      ) : confirmDelete ? (
+      ) : renderedSurface.kind === "confirm-delete" ? (
         /* ── Delete confirmation: same height, two flat buttons ── */
         <>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {t("sidebar.deleteSession", { title: title.slice(0, 22) + (title.length > 22 ? "…" : "") })}
+          <div id={deleteDescriptionId} style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {t("sidebar.deleteSession", { title })}
           </div>
           <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
             <button
+              ref={confirmationRef}
+              aria-describedby={deleteDescriptionId}
               onClick={handleDeleteConfirm}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
@@ -321,7 +496,8 @@ export function SessionItem({
               {t("sidebar.delete")}
             </button>
             <button
-              onClick={handleDeleteCancel}
+              aria-describedby={deleteDescriptionId}
+              onClick={handleCancel}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
                 height: 30, padding: "0 11px",
@@ -335,18 +511,26 @@ export function SessionItem({
             </button>
           </div>
         </>
-      ) : renaming ? (
+      ) : renderedSurface.kind === "rename" ? (
         /* ── Rename: input fills the same row ── */
         <input
           ref={inputRef}
+          aria-label={t("sidebar.renameSession", { title })}
           value={renameValue}
           onChange={(e) => setRenameValue(e.target.value)}
-          onBlur={commitRename}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commitRename();
-            if (e.key === "Escape") setRenaming(false);
+          onBlur={(e) => {
+            if (e.relatedTarget !== menuTriggerRef.current && renderedSurfaceRef.current.kind === "rename") {
+              void commitRename();
+            }
           }}
-          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void commitRename(true);
+            if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
+            }
+          }}
           style={{
             flex: 1,
             fontSize: 12,
@@ -406,95 +590,68 @@ export function SessionItem({
             </div>
           </div>
 
-          {/* Action buttons — shown on hover */}
-          {hovered && (isActive || !session.transient) && (
-            <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          <div style={{ width: 28, height: 32, flexShrink: 0, alignSelf: "flex-start", marginTop: 5 }}>
+            {hasActions && (
+              <button
+                ref={menuTriggerRef}
+                type="button"
+                aria-label={actionsLabel}
+                aria-controls={menuId}
+                aria-expanded={Boolean(menuPosition)}
+                onClick={toggleMenu}
+                onFocus={() => { menuHadFocusRef.current = false; }}
+                onBlur={closeWhenFocusLeaves}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 28, height: 28, padding: 0,
+                  background: menuPosition ? "var(--bg-selected)" : "transparent",
+                  border: "1px solid transparent", borderRadius: 6,
+                  color: "var(--text-muted)", cursor: "pointer",
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="12" r="1.8" />
+                  <circle cx="12" cy="12" r="1.8" />
+                  <circle cx="19" cy="12" r="1.8" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {menuPosition && createPortal(
+            <div
+              ref={menuRef}
+              id={menuId}
+              role="group"
+              aria-label={actionsLabel}
+              style={{
+                position: "fixed", top: menuPosition.top, left: menuPosition.left, zIndex: 1000,
+                width: "min(144px, calc(100vw - 16px))", maxHeight: "calc(100vh - 16px)", overflowY: "auto",
+                padding: 4, background: "var(--bg)", border: "1px solid var(--border)",
+                borderRadius: 7, boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onFocusCapture={() => { menuHadFocusRef.current = true; }}
+              onBlur={closeWhenFocusLeaves}
+              onKeyDown={handleMenuKeyDown}
+            >
               {isActive && (
-                <button
-                  onClick={handleStopClick}
-                  title={t("sidebar.stopWithShiftClick")}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 32, height: 32, padding: 0,
-                    background: "var(--bg-hover)", border: "1px solid var(--border)",
-                    borderRadius: 7, color: "var(--text-muted)", cursor: "pointer", flexShrink: 0,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "rgba(239,68,68,0.08)";
-                    e.currentTarget.style.color = "#ef4444";
-                    e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "var(--bg-hover)";
-                    e.currentTarget.style.color = "var(--text-muted)";
-                    e.currentTarget.style.borderColor = "var(--border)";
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <rect x="6" y="6" width="12" height="12" rx="1" />
-                  </svg>
+                <button type="button" title={t("sidebar.stopWithShiftClick")} onClick={(e) => chooseMenuAction(e, "stop")} style={menuItemStyle}>
+                  {t("sidebar.stop")}
                 </button>
               )}
               {!session.transient && (
                 <>
-              <button
-                onClick={startRename}
-                title={t("sidebar.rename")}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 32, height: 32, padding: 0,
-                  background: "var(--bg-hover)", border: "1px solid var(--border)",
-                  borderRadius: 7, color: "var(--text-muted)",
-                  cursor: "pointer", flexShrink: 0,
-                  transition: "background 0.12s, color 0.12s, border-color 0.12s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "var(--bg-selected)";
-                  e.currentTarget.style.color = "var(--accent)";
-                  e.currentTarget.style.borderColor = "rgba(37,99,235,0.35)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "var(--bg-hover)";
-                  e.currentTarget.style.color = "var(--text-muted)";
-                  e.currentTarget.style.borderColor = "var(--border)";
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                </svg>
-              </button>
-              <button
-                onClick={handleDeleteClick}
-                title={t("sidebar.deleteWithShiftClick")}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 32, height: 32, padding: 0,
-                  background: "var(--bg-hover)", border: "1px solid var(--border)",
-                  borderRadius: 7, color: "var(--text-muted)",
-                  cursor: "pointer", flexShrink: 0,
-                  transition: "background 0.12s, color 0.12s, border-color 0.12s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(239,68,68,0.08)";
-                  e.currentTarget.style.color = "#ef4444";
-                  e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "var(--bg-hover)";
-                  e.currentTarget.style.color = "var(--text-muted)";
-                  e.currentTarget.style.borderColor = "var(--border)";
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                  <path d="M10 11v6M14 11v6" />
-                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                </svg>
-              </button>
+                  <button type="button" onClick={(e) => chooseMenuAction(e, "rename")} style={menuItemStyle}>
+                    {t("sidebar.rename")}
+                  </button>
+                  <button type="button" title={t("sidebar.deleteWithShiftClick")} onClick={(e) => chooseMenuAction(e, "delete")} style={{ ...menuItemStyle, color: "#ef4444" }}>
+                    {t("sidebar.delete")}
+                  </button>
                 </>
               )}
-            </div>
+            </div>,
+            document.body,
           )}
         </>
       )}
