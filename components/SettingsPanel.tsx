@@ -81,7 +81,7 @@ function GeneralSettings({ sessionId, toolPresetControl, soundEnabled, onSoundTo
   const selectToolPreset = (preset: ToolPreset) => {
     setPreferredToolPreset(preset);
     setPreferredToolPresetState(preset);
-    toolPresetControl?.onChange(preset);
+    if (toolPresetControl?.preset !== preset) toolPresetControl?.onChange(preset);
   };
 
   useEffect(() => {
