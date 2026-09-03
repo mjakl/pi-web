@@ -8,7 +8,7 @@ const jiti = createJiti(import.meta.url, {
 });
 const React = await jiti.import("react");
 const { renderToStaticMarkup } = await jiti.import("react-dom/server");
-const { ChatInput, ModelErrorBanner, ModelScopeWarningBanner, canClearBuiltinCommandInput, canRestoreUserMessage, canRunBuiltinSlashCommandWhileStreaming, compressImageFile, filterModelOptions, getUpwardMenuMaxHeight, getUserMessageText, getUserMessageDraftImages, isExactSlashCommand, shouldCompressImageFile } = await jiti.import("./ChatInput.tsx");
+const { ChatInput, ModelErrorBanner, ModelScopeWarningBanner, canClearBuiltinCommandInput, canRestoreUserMessage, canRunBuiltinSlashCommandWhileStreaming, compressImageFile, filterModelOptions, getStreamingSubmissionAction, getUpwardMenuMaxHeight, getUserMessageText, getUserMessageDraftImages, isExactSlashCommand, shouldCompressImageFile } = await jiti.import("./ChatInput.tsx");
 const { ModelSelector } = await jiti.import("./ModelSelector.tsx");
 const { clearDraft, getDraft, mergeRestoredSubmissionDraft, mergeRestoredSubmissionText, rekeyDraft, setDraft } = await jiti.import("@/lib/draft-store.ts");
 
@@ -57,34 +57,42 @@ test("keeps the model selector visible when a model error leaves no options", ()
   assert.match(html, /title="No available models"/);
 });
 
-test("renders the read-only tool preset as the active selection", () => {
+test("groups model and reasoning on the left and keeps Compact separate", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
       onSend() {},
       onAbort() {},
-      onToolPresetChange() {},
+      onModelChange() {},
+      onThinkingLevelChange() {},
+      onCompact() {},
       isStreaming: false,
-      toolPreset: "read-only",
+      model: { provider: "openai", modelId: "gpt-5.4" },
+      modelList: [{ provider: "openai", id: "gpt-5.4", name: "GPT-5.4" }],
+      thinkingLevel: "high",
     }),
   );
 
-  assert.match(html, /title="Change tool preset: read-only"/);
-  assert.match(html, />read-only<\/span>/);
+  const settingsGroup = html.indexOf('class="composer-settings-group"');
+  const model = html.indexOf('title="Change model"');
+  const reasoning = html.indexOf('aria-label="Change reasoning level"');
+  const immediateActions = html.indexOf('class="composer-immediate-actions"');
+  const compact = html.indexOf('aria-label="Compact context"');
+  assert.ok(settingsGroup < model && model < reasoning && reasoning < immediateActions && immediateActions < compact);
 });
 
-test("renders the empty tool preset as Chat only", () => {
+test("does not render tool or completion sound settings in the composer", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
       onSend() {},
       onAbort() {},
       onToolPresetChange() {},
+      onSoundToggle() {},
       isStreaming: false,
-      toolPreset: "none",
     }),
   );
 
-  assert.match(html, /title="Change tool preset: Chat only"/);
-  assert.match(html, />Chat only<\/span>/);
+  assert.doesNotMatch(html, /Change tool preset/);
+  assert.doesNotMatch(html, /completion sound/i);
 });
 
 test("shows and locks the optimistic model while a switch is pending", () => {
@@ -159,6 +167,55 @@ test("labels the model selector from the English message package", () => {
 test("caps an upward menu to the visible space above its anchor", () => {
   assert.equal(getUpwardMenuMaxHeight(343, 36), 299);
   assert.equal(getUpwardMenuMaxHeight(40, 36), 0);
+});
+
+test("keeps one composer action slot across idle, agent, and non-agent busy states", () => {
+  const render = (props) => renderToStaticMarkup(React.createElement(ChatInput, {
+    onSend() {},
+    onAbort() {},
+    ...props,
+  }));
+  const idle = render({ isStreaming: false });
+  const agent = render({ isStreaming: true, onSteer() {}, onFollowUp() {} });
+  const busy = render({ isStreaming: true });
+
+  for (const html of [idle, agent, busy]) {
+    assert.match(html, /class="composer-action-slot" style="width:128px;min-width:128px/);
+  }
+  assert.match(idle, />Send<\/button>/);
+  assert.match(agent, />Steer<\/button>/);
+  assert.match(agent, /aria-label="Select run action"/);
+  assert.match(agent, /hidden=""/);
+  assert.doesNotMatch(busy, /aria-label="Select run action"/);
+});
+
+test("uses the selected streaming action and falls back only when unavailable", () => {
+  assert.equal(getStreamingSubmissionAction("steer", true, true), "steer");
+  assert.equal(getStreamingSubmissionAction("followup", true, true), "followup");
+  assert.equal(getStreamingSubmissionAction("steer", false, true), "followup");
+  assert.equal(getStreamingSubmissionAction("followup", true, false), "steer");
+  assert.equal(getStreamingSubmissionAction("steer", false, false), null);
+});
+
+test("text or images enable the selected streaming action", () => {
+  const draftKey = "composer-action-image";
+  const render = () => renderToStaticMarkup(React.createElement(ChatInput, {
+    onSend() {},
+    onAbort() {},
+    onSteer() {},
+    onFollowUp() {},
+    isStreaming: true,
+    draftKey,
+  }));
+
+  clearDraft(draftKey);
+  const emptyAction = render().match(/<button[^>]*title="Interrupt the current run[^>]*>/)?.[0];
+  assert.match(emptyAction, /disabled=""/);
+
+  setDraft(draftKey, { value: "", images: [{ data: "AQID", mimeType: "image/png" }] });
+  const imageAction = render().match(/<button[^>]*title="Interrupt the current run[^>]*>/)?.[0];
+  assert.doesNotMatch(imageAction, /disabled=""/);
+  clearDraft(draftKey);
 });
 
 test("compresses large images while preserving small images and GIFs", async () => {

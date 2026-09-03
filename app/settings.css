@@ -899,16 +899,25 @@
   font-weight: 400;
 }
 
+.settings-tool-options {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .settings-theme-option[aria-checked="true"] {
   background: var(--bg-selected);
   color: var(--accent);
   font-weight: 600;
 }
 
-.settings-theme-option:not([aria-checked="true"]):hover,
-.settings-theme-option:focus-visible {
+.settings-theme-option:not(:disabled):not([aria-checked="true"]):hover,
+.settings-theme-option:not(:disabled):focus-visible {
   background: var(--bg-hover);
   outline: none;
+}
+
+.settings-theme-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .settings-theme-option-label {
