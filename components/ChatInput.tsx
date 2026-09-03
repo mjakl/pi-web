@@ -2043,7 +2043,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
         {/* Bash mode status label */}
         {bashMode && (
-          <div className="text-xs px-2 py-1" style={{ color: bashExcluded ? "var(--text-muted)" : "var(--accent)", marginTop: 4 }}>
+          <div style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem", lineHeight: "calc(1 / 0.75)", color: bashExcluded ? "var(--text-muted)" : "var(--accent)", marginTop: 4 }}>
              {t("chat.shell")} · {bashExcluded ? t("chat.outputLocal") : t("chat.outputModel")}
           </div>
         )}
