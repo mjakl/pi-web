@@ -1,8 +1,7 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/lib/error-message";
-import { createPortal } from "react-dom";
 import { useI18n } from "@/hooks/useI18n";
 
 interface DirectoryEntry {
@@ -58,7 +57,7 @@ interface Props {
 
 export function DirectoryPicker({ onCancel, onSelect, initialPath, busy = false, error }: Props) {
   const { t } = useI18n();
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const [currentPath, setCurrentPath] = useState("");
   const [parentDirectory, setParentDirectory] = useState<string | null>(null);
   const [pathInput, setPathInput] = useState(initialPath ?? "");
@@ -85,8 +84,18 @@ export function DirectoryPicker({ onCancel, onSelect, initialPath, busy = false,
     }
   }, []);
 
+  // showModal() supplies the backdrop, the focus trap, focus restoration and
+  // the top layer this dialog previously hand-rolled with a portal.
   useEffect(() => {
-    setPortalTarget(document.body);
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+
+  useEffect(() => {
     void navigateTo(initialPath || undefined);
   }, [initialPath, navigateTo]);
 
@@ -99,24 +108,22 @@ export function DirectoryPicker({ onCancel, onSelect, initialPath, busy = false,
   const canSelect = Boolean(currentPath) && !hasUncommittedPath && !busy;
   const canNavigateUp = Boolean(parentDirectory) || isWindowsDriveRoot(currentPath);
 
-  if (!portalTarget) return null;
-
-  return createPortal(
-    <div
-      className="directory-picker-backdrop"
-      role="dialog"
-      aria-modal="true"
+  return (
+    <dialog
+      ref={dialogRef}
+      className="directory-picker-dialog"
       aria-label={t("directoryPicker.selectDirectory")}
+      onCancel={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        // Own the key so the global Esc shortcut cannot abort the turn
+        // running behind this dialog.
+        event.preventDefault();
+        if (!busy) onCancel();
+      }}
       onClick={(event) => {
         if (event.target === event.currentTarget && !busy) onCancel();
       }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && !busy) {
-          event.preventDefault();
-          onCancel();
-        }
-      }}
-      style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.35)" }}
     >
       <div className="directory-picker-panel" style={{ width: 520, maxWidth: "calc(100vw - 16px)", height: "min(620px, calc(100dvh - 16px))", maxHeight: "calc(100dvh - 16px)", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, padding: "12px 18px", borderBottom: "1px solid var(--border)" }}>
@@ -227,7 +234,6 @@ export function DirectoryPicker({ onCancel, onSelect, initialPath, busy = false,
           </button>
         </div>
       </div>
-    </div>,
-    portalTarget,
+    </dialog>
   );
 }

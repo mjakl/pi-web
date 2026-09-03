@@ -1729,3 +1729,19 @@ span.linenumber {
     inset: -5px 0;
   }
 }
+
+/* Directory picker uses <dialog>, matching the other modals: showModal()
+   supplies the backdrop, focus trap and top layer. Reset the UA dialog box so
+   the panel inside keeps owning its own size. */
+.directory-picker-dialog {
+  margin: auto;
+  padding: 0;
+  border: 0;
+  max-width: none;
+  max-height: none;
+  background: transparent;
+  color: var(--text);
+}
+.directory-picker-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.35);
+}
