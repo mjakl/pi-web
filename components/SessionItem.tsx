@@ -77,7 +77,7 @@ const SESSION_INDICATORS = {
     color: "#16a34a",
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-        <circle cx="7" cy="7" r="3" fill="currentColor" />
+        <circle cx="7" cy="7" r="5" fill="currentColor" />
       </svg>
     ),
   },
@@ -97,11 +97,7 @@ const SESSION_INDICATORS = {
     color: "#0891b2",
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ display: "block" }}>
-        <circle cx="7" cy="7" r="2.5" fill="currentColor" />
-        <circle cx="7" cy="7" r="3" stroke="currentColor" strokeWidth="1.4" opacity="0.32">
-          <animate attributeName="r" values="3;6;3" dur="1.6s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0.32;0;0.32" dur="1.6s" repeatCount="indefinite" />
-        </circle>
+        <circle cx="7" cy="7" r="5" fill="currentColor" />
       </svg>
     ),
   },
@@ -564,15 +560,10 @@ export function SessionItem({
                 {title}
               </span>
             </div>
-            <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 8, color: "var(--text-dim)", fontSize: 11, minWidth: 0 }}>
+            <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 8, color: "var(--text-dim)", fontSize: 11, minWidth: 0, overflow: "hidden" }}>
               <SessionIndicator kind={isRunning ? "running" : isActive ? "active" : "stopped"} />
               {isUnread && <SessionIndicator kind="unread" />}
-              <span title={session.modified}>{formatRelativeTime(session.modified)}</span>
-              {session.messageCount === undefined ? (
-                <span aria-label={t("sidebar.loading")}>…</span>
-              ) : (
-                <span>{t("sidebar.messagesCount", { count: session.messageCount })}</span>
-              )}
+              <span title={session.modified} style={{ whiteSpace: "nowrap", flexShrink: 0 }}>{formatRelativeTime(session.modified)}</span>
               {session.isWorktree && session.branch && (
                 <span
                   title={`Worktree: ${session.cwd}`}
@@ -590,8 +581,22 @@ export function SessionItem({
             </div>
           </div>
 
-          <div style={{ width: 28, height: 32, flexShrink: 0, alignSelf: "flex-start", marginTop: 5 }}>
-            {hasActions && (
+          <div
+            style={{
+              width: 44,
+              height: SESSION_ITEM_HEIGHT,
+              padding: "4px 0 5px",
+              boxSizing: "border-box",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              justifyContent: "space-between",
+              flexShrink: 0,
+              color: "var(--text-dim)",
+              fontSize: 11,
+            }}
+          >
+            {hasActions ? (
               <button
                 ref={menuTriggerRef}
                 type="button"
@@ -615,6 +620,16 @@ export function SessionItem({
                   <circle cx="19" cy="12" r="1.8" />
                 </svg>
               </button>
+            ) : <span />}
+            {session.messageCount === undefined ? (
+              <span aria-label={t("sidebar.loading")}>…</span>
+            ) : (
+              <span
+                title={t("sidebar.messagesCount", { count: session.messageCount })}
+                style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              >
+                {t("sidebar.messagesCount", { count: session.messageCount })}
+              </span>
             )}
           </div>
 

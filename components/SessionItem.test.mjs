@@ -111,7 +111,7 @@ test("each session indicator keeps its own label, colour, and glyph", () => {
 
   const active = renderIndicator("active");
   assert.match(active, /title="Session active" aria-label="Session active" style="[^"]*color:#16a34a"/);
-  assert.match(active, /<circle cx="7" cy="7" r="3" fill="currentColor">/);
+  assert.match(active, /<circle cx="7" cy="7" r="5" fill="currentColor">/);
 
   const stopped = renderIndicator("stopped");
   assert.match(stopped, /title="Session stopped" aria-label="Session stopped" style="[^"]*color:var\(--text-dim\)"/);
@@ -119,7 +119,8 @@ test("each session indicator keeps its own label, colour, and glyph", () => {
 
   const unread = renderIndicator("unread");
   assert.match(unread, /title="New activity" aria-label="New session activity" style="[^"]*color:#0891b2"/);
-  assert.match(unread, /<animate attributeName="r" values="3;6;3"/);
+  assert.match(unread, /<circle cx="7" cy="7" r="5" fill="currentColor">/);
+  assert.doesNotMatch(unread, /<animate/);
 });
 
 test("a session row titles itself from the name, then the first message, then the id", () => {
@@ -723,20 +724,39 @@ test("Shift-click bypasses Stop and Delete confirmations", async () => {
   }
 });
 
-test("opening and closing the out-of-flow menu preserves row geometry", async () => {
-  const view = await mountItem({ ...baseSession, name: "A very long session title that must stay truncated" });
+test("the fixed right rail keeps metadata and actions from changing left-row geometry", async () => {
+  const session = { ...baseSession, name: "A very long session title that must stay truncated", messageCount: 1000 };
+  const view = await mountItem(session);
   const row = view.container.firstElementChild;
   const trigger = view.container.querySelector("button[aria-controls]");
+  const rail = trigger.parentElement;
   const title = view.container.querySelector('[title="A very long session title that must stay truncated"]');
-  const titleStyle = title.getAttribute("style");
+  const left = title.parentElement;
+  const leftStyle = left.getAttribute("style");
 
   assert.equal(row.style.height, "54px");
-  assert.equal(trigger.parentElement.style.width, "28px");
+  assert.equal(rail.style.width, "44px");
+  assert.equal(rail.style.height, "54px");
+  assert.equal(rail.style.flexDirection, "column");
+  assert.equal(rail.style.justifyContent, "space-between");
+  assert.equal(rail.style.alignItems, "flex-end");
+  const count = rail.lastElementChild;
+  assert.equal(count.textContent, "1000 msgs");
+  assert.equal(count.title, "1000 msgs");
+  assert.equal(count.style.maxWidth, "100%");
+  assert.equal(count.style.overflow, "hidden");
+  assert.equal(count.style.textOverflow, "ellipsis");
+
+  await view.rerender({ ...session, messageCount: undefined });
+  assert.equal(trigger.parentElement, rail);
+  assert.equal(left.getAttribute("style"), leftStyle);
+  assert.equal(rail.querySelector('[aria-label="Loading..."]').textContent, "…");
+
   await click(trigger);
   assert.equal(document.querySelector('[role="group"]').parentElement, document.body);
-  assert.equal(title.getAttribute("style"), titleStyle);
+  assert.equal(left.getAttribute("style"), leftStyle);
   await act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
-  assert.equal(title.getAttribute("style"), titleStyle);
+  assert.equal(left.getAttribute("style"), leftStyle);
   await view.unmount();
 });
 
