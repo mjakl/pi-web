@@ -3,9 +3,9 @@ import {
   buildContextEntries as piBuildContextEntries,
   getAgentDir,
 } from "@earendil-works/pi-coding-agent";
-import { closeSync, type Dirent, existsSync, openSync, readSync, statSync } from "fs";
+import { closeSync, type Dirent, existsSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from "fs";
 import { readdir } from "fs/promises";
-import { isAbsolute, join, normalize as normalizePath, relative, resolve as resolvePath, sep } from "path";
+import { dirname, isAbsolute, join, normalize as normalizePath, relative, resolve as resolvePath, sep } from "path";
 import type { AgentMessage, ImageContent, SessionEntry, SessionHeader, SessionInfo, SessionContext } from "./types";
 import type { SessionEntry as PiSessionEntry } from "@earendil-works/pi-coding-agent";
 import { normalizeToolCalls } from "./normalize";
@@ -184,6 +184,11 @@ declare global {
 
 const SESSION_ID_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
 
+/** The id shape a session header may carry; also bounds ids taken from requests. */
+export function isValidSessionId(sessionId: unknown): sessionId is string {
+  return typeof sessionId === "string" && SESSION_ID_PATTERN.test(sessionId);
+}
+
 function defaultSessionsDir(): string {
   return join(getAgentDir(), "sessions");
 }
@@ -205,7 +210,7 @@ function resolvePathWithinDefaultSessions(
 async function findSessionPathById(sessionId: string): Promise<string | null> {
   // The filename is only a candidate hint; the bounded header check remains
   // authoritative so future layouts and malformed files use the full fallback.
-  if (!SESSION_ID_PATTERN.test(sessionId)) return null;
+  if (!isValidSessionId(sessionId)) return null;
 
   let projectDirs: Dirent[];
   const sessionsDir = resolvePath(defaultSessionsDir());
@@ -348,8 +353,7 @@ export function readSessionHeader(filePath: string): SessionHeader | null {
     const header = JSON.parse(firstLine) as Partial<SessionHeader>;
     if (
       header.type !== "session"
-      || typeof header.id !== "string"
-      || !SESSION_ID_PATTERN.test(header.id)
+      || !isValidSessionId(header.id)
       || typeof header.cwd !== "string"
       || !isAbsolute(header.cwd)
       || typeof header.timestamp !== "string"
@@ -362,6 +366,65 @@ export function readSessionHeader(filePath: string): SessionHeader | null {
     return header as SessionHeader;
   } catch {
     return null;
+  }
+}
+
+const LEGACY_BUILT_IN_SUBAGENT_META_TYPE = "pi-web:subagent";
+
+function hasLegacyBuiltInSubagentMetadata(lines: readonly string[]): boolean {
+  return lines.slice(1).some((line) => {
+    try {
+      const entry = JSON.parse(line) as { type?: string; customType?: string };
+      return entry.type === "custom" && entry.customType === LEGACY_BUILT_IN_SUBAGENT_META_TYPE;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * Before `filePath` is deleted, re-attach its direct children to its own
+ * parent, or promote them to roots when that parent is already gone. Children
+ * are selected by their bounded header before any full read. Legacy built-in
+ * subagent transcripts are historical user data and stay byte-for-byte
+ * unchanged.
+ */
+export function reparentChildSessions(filePath: string): void {
+  let newParentPath = readSessionHeader(filePath)?.parentSession;
+  if (newParentPath) {
+    try {
+      // The parent may have been deleted or moved already; treat it as absent.
+      readSessionHeader(newParentPath);
+    } catch {
+      newParentPath = undefined;
+    }
+  }
+
+  const targetPathKey = sessionPathKey(filePath);
+  const dir = dirname(filePath);
+  let siblings: string[];
+  try {
+    siblings = readdirSync(dir).filter(
+      (file) => file.endsWith(".jsonl") && sessionPathKey(join(dir, file)) !== targetPathKey,
+    );
+  } catch {
+    return;
+  }
+  for (const file of siblings) {
+    const childPath = join(dir, file);
+    try {
+      const parentSession = readSessionHeader(childPath)?.parentSession;
+      if (!parentSession || sessionPathKey(parentSession) !== targetPathKey) continue;
+
+      const lines = readFileSync(childPath, "utf8").split("\n");
+      if (hasLegacyBuiltInSubagentMetadata(lines)) continue;
+
+      // Rewrite only the generic child header with the new parentSession.
+      const header = JSON.parse(lines[0]) as { parentSession?: string };
+      header.parentSession = newParentPath;
+      lines[0] = JSON.stringify(header);
+      writeFileSync(childPath, lines.join("\n"));
+    } catch { /* skip malformed */ }
   }
 }
 

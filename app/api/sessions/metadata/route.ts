@@ -4,13 +4,11 @@ import {
   SESSION_METADATA_BATCH_SIZE,
   type SessionMetadataFingerprint,
 } from "@/lib/session-metadata-types";
-import { resolveSessionPath } from "@/lib/session-reader";
+import { isValidSessionId, resolveSessionPath } from "@/lib/session-reader";
 
 interface MetadataRequestEntry extends SessionMetadataFingerprint {
   id: string;
 }
-
-const SESSION_ID_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
 
 function parseEntries(value: unknown): MetadataRequestEntry[] | null {
   if (!Array.isArray(value) || value.length === 0 || value.length > SESSION_METADATA_BATCH_SIZE) return null;
@@ -20,8 +18,7 @@ function parseEntries(value: unknown): MetadataRequestEntry[] | null {
     if (!candidate || typeof candidate !== "object") return null;
     const { id, fileSize, modified } = candidate as Record<string, unknown>;
     if (
-      typeof id !== "string"
-      || !SESSION_ID_PATTERN.test(id)
+      !isValidSessionId(id)
       || typeof fileSize !== "number"
       || !Number.isSafeInteger(fileSize)
       || fileSize < 0

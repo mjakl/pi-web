@@ -1,8 +1,7 @@
-import { getSessionEntries, resolveSessionPath } from "./session-reader";
+import { getSessionEntries, isValidSessionId, resolveSessionPath } from "./session-reader";
 import {
   isBashOutputPathReferencedByEntries,
   isFilePathReferencedByEntries,
-  isValidSessionId,
 } from "./session-file-references-core";
 
 export async function isFilePathReferencedBySession(filePath: string, sessionId: string | null): Promise<boolean> {

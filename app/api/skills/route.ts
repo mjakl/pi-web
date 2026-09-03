@@ -5,7 +5,8 @@ import path from "path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { loadSkillsWithInstallInfo } from "@/lib/skills-service";
 import { setDisableModelInvocation } from "@/lib/skill-frontmatter";
-import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
+import { getAllowedFileRoots, isExistingPathAllowed } from "@/lib/file-access";
+import { isExistingPathWithinRoots } from "@/lib/path-security";
 
 // GET /api/skills?cwd=<path>
 // Uses DefaultResourceLoader (same logic as AgentSession startup) so settings.json
@@ -16,8 +17,7 @@ export async function GET(req: Request) {
   if (!cwd) return NextResponse.json({ error: "cwd required" }, { status: 400 });
 
   try {
-    const allowedRoots = await getAllowedFileRoots();
-    if (!isExistingFilePathAllowed(cwd, allowedRoots)) {
+    if (!(await isExistingPathAllowed(cwd))) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
     return NextResponse.json(await loadSkillsWithInstallInfo(cwd));
@@ -36,12 +36,12 @@ export async function PATCH(req: Request) {
     const allowedRoots = new Set(await getAllowedFileRoots());
     allowedRoots.add(getAgentDir());
     // Globally installed skills live in ~/.agents/skills and are symlinked into
-    // the agent's skills dir; isExistingFilePathAllowed resolves the symlink, so
+    // the agent's skills dir; isExistingPathWithinRoots resolves the symlink, so
     // the real target sits outside getAgentDir(). Allow the global skills root
     // too (the SDK always treats ~/.agents/skills as trusted).
     const globalSkillsDir = path.join(homedir(), ".agents", "skills");
     if (existsSync(globalSkillsDir)) allowedRoots.add(globalSkillsDir);
-    if (!isExistingFilePathAllowed(filePath, allowedRoots)) {
+    if (!isExistingPathWithinRoots(filePath, allowedRoots)) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 

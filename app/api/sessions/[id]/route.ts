@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { existsSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { existsSync, statSync, unlinkSync } from "fs";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import {
   attachSessionProjectInfo,
@@ -8,28 +7,14 @@ import {
   resolveSessionIdByPath,
   invalidateSessionPathCache,
   buildSessionContext,
-  readSessionHeader,
+  reparentChildSessions,
 } from "@/lib/session-reader";
-import { sessionPathKey } from "@/lib/session-path";
 import { getRpcSession, stopRpcSession } from "@/lib/rpc-manager";
 import { projectTreeForResponse } from "@/lib/project-tree";
 import { computeSessionTotalActiveMs } from "@/lib/session-timing";
 import { computeSessionStats } from "@/lib/session-stats";
 import type { SessionEntry } from "@/lib/types";
 import { readSessionToolSelection } from "@/lib/session-tool-selection";
-
-const LEGACY_BUILT_IN_SUBAGENT_META_TYPE = "pi-web:subagent";
-
-function hasLegacyBuiltInSubagentMetadata(lines: readonly string[]): boolean {
-  return lines.slice(1).some((line) => {
-    try {
-      const entry = JSON.parse(line) as { type?: string; customType?: string };
-      return entry.type === "custom" && entry.customType === LEGACY_BUILT_IN_SUBAGENT_META_TYPE;
-    } catch {
-      return false;
-    }
-  });
-}
 
 export async function GET(
   req: Request,
@@ -147,50 +132,7 @@ export async function DELETE(
 
     // Stop first so no live runtime can append while files are reparented and removed.
     await stopRpcSession(id);
-
-    // Read only the bounded header before deleting.
-    let parentSessionPath = readSessionHeader(filePath)?.parentSession;
-    if (parentSessionPath) {
-      try {
-        // The parent may have been deleted or moved already; treat it as absent.
-        readSessionHeader(parentSessionPath);
-      } catch {
-        parentSessionPath = undefined;
-      }
-    }
-
-    // Re-attach all direct children to this session's parent (cascade re-parent)
-    // Scan sibling files in the same directory
-    const targetPathKey = sessionPathKey(filePath);
-    const dir = dirname(filePath);
-    try {
-      const files = readdirSync(dir).filter(
-        (file) => file.endsWith(".jsonl") && sessionPathKey(join(dir, file)) !== targetPathKey,
-      );
-      for (const file of files) {
-        const childPath = join(dir, file);
-        try {
-          const content = readFileSync(childPath, "utf8");
-          const lines = content.split("\n");
-          const header = JSON.parse(lines[0]) as { type?: string; parentSession?: string };
-          if (
-            header.type === "session" &&
-            header.parentSession &&
-            sessionPathKey(header.parentSession) === targetPathKey
-          ) {
-            // Legacy built-in subagent transcripts are historical user data.
-            // Leave them byte-for-byte unchanged when their parent is deleted.
-            if (hasLegacyBuiltInSubagentMetadata(lines)) continue;
-
-            // Rewrite only the generic child header with the new parentSession.
-            header.parentSession = parentSessionPath;
-            lines[0] = JSON.stringify(header);
-            writeFileSync(childPath, lines.join("\n"));
-          }
-        } catch { /* skip malformed */ }
-      }
-    } catch { /* skip if dir unreadable */ }
-
+    reparentChildSessions(filePath);
     unlinkSync(filePath);
     invalidateSessionPathCache(id);
     return NextResponse.json({ ok: true });

@@ -8,7 +8,7 @@ import {
   type SessionRowMetadata,
 } from "./session-metadata-types";
 
-function extractTextContent(message: unknown): string {
+export function extractTextContent(message: unknown): string {
   if (!message || typeof message !== "object") return "";
   const content = (message as { content?: unknown }).content;
   if (typeof content === "string") return content;
