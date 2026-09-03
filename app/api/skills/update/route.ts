@@ -3,7 +3,7 @@ import { runNpx } from "@/lib/npx";
 import type { SkillInstallScope } from "@/lib/api-types";
 import { buildSkillUpdateArgs } from "@/lib/skill-updates";
 import { loadSkillsWithInstallInfo } from "@/lib/skills-service";
-import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
+import { isExistingPathAllowed } from "@/lib/file-access";
 
 export async function POST(req: Request) {
   try {
@@ -20,8 +20,7 @@ export async function POST(req: Request) {
     if (!cwd || !pkg || !scope) {
       return NextResponse.json({ error: "cwd, package, and scope are required" }, { status: 400 });
     }
-    const allowedRoots = await getAllowedFileRoots();
-    if (!isExistingFilePathAllowed(cwd, allowedRoots)) {
+    if (!(await isExistingPathAllowed(cwd))) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 

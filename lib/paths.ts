@@ -28,6 +28,15 @@ export function isWindowsAbsolutePath(filePath: string): boolean {
 }
 
 /**
+ * Whether a request-supplied path is absolute in either convention, POSIX
+ * (`/repo`) or Windows drive/UNC (`D:\repo`, `\\server\share`), regardless
+ * of the platform Pi Web runs on.
+ */
+export function isAbsolutePath(filePath: string): boolean {
+  return filePath.startsWith("/") || isWindowsAbsolutePath(filePath);
+}
+
+/**
  * Convert a path to native separators. Chiefly for git output: git prints
  * POSIX-style absolute paths even on Windows (`D:/repo/sub`), which never
  * string-compares equal to the native paths Node and pi produce.

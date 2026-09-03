@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import {
-  getAllowedFileRoots,
-  isExistingFilePathAllowed,
-  isFilePathAllowed,
-  isWindowsAbsolutePath,
-  normalizeSlashes,
-} from "@/lib/file-access";
+import { getAllowedFileRoots } from "@/lib/file-access";
+import { isExistingPathWithinRoots, isPathWithinRoots } from "@/lib/path-security";
 import {
   DOCX_PREVIEW_MAX_BYTES,
   IMAGE_PREVIEW_MAX_BYTES,
@@ -26,7 +21,7 @@ import {
   validateUploadFileNames,
 } from "@/lib/file-upload";
 import { parseFormDataWithinLimit, RequestBodyTooLargeError } from "@/lib/bounded-form-data";
-import { samePath } from "@/lib/paths";
+import { isWindowsAbsolutePath, samePath, toSlashPath } from "@/lib/paths";
 
 const IGNORED_NAMES = new Set([
   "node_modules", ".git", ".next", "dist", "build", "__pycache__",
@@ -71,7 +66,7 @@ function getLanguage(filePath: string): string {
 
 function filePathFromSegments(segments: string[]): string {
   const joined = segments.join("/");
-  const slashJoined = normalizeSlashes(joined);
+  const slashJoined = toSlashPath(joined);
   if (isWindowsAbsolutePath(slashJoined)) return slashJoined;
   return "/" + joined.replace(/^\/+/, "");
 }
@@ -85,7 +80,7 @@ async function getUploadDirectory(segments: string[]): Promise<
 > {
   const directory = filePathFromSegments(segments);
   const allowedRoots = await getAllowedFileRoots();
-  if (!isFilePathAllowed(directory, allowedRoots)) {
+  if (!isPathWithinRoots(directory, allowedRoots)) {
     return { response: NextResponse.json({ error: "Access denied" }, { status: 403 }) };
   }
 
@@ -99,18 +94,10 @@ async function getUploadDirectory(segments: string[]): Promise<
     return { response: NextResponse.json({ error: "Upload target is not a directory" }, { status: 400 }) };
   }
 
-  // A browsable directory can be a symlink. Resolve both sides before writes
-  // so a symlink inside an allowed root cannot redirect uploads outside it.
+  // A browsable directory can be a symlink. Resolve it before writes so a
+  // symlink inside an allowed root cannot redirect uploads outside it.
   const realDirectory = fs.realpathSync(directory);
-  const realRoots = new Set<string>();
-  for (const root of allowedRoots) {
-    try {
-      realRoots.add(fs.realpathSync(root));
-    } catch {
-      // Ignore stale session roots that no longer exist.
-    }
-  }
-  if (!isFilePathAllowed(realDirectory, realRoots)) {
+  if (!isExistingPathWithinRoots(realDirectory, allowedRoots)) {
     return { response: NextResponse.json({ error: "Access denied" }, { status: 403 }) };
   }
 
@@ -433,7 +420,7 @@ export async function GET(
     const sessionId = request.nextUrl.searchParams.get("sessionId");
 
     const allowedRoots = await getAllowedFileRoots();
-    const allowedByRoot = isFilePathAllowed(filePath, allowedRoots);
+    const allowedByRoot = isPathWithinRoots(filePath, allowedRoots);
     const allowedBySessionReference =
       !allowedByRoot &&
       type !== "list" &&
@@ -454,7 +441,7 @@ export async function GET(
     const existingAuthorizationPath = stat ? filePath : path.dirname(filePath);
     if (
       !allowedBySessionReference
-      && !isExistingFilePathAllowed(existingAuthorizationPath, allowedRoots)
+      && !isExistingPathWithinRoots(existingAuthorizationPath, allowedRoots)
     ) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }

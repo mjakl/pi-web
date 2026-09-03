@@ -2,7 +2,7 @@ import { stat } from "fs/promises";
 import { resolve } from "path";
 import { NextResponse } from "next/server";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
+import { isExistingPathAllowed } from "@/lib/file-access";
 import { invalidateModelsCache } from "@/lib/models-cache";
 import { getProjectTrustStatus, trustProject } from "@/lib/project-trust";
 import { destroyRpcSessionsForCwd, hasBusyRpcSessionForCwd } from "@/lib/rpc-manager";
@@ -23,8 +23,7 @@ async function validateCwd(value: unknown): Promise<
     return { response: NextResponse.json({ error: "Directory does not exist" }, { status: 400 }) };
   }
 
-  const allowedRoots = await getAllowedFileRoots();
-  if (!isExistingFilePathAllowed(cwd, allowedRoots)) {
+  if (!(await isExistingPathAllowed(cwd))) {
     return { response: NextResponse.json({ error: "Access denied" }, { status: 403 }) };
   }
   return { cwd };

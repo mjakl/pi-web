@@ -3,12 +3,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
-import {
-  getAllowedFileRoots,
-  isExistingFilePathAllowed,
-  isFilePathAllowed,
-  isWindowsAbsolutePath,
-} from "@/lib/file-access";
+import { authorizeDirectory } from "@/lib/file-access";
 import { buildEntriesFromFiles, filterFileEntries, type FileIndexEntry } from "@/lib/file-fuzzy";
 
 const execFileAsync = promisify(execFile);
@@ -117,28 +112,11 @@ function listWithWalk(cwd: string): FileListing {
 export async function GET(req: NextRequest) {
   try {
     const cwd = req.nextUrl.searchParams.get("cwd")?.trim() ?? "";
-    if (!cwd || (!cwd.startsWith("/") && !isWindowsAbsolutePath(cwd))) {
-      return NextResponse.json({ error: "cwd must be an absolute path" }, { status: 400 });
+    const authorized = await authorizeDirectory(cwd);
+    if ("error" in authorized) {
+      return NextResponse.json({ error: authorized.error }, { status: authorized.status });
     }
     const query = req.nextUrl.searchParams.get("q")?.slice(0, MAX_QUERY_LENGTH) ?? "";
-
-    const allowedRoots = await getAllowedFileRoots();
-    if (!isFilePathAllowed(cwd, allowedRoots)) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
-    }
-
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(cwd);
-    } catch {
-      return NextResponse.json({ error: "Directory not found" }, { status: 404 });
-    }
-    if (!stat.isDirectory()) {
-      return NextResponse.json({ error: "Not a directory" }, { status: 400 });
-    }
-    if (!isExistingFilePathAllowed(cwd, allowedRoots)) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
-    }
 
     const cache = getIndexCache();
     const now = Date.now();

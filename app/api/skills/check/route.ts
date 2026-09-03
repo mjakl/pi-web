@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { SkillInstallScope } from "@/lib/api-types";
 import { checkSkillUpdates } from "@/lib/skill-updates";
 import { loadSkillsWithInstallInfo } from "@/lib/skills-service";
-import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
+import { isExistingPathAllowed } from "@/lib/file-access";
 
 export async function POST(req: Request) {
   try {
@@ -13,8 +13,7 @@ export async function POST(req: Request) {
     };
     const cwd = typeof body.cwd === "string" ? body.cwd : "";
     if (!cwd) return NextResponse.json({ error: "cwd required" }, { status: 400 });
-    const allowedRoots = await getAllowedFileRoots();
-    if (!isExistingFilePathAllowed(cwd, allowedRoots)) {
+    if (!(await isExistingPathAllowed(cwd))) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
