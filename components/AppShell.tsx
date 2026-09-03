@@ -1506,6 +1506,8 @@ export function AppShell({ piVersion }: { piVersion: string }) {
       <div
         ref={sidebarResizer.panelRef}
         id="session-sidebar"
+        inert={!sidebarOpen}
+        aria-hidden={sidebarOpen ? undefined : true}
         className={`sidebar-container${sidebarOpen ? " sidebar-open" : " sidebar-closed"}${mobileSidebarReady ? "" : " sidebar-mobile-pending"}${sidebarResizer.isResizing ? " sidebar-resizing" : ""}`}
         style={{
           "--sidebar-width": `${sidebarResizer.width}px`,
