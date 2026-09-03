@@ -519,7 +519,7 @@ test("eligibility changes close an open popup and restore focus only to an eligi
   }
 });
 
-test("boundary Tab closes the portal and follows the trigger's logical position", async () => {
+test("boundary Tab closes the popup and follows the trigger's logical position", async () => {
   const view = await mountItem(baseSession, { isActive: true });
   const next = document.createElement("button");
   next.textContent = "Next control";
@@ -700,19 +700,20 @@ test("session action controls include the session title in their accessible name
   }
 });
 
-test("Escape and outside presses dismiss the menu, with Escape restoring trigger focus", async () => {
+test("Escape dismisses the menu and restores trigger focus", async () => {
+  // The outside press that used to be asserted here is the UA's light dismiss
+  // now; see the native-popover test. Cleanup stays in a finally so a failed
+  // assertion cannot leave a mounted root behind and hang the whole file.
   const view = await mountItem(baseSession);
-  const trigger = view.container.querySelector("button[aria-controls]");
-
-  await click(trigger);
-  await act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
-  assert.equal(document.querySelector('[role="group"]'), null);
-  assert.equal(document.activeElement, trigger);
-
-  await click(trigger);
-  await act(() => document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
-  assert.equal(document.querySelector('[role="group"]'), null);
-  await view.unmount();
+  try {
+    const trigger = view.container.querySelector("button[aria-controls]");
+    await click(trigger);
+    await act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    assert.equal(document.querySelector('[role="group"]'), null);
+    assert.equal(document.activeElement, trigger);
+  } finally {
+    await view.unmount();
+  }
 });
 
 test("menu actions run without selecting the row", async () => {
@@ -772,7 +773,9 @@ test("the fixed right rail keeps metadata and actions from changing left-row geo
   assert.equal(rail.querySelector('[aria-label="Loading..."]').textContent, "…");
 
   await click(trigger);
-  assert.equal(document.querySelector('[role="group"]').parentElement, document.body);
+  // No portal any more: popover puts it in the top layer, so it escapes the
+  // row's clipping and stacking without moving in the tree.
+  assert.equal(document.querySelector('[role="group"]').getAttribute("popover"), "auto");
   assert.equal(left.getAttribute("style"), leftStyle);
   await act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   assert.equal(left.getAttribute("style"), leftStyle);
