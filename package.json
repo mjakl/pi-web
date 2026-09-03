@@ -29,19 +29,15 @@
     "package.json"
   ],
   "scripts": {
-    "dev": "next dev -H 127.0.0.1 -p 30141",
-    "dev:lan": "next dev -H 0.0.0.0 -p 30141",
+    "dev": "node bin/run-next.js dev -H 127.0.0.1 -p 30141",
+    "dev:lan": "node bin/run-next.js dev -H 0.0.0.0 -p 30141",
     "build": "next build --webpack",
-    "start": "next start -H 127.0.0.1 -p 30141",
-    "start:lan": "next start -H 0.0.0.0 -p 30141",
+    "start": "node bin/run-next.js start -H 127.0.0.1 -p 30141",
+    "start:lan": "node bin/run-next.js start -H 0.0.0.0 -p 30141",
     "lint": "eslint .",
     "test": "node --experimental-strip-types --test \"*.test.mjs\" \"app/**/*.test.mjs\" \"bin/**/*.test.mjs\" \"components/**/*.test.mjs\" \"hooks/**/*.test.mjs\" \"lib/**/*.test.mjs\" \"public/**/*.test.mjs\""
   },
   "dependencies": {
-    "@earendil-works/pi-agent-core": "0.84.3",
-    "@earendil-works/pi-ai": "0.84.3",
-    "@earendil-works/pi-coding-agent": "0.84.3",
-    "@earendil-works/pi-tui": "0.84.3",
     "ansi_up": "^6.0.6",
     "js-yaml": "^5.2.3",
     "next": "16.3.1",
@@ -53,6 +49,10 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@earendil-works/pi-agent-core": "0.84.3",
+    "@earendil-works/pi-ai": "0.84.3",
+    "@earendil-works/pi-coding-agent": "0.84.3",
+    "@earendil-works/pi-tui": "0.84.3",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25",
     "@types/proper-lockfile": "4.1.4",

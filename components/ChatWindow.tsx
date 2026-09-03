@@ -35,6 +35,7 @@ export interface ToolPresetControl {
 }
 
 interface Props {
+  piVersion: string;
   session: SessionInfo | null;
   sessionActive?: boolean;
   sessionRunning?: boolean;
@@ -183,7 +184,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = fa
   );
 }
 
-export function ChatWindow({ session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, onToolPresetControlChange, soundEnabled = true, playDoneSound = () => {}, unlockAudio }: Props) {
+export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, onToolPresetControlChange, soundEnabled = true, playDoneSound = () => {}, unlockAudio }: Props) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
 
@@ -637,7 +638,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                   web <span style={{ color: "var(--text)" }}>v{process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}</span>
                 </span>
                 <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                  pi <span style={{ color: "var(--text)" }}>v{process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}</span>
+                  pi <span style={{ color: "var(--text)" }}>v{piVersion}</span>
                 </span>
               </div>
             </div>
