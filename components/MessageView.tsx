@@ -797,7 +797,7 @@ function AssistantMessageView({
             border: "1px solid rgba(239,68,68,0.3)",
             borderRadius: 6,
             background: "rgba(239,68,68,0.07)",
-            color: "#ef4444",
+            color: "var(--danger)",
             fontFamily: "var(--font-mono)",
             fontSize: 12,
             lineHeight: 1.5,
@@ -976,7 +976,7 @@ function ThinkingBlock({ block, duration, sessionId, entryId, blockIndex }: {
         <div
           style={{
             padding: "8px 10px",
-            color: error ? "#f87171" : "var(--text-muted)",
+            color: error ? "var(--danger)" : "var(--text-muted)",
             fontSize: 12,
             lineHeight: 1.6,
             whiteSpace: "pre-wrap",
@@ -1036,7 +1036,7 @@ function ToolCallBlock({ block, result, duration }: { block: ToolCallContent; re
             textAlign: "left",
           }}
         >
-          <span style={{ color: isError ? "#f87171" : "#16a34a", fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
+          <span style={{ color: isError ? "var(--danger)" : "var(--success)", fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
             {block.toolName}
           </span>
           <span style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
@@ -1195,7 +1195,7 @@ function SplitDiffCellView({ cell, side }: { cell: SplitDiffCell; side: "left" |
   const marker =
     cell.type === "added" ? "+" : cell.type === "removed" ? "-" : " ";
   const markerColor =
-    cell.type === "added" ? "#22c55e" : cell.type === "removed" ? "#f87171" : "var(--text-dim)";
+    cell.type === "added" ? "var(--success)" : cell.type === "removed" ? "var(--danger)" : "var(--text-dim)";
 
   return (
     <div
@@ -1264,12 +1264,6 @@ function PatchTextView({ text }: { text: string }) {
           kind === "removed" ? "rgba(248,113,113,0.13)" :
           kind === "hunk" ? "rgba(96,165,250,0.12)" :
           "transparent";
-        const color =
-          kind === "added" ? "#22c55e" :
-          kind === "removed" ? "#f87171" :
-          kind === "hunk" ? "var(--accent)" :
-          "var(--text)";
-
         return (
           <div
             key={i}
@@ -1277,9 +1271,9 @@ function PatchTextView({ text }: { text: string }) {
               display: "flex",
               background: bg,
               borderLeft: kind === "added"
-                ? "3px solid #22c55e"
+                ? "3px solid var(--success)"
                 : kind === "removed"
-                ? "3px solid #f87171"
+                ? "3px solid var(--danger)"
                 : kind === "hunk"
                 ? "3px solid var(--accent)"
                 : "3px solid transparent",
@@ -1299,7 +1293,10 @@ function PatchTextView({ text }: { text: string }) {
             >
               {i + 1}
             </span>
-            <span style={{ padding: "0 10px", whiteSpace: "pre-wrap", overflowWrap: "anywhere", color }}>
+            {/* The tint and the left border already carry the kind; colouring
+                the body too drops it below AA, and the split view next door
+                keeps its body at --text. */}
+            <span style={{ padding: "0 10px", whiteSpace: "pre-wrap", overflowWrap: "anywhere", color: "var(--text)" }}>
               {line || "\u00a0"}
             </span>
           </div>
@@ -1376,7 +1373,7 @@ function PairedResult({ text, images, isEmpty, isError }: {
           style={{
             margin: 0,
             padding: "8px 10px",
-            color: isError ? "#f87171" : (isEmpty ? "var(--text-dim)" : "var(--text-muted)"),
+            color: isError ? "var(--danger)" : (isEmpty ? "var(--text-dim)" : "var(--text-muted)"),
             fontSize: 12,
             lineHeight: 1.5,
             overflow: "auto",

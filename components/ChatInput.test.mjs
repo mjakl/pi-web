@@ -433,7 +433,7 @@ test("highlights Compact in green when context needs attention", () => {
     }),
   );
 
-  assert.match(html, /background:rgba\(34,197,94,0\.08\);border:1px solid rgba\(34,197,94,0\.3\);[^>]*color:#22c55e[^>]*aria-label="Compact context"/);
+  assert.match(html, /background:rgba\(34,197,94,0\.08\);border:1px solid rgba\(34,197,94,0\.3\);[^>]*color:var\(--success\)[^>]*aria-label="Compact context"/);
 });
 
 test("renders compact errors above the input as a wrapping alert", () => {

@@ -101,7 +101,7 @@ test("each session indicator keeps its own label, colour, and glyph", () => {
   assert.match(running, /<animateTransform attributeName="transform" type="rotate"/);
 
   const active = renderIndicator("active");
-  assert.match(active, /title="Session active" aria-label="Session active" style="[^"]*color:#16a34a"/);
+  assert.match(active, /title="Session active" aria-label="Session active" style="[^"]*color:var\(--success\)"/);
   assert.match(active, /<circle cx="7" cy="7" r="5" fill="currentColor">/);
 
   const stopped = renderIndicator("stopped");
@@ -109,7 +109,7 @@ test("each session indicator keeps its own label, colour, and glyph", () => {
   assert.match(stopped, /<rect x="4" y="4" width="6" height="6" rx="1"/);
 
   const unread = renderIndicator("unread");
-  assert.match(unread, /title="New activity" aria-label="New session activity" style="[^"]*color:#0891b2"/);
+  assert.match(unread, /title="New activity" aria-label="New session activity" style="[^"]*color:var\(--info\)"/);
   assert.match(unread, /<circle cx="7" cy="7" r="5" fill="currentColor">/);
   assert.doesNotMatch(unread, /<animate/);
 });

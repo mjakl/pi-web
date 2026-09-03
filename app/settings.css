@@ -90,7 +90,11 @@
 .config-close-button:focus-visible {
   background: var(--bg-hover);
   color: var(--text);
-  outline: none;
+}
+
+.config-close-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .config-split-view {
@@ -203,7 +207,7 @@
 }
 
 .config-sidebar-message.is-error {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .config-sidebar-message.is-empty {
@@ -414,7 +418,7 @@
 
 .skill-version-value.is-update,
 .skill-update-indicator {
-  color: #d97706;
+  color: var(--warning);
 }
 
 .skill-name-value {
@@ -431,11 +435,11 @@
 }
 
 .skill-update-status.is-success {
-  color: #16a34a;
+  color: var(--success);
 }
 
 .skill-update-status.is-error {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .skill-description {
@@ -511,7 +515,7 @@
 .config-button-primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -524,7 +528,7 @@
 .config-button-danger {
   border-color: rgba(239, 68, 68, 0.35);
   background: rgba(239, 68, 68, 0.06);
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .config-button-ghost {
@@ -561,8 +565,8 @@
 }
 
 .config-button-primary.is-success {
-  border-color: #16a34a;
-  background: #16a34a;
+  border-color: var(--success);
+  background: var(--success);
   animation: saved-pop 0.45s ease;
 }
 
@@ -587,10 +591,14 @@
   background: var(--border);
   cursor: pointer;
   transition: background 0.18s;
+  /* --border alone is ~1.3:1 against the surrounding surface, so the control
+     had no discernible edge when off. */
+  box-shadow: inset 0 0 0 1px var(--text-muted);
 }
 
 .config-switch[aria-checked="true"] {
   background: var(--accent);
+  box-shadow: none;
 }
 
 .config-switch:disabled {
@@ -650,7 +658,11 @@
 .config-list-action-button:not(:disabled):focus-visible {
   background: var(--bg-hover);
   color: var(--text-muted);
-  outline: none;
+}
+
+.config-list-action-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .config-list-action-button[aria-current="page"] {
@@ -791,8 +803,9 @@
   color: var(--text);
 }
 
-.settings-section-tab:focus-visible[aria-current="page"] {
-  outline: none;
+.settings-section-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .settings-section-icon {
@@ -900,9 +913,13 @@
 }
 
 .settings-theme-option:not(:disabled):not([aria-checked="true"]):hover,
-.settings-theme-option:not(:disabled):focus-visible {
+.settings-theme-option:not(:disabled):not([aria-checked="true"]):focus-visible {
   background: var(--bg-hover);
-  outline: none;
+}
+
+.settings-theme-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .settings-theme-option:disabled {
@@ -950,7 +967,7 @@
 
 .settings-general-error {
   margin: 8px 0 0;
-  color: #ef4444;
+  color: var(--danger);
   font-size: 11px;
 }
 

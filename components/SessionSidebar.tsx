@@ -1192,7 +1192,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
                 display: "flex", alignItems: "center", justifyContent: "center",
                 background: sessionRefreshDone ? "rgba(74,222,128,0.18)" : "var(--bg-hover)",
                 border: `1px solid ${sessionRefreshDone ? "rgba(74,222,128,0.4)" : "var(--border)"}`,
-                color: sessionRefreshDone ? "#4ade80" : "var(--text-muted)",
+                color: sessionRefreshDone ? "var(--success)" : "var(--text-muted)",
                 cursor: "pointer",
                 width: 32, height: 32,
                 borderRadius: 7,
@@ -1215,7 +1215,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
                title={t("sidebar.refresh")}
             >
               {sessionRefreshDone ? (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               ) : (
@@ -1548,7 +1548,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
                             <button
                               onClick={() => void handleRemoveWorktree(wt.path, true)}
                               disabled={wtBusy}
-                              style={{ padding: "3px 9px", background: "#ef4444", border: "none", borderRadius: 5, color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}
+                              style={{ padding: "3px 9px", background: "var(--danger)", border: "none", borderRadius: 5, color: "var(--on-danger)", fontSize: 11, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}
                             >
                               {t("sidebar.force")}
                             </button>
@@ -1614,7 +1614,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
                                 borderRadius: 5, flexShrink: 0,
                                 transition: "color 0.12s, background 0.12s",
                               }}
-                              onMouseEnter={(e) => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.background = "rgba(239,68,68,0.08)"; }}
+                              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--danger)"; e.currentTarget.style.background = "rgba(239,68,68,0.08)"; }}
                               onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.background = "none"; }}
                             >
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1706,7 +1706,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
                             background: "var(--accent)",
                             border: "none",
                             borderRadius: 5,
-                            color: "#fff",
+                            color: "var(--on-accent)",
                             fontSize: 11,
                             fontWeight: 600,
                             cursor: wtBusy || !wtNewBranch.trim() ? "not-allowed" : "pointer",
@@ -1736,7 +1736,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
                   {wtError && (
                     <div style={{
                       padding: "5px 10px 8px",
-                      color: "#dc2626",
+                      color: "var(--danger)",
                       fontSize: 11,
                       lineHeight: 1.35,
                       overflowWrap: "anywhere",
@@ -1794,7 +1794,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
           </div>
         )}
         {error && (
-          <div style={{ padding: "12px 14px", color: "#f87171", fontSize: 12 }}>
+          <div style={{ padding: "12px 14px", color: "var(--danger)", fontSize: 12 }}>
             {error}
           </div>
         )}
@@ -1936,12 +1936,12 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
               }}
               title={t("sidebar.refreshExplorer")}
               skipHover={explorerRefreshDone}
-              color={explorerRefreshDone ? "#4ade80" : "var(--text-dim)"}
+              color={explorerRefreshDone ? "var(--success)" : "var(--text-dim)"}
               background={explorerRefreshDone ? "rgba(74,222,128,0.18)" : "none"}
               marginRight={6}
             >
               {explorerRefreshDone ? (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               ) : (
@@ -2007,7 +2007,7 @@ function showProjectActivity(
         <span
           title={t("sidebar.newSessionActivity")}
           aria-label={`${t("sidebar.newSessionActivity")} (${activity.unread})`}
-          style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#0891b2", fontSize: 10, fontFamily: "var(--font-mono)" }}
+          style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--info)", fontSize: 10, fontFamily: "var(--font-mono)" }}
         >
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
           {activity.unread}

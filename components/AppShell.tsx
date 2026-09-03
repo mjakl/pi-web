@@ -994,11 +994,11 @@ export function AppShell({ piVersion }: { piVersion: string }) {
           minHeight: mobileBanner ? 32 : undefined,
           height: mobileBanner ? undefined : "100%",
           padding: mobileBanner ? "6px 12px" : "0 12px",
-          background: mobileBanner ? "color-mix(in srgb, #d97706 8%, var(--bg-panel))" : "none",
+          background: mobileBanner ? "color-mix(in srgb, var(--warning) 8%, var(--bg-panel))" : "none",
           border: "none",
           borderRight: mobileBanner ? "none" : "1px solid var(--border)",
           borderBottom: mobileBanner ? "1px solid var(--border)" : "none",
-          color: "#d97706",
+          color: "var(--warning)",
           cursor: "pointer",
           flexShrink: 0,
           fontSize: 11,
@@ -1221,7 +1221,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
     let mobileContextText: string | null = null;
     if (contextUsage?.contextWindow) {
       const percent = contextUsage.percent;
-      if (contextWarningLevel === "red") contextColor = "#ef4444";
+      if (contextWarningLevel === "red") contextColor = "var(--danger)";
       else if (contextWarningLevel === "yellow") contextColor = "rgba(234,179,8,0.95)";
       desktopContextText = percent !== null
         ? `${percent.toFixed(0)}% / ${formatCompact(contextUsage.contextWindow)}`
@@ -1933,7 +1933,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
               role="alert"
               style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: 24, color: "var(--text-muted)", textAlign: "center" }}
             >
-               <div style={{ fontSize: 14, color: "#dc2626" }}>{translate("workspace.unable")}</div>
+               <div style={{ fontSize: 14, color: "var(--danger)" }}>{translate("workspace.unable")}</div>
               <div style={{ maxWidth: "min(720px, 100%)", overflowWrap: "anywhere", fontFamily: "var(--font-mono)", fontSize: 12 }}>
                 {initialNavigation.requestedCwd}
               </div>

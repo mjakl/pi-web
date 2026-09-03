@@ -5,14 +5,22 @@
   --bg-selected: #e8e8e8;
   --border: #e0e0e0;
   --text: #1a1a1a;
-  --text-muted: #6b7280;
-  --text-dim: #9ca3af;
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
+  --text-muted: #444952;
+  --text-dim: #5f6672;
+  --accent: #225bd8;
+  --accent-hover: #1b4bb8;
   --user-bg: #eff6ff;
   --assistant-bg: #ffffff;
   --tool-bg: #f9fafb;
   --bg-subtle: rgba(0,0,0,0.03);
+  /* Status colours. Values are chosen against --bg-selected, the lowest
+     contrast surface any of them lands on, so every one clears WCAG AA. */
+  --danger: #b91c1c;
+  --success: #13703a;
+  --warning: #8a5a06;
+  --info: #0b6c85;
+  --on-accent: #ffffff;
+  --on-danger: #ffffff;
 }
 
 html.dark {
@@ -22,14 +30,20 @@ html.dark {
   --bg-selected: #383838;
   --border: #3a3a3a;
   --text: #e8e8e8;
-  --text-muted: #9ca3af;
-  --text-dim: #6b7280;
+  --text-muted: #c0c4cc;
+  --text-dim: #9ca3af;
   --accent: #60a5fa;
   --accent-hover: #93c5fd;
   --user-bg: #1e293b;
   --assistant-bg: #1a1a1a;
   --tool-bg: #1f2937;
   --bg-subtle: rgba(255,255,255,0.04);
+  --danger: #fb8a8a;
+  --success: #4ade80;
+  --warning: #e5b163;
+  --info: #22d3ee;
+  --on-accent: #1a1a1a;
+  --on-danger: #1a1a1a;
 }
 
 /* WebKit reports dvh/innerHeight without the status-bar strip for installed
@@ -1228,25 +1242,13 @@ span.linenumber {
   to   { opacity: 1; transform: scale(1); }
 }
 
-@keyframes drop-icon-float {
-  0%, 100% { transform: translateY(0px); }
-  50%       { transform: translateY(-6px); }
-}
 
-@keyframes drop-ring-pulse {
-  0%, 100% { opacity: 0.5; transform: scale(1); }
-  50%       { opacity: 1;   transform: scale(1.06); }
-}
 
 @keyframes drop-ripple {
   0%   { transform: scale(0); opacity: 0.6; }
   100% { transform: scale(1); opacity: 0; }
 }
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
 
 @keyframes spin {
   from { transform: rotate(0deg); }
@@ -1585,4 +1587,15 @@ span.linenumber {
   background: var(--accent);
   color: #ffffff;
   font-weight: 600;
+}
+
+/* Honour the OS preference everywhere. The chat drop ripple alone is three
+   720px rings looping over the whole pane during any file drag. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -72,7 +72,7 @@ const SESSION_INDICATORS = {
   active: {
     title: "sidebar.sessionActive",
     label: "sidebar.sessionActive",
-    color: "#16a34a",
+    color: "var(--success)",
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
         <circle cx="7" cy="7" r="5" fill="currentColor" />
@@ -92,7 +92,7 @@ const SESSION_INDICATORS = {
   unread: {
     title: "sidebar.newActivity",
     label: "sidebar.newSessionActivity",
-    color: "#0891b2",
+    color: "var(--info)",
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ display: "block" }}>
         <circle cx="7" cy="7" r="5" fill="currentColor" />
@@ -579,7 +579,7 @@ export function SessionItem({
                   <button type="button" onClick={(e) => chooseMenuAction(e, "rename")} style={menuItemStyle}>
                     {t("sidebar.rename")}
                   </button>
-                  <button type="button" onClick={(e) => chooseMenuAction(e, "delete")} style={{ ...menuItemStyle, color: "#ef4444" }}>
+                  <button type="button" onClick={(e) => chooseMenuAction(e, "delete")} style={{ ...menuItemStyle, color: "var(--danger)" }}>
                     {t("sidebar.delete")}
                   </button>
                 </>

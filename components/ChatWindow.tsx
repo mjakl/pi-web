@@ -898,11 +898,11 @@ function NoticeShelf({ notices, floating = false, onPauseChange }: { notices: No
     >
       {notices.map((notice, index) => {
         const color = notice.type === "error"
-          ? "#ef4444"
+          ? "var(--danger)"
           : notice.type === "warning"
-            ? "#d97706"
+            ? "var(--warning)"
             : notice.type === "success"
-              ? "#10b981"
+              ? "var(--success)"
               : "var(--accent)";
         return (
           <div
@@ -1144,7 +1144,7 @@ function ExtensionDialog({
                 borderRadius: 6,
                 border: "1px solid var(--accent)",
                 background: "var(--accent)",
-                color: "#fff",
+                color: "var(--on-accent)",
                 cursor: "pointer",
               }}
             >
@@ -1158,7 +1158,7 @@ function ExtensionDialog({
                 borderRadius: 6,
                 border: "1px solid var(--accent)",
                 background: "var(--accent)",
-                color: "#fff",
+                color: "var(--on-accent)",
                 cursor: "pointer",
               }}
             >
