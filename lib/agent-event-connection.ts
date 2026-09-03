@@ -1,3 +1,5 @@
+import { translateMessage } from "./i18n/format";
+
 import type { AgentEventLike } from "./agent-event-wire";
 
 export interface AgentEventSourceLike {
@@ -11,10 +13,8 @@ export type AgentEventConnectionStatus = "ready_timeout" | "startup_error" | "cl
 
 class AgentEventConnectionError extends Error {
   constructor(public readonly status: AgentEventConnectionStatus, message?: string) {
-    super(message ?? (
-      status === "ready_timeout"
-        ? "Timed out starting the agent session. Please try again."
-        : "Failed to connect to the agent event stream. Please try again."
+    super(message ?? translateMessage(
+      status === "ready_timeout" ? "chat.agentStartTimedOut" : "chat.agentStreamConnectFailed",
     ));
     this.name = "AgentEventConnectionError";
   }

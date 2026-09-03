@@ -28,6 +28,20 @@ interface UseGlobalKeyboardShortcutsOptions {
 }
 
 /**
+ * Whether the global Esc shortcut may abort the running turn.
+ *
+ * An overlay that already handled Esc owns it — otherwise closing a dialog
+ * also kills the turn running behind it. Text fields handle Esc themselves
+ * (ChatInput closes its slash / @ menus first).
+ */
+export function shouldAbortOnEscape(
+  { defaultPrevented, tagName }: { defaultPrevented: boolean; tagName?: string | null },
+): boolean {
+  if (defaultPrevented) return false;
+  return tagName !== "TEXTAREA" && tagName !== "INPUT";
+}
+
+/**
  * Register global keyboard shortcuts for the application.
  *
  * Shortcuts handled here:
@@ -49,10 +63,10 @@ export function useGlobalKeyboardShortcuts(
       // ---- Esc: stop agent ----
       if (e.key === "Escape") {
         if (!globalAbortHandler) return;
-
-        const tag = (e.target as HTMLElement)?.tagName;
-        // Let textarea/input handle Esc internally (ChatInput menus / stop).
-        if (tag === "TEXTAREA" || tag === "INPUT") return;
+        if (!shouldAbortOnEscape({
+          defaultPrevented: e.defaultPrevented,
+          tagName: (e.target as HTMLElement)?.tagName,
+        })) return;
 
         e.preventDefault();
         globalAbortHandler();
@@ -61,7 +75,7 @@ export function useGlobalKeyboardShortcuts(
 
       // ---- Ctrl+Alt+N: new session ----
       if (e.key === "n" && e.ctrlKey && e.altKey) {
-        if (!activeCwd || !onNewSession) return;
+        if (e.defaultPrevented || !activeCwd || !onNewSession) return;
         e.preventDefault();
         onNewSession(activeCwd);
       }

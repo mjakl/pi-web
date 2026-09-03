@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 import { useI18n } from "@/hooks/useI18n";
 
 export function ProjectTrustDialog({
@@ -16,38 +18,37 @@ export function ProjectTrustDialog({
   onConfirm: () => void;
 }) {
   const { t } = useI18n();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  // showModal() supplies the backdrop, the focus trap, and focus restoration
+  // that this dialog previously had none of.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
 
   return (
-    <div
-      role="presentation"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1100,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-        background: "rgba(0,0,0,0.4)",
+    <dialog
+      ref={dialogRef}
+      className="project-trust-dialog"
+      aria-labelledby="project-trust-title"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        // Own the key so the global Esc shortcut cannot abort the turn
+        // running behind this dialog.
+        event.preventDefault();
+        if (!busy) onCancel();
       }}
+      onCancel={(event) => event.preventDefault()}
       onClick={(event) => {
         if (!busy && event.target === event.currentTarget) onCancel();
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="project-trust-title"
-        style={{
-          width: 440,
-          maxWidth: "100%",
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          background: "var(--bg-panel)",
-          boxShadow: "0 12px 36px rgba(0,0,0,0.24)",
-          overflow: "hidden",
-        }}
-      >
+      <div className="project-trust-panel">
         <div style={{ display: "flex", gap: 12, padding: "18px 18px 14px" }}>
           <svg
             width="20"
@@ -141,6 +142,6 @@ export function ProjectTrustDialog({
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }

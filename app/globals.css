@@ -1497,3 +1497,92 @@ span.linenumber {
     font-size: 16px !important;
   }
 }
+
+/* Project trust dialog — native <dialog> supplies the backdrop, focus trap
+   and focus restoration; only the box needs styling. */
+.project-trust-dialog {
+  margin: auto;
+  padding: 16px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+}
+.project-trust-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+.project-trust-panel {
+  width: 440px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.24);
+  overflow: hidden;
+}
+
+/* Root error boundary (app/error.tsx). */
+.app-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  background: var(--bg);
+}
+.app-error-panel {
+  width: 520px;
+  max-width: 100%;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+.app-error-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.app-error-body {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.app-error-detail {
+  margin: 12px 0 0;
+  padding: 10px;
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.app-error-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+.app-error-button {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.app-error-button.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}

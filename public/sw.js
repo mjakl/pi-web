@@ -14,7 +14,13 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(STATIC_CACHE)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      // Cache each URL independently: addAll rejects atomically, so one
+      // transient non-2xx (e.g. the generated /manifest.webmanifest route
+      // during a server restart) would fail install and leave the worker
+      // permanently inactive, silently disabling offline support.
+      .then((cache) => Promise.all(
+        PRECACHE_URLS.map((url) => cache.add(url).catch(() => {})),
+      ))
       .then(() => self.skipWaiting()),
   );
 });

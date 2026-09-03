@@ -37,7 +37,11 @@ export async function setupPushSubscription(): Promise<boolean> {
       const { publicKey } = await configResponse.json() as { publicKey?: string };
       if (!publicKey) return false;
 
-      const registration = await navigator.serviceWorker.ready;
+      // getRegistration() always settles; serviceWorker.ready never does
+      // when no worker is registered, which would leave this promise pending
+      // forever and poison every later call.
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration?.active) return false;
       let subscription = await registration.pushManager.getSubscription();
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
@@ -53,12 +57,13 @@ export async function setupPushSubscription(): Promise<boolean> {
       });
       return response.ok;
     } catch {
-      // Retry on the next trigger (e.g. the next permission grant) rather
-      // than caching a transient failure forever.
-      activeSubscriptionPromise = null;
       return false;
     }
   })();
 
-  return activeSubscriptionPromise;
+  const subscribed = await activeSubscriptionPromise;
+  // Retry on the next trigger (e.g. the next permission grant) rather than
+  // caching a failure forever.
+  if (!subscribed) activeSubscriptionPromise = null;
+  return subscribed;
 }

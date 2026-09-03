@@ -572,4 +572,10 @@ export const enMessages: Record<string, string> = {
     "i18n.taskFinished": "Task finished.",
     "i18n.attentionNeeded": "Pi needs your attention",
     "i18n.extensionInputNeeded": "An extension is waiting for your input.",
+    "chat.agentStartTimedOut": "Timed out starting the agent session. Please try again.",
+    "chat.agentStreamConnectFailed": "Could not connect to the agent event stream. Please try again.",
+    "error.boundaryTitle": "Something went wrong",
+    "error.boundaryBody": "Pi Web could not render this screen. Your sessions are stored on disk and are not affected.",
+    "error.tryAgain": "Try again",
+    "error.reload": "Reload page",
 };

@@ -7,7 +7,7 @@ export default async function Home() {
   const piVersion = process.env.PI_WEB_PI_VERSION;
   if (!piVersion) throw new Error("Validated host Pi runtime version is missing. Start Pi Web through its pi-web, dev, or start command.");
   return (
-    <Suspense>
+    <Suspense fallback={<div style={{ height: "100%", background: "var(--bg)" }} />}>
       <AppShell piVersion={piVersion} />
     </Suspense>
   );

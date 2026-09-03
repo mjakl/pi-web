@@ -929,6 +929,7 @@ function NoticeShelf({ notices, floating = false, onPauseChange }: { notices: No
           <div
             key={notice.id}
             className="notice-shelf-item"
+            role={notice.type === "error" ? "alert" : "status"}
             onMouseEnter={() => onPauseChange?.(notice.id)}
             onMouseLeave={(event) => {
               if (!event.currentTarget.contains(document.activeElement)) onPauseChange?.(null);

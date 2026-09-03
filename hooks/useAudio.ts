@@ -2,6 +2,16 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 
+import { getBrowserStorage, type StorageLike } from "@/lib/browser-storage";
+
+const SOUND_ENABLED_KEY = "pi-sound-enabled";
+
+/** Sound preference from storage; on by default when storage is unavailable. */
+export function readSoundEnabled(storage: StorageLike | null): boolean {
+  const stored = storage?.getItem(SOUND_ENABLED_KEY) ?? null;
+  return stored === null ? true : stored === "true";
+}
+
 function playTone(ctx: AudioContext) {
   const now = ctx.currentTime;
   const freqs = [523.25, 659.25];
@@ -22,11 +32,7 @@ function playTone(ctx: AudioContext) {
 }
 
 export function useAudio() {
-  const [enabled, setEnabled] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    const stored = localStorage.getItem("pi-sound-enabled");
-    return stored === null ? true : stored === "true";
-  });
+  const [enabled, setEnabled] = useState<boolean>(() => readSoundEnabled(getBrowserStorage()));
 
   const enabledRef = useRef(enabled);
   useEffect(() => { enabledRef.current = enabled; }, [enabled]);
@@ -56,8 +62,11 @@ export function useAudio() {
     const next = !enabledRef.current;
     if (next) unlockAudio(true);
     enabledRef.current = next;
-    localStorage.setItem("pi-sound-enabled", String(next));
     setEnabled(next);
+    // Persist last: a blocked or full store must not desync ref from state.
+    try {
+      getBrowserStorage()?.setItem(SOUND_ENABLED_KEY, String(next));
+    } catch { /* preference is not worth failing the toggle for */ }
   }, [unlockAudio]);
 
   const playDone = useCallback(() => {
