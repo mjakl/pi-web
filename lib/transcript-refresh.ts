@@ -68,8 +68,8 @@ export function mergeTranscriptRefreshMessages(
     : [...persisted, ...liveTail.slice(liveIndex)];
 }
 
-export function getPersistedThinkingLevel(level: string): string | null {
-  return level || null;
+export function getPersistedThinkingLevel(level: string | null): string {
+  return level ?? "auto";
 }
 
 export async function runSessionLoadPhases<T>(

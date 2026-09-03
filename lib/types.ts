@@ -345,6 +345,6 @@ export interface SessionContext {
   entryIds: string[]; // parallel to messages — the session entry id for each message
   oldestEntryId: string | null;
   hasMore: boolean;
-  thinkingLevel: string;
+  thinkingLevel: string | null;
   model: { provider: string; modelId: string } | null;
 }

@@ -452,8 +452,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         setToolPresetState(d.toolNames !== undefined ? getPresetFromToolNames(d.toolNames) : "default");
         setCurrentModelOverride((current) => modelSwitchPendingRef.current ? current : null);
         setError(null);
-        const persistedThinkingLevel = getPersistedThinkingLevel(d.context.thinkingLevel);
-        if (persistedThinkingLevel) setThinkingLevel(persistedThinkingLevel as ThinkingLevelOption);
+        setThinkingLevel(getPersistedThinkingLevel(d.context.thinkingLevel) as ThinkingLevelOption);
 
         messagesLoaded = true;
         if (showLoading) setLoading(false);
@@ -534,7 +533,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const invalidateTranscriptRequests = useCallback(() => {
     sessionLoadRequestIdRef.current += 1;
-    sessionStateLoadRequestIdRef.current += 1;
     transcriptRevisionRef.current += 1;
   }, []);
 
@@ -760,7 +758,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       requestId: ++sessionLoadRequestIdRef.current,
       sessionId: sid,
       runId: promptRunIdRef.current,
-      transcriptRevision: transcriptRevisionRef.current,
+      transcriptRevision: ++transcriptRevisionRef.current,
     };
     const currentVersion = (): TranscriptRefreshVersion => ({
       requestId: sessionLoadRequestIdRef.current,
@@ -782,8 +780,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       dataRef.current = refreshed;
       setData(refreshed);
       setActiveLeafId(refreshed.leafId);
-      const persistedThinkingLevel = getPersistedThinkingLevel(refreshed.context.thinkingLevel);
-      if (persistedThinkingLevel) setThinkingLevel(persistedThinkingLevel as ThinkingLevelOption);
+      setThinkingLevel(getPersistedThinkingLevel(refreshed.context.thinkingLevel) as ThinkingLevelOption);
       setMessages((current) => mergeTranscriptRefreshMessages(
         refreshed.context.messages,
         current,
