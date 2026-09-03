@@ -299,7 +299,6 @@ export const enMessages: Record<string, string> = {
     "chat.modelError": "Model error",
     "chat.modelScopeWarning": "Model scope warning",
     "chat.modelScopeWarnings": "Model scope warnings",
-    "chat.inputHistory": "Input history",
     "chat.steerTitle": "Interrupt the current run and inject this message now",
     "chat.followUpTitle": "Queue this message after the agent finishes",
     "chat.selectModel": "Select model",

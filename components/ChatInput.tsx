@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useCallback, useEffect, useLayoutEffect, useImperativeHandle, forwardRef, KeyboardEvent } from "react";
+import React, { useRef, useState, useCallback, useEffect, useImperativeHandle, forwardRef, KeyboardEvent } from "react";
 import type { BuiltinSlashCommandResult, CompactResultInfo, QueuedMessages, SlashCommandInfo } from "@/hooks/useAgentSession";
 import type { SkillsResponse } from "@/lib/api-types";
 import type { TextContent, UserMessage } from "@/lib/types";
@@ -87,8 +87,27 @@ export interface ChatInputHandle {
 
 const COMPOSITION_END_ENTER_GRACE_MS = 100;
 const TEXT_COLLATOR = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
-const ANCHORED_MENU_GAP = 8;
 type StreamingAction = "steer" | "followup";
+
+/**
+ * Shell-style history cycling. `cycle` counts back from the newest prompt, or
+ * is null when not cycling; `history` is oldest-first. Walking forward off the
+ * end restores the empty composer.
+ */
+export function cycleInputHistory(
+  history: string[],
+  cycle: number | null,
+  direction: "up" | "down",
+): { cycle: number | null; text: string } {
+  if (direction === "up") {
+    if (history.length === 0) return { cycle: null, text: "" };
+    const next = Math.min(history.length - 1, (cycle ?? -1) + 1);
+    return { cycle: next, text: history[history.length - 1 - next] ?? "" };
+  }
+  const next = (cycle ?? 0) - 1;
+  if (next < 0) return { cycle: null, text: "" };
+  return { cycle: next, text: history[history.length - 1 - next] ?? "" };
+}
 
 export function getStreamingSubmissionAction(
   selected: StreamingAction,
@@ -100,23 +119,6 @@ export function getStreamingSubmissionAction(
   if (hasSteer) return "steer";
   if (hasFollowUp) return "followup";
   return null;
-}
-
-export function getUpwardMenuMaxHeight(menuBottom: number, visibleTop: number, gap = ANCHORED_MENU_GAP): number {
-  return Math.max(0, Math.floor(menuBottom - visibleTop - gap));
-}
-
-function getVisibleTopBoundary(element: HTMLElement): number {
-  let visibleTop = window.visualViewport?.offsetTop ?? 0;
-
-  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
-    const overflowY = window.getComputedStyle(parent).overflowY;
-    if (overflowY === "auto" || overflowY === "scroll" || overflowY === "hidden" || overflowY === "clip") {
-      visibleTop = Math.max(visibleTop, parent.getBoundingClientRect().top + parent.clientTop);
-    }
-  }
-
-  return visibleTop;
 }
 
 const THINKING_LEVELS = ["auto", "off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
@@ -453,12 +455,12 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const bashExcluded = bashMode && trimmedValue.startsWith("!!");
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashActiveIndex, setSlashActiveIndex] = useState(0);
-  const [slashMenuMaxHeight, setSlashMenuMaxHeight] = useState<number | null>(null);
   const [atQuery, setAtQuery] = useState<AtQueryMatch | null>(null);
   const [atMenuOpen, setAtMenuOpen] = useState(false);
   const [atActiveIndex, setAtActiveIndex] = useState(0);
-  const [historyMenuOpen, setHistoryMenuOpen] = useState(false);
-  const [historyActiveIndex, setHistoryActiveIndex] = useState(0);
+  // Shell-style history cycling: null when not cycling, otherwise how many
+  // prompts back from the newest we are showing.
+  const [historyCycle, setHistoryCycle] = useState<number | null>(null);
   const [fileIndex, setFileIndex] = useState<{ cwd: string; entries: FileIndexEntry[]; truncated: boolean } | null>(null);
   const [fileIndexLoading, setFileIndexLoading] = useState(false);
   const [atServerResult, setAtServerResult] = useState<{ cwd: string; query: string; matches: FileIndexEntry[] } | null>(null);
@@ -473,15 +475,12 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const thinkingDropdownRef = useRef<HTMLDivElement>(null);
   const streamingActionRef = useRef<HTMLDivElement>(null);
-  const historyMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const lastCompositionEndAtRef = useRef(0);
   const slashCommandsRequestedRef = useRef(false);
-  const slashMenuRef = useRef<HTMLDivElement>(null);
   const slashItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const atItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const historyItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const fileIndexMetaRef = useRef<{ cwd: string; fetchedAt: number } | null>(null);
   const fileIndexFetchingRef = useRef<string | null>(null);
   const draftKeyRef = useRef(draftKey);
@@ -502,8 +501,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       requestAnimationFrame(() => {
         if (!ta) return;
         ta.focus();
-        ta.style.height = "auto";
-        ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
       });
     },
     replaceMessage(message: UserMessage) {
@@ -517,7 +514,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       attachedImagesRef.current = restoredImages;
       setValue(restoredText);
       setAtQuery(null);
-      setHistoryMenuOpen(false);
+      setHistoryCycle(null);
       setAttachedImages((prev) => {
         prev.forEach(revokeImagePreview);
         return restoredImages;
@@ -525,8 +522,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       requestAnimationFrame(() => {
         if (!ta) return;
         ta.focus();
-        ta.style.height = "auto";
-        ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
       });
     },
     prependText(text: string) {
@@ -543,8 +538,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         if (!ta) return;
         ta.focus();
         ta.setSelectionRange(combined.length, combined.length);
-        ta.style.height = "auto";
-        ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
       });
     },
     rekeyDraft(previousKey: string, nextKey: string) {
@@ -577,7 +570,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         return movedImages;
       });
       setAtQuery(null);
-      setHistoryMenuOpen(false);
+      setHistoryCycle(null);
     },
     restoreSubmission(text: string, images?: ChatDraftImage[], targetDraftKey?: string) {
       if (!text.trim() && !images?.length) return;
@@ -623,7 +616,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         return restored;
       });
       setAtQuery(null);
-      setHistoryMenuOpen(false);
+      setHistoryCycle(null);
       if (images?.length) {
         setAttachedImages((current) => {
           const available = Math.max(0, MAX_ATTACHED_IMAGES - current.length);
@@ -639,8 +632,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         if (!ta) return;
         ta.focus();
         ta.setSelectionRange(ta.value.length, ta.value.length);
-        ta.style.height = "auto";
-        ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
       });
     },
     insertText(text: string) {
@@ -663,8 +654,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         const pos = start + sep.length + text.length;
         ta.setSelectionRange(pos, pos);
         ta.focus();
-        ta.style.height = "auto";
-        ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
       });
     },
     addImages(files: File[]) {
@@ -723,7 +712,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     valueRef.current = "";
     setValue("");
     setAtQuery(null);
-    setHistoryMenuOpen(false);
+    setHistoryCycle(null);
     if (draftKey) clearDraft(draftKey);
     if (draftKeyRef.current && draftKeyRef.current !== draftKey) clearDraft(draftKeyRef.current);
     clearImages();
@@ -759,7 +748,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     attachedImagesRef.current = nextImages;
     setValue(nextValue);
     setAtQuery(null);
-    setHistoryMenuOpen(false);
+    setHistoryCycle(null);
     setAttachedImages((prev) => {
       prev.forEach(revokeImagePreview);
       return nextImages;
@@ -961,8 +950,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       if (!el) return;
       el.focus();
       el.setSelectionRange(newPos, newPos);
-      el.style.height = "auto";
-      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
     });
   }, [atQuery, value]);
 
@@ -981,33 +968,14 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     atItemRefs.current[atActiveIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [atActiveIndex, atMenuOpen]);
 
-  useEffect(() => {
-    if (historyActiveIndex >= inputHistory.length) {
-      setHistoryActiveIndex(Math.max(0, inputHistory.length - 1));
-    }
-  }, [inputHistory.length, historyActiveIndex]);
-
-  useEffect(() => {
-    historyItemRefs.current.length = inputHistory.length;
-  }, [inputHistory.length]);
-
-  useEffect(() => {
-    if (!historyMenuOpen) return;
-    historyItemRefs.current[historyActiveIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [historyActiveIndex, historyMenuOpen]);
-
   const applyHistoryInput = useCallback((text: string) => {
     setValue(text);
-    setHistoryMenuOpen(false);
-    setHistoryActiveIndex(0);
     setAtQuery(null);
     requestAnimationFrame(() => {
       const ta = textareaRef.current;
       if (!ta) return;
       ta.focus();
       ta.setSelectionRange(text.length, text.length);
-      ta.style.height = "auto";
-      ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
     });
   }, []);
 
@@ -1021,8 +989,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       if (!ta) return;
       ta.focus();
       ta.setSelectionRange(nextValue.length, nextValue.length);
-      ta.style.height = "auto";
-      ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
     });
   }, []);
 
@@ -1056,49 +1022,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, []);
 
-  const getNextSlashIndex = useCallback((direction: "up" | "down" | "left" | "right") => {
-    const lastIndex = displayedSlashCommands.length - 1;
-    if (lastIndex < 0) return 0;
-
-    if (direction === "left") return Math.max(0, slashActiveIndex - 1);
-    if (direction === "right") return Math.min(lastIndex, slashActiveIndex + 1);
-
-    const currentNode = slashItemRefs.current[slashActiveIndex];
-    if (!currentNode) {
-      return direction === "down"
-        ? Math.min(lastIndex, slashActiveIndex + 1)
-        : Math.max(0, slashActiveIndex - 1);
-    }
-
-    const currentRect = currentNode.getBoundingClientRect();
-    const currentX = currentRect.left + currentRect.width / 2;
-    const currentY = currentRect.top + currentRect.height / 2;
-    let bestIndex = -1;
-    let bestScore = Number.POSITIVE_INFINITY;
-
-    for (let index = 0; index <= lastIndex; index += 1) {
-      if (index === slashActiveIndex) continue;
-      const node = slashItemRefs.current[index];
-      if (!node) continue;
-      const rect = node.getBoundingClientRect();
-      const candidateY = rect.top + rect.height / 2;
-      const verticalDelta = candidateY - currentY;
-      if (direction === "down" ? verticalDelta <= 4 : verticalDelta >= -4) continue;
-
-      const candidateX = rect.left + rect.width / 2;
-      const score = Math.abs(verticalDelta) * 1000 + Math.abs(candidateX - currentX);
-      if (score < bestScore) {
-        bestIndex = index;
-        bestScore = score;
-      }
-    }
-
-    if (bestIndex >= 0) return bestIndex;
-    return direction === "down"
-      ? Math.min(lastIndex, slashActiveIndex + 1)
-      : Math.max(0, slashActiveIndex - 1);
-  }, [displayedSlashCommands.length, slashActiveIndex]);
-
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       const nativeEvent = e.nativeEvent;
@@ -1114,48 +1037,18 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         return;
       }
 
-      if (historyMenuOpen && !isComposing) {
+      // Skip while composing so IME candidate navigation is never intercepted,
+      // and leave ArrowLeft/ArrowRight to the caret so a typo mid-command is
+      // still fixable with the menu open.
+      if (slashMenuOpen && slashQuery !== null && !isComposing) {
         if (e.key === "ArrowDown") {
           e.preventDefault();
-          setHistoryActiveIndex((i) => Math.min(Math.max(0, inputHistory.length - 1), i + 1));
+          setSlashActiveIndex((i) => Math.min(Math.max(0, displayedSlashCommands.length - 1), i + 1));
           return;
         }
         if (e.key === "ArrowUp") {
           e.preventDefault();
-          setHistoryActiveIndex((i) => Math.max(0, i - 1));
-          return;
-        }
-        if (e.key === "Escape") {
-          e.preventDefault();
-          setHistoryMenuOpen(false);
-          return;
-        }
-        if ((e.key === "Tab" || sendShortcut) && inputHistory[historyActiveIndex]) {
-          e.preventDefault();
-          applyHistoryInput(inputHistory[historyActiveIndex]);
-          return;
-        }
-      }
-
-      if (slashMenuOpen && slashQuery !== null) {
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          setSlashActiveIndex(getNextSlashIndex("down"));
-          return;
-        }
-        if (e.key === "ArrowUp") {
-          e.preventDefault();
-          setSlashActiveIndex(getNextSlashIndex("up"));
-          return;
-        }
-        if (e.key === "ArrowRight") {
-          e.preventDefault();
-          setSlashActiveIndex(getNextSlashIndex("right"));
-          return;
-        }
-        if (e.key === "ArrowLeft") {
-          e.preventDefault();
-          setSlashActiveIndex(getNextSlashIndex("left"));
+          setSlashActiveIndex((i) => Math.max(0, i - 1));
           return;
         }
         if (e.key === "Escape") {
@@ -1214,12 +1107,25 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         return;
       }
 
-      if (e.key === "ArrowUp" && !isComposing && !isStreaming && inputHistory.length > 0 && value.trim().length === 0) {
+      // Shell-style history: ArrowUp on an empty composer walks back through
+      // previous prompts, ArrowDown walks forward and off the end restores the
+      // empty composer. inputHistory is oldest-first.
+      const cycling = historyCycle !== null;
+      if (e.key === "ArrowUp" && !isComposing && !isStreaming && inputHistory.length > 0
+        && (cycling || value.trim().length === 0)) {
         e.preventDefault();
         setSlashMenuOpen(false);
         setAtMenuOpen(false);
-        setHistoryActiveIndex(inputHistory.length - 1);
-        setHistoryMenuOpen(true);
+        const next = cycleInputHistory(inputHistory, historyCycle, "up");
+        setHistoryCycle(next.cycle);
+        applyHistoryInput(next.text);
+        return;
+      }
+      if (e.key === "ArrowDown" && !isComposing && cycling) {
+        e.preventDefault();
+        const next = cycleInputHistory(inputHistory, historyCycle, "down");
+        setHistoryCycle(next.cycle);
+        applyHistoryInput(next.text);
         return;
       }
 
@@ -1239,7 +1145,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         }
       }
     },
-    [isMobile, isStreaming, streamingSubmissionAction, streamingActionMenuOpen, onAbort, slashMenuOpen, slashQuery, displayedSlashCommands, slashActiveIndex, applySlashCommand, sendQueued, handleSend, getNextSlashIndex, atMenuOpen, atQuery, atMatches, atActiveIndex, applyAtCompletion, historyMenuOpen, inputHistory, historyActiveIndex, applyHistoryInput, value]
+    [historyCycle, isMobile, isStreaming, streamingSubmissionAction, streamingActionMenuOpen, onAbort, slashMenuOpen, slashQuery, displayedSlashCommands, slashActiveIndex, applySlashCommand, sendQueued, handleSend, atMenuOpen, atQuery, atMatches, atActiveIndex, applyAtCompletion, inputHistory, applyHistoryInput, value]
   );
 
   const handleInput = useCallback(() => {
@@ -1317,50 +1223,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     slashItemRefs.current[slashActiveIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [slashActiveIndex, slashMenuOpen]);
 
-  useLayoutEffect(() => {
-    if (!slashMenuOpen || slashQuery === null) {
-      setSlashMenuMaxHeight(null);
-      return;
-    }
-
-    const menu = slashMenuRef.current;
-    if (!menu) return;
-
-    let frameId: number | null = null;
-    const update = () => {
-      frameId = null;
-      const nextHeight = getUpwardMenuMaxHeight(
-        menu.getBoundingClientRect().bottom,
-        getVisibleTopBoundary(menu),
-      );
-      setSlashMenuMaxHeight((current) => current === nextHeight ? current : nextHeight);
-    };
-    const scheduleUpdate = () => {
-      if (frameId !== null) cancelAnimationFrame(frameId);
-      frameId = requestAnimationFrame(update);
-    };
-
-    update();
-    const anchorObserver = typeof ResizeObserver === "undefined" || !menu.parentElement
-      ? null
-      : new ResizeObserver(scheduleUpdate);
-    if (menu.parentElement) anchorObserver?.observe(menu.parentElement);
-    const viewport = window.visualViewport;
-    viewport?.addEventListener("resize", scheduleUpdate);
-    viewport?.addEventListener("scroll", scheduleUpdate);
-    window.addEventListener("resize", scheduleUpdate);
-    window.addEventListener("scroll", scheduleUpdate, true);
-
-    return () => {
-      anchorObserver?.disconnect();
-      viewport?.removeEventListener("resize", scheduleUpdate);
-      viewport?.removeEventListener("scroll", scheduleUpdate);
-      window.removeEventListener("resize", scheduleUpdate);
-      window.removeEventListener("scroll", scheduleUpdate, true);
-      if (frameId !== null) cancelAnimationFrame(frameId);
-    };
-  }, [slashMenuOpen, slashQuery]);
-
   // Build model options: prefer modelList (has provider info), fallback to modelNames
   const modelOptions: ModelSelectorOption[] = (() => {
     if (modelList && modelList.length > 0) {
@@ -1393,9 +1255,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       }
       if (streamingActionRef.current && !streamingActionRef.current.contains(e.target as Node)) {
         setStreamingActionMenuOpen(false);
-      }
-      if (historyMenuRef.current && !historyMenuRef.current.contains(e.target as Node) && !textareaRef.current?.contains(e.target as Node)) {
-        setHistoryMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -1576,96 +1435,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
         {/* Main input */}
         <div style={{ position: "relative", minWidth: 0 }}>
-          {historyMenuOpen && inputHistory.length > 0 && (
-            <div
-              ref={historyMenuRef}
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                bottom: "calc(100% + 8px)",
-                zIndex: 120,
-                background: "var(--bg)",
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                boxShadow: "0 -6px 20px rgba(0,0,0,0.12)",
-                overflow: "hidden",
-                maxHeight: "min(44vh, 360px)",
-              }}
-            >
-              <div
-                title={t("chat.inputHistory")}
-                style={{
-                  height: 30,
-                  padding: "0 10px",
-                  borderBottom: "1px solid var(--border)",
-                  display: "flex",
-                  alignItems: "center",
-                  color: "var(--text-dim)",
-                }}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M3 12a9 9 0 1 0 3-6.7" />
-                  <path d="M3 4v5h5" />
-                  <path d="M12 7v5l3 2" />
-                </svg>
-              </div>
-              <div style={{ maxHeight: "calc(min(44vh, 360px) - 31px)", overflowY: "auto", padding: 4 }}>
-                {inputHistory.map((item, index) => {
-                  const active = index === historyActiveIndex;
-                  return (
-                    <button
-                      key={`${index}:${item}`}
-                      ref={(node) => {
-                        historyItemRefs.current[index] = node;
-                      }}
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        applyHistoryInput(item);
-                      }}
-                      onMouseEnter={() => setHistoryActiveIndex(index)}
-                      style={{
-                        width: "100%",
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 8,
-                        padding: "7px 8px",
-                        border: "none",
-                        borderRadius: 6,
-                        background: active ? "var(--bg-selected)" : "none",
-                        color: "var(--text)",
-                        cursor: "pointer",
-                        textAlign: "left",
-                        fontSize: 12.5,
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      <span style={{ flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", paddingTop: 1 }}>
-                        {index + 1}
-                      </span>
-                      <span style={{ minWidth: 0, display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflow: "hidden", overflowWrap: "anywhere" }}>
-                        {item}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
           {slashMenuOpen && slashQuery !== null && (
             <div
-              ref={slashMenuRef}
               style={{
                 position: "absolute",
                 left: 0,
@@ -1680,9 +1451,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 boxSizing: "border-box",
                 display: "flex",
                 flexDirection: "column",
-                maxHeight: slashMenuMaxHeight === null
-                  ? "min(72.8vh, 598px)"
-                  : `min(72.8vh, 598px, ${slashMenuMaxHeight}px)`,
+                maxHeight: "min(48vh, 400px)",
               }}
             >
               <div
@@ -1701,14 +1470,14 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                  <span>{slashCommandsLoading ? t("chat.loadingCommands") : t("chat.slashCommands", { label: slashCommandCountLabel })}</span>
                  <span style={{ fontFamily: "var(--font-mono)" }}>{t("chat.tabEnter")}</span>
               </div>
-              <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: 10 }}>
+              <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: 4 }}>
                 {!slashCommandsLoading && filteredSlashCommands.length === 0 ? (
                   <div style={{ padding: "2px 2px 4px", fontSize: 12, color: "var(--text-dim)" }}>
                      {t("chat.noCommands")}
                   </div>
                 ) : (
                   groupedSlashCommands.map((group) => (
-                    <section key={group.source} style={{ marginBottom: 12 }}>
+                    <section key={group.source} style={{ marginBottom: 8 }}>
                       <div
                         style={{
                           position: "sticky",
@@ -1729,13 +1498,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                            <span>{t(SLASH_SOURCE_GROUP_LABEL_KEYS[group.source])}</span>
                         <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{group.items.length}</span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                          gap: 8,
-                        }}
-                      >
+                      <div>
                         {group.items.map(({ command, index }) => {
                           const active = index === slashActiveIndex;
                           const manual = isManualSkillCommand(command, skillModes);
@@ -1754,26 +1517,23 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                               style={{
                                 width: "100%",
                                 minWidth: 0,
-                                minHeight: 58,
                                 display: "flex",
-                                flexDirection: "column",
-                                gap: 4,
-                                justifyContent: "center",
-                                padding: "9px 10px",
-                                border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-                                borderRadius: 7,
-                                background: active ? "var(--bg-selected)" : "var(--bg-panel)",
+                                alignItems: "baseline",
+                                gap: 8,
+                                padding: "6px 8px",
+                                border: "none",
+                                borderRadius: 6,
+                                background: active ? "var(--bg-selected)" : "none",
                                 color: "var(--text)",
                                 cursor: "pointer",
                                 textAlign: "left",
-                                boxShadow: active ? "0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent)" : "none",
                               }}
                             >
                               <span style={{
-                                fontSize: 13,
+                                flexShrink: 0,
+                                fontSize: 12.5,
                                 fontFamily: "var(--font-mono)",
                                 overflowWrap: "anywhere",
-                                wordBreak: "break-word",
                               }}>
                                 /{command.name}
                                 {manual && (
@@ -1792,12 +1552,12 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                               </span>
                                {command.description && (
                                 <span style={{
-                                  display: "-webkit-box",
-                                  WebkitBoxOrient: "vertical",
-                                  WebkitLineClamp: 2,
+                                  minWidth: 0,
+                                  flex: "1 1 auto",
                                   overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
                                   fontSize: 11,
-                                  lineHeight: 1.35,
                                   color: "var(--text-dim)",
                                 }}>
                                    {getSlashDescription(command, t)}
@@ -1932,7 +1692,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             onChange={(e) => {
               valueRef.current = e.target.value;
               setValue(e.target.value);
-              setHistoryMenuOpen(false);
+              setHistoryCycle(null);
               updateAtQuery(e.target.value, e.target.selectionStart);
             }}
             onSelect={(e) => {

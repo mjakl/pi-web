@@ -8,7 +8,7 @@ const jiti = createJiti(import.meta.url, {
 });
 const React = await jiti.import("react");
 const { renderToStaticMarkup } = await jiti.import("react-dom/server");
-const { ChatInput, ModelErrorBanner, ModelScopeWarningBanner, canClearBuiltinCommandInput, canRestoreUserMessage, canRunBuiltinSlashCommandWhileStreaming, compressImageFile, filterModelOptions, getStreamingSubmissionAction, getUpwardMenuMaxHeight, getUserMessageText, getUserMessageDraftImages, isExactSlashCommand, shouldCompressImageFile } = await jiti.import("./ChatInput.tsx");
+const { ChatInput, ModelErrorBanner, ModelScopeWarningBanner, canClearBuiltinCommandInput, canRestoreUserMessage, canRunBuiltinSlashCommandWhileStreaming, compressImageFile, cycleInputHistory, filterModelOptions, getStreamingSubmissionAction, getUserMessageText, getUserMessageDraftImages, isExactSlashCommand, shouldCompressImageFile } = await jiti.import("./ChatInput.tsx");
 const { ModelSelector } = await jiti.import("./ModelSelector.tsx");
 const { clearDraft, getDraft, mergeRestoredSubmissionDraft, mergeRestoredSubmissionText, rekeyDraft, setDraft } = await jiti.import("@/lib/draft-store.ts");
 
@@ -174,11 +174,6 @@ test("labels the model selector from the English message package", () => {
 
   assert.match(html, />Select model</);
   assert.match(html, /title="Change model"/);
-});
-
-test("caps an upward menu to the visible space above its anchor", () => {
-  assert.equal(getUpwardMenuMaxHeight(343, 36), 299);
-  assert.equal(getUpwardMenuMaxHeight(40, 36), 0);
 });
 
 test("keeps one composer action slot across idle, agent, and non-agent busy states", () => {
@@ -458,4 +453,31 @@ test("renders compact errors above the input as a wrapping alert", () => {
   assert.match(html, /&lt;html&gt;request forbidden&lt;\/html&gt;/);
   assert.match(html, /white-space:pre-wrap/);
   assert.ok(html.indexOf('role="alert"') < html.indexOf("<textarea"));
+});
+
+test("walks back through prompts with ArrowUp, newest first", () => {
+  const history = ["oldest", "middle", "newest"];
+
+  const first = cycleInputHistory(history, null, "up");
+  assert.deepEqual(first, { cycle: 0, text: "newest" });
+  assert.deepEqual(cycleInputHistory(history, first.cycle, "up"), { cycle: 1, text: "middle" });
+  assert.deepEqual(cycleInputHistory(history, 1, "up"), { cycle: 2, text: "oldest" });
+});
+
+test("stops at the oldest prompt instead of wrapping", () => {
+  const history = ["oldest", "middle", "newest"];
+
+  assert.deepEqual(cycleInputHistory(history, 2, "up"), { cycle: 2, text: "oldest" });
+});
+
+test("walks forward and restores the empty composer off the end", () => {
+  const history = ["oldest", "middle", "newest"];
+
+  assert.deepEqual(cycleInputHistory(history, 2, "down"), { cycle: 1, text: "middle" });
+  assert.deepEqual(cycleInputHistory(history, 0, "down"), { cycle: null, text: "" });
+});
+
+test("does nothing with no history to cycle", () => {
+  assert.deepEqual(cycleInputHistory([], null, "up"), { cycle: null, text: "" });
+  assert.deepEqual(cycleInputHistory([], null, "down"), { cycle: null, text: "" });
 });
