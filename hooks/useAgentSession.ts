@@ -24,6 +24,7 @@ import { mergeSessionStats, type SessionFileStats } from "@/lib/session-stats";
 import { userMessageKey } from "@/lib/prompt-recovery";
 import {
   advancePersistedSnapshotVersion,
+  isCurrentSessionLoad,
   isCurrentTranscriptRefresh,
   mergeTranscriptRefreshMessages,
   projectPersistedSnapshot,
@@ -288,6 +289,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const thinkingLevelOverrideRef = useRef<Exclude<ThinkingLevelOption, "auto"> | null>(null);
   const promptRunIdRef = useRef(0);
   const sessionLoadRequestIdRef = useRef(0);
+  const transcriptRefreshRequestIdRef = useRef(0);
   const sessionStateLoadRequestIdRef = useRef(0);
   const transcriptRevisionRef = useRef(0);
   const optimisticUserMessageKeyRef = useRef<string | null>(null);
@@ -418,13 +420,19 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const loadSession = useCallback(async (sid: string, showLoading = false, includeState = false) => {
     const loadRunId = promptRunIdRef.current;
-    const requestId = ++sessionLoadRequestIdRef.current;
+    const request = {
+      requestId: ++sessionLoadRequestIdRef.current,
+      sessionId: sid,
+      runId: loadRunId,
+    };
     const stateRequestId = includeState ? ++sessionStateLoadRequestIdRef.current : null;
     const isCurrentLoad = () => (
       sessionHookMountedRef.current
-      && sessionIdRef.current === sid
-      && promptRunIdRef.current === loadRunId
-      && sessionLoadRequestIdRef.current === requestId
+      && isCurrentSessionLoad(request, {
+        requestId: sessionLoadRequestIdRef.current,
+        sessionId: sessionIdRef.current ?? "",
+        runId: promptRunIdRef.current,
+      })
     );
     const isCurrentStateLoad = () => (
       stateRequestId !== null
@@ -534,6 +542,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
   }, []);
 
+  // Local persisted-state changes outrank snapshots that started earlier.
   const invalidatePersistedSnapshotRequests = useCallback(() => {
     const next = advancePersistedSnapshotVersion({
       requestId: sessionLoadRequestIdRef.current,
@@ -761,22 +770,20 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (!sid || sessionIdRef.current !== sid) return false;
 
     const previousPersisted = dataRef.current?.context.messages ?? [];
-    const next = advancePersistedSnapshotVersion({
-      requestId: sessionLoadRequestIdRef.current,
-      transcriptRevision: transcriptRevisionRef.current,
-    });
-    sessionLoadRequestIdRef.current = next.requestId;
-    transcriptRevisionRef.current = next.transcriptRevision;
     const request: TranscriptRefreshVersion = {
-      ...next,
+      requestId: ++transcriptRefreshRequestIdRef.current,
+      snapshotRequestId: sessionLoadRequestIdRef.current,
       sessionId: sid,
       runId: promptRunIdRef.current,
     };
+    // Reject older partial context loads now, but keep a canonical load usable
+    // until this Refresh has an accepted snapshot to replace it.
+    transcriptRevisionRef.current += 1;
     const currentVersion = (): TranscriptRefreshVersion => ({
-      requestId: sessionLoadRequestIdRef.current,
+      requestId: transcriptRefreshRequestIdRef.current,
+      snapshotRequestId: sessionLoadRequestIdRef.current,
       sessionId: sessionPropIdRef.current ?? "",
       runId: promptRunIdRef.current,
-      transcriptRevision: transcriptRevisionRef.current,
     });
 
     try {
@@ -788,6 +795,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       const refreshed = await response.json() as SessionData;
       if (!sessionHookMountedRef.current || !isCurrentTranscriptRefresh(request, currentVersion())) return false;
 
+      // Only successful Refresh acceptance supersedes an older canonical load.
+      sessionLoadRequestIdRef.current += 1;
       applyPersistedSnapshot(refreshed, (current) => mergeTranscriptRefreshMessages(
         refreshed.context.messages,
         current,
@@ -1577,6 +1586,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
     const sid = sessionIdRef.current;
     if (!sid || modelSwitchPendingRef.current) return;
+    invalidatePersistedSnapshotRequests();
     const target = { provider, modelId };
     const previousOverride = currentModelOverride;
     modelSwitchPendingRef.current = true;
@@ -1603,7 +1613,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       modelSwitchPendingRef.current = false;
       setModelSwitching(false);
     }
-  }, [addNotice, currentModelOverride, isNew, loadSession, setNewSessionModel, t]);
+  }, [addNotice, currentModelOverride, invalidatePersistedSnapshotRequests, isNew, loadSession, setNewSessionModel, t]);
 
   const handleCompact = useCallback(async () => {
     const sid = sessionIdRef.current;
@@ -1832,6 +1842,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, [opts.chatInputRef, addNotice, t]);
 
   const handleThinkingLevelChange = useCallback(async (level: ThinkingLevelOption) => {
+    invalidatePersistedSnapshotRequests();
     setThinkingLevel(level);
     if (isNew && !sessionIdRef.current) {
       thinkingLevelOverrideRef.current = level === "auto" ? null : level;
@@ -1844,7 +1855,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } catch (e) {
       console.error("Failed to set thinking level:", e);
     }
-  }, [isNew]);
+  }, [invalidatePersistedSnapshotRequests, isNew]);
 
   const handleToolPresetChange = useCallback(async (preset: ToolPreset) => {
     invalidatePersistedSnapshotRequests();

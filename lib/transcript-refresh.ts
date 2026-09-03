@@ -2,11 +2,17 @@ import type { AgentMessage, SessionContext, SessionInfo } from "./types";
 import { userMessageKey } from "./prompt-recovery";
 import { getPresetFromToolNames } from "./tool-presets";
 
-export interface TranscriptRefreshVersion {
+export interface SessionLoadVersion {
   requestId: number;
   sessionId: string;
   runId: number;
-  transcriptRevision: number;
+}
+
+export interface TranscriptRefreshVersion {
+  requestId: number;
+  snapshotRequestId: number;
+  sessionId: string;
+  runId: number;
 }
 
 export function advancePersistedSnapshotVersion(current: {
@@ -19,14 +25,23 @@ export function advancePersistedSnapshotVersion(current: {
   };
 }
 
+export function isCurrentSessionLoad(
+  request: SessionLoadVersion,
+  current: SessionLoadVersion,
+): boolean {
+  return request.requestId === current.requestId
+    && request.sessionId === current.sessionId
+    && request.runId === current.runId;
+}
+
 export function isCurrentTranscriptRefresh(
   request: TranscriptRefreshVersion,
   current: TranscriptRefreshVersion,
 ): boolean {
   return request.requestId === current.requestId
+    && request.snapshotRequestId === current.snapshotRequestId
     && request.sessionId === current.sessionId
-    && request.runId === current.runId
-    && request.transcriptRevision === current.transcriptRevision;
+    && request.runId === current.runId;
 }
 
 function sameExactMessage(left: AgentMessage, right: AgentMessage): boolean {
