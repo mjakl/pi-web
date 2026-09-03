@@ -733,7 +733,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     const sid = sessionPropIdRef.current;
     if (!sid || sessionIdRef.current !== sid) return false;
 
-    const previousPersistedCount = dataRef.current?.context.messages.length ?? 0;
+    const previousPersisted = dataRef.current?.context.messages ?? [];
     const request: TranscriptRefreshVersion = {
       requestId: ++sessionLoadRequestIdRef.current,
       sessionId: sid,
@@ -763,12 +763,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setMessages((current) => mergeTranscriptRefreshMessages(
         refreshed.context.messages,
         current,
-        previousPersistedCount,
+        previousPersisted,
       ));
       setEntryIds(refreshed.context.entryIds ?? []);
       setHistoryCursor(refreshed.context.oldestEntryId);
       setHasEarlierMessages(refreshed.context.hasMore);
       setSessionStatsOverride(null);
+      setError(null);
       if (refreshed.info) onSessionMetadataChange?.(refreshed.info);
       return true;
     } catch (refreshError) {
@@ -1515,6 +1516,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (bashRunningRef.current) return;
     const sid = sessionIdRef.current;
     if (!sid) return;
+    sessionLoadRequestIdRef.current += 1;
+    transcriptRevisionRef.current += 1;
     sendAgentCommand(sid, { type: "navigate_tree", targetId: entryId }).catch(() => {});
     setActiveLeafId(entryId);
     await loadContext(sid, entryId);
@@ -1525,6 +1528,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     setActiveLeafId(leafId);
     const sid = sessionIdRef.current;
     if (!sid) return;
+    sessionLoadRequestIdRef.current += 1;
+    transcriptRevisionRef.current += 1;
     await loadContext(sid, leafId);
     if (leafId) {
       sendAgentCommand(sid, { type: "navigate_tree", targetId: leafId }).catch(() => {});

@@ -21,24 +21,27 @@ export function isCurrentTranscriptRefresh(
 function sameMessage(left: AgentMessage, right: AgentMessage): boolean {
   if (left.role !== right.role) return false;
   if (left.role === "user") return userMessageKey(left) === userMessageKey(right);
+  if (left.timestamp !== undefined && right.timestamp !== undefined) {
+    return left.timestamp === right.timestamp;
+  }
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
 export function mergeTranscriptRefreshMessages(
   persisted: AgentMessage[],
   current: AgentMessage[],
-  previousPersistedCount: number,
+  previousPersisted: AgentMessage[],
 ): AgentMessage[] {
-  const liveTail = current.slice(previousPersistedCount);
-  let overlap = Math.min(persisted.length, liveTail.length);
-  while (overlap > 0) {
-    const persistedStart = persisted.length - overlap;
-    if (liveTail.slice(0, overlap).every((message, index) => (
-      sameMessage(persisted[persistedStart + index], message)
-    ))) break;
-    overlap -= 1;
-  }
-  return overlap === liveTail.length
+  const liveTail = current.slice(previousPersisted.length);
+  const previousLast = previousPersisted.at(-1);
+  const previousBoundary = previousLast
+    ? persisted.findLastIndex((message) => JSON.stringify(message) === JSON.stringify(previousLast))
+    : -1;
+  const refreshedTail = persisted.slice(previousBoundary + 1);
+  const lastPersistedLiveIndex = liveTail.findLastIndex((liveMessage) => (
+    refreshedTail.some((message) => sameMessage(message, liveMessage))
+  ));
+  return lastPersistedLiveIndex === liveTail.length - 1
     ? persisted
-    : [...persisted, ...liveTail.slice(overlap)];
+    : [...persisted, ...liveTail.slice(lastPersistedLiveIndex + 1)];
 }
