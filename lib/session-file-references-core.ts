@@ -1,3 +1,5 @@
+// Pure entry scanning, kept apart from lib/session-file-references.ts so it is
+// testable without the session reader and the Pi SDK.
 import type { SessionEntry } from "./types";
 
 function safeDecode(value: string): string {

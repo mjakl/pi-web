@@ -1,3 +1,4 @@
+// Imported by browser components; keep this module free of Node and SDK imports.
 export type GitFileStatusKind =
   | "modified"
   | "added"

@@ -59,7 +59,7 @@ export async function resolveDirectory(directory: string): Promise<string> {
 
 export async function listDirectories(directory: string): Promise<BrowsableDirectory[]> {
   const entries = await readdir(directory, { withFileTypes: true });
-  // 忽略损坏、不可访问或不指向目录的符号链接。
+  // Skip symlinks that are broken, inaccessible, or do not point to a directory.
   const candidates = await Promise.all(entries.map(async (entry) => {
     if (entry.isDirectory()) {
       return { name: entry.name, path: path.join(directory, entry.name) };

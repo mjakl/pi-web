@@ -1,3 +1,4 @@
+// Imported by browser components; keep this module free of Node and SDK imports.
 export const SESSION_METADATA_BATCH_SIZE = 10;
 export const SESSION_TITLE_MAX_CHARS = 512;
 

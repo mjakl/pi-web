@@ -190,7 +190,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     onAgentEnd?.();
   }, [onAgentEnd]);
 
-  // 稳定化 onEditContent 引用，配合 React.memo 防止历史消息重渲染
+  // Keep onEditContent stable so React.memo does not rerender historical messages.
   const handleEditContent = useCallback((message: UserMessage) => {
     chatInputRef?.current?.replaceMessage(message);
   }, [chatInputRef]);
@@ -882,7 +882,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
   );
 }
 
-// Toast 整体高度上限；文本区高度上限 = 整体上限 - 上下 padding(14*2) - 上下边框(1*2)
+// Toast height cap; the text area cap subtracts vertical padding (14*2) and borders (1*2).
 const NOTICE_MAX_HEIGHT_PX = 500;
 const NOTICE_TEXT_MAX_HEIGHT_PX = NOTICE_MAX_HEIGHT_PX - 30;
 
@@ -925,8 +925,8 @@ function NoticeShelf({ notices, floating = false, onPauseChange }: { notices: No
               gap: 10,
               minHeight: 60,
               height: "auto",
-              // 整体高度上限：超出后由文本区内部滚动承担（见下方 span 的 overflowY），
-              // 容器自身保持 hidden，小圆点固定在顶部不随文本滚动
+              // Height cap: overflow scrolls inside the text span below (see its overflowY);
+              // the container stays hidden so the type dot stays pinned at the top.
               maxHeight: NOTICE_MAX_HEIGHT_PX,
               // The floating wrapper is pointerEvents:"none" (click-through by design),
               // so the toast itself must opt back into interactivity or hover events never reach it
