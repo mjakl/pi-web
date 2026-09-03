@@ -223,6 +223,40 @@ test("menu Stop and Delete execute immediately and restore the action trigger", 
   }
 });
 
+test("a pending Delete closes the menu and cannot be started twice", async () => {
+  const originalFetch = globalThis.fetch;
+  let finishDelete;
+  const pendingDelete = new Promise((resolve) => { finishDelete = resolve; });
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests += 1;
+    await pendingDelete;
+    return new Response(null, { status: 200 });
+  };
+  const view = await mountItem(baseSession, { isActive: true });
+  try {
+    const trigger = view.container.querySelector("button[aria-controls]");
+    await click(trigger);
+    const deleteItem = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Delete");
+    await act(() => deleteItem.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })));
+
+    assert.equal(document.querySelector('[role="group"]'), null);
+    assert.equal(trigger.getAttribute("aria-disabled"), "true");
+    await click(trigger);
+    assert.equal(document.querySelector('[role="group"]'), null);
+    assert.equal(requests, 1);
+
+    await act(async () => {
+      finishDelete();
+      await pendingDelete;
+    });
+  } finally {
+    finishDelete();
+    await view.unmount();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("failed destructive actions restore focus when their trigger remains", async () => {
   const originalFetch = globalThis.fetch;
   const cases = [
@@ -679,16 +713,24 @@ test("the fixed right rail keeps metadata and actions from changing left-row geo
   await view.unmount();
 });
 
-test("the shortcut hint replaces the menu trigger in the actions rail", () => {
-  assert.match(
-    renderItem(baseSession, { shortcutLabel: "Ctrl+1" }),
-    /<kbd[^>]*>Ctrl\+1<\/kbd>/,
-  );
-  assert.doesNotMatch(
-    renderItem(baseSession, { shortcutLabel: "Ctrl+1" }),
-    /aria-label="Session actions for abcdef123456"/,
-  );
-  assert.match(renderItem(baseSession), /aria-label="Session actions for abcdef123456"/);
+test("the shortcut hint replaces the right-rail trigger and closes its open menu", async () => {
+  const view = await mountItem(baseSession);
+  try {
+    const row = view.container.firstElementChild;
+    const trigger = view.container.querySelector("button[aria-controls]");
+    await click(trigger);
+    document.querySelector('[role="group"] button').focus();
+
+    await view.rerender(baseSession, { shortcutLabel: "Ctrl+1" });
+
+    const hint = view.container.querySelector("kbd");
+    assert.equal(hint.textContent, "Ctrl+1");
+    assert.equal(hint.parentElement, row.lastElementChild);
+    assert.equal(view.container.querySelector("button[aria-controls]"), null);
+    assert.equal(document.querySelector('[role="group"]'), null);
+  } finally {
+    await view.unmount();
+  }
 });
 
 test("inactive session titles are muted", async () => {

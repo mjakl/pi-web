@@ -165,6 +165,7 @@ export function SessionItem({
   const menuId = useId();
   const eligibleForActions = isActive || !session.transient;
   const hasActions = actionsAvailable && eligibleForActions;
+  const actionPending = stopping || deleting;
   const renderedSurface = actionsAvailable ? actionSurface : IDLE_ACTION_SURFACE;
   actionsAvailableRef.current = actionsAvailable;
   hasActionsRef.current = hasActions;
@@ -214,9 +215,12 @@ export function SessionItem({
   useLayoutEffect(() => {
     if (!menuPosition) return;
     const rect = menuTriggerRef.current?.getBoundingClientRect();
-    const anchorMoved = rect
-      && (rect.top !== menuPosition.anchorTop || rect.left !== menuPosition.anchorLeft);
-    if (!menuEligibilityValid || anchorMoved) transitionActionSurface(IDLE_ACTION_SURFACE, "trigger-if-owned");
+    const anchorMoved = !rect
+      || rect.top !== menuPosition.anchorTop
+      || rect.left !== menuPosition.anchorLeft;
+    if (!menuEligibilityValid || anchorMoved) {
+      transitionActionSurface(IDLE_ACTION_SURFACE, rect ? "trigger-if-owned" : "none");
+    }
   });
 
   useEffect(() => {
@@ -286,7 +290,7 @@ export function SessionItem({
 
   const performStop = useCallback(async () => {
     if (!isActive) return;
-    if (!session.transient) transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
+    transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     setStopping(true);
     try {
       const response = await fetch(`/api/agent/${encodeURIComponent(session.id)}`, { method: "DELETE" });
@@ -303,6 +307,7 @@ export function SessionItem({
 
   const performDelete = useCallback(async () => {
     if (session.transient) return;
+    transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     setDeleting(true);
     try {
       const response = await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "DELETE" });
@@ -342,6 +347,7 @@ export function SessionItem({
 
   const toggleMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
+    if (actionPending) return;
     if (menuPosition) {
       transitionActionSurface(IDLE_ACTION_SURFACE, "none");
       return;
@@ -361,7 +367,7 @@ export function SessionItem({
         transient: Boolean(session.transient),
       },
     }, "surface");
-  }, [isActive, menuPosition, session.transient, transitionActionSurface]);
+  }, [actionPending, isActive, menuPosition, session.transient, transitionActionSurface]);
 
   const chooseMenuAction = useCallback((e: React.MouseEvent, action: "stop" | "rename" | "delete") => {
     e.stopPropagation();
@@ -515,6 +521,7 @@ export function SessionItem({
                 aria-label={actionsLabel}
                 aria-controls={menuId}
                 aria-expanded={Boolean(menuPosition)}
+                aria-disabled={actionPending || undefined}
                 onClick={toggleMenu}
                 onFocus={() => { menuHadFocusRef.current = false; }}
                 onBlur={closeWhenFocusLeaves}
@@ -523,7 +530,7 @@ export function SessionItem({
                   width: 28, height: 28, padding: 0,
                   background: menuPosition ? "var(--bg-selected)" : "transparent",
                   border: "1px solid transparent", borderRadius: 6,
-                  color: "var(--text-muted)", cursor: "pointer",
+                  color: "var(--text-muted)", cursor: actionPending ? "default" : "pointer",
                 }}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
