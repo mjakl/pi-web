@@ -8,7 +8,7 @@ const jiti = createJiti(import.meta.url, {
 });
 const React = await jiti.import("react");
 const { renderToStaticMarkup } = await jiti.import("react-dom/server");
-const { ChatInput, ModelErrorBanner, ModelScopeWarningBanner, canClearBuiltinCommandInput, canRestoreUserMessage, canRunBuiltinSlashCommandWhileStreaming, compressImageFile, cycleInputHistory, filterModelOptions, getStreamingSubmissionAction, getUserMessageText, getUserMessageDraftImages, isExactSlashCommand, shouldCompressImageFile } = await jiti.import("./ChatInput.tsx");
+const { ChatInput, ModelErrorBanner, ModelScopeWarningBanner, canClearBuiltinCommandInput, canRestoreUserMessage, canRunBuiltinSlashCommandWhileStreaming, compressImageFile, cycleInputHistory, filterModelOptions, getAnchoredMenuMaxHeight, getStreamingSubmissionAction, getUserMessageText, getUserMessageDraftImages, isExactSlashCommand, shouldCompressImageFile } = await jiti.import("./ChatInput.tsx");
 const { ModelSelector } = await jiti.import("./ModelSelector.tsx");
 const { clearDraft, getDraft, mergeRestoredSubmissionDraft, mergeRestoredSubmissionText, rekeyDraft, setDraft } = await jiti.import("@/lib/draft-store.ts");
 
@@ -480,4 +480,12 @@ test("walks forward and restores the empty composer off the end", () => {
 test("does nothing with no history to cycle", () => {
   assert.deepEqual(cycleInputHistory([], null, "up"), { cycle: null, text: "" });
   assert.deepEqual(cycleInputHistory([], null, "down"), { cycle: null, text: "" });
+});
+
+test("clamps an upward menu to the visible top of its container", () => {
+  // Menu bottom at 343, container top at 36, 8px gap.
+  assert.equal(getAnchoredMenuMaxHeight(343, 36), 299);
+  // Never negative when the anchor sits above the visible area.
+  assert.equal(getAnchoredMenuMaxHeight(40, 36), 0);
+  assert.equal(getAnchoredMenuMaxHeight(10, 200), 0);
 });

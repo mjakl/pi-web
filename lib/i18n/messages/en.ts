@@ -94,7 +94,7 @@ export const enMessages: Record<string, string> = {
     "workspace.selectSession": "Select a session from the sidebar",
     "workspace.getStarted": "Get Started",
     "workspace.selectProject": "Select a project directory from the sidebar",
-    "workspace.addModels": "Open Settings at the bottom, then choose Models",
+    "workspace.addModels": "Sign in or add an API key in the Pi terminal",
     "files.hidePanel": "Hide file panel",
     "files.showPanel": "Show file panel",
     "files.noneOpen": "No file open",

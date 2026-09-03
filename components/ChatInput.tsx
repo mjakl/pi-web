@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useCallback, useEffect, useImperativeHandle, forwardRef, KeyboardEvent } from "react";
+import React, { useRef, useState, useCallback, useEffect, useLayoutEffect, useImperativeHandle, forwardRef, KeyboardEvent } from "react";
 import type { BuiltinSlashCommandResult, CompactResultInfo, QueuedMessages, SlashCommandInfo } from "@/hooks/useAgentSession";
 import { formatCompactCount } from "@/lib/i18n/format";
 import type { SkillsResponse } from "@/lib/api-types";
@@ -108,6 +108,27 @@ export function cycleInputHistory(
   const next = (cycle ?? 0) - 1;
   if (next < 0) return { cycle: null, text: "" };
   return { cycle: next, text: history[history.length - 1 - next] ?? "" };
+}
+
+/**
+ * Height cap for a menu anchored upward from the composer. Both completion
+ * menus sit `bottom: calc(100% + 8px)` inside a scroll container, so a cap in
+ * vh can render their top -- including the sticky header -- above the
+ * container's edge, where scrolling cannot reach it.
+ */
+export function getAnchoredMenuMaxHeight(menuBottom: number, visibleTop: number, gap = 8): number {
+  return Math.max(0, Math.floor(menuBottom - visibleTop - gap));
+}
+
+function getVisibleTopBoundary(element: HTMLElement): number {
+  let visibleTop = window.visualViewport?.offsetTop ?? 0;
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    const overflowY = window.getComputedStyle(parent).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll" || overflowY === "hidden" || overflowY === "clip") {
+      visibleTop = Math.max(visibleTop, parent.getBoundingClientRect().top + parent.clientTop);
+    }
+  }
+  return visibleTop;
 }
 
 export function getStreamingSubmissionAction(
@@ -450,6 +471,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const bashExcluded = bashMode && trimmedValue.startsWith("!!");
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashActiveIndex, setSlashActiveIndex] = useState(0);
+  const [anchoredMenuMaxHeight, setAnchoredMenuMaxHeight] = useState<number | null>(null);
+  const anchoredMenuRef = useRef<HTMLDivElement>(null);
   const [atQuery, setAtQuery] = useState<AtQueryMatch | null>(null);
   const [atMenuOpen, setAtMenuOpen] = useState(false);
   const [atActiveIndex, setAtActiveIndex] = useState(0);
@@ -1017,6 +1040,42 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, []);
 
+  const anchoredMenuOpen = (slashMenuOpen && slashQuery !== null) || (atMenuOpen && atQuery !== null);
+  useLayoutEffect(() => {
+    if (!anchoredMenuOpen) {
+      setAnchoredMenuMaxHeight(null);
+      return;
+    }
+    const menu = anchoredMenuRef.current;
+    if (!menu) return;
+
+    let frameId: number | null = null;
+    const update = () => {
+      frameId = null;
+      const next = getAnchoredMenuMaxHeight(
+        menu.getBoundingClientRect().bottom,
+        getVisibleTopBoundary(menu),
+      );
+      setAnchoredMenuMaxHeight((current) => (current === next ? current : next));
+    };
+    const schedule = () => {
+      if (frameId !== null) cancelAnimationFrame(frameId);
+      frameId = requestAnimationFrame(update);
+    };
+
+    update();
+    const viewport = window.visualViewport;
+    viewport?.addEventListener("resize", schedule);
+    viewport?.addEventListener("scroll", schedule);
+    window.addEventListener("resize", schedule);
+    return () => {
+      if (frameId !== null) cancelAnimationFrame(frameId);
+      viewport?.removeEventListener("resize", schedule);
+      viewport?.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [anchoredMenuOpen]);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       const nativeEvent = e.nativeEvent;
@@ -1029,6 +1088,18 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
       if (sendShortcut && (isComposing || recentlyComposed)) {
         if (recentlyComposed) e.preventDefault();
+        return;
+      }
+
+      // An active history cycle owns the arrows. Recalling a prompt that is a
+      // bare "/command" re-derives slashQuery and reopens the palette, which
+      // would otherwise swallow the next ArrowUp and strand the rest of the
+      // history behind an Escape.
+      if (historyCycle !== null && !isComposing && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        e.preventDefault();
+        const next = cycleInputHistory(inputHistory, historyCycle, e.key === "ArrowUp" ? "up" : "down");
+        setHistoryCycle(next.cycle);
+        applyHistoryInput(next.text);
         return;
       }
 
@@ -1102,23 +1173,14 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         return;
       }
 
-      // Shell-style history: ArrowUp on an empty composer walks back through
-      // previous prompts, ArrowDown walks forward and off the end restores the
-      // empty composer. inputHistory is oldest-first.
-      const cycling = historyCycle !== null;
-      if (e.key === "ArrowUp" && !isComposing && !isStreaming && inputHistory.length > 0
-        && (cycling || value.trim().length === 0)) {
+      // Start a cycle from an empty composer. Continuing one is handled higher
+      // up, before the slash and @ menus.
+      if (e.key === "ArrowUp" && !isComposing && !isStreaming && historyCycle === null
+        && inputHistory.length > 0 && value.trim().length === 0) {
         e.preventDefault();
         setSlashMenuOpen(false);
         setAtMenuOpen(false);
-        const next = cycleInputHistory(inputHistory, historyCycle, "up");
-        setHistoryCycle(next.cycle);
-        applyHistoryInput(next.text);
-        return;
-      }
-      if (e.key === "ArrowDown" && !isComposing && cycling) {
-        e.preventDefault();
-        const next = cycleInputHistory(inputHistory, historyCycle, "down");
+        const next = cycleInputHistory(inputHistory, null, "up");
         setHistoryCycle(next.cycle);
         applyHistoryInput(next.text);
         return;
@@ -1432,6 +1494,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         <div style={{ position: "relative", minWidth: 0 }}>
           {slashMenuOpen && slashQuery !== null && (
             <div
+              ref={anchoredMenuRef}
               style={{
                 position: "absolute",
                 left: 0,
@@ -1446,7 +1509,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 boxSizing: "border-box",
                 display: "flex",
                 flexDirection: "column",
-                maxHeight: "min(48vh, 400px)",
+                maxHeight: anchoredMenuMaxHeight === null ? "min(48vh, 400px)" : `min(48vh, 400px, ${anchoredMenuMaxHeight}px)`,
               }}
             >
               <div
@@ -1578,6 +1641,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               : "";
             return (
               <div
+                ref={anchoredMenuRef}
                 style={{
                   position: "absolute",
                   left: 0,
@@ -1589,7 +1653,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   borderRadius: 8,
                   boxShadow: "0 -6px 20px rgba(0,0,0,0.12)",
                   overflow: "hidden",
-                  maxHeight: "min(48vh, 400px)",
+                  maxHeight: anchoredMenuMaxHeight === null ? "min(48vh, 400px)" : `min(48vh, 400px, ${anchoredMenuMaxHeight}px)`,
                 }}
               >
                 <div

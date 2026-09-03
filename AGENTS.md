@@ -56,7 +56,7 @@ Start with these owners instead of a broad file inventory:
 | Browser streaming and reconciliation | `hooks/useAgentSession.ts`, `lib/agent-event-*.ts`, `lib/agent-client.ts` |
 | File access, path identity, Git, or worktrees | `lib/file-access.ts`, `lib/path-security.ts`, `lib/paths.ts`, `lib/worktree.ts` |
 | Project resources, trust, plugins, or skills | `lib/project-trust.ts`, `lib/chat-only.ts`, `app/api/{project-trust,plugins,skills}/**` |
-| Models, startup preferences, or provider authentication | `lib/model-*.ts`, `lib/startup-preferences.ts`, `lib/provider-*.ts`, `app/api/{models,models-config,auth}/**` |
+| Models and startup preferences | `lib/model-scope.ts`, `lib/models-cache.ts`, `lib/agent-config-stamp.ts`, `lib/startup-preferences.ts`, `app/api/models/**` |
 | Application shell and session workspace UI | `components/AppShell.tsx`, `components/SessionSidebar.tsx`, `components/ChatWindow.tsx`, `components/ChatInput.tsx` |
 
 ## High-risk invariants
@@ -126,15 +126,17 @@ Start with these owners instead of a broad file inventory:
 - Git emits POSIX-style paths even on Windows. Convert Git path output with
   `toNativePath()` and compare paths with `samePath()` or the centralized
   containment helpers, never raw string equality. Do not convert branch names.
-- Derive provider listings from SDK-declared authentication capabilities and
-  the stored credential type, not provider ids. Store and conditionally delete
-  credentials through the locked credential helpers so one auth flow cannot
-  remove another flow's newer credential. Never return raw credentials from an
-  API.
+- Pi Web never reads, writes, or serves provider credentials. Providers are
+  configured in the Pi terminal, and the SDK resolves credentials inside
+  `createAgentSessionServices()` during session construction. Do not add a
+  credential store or an authentication route.
 - Keep model scope resolution delegated to Pi's SDK semantics; do not compare
   `enabledModels` patterns literally. Apply explicit startup model and thinking
   choices during session construction so the first turn cannot run with a
   transient default.
+- `auth.json` and `models.json` change outside Pi Web, so the models cache
+  cannot be invalidated on write. Expire it with `readAgentConfigStamp()`
+  instead, or a terminal login stays invisible for the cache TTL.
 
 ## UI and conditional guidance
 

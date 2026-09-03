@@ -7,7 +7,7 @@ This fork follows my own workflow and is not intended to stay compatible with up
 ## What it does
 
 - Browse, resume, rename, export, branch, and delete Pi sessions, with context, cost, compaction, and running-state details.
-- Run agent turns with model, thinking-level, and tool controls; manage provider credentials, models, plugins, and skills from the browser.
+- Run agent turns with model, thinking-level, and tool controls; manage plugins and skills from the browser.
 - Keep assistant text and images visible with structured tool and process details.
 - Browse and upload project files, inspect Git changes, and preview source, Markdown, images, audio, PDFs, and DOCX files.
 - Switch, create, and remove Git worktrees while keeping related sessions grouped. See [Worktrees in Pi Web](./docs/worktrees.md).
@@ -35,7 +35,7 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:30141](http://127.0.0.1:30141) after the development server is ready. It does not open a browser automatically. If no model provider is configured, use the **Models** panel to sign in or add an API key.
+Open [http://127.0.0.1:30141](http://127.0.0.1:30141) after the development server is ready. It does not open a browser automatically. If no model provider is configured, sign in or add an API key in the Pi terminal first; Pi Web reads the credentials Pi already has.
 
 To update an existing checkout, stop the server, pull the branch you maintain, refresh dependencies, and start it again:
 
@@ -70,7 +70,7 @@ Both commands validate the first host `pi` on `PATH` before starting. Open [http
 
 - Pi Web reads Pi data from `~/.pi/agent` by default. Set `PI_CODING_AGENT_DIR` before starting the server to use another agent directory.
 - Sessions are stored below `sessions/<encoded-cwd>/`. Pi Web must be able to read the agent directory and the working directories recorded in those sessions.
-- Model settings and credentials are shared with Pi. Changes made in the **Models** panel affect both interfaces.
+- Model settings and credentials are shared with Pi and are managed in the Pi terminal. Pi Web reads them and lets you pick a model per session.
 - Server-side model and API requests honor `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`.
 - The file browser is limited to working directories and known project or session roots. It is not a general filesystem browser.
 
