@@ -12,7 +12,7 @@ export interface ModelsData {
 }
 
 interface ModelsCacheState {
-  entries: Map<string, { data: ModelsData; expiresAt: number }>;
+  entries: Map<string, { data: ModelsData; expiresAt: number; stamp: string }>;
   inFlight: Map<string, Promise<ModelsData>>;
   generation: number;
 }
@@ -52,11 +52,21 @@ export function withSafeModelLoadFailure(data: ModelsData): ModelsData {
   return { ...data, modelError: SAFE_MODEL_LOAD_FAILURE_MESSAGE };
 }
 
-export function loadModelsWithCache(cwd: string, loader: () => Promise<ModelsData>): Promise<ModelsData> {
+/**
+ * Cached model load for `cwd`. `stamp` is an opaque marker of the agent
+ * configuration the data was derived from -- a changed stamp expires the entry
+ * early, so a credential added in the Pi terminal does not stay invisible for
+ * the whole TTL. See readAgentConfigStamp().
+ */
+export function loadModelsWithCache(
+  cwd: string,
+  stamp: string,
+  loader: () => Promise<ModelsData>,
+): Promise<ModelsData> {
   const state = getModelsCacheState();
   const cached = state.entries.get(cwd);
   if (cached) {
-    if (cached.expiresAt > Date.now()) return Promise.resolve(cached.data);
+    if (cached.expiresAt > Date.now() && cached.stamp === stamp) return Promise.resolve(cached.data);
     state.entries.delete(cwd);
   }
 
@@ -77,7 +87,7 @@ export function loadModelsWithCache(cwd: string, loader: () => Promise<ModelsDat
           if (oldestKey === undefined) break;
           state.entries.delete(oldestKey);
         }
-        state.entries.set(cwd, { data, expiresAt: now + MODELS_CACHE_TTL_MS });
+        state.entries.set(cwd, { data, expiresAt: now + MODELS_CACHE_TTL_MS, stamp });
       }
       return data;
     })

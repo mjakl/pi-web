@@ -2,7 +2,6 @@ import { getBrowserStorage, type StorageLike } from "./browser-storage";
 
 const SETTINGS_SECTION_VALUES = [
   "general",
-  "models",
   "skills",
   "plugins",
 ] as const;
@@ -44,7 +43,6 @@ function readState(storage: StorageLike): SettingsNavigationState {
 }
 
 function selectionKey(section: SettingsDetailSection, cwd?: string | null): string | null {
-  if (section === "models") return section;
   return cwd ? JSON.stringify([section, cwd]) : null;
 }
 

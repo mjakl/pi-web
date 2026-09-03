@@ -174,18 +174,8 @@
   opacity: 0.5;
 }
 
-.models-sidebar-indented-item {
-  padding-left: 26px;
-}
 
-.models-sidebar-add-item {
-  color: var(--text-dim);
-}
 
-.models-sidebar-add-item:not(:disabled):hover,
-.models-sidebar-add-item:not(:disabled):focus-visible {
-  color: var(--accent);
-}
 
 .config-sidebar-text {
   display: block;

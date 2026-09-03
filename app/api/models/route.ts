@@ -2,6 +2,7 @@ import { stat } from "fs/promises";
 import { resolve } from "path";
 import { createAgentSessionServices, getAgentDir, type SettingsManager } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import { readAgentConfigStamp } from "@/lib/agent-config-stamp";
 import {
   loadModelsWithCache,
   withModelRuntimeError,
@@ -113,7 +114,8 @@ export async function GET(req: Request) {
   }
 
   try {
-    return Response.json(await loadModelsWithCache(cwd, () => loadModels(cwd)));
+    const stamp = await readAgentConfigStamp();
+    return Response.json(await loadModelsWithCache(cwd, stamp, () => loadModels(cwd)));
   } catch {
     return Response.json(withSafeModelLoadFailure(EMPTY_MODELS));
   }
