@@ -17,6 +17,7 @@ const jiti = createJiti(import.meta.url, {
 const React = await jiti.import("react");
 const { renderToStaticMarkup } = await jiti.import("react-dom/server");
 const { ChatWindow } = await jiti.import("./ChatWindow.tsx");
+const { DockedComposer } = await jiti.import("./DockedComposer.tsx");
 
 test("shows the validated runtime Pi version in the empty composer", () => {
   const html = renderToStaticMarkup(React.createElement(ChatWindow, {
@@ -27,4 +28,18 @@ test("shows the validated runtime Pi version in the empty composer", () => {
   }));
 
   assert.match(html, /pi <span[^>]*>v0\.84\.4<\/span>/);
+});
+
+test("separates the docked composer from the full chat pane", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(
+      DockedComposer,
+      null,
+      React.createElement("span", null, "composer"),
+      React.createElement("span", null, "status"),
+    ),
+  );
+
+  assert.match(html, /^<div style="position:relative;border-top:1px solid var\(--border\)">/);
+  assert.match(html, />composer<\/span><span>status<\/span><\/div>$/);
 });
