@@ -91,6 +91,19 @@ async function pressKey(element, key, init = {}) {
   await act(() => element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })));
 }
 
+function accessibleName(element) {
+  return element.getAttribute("aria-label") ?? element.textContent.trim();
+}
+
+function accessibleDescription(element) {
+  return (element.getAttribute("aria-describedby") ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((id) => document.getElementById(id)?.textContent.trim() ?? "")
+    .filter(Boolean)
+    .join(" ");
+}
+
 test("each session indicator keeps its own label, colour, and glyph", () => {
   const running = renderIndicator("running");
   assert.match(running, /^<span title="Agent running…" aria-label="Agent running…" style="width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var\(--accent\)">/);
@@ -219,6 +232,49 @@ test("Rename Escape restores the action trigger", async () => {
     await pressKey(input, "Escape");
     assert.equal(view.container.querySelector("input"), null);
     assert.equal(document.activeElement, view.container.querySelector("button[aria-controls]"));
+  } finally {
+    await view.unmount();
+  }
+});
+
+test("focused inline action surfaces expose their accessible context", async () => {
+  const view = await mountItem(baseSession, { isActive: true });
+  try {
+    const openAction = async (action) => {
+      await click(view.container.querySelector("button[aria-controls]"));
+      await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === action));
+    };
+
+    await openAction("Rename");
+    const input = view.container.querySelector("input");
+    assert.equal(accessibleName(input), "Rename session abcdef123456");
+    await pressKey(input, "Escape");
+
+    await openAction("Stop");
+    for (const button of view.container.querySelectorAll("button")) {
+      assert.equal(accessibleDescription(button), "Stop active work, extension processes, and temporary logs?");
+    }
+    await click([...view.container.querySelectorAll("button")].find((button) => button.textContent.trim() === "Cancel"));
+
+    await openAction("Delete");
+    for (const button of view.container.querySelectorAll("button")) {
+      assert.equal(accessibleDescription(button), "Delete abcdef123456?");
+    }
+  } finally {
+    await view.unmount();
+  }
+});
+
+test("Delete confirmation exposes the full session title to assistive technology", async () => {
+  const title = "Release notes for customer alpha and launch readiness";
+  const view = await mountItem({ ...baseSession, name: title });
+  try {
+    await click(view.container.querySelector("button[aria-controls]"));
+    await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Delete"));
+
+    for (const button of view.container.querySelectorAll("button")) {
+      assert.equal(accessibleDescription(button), `Delete ${title}?`);
+    }
   } finally {
     await view.unmount();
   }

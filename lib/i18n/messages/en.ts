@@ -158,6 +158,7 @@ export const enMessages: Record<string, string> = {
     "sidebar.stop": "Stop",
     "sidebar.stopWithShiftClick": "Stop (Shift+click to stop without confirmation)",
     "sidebar.rename": "Rename",
+    "sidebar.renameSession": "Rename session {title}",
     "sidebar.delete": "Delete",
     "sidebar.deleteWithShiftClick": "Delete (Shift+click to delete without confirmation)",
     "sidebar.messagesCount": "{count} msgs",

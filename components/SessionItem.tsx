@@ -166,6 +166,8 @@ export function SessionItem({
   const pendingFocusRef = useRef<FocusPolicy>("none");
   const renderedSurfaceRef = useRef(actionSurface);
   const menuId = useId();
+  const stopDescriptionId = `${menuId}-stop-description`;
+  const deleteDescriptionId = `${menuId}-delete-description`;
   const eligibleForActions = isActive || !session.transient;
   const hasActions = actionsAvailable && eligibleForActions;
   const renderedSurface = actionsAvailable ? actionSurface : IDLE_ACTION_SURFACE;
@@ -423,12 +425,13 @@ export function SessionItem({
     >
       {renderedSurface.kind === "confirm-stop" ? (
         <>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 10, lineHeight: 1.25, color: "var(--text)", overflowWrap: "anywhere" }}>
+          <div id={stopDescriptionId} style={{ flex: 1, minWidth: 0, fontSize: 10, lineHeight: 1.25, color: "var(--text)", overflowWrap: "anywhere" }}>
             {t("sidebar.stopSessionWarning")}
           </div>
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
             <button
               ref={confirmationRef}
+              aria-describedby={stopDescriptionId}
               onClick={handleStopConfirm}
               style={{
                 height: 30, padding: "0 9px", background: "#ef4444", border: "none",
@@ -438,6 +441,7 @@ export function SessionItem({
               {t("sidebar.stop")}
             </button>
             <button
+              aria-describedby={stopDescriptionId}
               onClick={handleCancel}
               style={{
                 height: 30, padding: "0 8px", background: "var(--bg)", border: "1px solid var(--border)",
@@ -451,12 +455,13 @@ export function SessionItem({
       ) : renderedSurface.kind === "confirm-delete" ? (
         /* ── Delete confirmation: same height, two flat buttons ── */
         <>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {t("sidebar.deleteSession", { title: title.slice(0, 22) + (title.length > 22 ? "…" : "") })}
+          <div id={deleteDescriptionId} style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {t("sidebar.deleteSession", { title })}
           </div>
           <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
             <button
               ref={confirmationRef}
+              aria-describedby={deleteDescriptionId}
               onClick={handleDeleteConfirm}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
@@ -476,6 +481,7 @@ export function SessionItem({
               {t("sidebar.delete")}
             </button>
             <button
+              aria-describedby={deleteDescriptionId}
               onClick={handleCancel}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
@@ -494,6 +500,7 @@ export function SessionItem({
         /* ── Rename: input fills the same row ── */
         <input
           ref={inputRef}
+          aria-label={t("sidebar.renameSession", { title })}
           value={renameValue}
           onChange={(e) => setRenameValue(e.target.value)}
           onBlur={(e) => {
