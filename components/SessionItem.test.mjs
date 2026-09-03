@@ -80,6 +80,10 @@ async function click(element, init = {}) {
   });
 }
 
+async function pressKey(element, key, init = {}) {
+  await act(() => element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })));
+}
+
 test("each session indicator keeps its own label, colour, and glyph", () => {
   const running = renderIndicator("running");
   assert.match(running, /^<span title="Agent running…" aria-label="Agent running…" style="width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var\(--accent\)">/);
@@ -114,16 +118,16 @@ test("a stopped session row shows the stopped marker and its message count", () 
 });
 
 test("session action eligibility matches persisted and transient state", () => {
-  assert.match(renderItem(baseSession), /aria-label="Session actions"/);
-  assert.match(renderItem(baseSession, { isActive: true }), /aria-label="Session actions"/);
-  assert.match(renderItem({ ...baseSession, transient: true }, { isActive: true }), /aria-label="Session actions"/);
-  assert.doesNotMatch(renderItem({ ...baseSession, transient: true }), /aria-label="Session actions"/);
+  assert.match(renderItem(baseSession), /aria-label="Session actions for abcdef123456"/);
+  assert.match(renderItem(baseSession, { isActive: true }), /aria-label="Session actions for abcdef123456"/);
+  assert.match(renderItem({ ...baseSession, transient: true }, { isActive: true }), /aria-label="Session actions for abcdef123456"/);
+  assert.doesNotMatch(renderItem({ ...baseSession, transient: true }), /aria-label="Session actions for abcdef123456"/);
 });
 
 test("the always-visible trigger uses native button keyboard semantics and does not select the row", async () => {
   let selections = 0;
   const view = await mountItem(baseSession, { onClick: () => { selections += 1; } });
-  const trigger = view.container.querySelector('[aria-label="Session actions"]');
+  const trigger = view.container.querySelector("button[aria-controls]");
   assert.ok(trigger instanceof HTMLButtonElement);
   assert.equal(trigger.getAttribute("aria-haspopup"), null);
   assert.ok(trigger.getAttribute("aria-controls"));
@@ -134,7 +138,7 @@ test("the always-visible trigger uses native button keyboard semantics and does 
   await view.unmount();
 
   const transient = await mountItem({ ...baseSession, transient: true }, { isActive: true });
-  await click(transient.container.querySelector('[aria-label="Session actions"]'));
+  await click(transient.container.querySelector("button[aria-controls]"));
   assert.deepEqual([...document.querySelectorAll('[role="group"] button')].map((item) => item.textContent), ["Stop"]);
   await transient.unmount();
 });
@@ -142,10 +146,10 @@ test("the always-visible trigger uses native button keyboard semantics and does 
 test("the popup uses native disclosure and action-group semantics", async () => {
   const view = await mountItem(baseSession);
   try {
-    const trigger = view.container.querySelector('[aria-label="Session actions"]');
+    const trigger = view.container.querySelector("button[aria-controls]");
     await click(trigger);
 
-    const popup = document.querySelector('[aria-label="Session actions"][role="group"]');
+    const popup = document.querySelector('[aria-label="Session actions for abcdef123456"][role="group"]');
     assert.ok(popup);
     assert.equal(trigger.getAttribute("aria-haspopup"), null);
     assert.ok([...popup.querySelectorAll("button")].every((button) => button instanceof HTMLButtonElement && !button.hasAttribute("role")));
@@ -156,7 +160,7 @@ test("the popup uses native disclosure and action-group semantics", async () => 
 
 test("Escape claimed by the popup does not reach window shortcuts", async () => {
   const view = await mountItem(baseSession);
-  const trigger = view.container.querySelector('[aria-label="Session actions"]');
+  const trigger = view.container.querySelector("button[aria-controls]");
   let windowEscapes = 0;
   const windowListener = (event) => { if (event.key === "Escape") windowEscapes += 1; };
   window.addEventListener("keydown", windowListener);
@@ -176,7 +180,7 @@ test("Stop and Delete move focus into their inline confirmation", async () => {
   for (const action of ["Stop", "Delete"]) {
     const view = await mountItem(baseSession, { isActive: true });
     try {
-      await click(view.container.querySelector('[aria-label="Session actions"]'));
+      await click(view.container.querySelector("button[aria-controls]"));
       const item = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === action);
       await click(item);
 
@@ -188,31 +192,110 @@ test("Stop and Delete move focus into their inline confirmation", async () => {
   }
 });
 
-test("eligibility changes close an open popup", async () => {
+test("eligibility changes close an open popup and restore focus only to an eligible trigger", async () => {
   const activePersisted = await mountItem(baseSession, { isActive: true });
   try {
-    await click(activePersisted.container.querySelector('[aria-label="Session actions"]'));
+    const trigger = activePersisted.container.querySelector("button[aria-controls]");
+    await click(trigger);
+    document.querySelector('[role="group"] button').focus();
     await activePersisted.rerender(baseSession, { isActive: false });
     assert.equal(document.querySelector('[role="group"]') === null, true);
+    assert.equal(document.activeElement === trigger, true);
     await activePersisted.rerender(baseSession, { isActive: true });
     assert.equal(document.querySelector('[role="group"]') === null, true);
   } finally {
     await activePersisted.unmount();
   }
 
-  const persisted = await mountItem(baseSession);
+  const transient = await mountItem({ ...baseSession, transient: true }, { isActive: true });
   try {
-    await click(persisted.container.querySelector('[aria-label="Session actions"]'));
-    await persisted.rerender({ ...baseSession, transient: true });
+    await click(transient.container.querySelector("button[aria-controls]"));
+    document.querySelector('[role="group"] button').focus();
+    await transient.rerender({ ...baseSession, transient: true }, { isActive: false });
+    assert.equal(document.querySelector('[role="group"]') === null, true);
+    assert.equal(transient.container.querySelector("button[aria-controls]"), null);
+  } finally {
+    await transient.unmount();
+  }
+});
+
+test("boundary Tab closes the portal and follows the trigger's logical position", async () => {
+  const view = await mountItem(baseSession, { isActive: true });
+  const next = document.createElement("button");
+  next.textContent = "Next control";
+  view.container.after(next);
+
+  try {
+    const trigger = view.container.querySelector("button[aria-controls]");
+    await click(trigger);
+    const actions = [...document.querySelectorAll('[role="group"] button')];
+    actions.at(-1).focus();
+    await pressKey(actions.at(-1), "Tab");
+    assert.equal(document.querySelector('[role="group"]') === null, true);
+    assert.equal(document.activeElement === next, true);
+
+    await click(trigger);
+    const first = document.querySelector('[role="group"] button');
+    first.focus();
+    await pressKey(first, "Tab", { shiftKey: true });
+    assert.equal(document.querySelector('[role="group"]') === null, true);
+    assert.equal(document.activeElement === trigger, true);
+  } finally {
+    next.remove();
+    await view.unmount();
+  }
+});
+
+test("moving focus outside the trigger and popup closes the popup", async () => {
+  const view = await mountItem(baseSession);
+  const outside = document.createElement("button");
+  document.body.append(outside);
+
+  try {
+    await click(view.container.querySelector("button[aria-controls]"));
+    await act(() => outside.focus());
     assert.equal(document.querySelector('[role="group"]') === null, true);
   } finally {
-    await persisted.unmount();
+    outside.remove();
+    await view.unmount();
+  }
+});
+
+test("popup scrolling stays open while outside scrolling closes it", async () => {
+  const view = await mountItem(baseSession, { isActive: true });
+  try {
+    const trigger = view.container.querySelector("button[aria-controls]");
+    await click(trigger);
+    const group = document.querySelector('[role="group"]');
+    await act(() => group.dispatchEvent(new Event("scroll")));
+    assert.equal(document.querySelector('[role="group"]') === group, true);
+
+    await act(() => view.container.dispatchEvent(new Event("scroll")));
+    assert.equal(document.querySelector('[role="group"]') === null, true);
+  } finally {
+    await view.unmount();
+  }
+});
+
+test("session action controls include the session title in their accessible name", async () => {
+  const first = await mountItem({ ...baseSession, name: "Release notes" });
+  const second = await mountItem({ ...baseSession, id: "other", name: "Bug triage" });
+  try {
+    const firstTrigger = first.container.querySelector('[aria-label="Session actions for Release notes"]');
+    const secondTrigger = second.container.querySelector('[aria-label="Session actions for Bug triage"]');
+    assert.ok(firstTrigger);
+    assert.ok(secondTrigger);
+    await click(firstTrigger);
+    assert.equal(document.querySelector('[role="group"]').getAttribute("aria-label"), "Session actions for Release notes");
+  } finally {
+    await first.unmount();
+    await second.unmount();
   }
 });
 
 test("Escape and outside presses dismiss the menu, with Escape restoring trigger focus", async () => {
   const view = await mountItem(baseSession);
-  const trigger = view.container.querySelector('[aria-label="Session actions"]');
+  const trigger = view.container.querySelector("button[aria-controls]");
 
   await click(trigger);
   await act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
@@ -229,7 +312,7 @@ test("menu actions preserve rename and Stop/Delete confirmations without selecti
   for (const action of ["Rename", "Stop", "Delete"]) {
     let selections = 0;
     const view = await mountItem(baseSession, { isActive: true, onClick: () => { selections += 1; } });
-    await click(view.container.querySelector('[aria-label="Session actions"]'));
+    await click(view.container.querySelector("button[aria-controls]"));
     const item = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === action);
     await click(item);
 
@@ -252,7 +335,7 @@ test("Shift-click bypasses Stop and Delete confirmations", async () => {
   try {
     const view = await mountItem(baseSession, { isActive: true });
     for (const action of ["Stop", "Delete"]) {
-      await click(view.container.querySelector('[aria-label="Session actions"]'));
+      await click(view.container.querySelector("button[aria-controls]"));
       const item = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === action);
       await click(item, { shiftKey: true });
       assert.doesNotMatch(view.container.textContent, /Stop active work|Delete abcdef123456\?/);
@@ -270,7 +353,7 @@ test("Shift-click bypasses Stop and Delete confirmations", async () => {
 test("opening and closing the out-of-flow menu preserves row geometry", async () => {
   const view = await mountItem({ ...baseSession, name: "A very long session title that must stay truncated" });
   const row = view.container.firstElementChild;
-  const trigger = view.container.querySelector('[aria-label="Session actions"]');
+  const trigger = view.container.querySelector("button[aria-controls]");
   const title = view.container.querySelector('[title="A very long session title that must stay truncated"]');
   const titleStyle = title.getAttribute("style");
 

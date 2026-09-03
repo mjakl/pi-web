@@ -145,7 +145,7 @@ export const enMessages: Record<string, string> = {
     "sidebar.sessionStopped": "Session stopped",
     "sidebar.newActivity": "New activity",
     "sidebar.newSessionActivity": "New session activity",
-    "sidebar.sessionActions": "Session actions",
+    "sidebar.sessionActions": "Session actions for {title}",
     "sidebar.deleteSession": "Delete {title}?",
     "sidebar.stopSessionWarning": "Stop active work, extension processes, and temporary logs?",
     "sidebar.stop": "Stop",

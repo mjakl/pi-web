@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SessionInfo } from "@/lib/types";
 import { dispatchSessionRowContextMenu } from "@/lib/session-row-context-menu";
@@ -8,6 +8,8 @@ import { formatRelativeTime } from "@/lib/i18n/format";
 import { useI18n } from "@/hooks/useI18n";
 
 export const SESSION_ITEM_HEIGHT = 54;
+
+const TABBABLE_SELECTOR = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
 const menuItemStyle: React.CSSProperties = {
   display: "block",
@@ -146,12 +148,12 @@ export function SessionItem({
   const confirmationRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const menuHadFocusRef = useRef(false);
   const menuId = useId();
-  const openMenuPosition = menuPosition
-    && menuPosition.isActive === Boolean(isActive)
-    && menuPosition.transient === Boolean(session.transient)
-    ? menuPosition
-    : undefined;
+  const hasActions = isActive || !session.transient;
+  const menuEligibilityValid = !menuPosition
+    || (menuPosition.isActive === Boolean(isActive)
+      && menuPosition.transient === Boolean(session.transient));
 
   // Select the whole name once the rename input is mounted (startRename's
   // immediate setTimeout can fire before the input exists).
@@ -166,12 +168,16 @@ export function SessionItem({
     if (confirmStop || confirmDelete) confirmationRef.current?.focus();
   }, [confirmDelete, confirmStop]);
 
-  useEffect(() => {
-    if (menuPosition && !openMenuPosition) setMenuPosition(undefined);
-  }, [menuPosition, openMenuPosition]);
+  useLayoutEffect(() => {
+    if (!menuPosition || menuEligibilityValid) return;
+    const restoreFocus = menuHadFocusRef.current && hasActions;
+    setMenuPosition(undefined);
+    menuHadFocusRef.current = false;
+    if (restoreFocus) menuTriggerRef.current?.focus();
+  }, [hasActions, menuEligibilityValid, menuPosition]);
 
   useEffect(() => {
-    if (!openMenuPosition) return;
+    if (!menuPosition || !menuEligibilityValid) return;
 
     const focusFrame = requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus());
     const dismissOutside = (event: PointerEvent) => {
@@ -185,23 +191,29 @@ export function SessionItem({
       setMenuPosition(undefined);
       menuTriggerRef.current?.focus();
     };
-    const dismissOnViewportChange = () => setMenuPosition(undefined);
+    const dismissOnResize = () => setMenuPosition(undefined);
+    const dismissOnScroll = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) return;
+      setMenuPosition(undefined);
+    };
 
     document.addEventListener("pointerdown", dismissOutside, true);
     document.addEventListener("keydown", dismissOnEscape);
-    window.addEventListener("resize", dismissOnViewportChange);
-    window.addEventListener("scroll", dismissOnViewportChange, true);
+    window.addEventListener("resize", dismissOnResize);
+    window.addEventListener("scroll", dismissOnScroll, true);
     return () => {
       cancelAnimationFrame(focusFrame);
       document.removeEventListener("pointerdown", dismissOutside, true);
       document.removeEventListener("keydown", dismissOnEscape);
-      window.removeEventListener("resize", dismissOnViewportChange);
-      window.removeEventListener("scroll", dismissOnViewportChange, true);
+      window.removeEventListener("resize", dismissOnResize);
+      window.removeEventListener("scroll", dismissOnScroll, true);
     };
-  }, [openMenuPosition]);
+  }, [menuEligibilityValid, menuPosition]);
 
   const firstMessage = session.firstMessage ?? "";
   const title = session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12);
+  const actionsLabel = t("sidebar.sessionActions", { title });
 
   const startRename = useCallback(() => {
     if (session.transient) return;
@@ -291,11 +303,37 @@ export function SessionItem({
     setConfirmDelete(false);
   }, []);
 
-  const hasActions = isActive || !session.transient;
+  const closeWhenFocusLeaves = useCallback((e: React.FocusEvent) => {
+    if (!menuPosition || !menuEligibilityValid) return;
+    const next = e.relatedTarget as Node | null;
+    if (menuRef.current?.contains(next) || menuTriggerRef.current?.contains(next)) return;
+    menuHadFocusRef.current = false;
+    setMenuPosition(undefined);
+  }, [menuEligibilityValid, menuPosition]);
+
+  const handleMenuKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+    const buttons = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+    const leavingBackward = e.shiftKey && e.target === buttons[0];
+    const leavingForward = !e.shiftKey && e.target === buttons.at(-1);
+    if (!leavingBackward && !leavingForward) return;
+
+    e.preventDefault();
+    const trigger = menuTriggerRef.current;
+    let destination: HTMLElement | null = trigger;
+    if (leavingForward && trigger) {
+      const tabbable = [...document.querySelectorAll<HTMLElement>(TABBABLE_SELECTOR)]
+        .filter((element) => element.tabIndex >= 0 && !element.closest("[hidden], [inert]") && !menuRef.current?.contains(element));
+      destination = tabbable[tabbable.indexOf(trigger) + 1] ?? trigger;
+    }
+    menuHadFocusRef.current = false;
+    setMenuPosition(undefined);
+    destination?.focus();
+  }, []);
 
   const toggleMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
-    if (openMenuPosition) {
+    if (menuPosition) {
       setMenuPosition(undefined);
       return;
     }
@@ -309,7 +347,7 @@ export function SessionItem({
       isActive: Boolean(isActive),
       transient: Boolean(session.transient),
     });
-  }, [isActive, openMenuPosition, session.transient]);
+  }, [isActive, menuPosition, session.transient]);
 
   const chooseMenuAction = useCallback((e: React.MouseEvent, action: "stop" | "rename" | "delete") => {
     e.stopPropagation();
@@ -508,14 +546,15 @@ export function SessionItem({
               <button
                 ref={menuTriggerRef}
                 type="button"
-                aria-label={t("sidebar.sessionActions")}
+                aria-label={actionsLabel}
                 aria-controls={menuId}
-                aria-expanded={Boolean(openMenuPosition)}
+                aria-expanded={Boolean(menuPosition)}
                 onClick={toggleMenu}
+                onBlur={closeWhenFocusLeaves}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   width: 28, height: 28, padding: 0,
-                  background: openMenuPosition ? "var(--bg-selected)" : "transparent",
+                  background: menuPosition ? "var(--bg-selected)" : "transparent",
                   border: "1px solid transparent", borderRadius: 6,
                   color: "var(--text-muted)", cursor: "pointer",
                 }}
@@ -529,19 +568,22 @@ export function SessionItem({
             )}
           </div>
 
-          {openMenuPosition && createPortal(
+          {menuPosition && createPortal(
             <div
               ref={menuRef}
               id={menuId}
               role="group"
-              aria-label={t("sidebar.sessionActions")}
+              aria-label={actionsLabel}
               style={{
-                position: "fixed", top: openMenuPosition.top, left: openMenuPosition.left, zIndex: 1000,
+                position: "fixed", top: menuPosition.top, left: menuPosition.left, zIndex: 1000,
                 width: "min(144px, calc(100vw - 16px))", maxHeight: "calc(100vh - 16px)", overflowY: "auto",
                 padding: 4, background: "var(--bg)", border: "1px solid var(--border)",
                 borderRadius: 7, boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
               }}
               onClick={(e) => e.stopPropagation()}
+              onFocusCapture={() => { menuHadFocusRef.current = true; }}
+              onBlur={closeWhenFocusLeaves}
+              onKeyDown={handleMenuKeyDown}
             >
               {isActive && (
                 <button type="button" title={t("sidebar.stopWithShiftClick")} onClick={(e) => chooseMenuAction(e, "stop")} style={menuItemStyle}>
