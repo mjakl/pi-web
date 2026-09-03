@@ -1304,9 +1304,14 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     if (lvl === "auto" || !thinkingLevelMap) return lvl;
     return thinkingLevelMap[lvl] ?? lvl;
   })();
-  // Close dropdowns on outside click
+  // Close dropdowns on an outside press. pointerdown, not mousedown: iOS
+  // synthesises mouse events only for elements Safari treats as clickable, so
+  // a tap on inert background can leave the menu open. These menus stay
+  // absolutely positioned against their trigger, so they are not popovers --
+  // a popover sits in the top layer, where absolute positioning resolves
+  // against the viewport instead of the wrapper.
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const handler = (e: PointerEvent) => {
       if (thinkingDropdownRef.current && !thinkingDropdownRef.current.contains(e.target as Node)) {
         setThinkingDropdownOpen(false);
       }
@@ -1314,8 +1319,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         setStreamingActionMenuOpen(false);
       }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("pointerdown", handler);
+    return () => document.removeEventListener("pointerdown", handler);
   }, []);
 
 

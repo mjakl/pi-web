@@ -976,7 +976,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
 
   // Close dropdowns on outside click
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const handler = (e: PointerEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
         setProjectFilter("");
@@ -990,8 +990,11 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
         setWtFilter("");
       }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    // pointerdown, not mousedown: iOS synthesises mouse events only for
+    // elements Safari treats as clickable, so a tap on inert background can
+    // leave the dropdown open.
+    document.addEventListener("pointerdown", handler);
+    return () => document.removeEventListener("pointerdown", handler);
   }, []);
 
   // Clicking a session moves the effective cwd to that session's worktree.
