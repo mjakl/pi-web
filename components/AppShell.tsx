@@ -930,6 +930,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
         onActiveSessionIdsChange={handleActiveSessionIdsChange}
         onRunningSessionIdsChange={handleRunningSessionIdsChange}
         onSessionsChange={handleSessionsChange}
+        actionsAvailable={sidebarOpen}
       />
       <div style={{ padding: "8px", flexShrink: 0, display: "flex", justifyContent: "space-between", gap: 4 }}>
         {([
@@ -1506,6 +1507,8 @@ export function AppShell({ piVersion }: { piVersion: string }) {
       <div
         ref={sidebarResizer.panelRef}
         id="session-sidebar"
+        inert={!sidebarOpen}
+        aria-hidden={sidebarOpen ? undefined : true}
         className={`sidebar-container${sidebarOpen ? " sidebar-open" : " sidebar-closed"}${mobileSidebarReady ? "" : " sidebar-mobile-pending"}${sidebarResizer.isResizing ? " sidebar-resizing" : ""}`}
         style={{
           "--sidebar-width": `${sidebarResizer.width}px`,
