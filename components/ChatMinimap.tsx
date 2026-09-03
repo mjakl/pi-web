@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo, type RefObject } from "react";
-import { isScrollAtTail } from "@/lib/chat-lazy-load";
 import { isMessageGroupAnchor } from "@/lib/message-display";
-import { useI18n } from "@/hooks/useI18n";
 import type { AgentMessage } from "@/lib/types";
 
 interface Props {
@@ -17,8 +15,8 @@ const MINIMAP_WIDTH = 36;
 const MAX_NODE_GAP = 50;
 const MINIMAP_PADDING = 12;
 const NAVIGATION_ACTIVE_LOCK_MS = 1600;
-// Reserved at the foot of the rail for the jump-to-latest button. Always
-// reserved, so the dots do not reflow as the button appears and disappears.
+// Reserved at the foot of the rail so the dots clear the jump-to-latest
+// control that floats over it.
 const MINIMAP_FOOTER = 30;
 
 interface NodeInfo {
@@ -67,13 +65,11 @@ export function ChatMinimap({
   scrollContainer,
   messageRefs,
 }: Props) {
-  const { t } = useI18n();
   const [visible, setVisible] = useState(false);
   const [allNodes, setAllNodes] = useState<NodeInfo[]>([]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [minimapHeight, setMinimapHeight] = useState(600);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [atBottom, setAtBottom] = useState(true);
   const draggingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const allNodesRef = useRef<NodeInfo[]>([]);
@@ -134,7 +130,6 @@ export function ChatMinimap({
     if (!scrollEl) return;
     const scrollable = scrollEl.scrollHeight - scrollEl.clientHeight;
     setVisible(scrollable > 20);
-    setAtBottom(isScrollAtTail(scrollEl.scrollTop, scrollEl.clientHeight, scrollEl.scrollHeight));
     syncActiveNode(scrollEl, allNodesRef.current);
   }, [scrollContainer, syncActiveNode]);
 
@@ -171,8 +166,7 @@ export function ChatMinimap({
       allNodesRef.current = nextNodes;
       setAllNodes(nextNodes);
       setVisible(scrollEl.scrollHeight - scrollEl.clientHeight > 20);
-      setAtBottom(isScrollAtTail(scrollEl.scrollTop, scrollEl.clientHeight, scrollEl.scrollHeight));
-      syncActiveNode(scrollEl, nextNodes);
+        syncActiveNode(scrollEl, nextNodes);
 
       // A jump requested before the target had been measured retries here.
       const pendingIndex = pendingNavigationRef.current;
@@ -323,28 +317,6 @@ export function ChatMinimap({
           zIndex: 0,
         }}
       />
-
-      {!atBottom && (
-        <button
-          type="button"
-          className="chat-minimap-jump"
-          title={t("chat.jumpToLatest")}
-          aria-label={t("chat.jumpToLatest")}
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            const scrollEl = scrollContainer.current;
-            if (!scrollEl) return;
-            activeNodeLockRef.current = null;
-            scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: "smooth" });
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 4v13" />
-            <path d="m6 12 6 6 6-6" />
-          </svg>
-        </button>
-      )}
 
       {positionedNodes.map((node) => {
         const isNearest = hoveredIndex === node.index;

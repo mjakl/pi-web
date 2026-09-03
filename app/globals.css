@@ -358,10 +358,18 @@ pre, code {
   font-size: 14px;
   line-height: 1.7;
   color: var(--text);
-  word-break: break-word;
+  /* Not word-break: break-word, which behaves like overflow-wrap: anywhere:
+     it lets content shrink to its narrowest, so a path shattered mid-token
+     (".ts:2" / "16-225") and a table squeezed its cells to "uncha"/"nged"
+     instead of scrolling. break-word moves the token to its own line and
+     splits it only when it cannot fit there alone. */
+  overflow-wrap: break-word;
 }
 /* The chat column is a fixed 820px, which is ~105 characters at 14px. Cap the
-   measure on prose only -- code blocks, tables and images still need the room. */
+   measure on prose only -- code blocks, tables and images still need the room.
+   76ch rather than a textbook 68ch: these transcripts are full of long paths in
+   inline code, and a narrower line forces them to break mid-token. Measured on
+   a real session, 68ch split 10 of 76 spans, 76ch splits 4, uncapped splits 1. */
 .markdown-body > p,
 .markdown-body > ul,
 .markdown-body > ol,
@@ -372,7 +380,7 @@ pre, code {
 .markdown-body > h4,
 .markdown-body > h5,
 .markdown-body > h6 {
-  max-width: 68ch;
+  max-width: 76ch;
 }
 .markdown-body p { margin: 0 0 8px; }
 .markdown-body p:last-child { margin-bottom: 0; }
@@ -1649,33 +1657,41 @@ span.linenumber {
   outline-offset: -2px;
 }
 
-/* Jump-to-latest control at the foot of the chat minimap rail. */
-.chat-minimap-jump {
+/* Jump back to the newest message. Floats over the bottom-right of the
+   transcript, clear of the minimap rail on desktop. */
+.chat-jump-to-latest {
   position: absolute;
-  left: 50%;
-  bottom: 8px;
-  transform: translateX(-50%);
-  z-index: 3;
+  right: 46px;
+  bottom: 18px;
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 50%;
   background: var(--bg);
   color: var(--text-muted);
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.chat-minimap-jump:hover {
+.chat-jump-to-latest:hover {
   background: var(--bg-selected);
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
-.chat-minimap-jump:focus-visible {
+.chat-jump-to-latest:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* No rail on mobile, so it sits at the edge and clears the composer. */
+@media (max-width: 640px) {
+  .chat-jump-to-latest {
+    right: 14px;
+    bottom: 14px;
+  }
 }

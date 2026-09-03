@@ -8,6 +8,7 @@ import { countToolCallBlocks, getAssistantErrorMessage, getDisplayableAssistantB
 import { extractTurnWrittenFiles, type WrittenFile } from "@/lib/turn-written-files";
 import { MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
+import { ChatJumpToLatest } from "./ChatJumpToLatest";
 import { ChatMinimap } from "./ChatMinimap";
 import { ExtensionStatusBar } from "./ExtensionStatusBar";
 import { DockedComposer } from "./DockedComposer";
@@ -860,6 +861,7 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
             </div>
           </div>
         </div>
+        <ChatJumpToLatest scrollContainer={scrollContainerRef} />
         {isMobile ? null : (
           <ChatMinimap
             messages={messages}
