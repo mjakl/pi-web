@@ -10,6 +10,7 @@ import { MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatMinimap } from "./ChatMinimap";
 import { ExtensionStatusBar } from "./ExtensionStatusBar";
+import { DockedComposer } from "./DockedComposer";
 import { AnsiText } from "./AnsiText";
 import { useI18n } from "@/hooks/useI18n";
 import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
@@ -888,10 +889,10 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
         )}
       </div>
 
-      <div style={{ position: "relative" }}>
+      <DockedComposer>
         {chatInputElement}
         <ExtensionStatusBar statuses={extensionStatuses} widgets={extensionWidgets} />
-      </div>
+      </DockedComposer>
       </>
       )}
     </div>
