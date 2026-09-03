@@ -40,6 +40,18 @@ test("renders enabledModels scope warnings", () => {
   assert.equal(renderToStaticMarkup(React.createElement(ModelScopeWarningBanner, { warnings: [] })), "");
 });
 
+test("leaves space above the docked input", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(ChatInput, {
+      onSend() {},
+      onAbort() {},
+      isStreaming: false,
+    }),
+  );
+
+  assert.match(html, /^<div style="flex-shrink:0;background:transparent;padding:12px 16px 8px;/);
+});
+
 test("keeps the model selector visible when a model error leaves no options", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {

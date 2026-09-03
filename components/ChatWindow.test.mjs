@@ -30,7 +30,7 @@ test("shows the validated runtime Pi version in the empty composer", () => {
   assert.match(html, /pi <span[^>]*>v0\.84\.4<\/span>/);
 });
 
-test("separates the docked composer from the full chat pane", () => {
+test("does not draw a hard divider above the docked composer", () => {
   const html = renderToStaticMarkup(
     React.createElement(
       DockedComposer,
@@ -40,6 +40,6 @@ test("separates the docked composer from the full chat pane", () => {
     ),
   );
 
-  assert.match(html, /^<div style="position:relative;border-top:1px solid var\(--border\)">/);
+  assert.match(html, /^<div style="position:relative">/);
   assert.match(html, />composer<\/span><span>status<\/span><\/div>$/);
 });
