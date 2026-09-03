@@ -138,7 +138,7 @@ export function ExtensionWidgets({ widgets }: { widgets: ExtensionWidgetItem[] }
           })()}
         </div>
       )}
-      <div className="extension-widget-triggers" aria-label={t("chat.extensionWidgets")}>
+      <div className="extension-widget-triggers" role="group" aria-label={t("chat.extensionWidgets")}>
         {widgets.map((widget, index) => {
           const expandable = widget.lines.length > 0;
           const expanded = expandable && widget.key === expandedWidget?.key;

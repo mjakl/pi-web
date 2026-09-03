@@ -3,6 +3,7 @@
 import { memo, useState, useRef, useEffect, useMemo } from "react";
 import { MarkdownBody } from "./MarkdownBody";
 import { ImagePreview } from "./ImagePreview";
+import { errorMessage } from "@/lib/error-message";
 import { copyText } from "@/lib/clipboard";
 import { useI18n } from "@/hooks/useI18n";
 import { formatTimestamp } from "@/lib/i18n/format";
@@ -936,7 +937,7 @@ function ThinkingBlock({ block, duration, sessionId, entryId, blockIndex }: {
     try {
       setContent(await loadThinkingContent(sessionId, entryId, blockIndex, t));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -1743,7 +1744,7 @@ function BashExecutionView({ message, sessionId }: { message: BashExecutionMessa
         setFullError(d.error ?? "failed");
       }
     } catch (e) {
-      setFullError(String(e));
+      setFullError(errorMessage(e));
     } finally {
       setLoadingFull(false);
     }

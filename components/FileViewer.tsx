@@ -17,11 +17,12 @@ import {
   isDocumentPreviewPath,
   isImagePath,
 } from "@/lib/file-types";
+import { errorMessage } from "@/lib/error-message";
 import { encodeFilePathForApi, getFileDirectory, getFileName, getRelativeFilePath } from "@/lib/file-paths";
 import { resolveLocalFileHref } from "@/lib/file-links";
 import { MentionIcon } from "./FileIcons";
 import { parseFrontmatter } from "@/lib/frontmatter";
-import { markdownPreviewRehypePlugins, markdownPreviewRemarkPlugins, normalizeDisplayMath } from "@/lib/markdown";
+import { markdownRehypePlugins, markdownRemarkPlugins, normalizeDisplayMath } from "@/lib/markdown";
 import { CodeBlock, MermaidBlock } from "./MermaidBlock";
 import { FrontmatterCard } from "./FrontmatterCard";
 import { parseUnifiedPatch } from "@/lib/patch";
@@ -470,7 +471,7 @@ function useWatchedFile(
           setBust((value) => value + 1);
         })
         .catch((nextError) => {
-          if (active && requestId === syncRequestRef.current) setError(String(nextError));
+          if (active && requestId === syncRequestRef.current) setError(errorMessage(nextError));
         });
     };
 
@@ -522,6 +523,7 @@ function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       <div
+        className="file-viewer-toolbar"
         style={{
           display: "flex",
           alignItems: "center",
@@ -534,7 +536,7 @@ function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
           flexShrink: 0,
         }}
       >
-        <span style={{ fontFamily: "var(--font-mono)" }} title={filePath}>
+        <span className="file-viewer-path" style={{ fontFamily: "var(--font-mono)" }} title={filePath}>
           {getRelativeFilePath(filePath, cwd)}
         </span>
         <span style={{ marginLeft: "auto" }}>{ext || "image"}</span>
@@ -545,10 +547,8 @@ function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
           style={{ display: "flex", alignItems: "center", gap: 4, color: watching ? "var(--success)" : "var(--text-dim)" }}
         >
           <span
+            className="file-viewer-live-indicator"
             style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
               background: watching ? "var(--success)" : "var(--border)",
               display: "inline-block",
               boxShadow: watching ? "0 0 4px var(--success)" : "none",
@@ -619,6 +619,7 @@ function AudioViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       <div
+        className="file-viewer-toolbar"
         style={{
           display: "flex",
           alignItems: "center",
@@ -631,7 +632,7 @@ function AudioViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
           flexShrink: 0,
         }}
       >
-        <span style={{ fontFamily: "var(--font-mono)" }} title={filePath}>
+        <span className="file-viewer-path" style={{ fontFamily: "var(--font-mono)" }} title={filePath}>
           {getRelativeFilePath(filePath, cwd)}
         </span>
         <span style={{ marginLeft: "auto" }}>{ext || "audio"}</span>
@@ -642,10 +643,8 @@ function AudioViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
           style={{ display: "flex", alignItems: "center", gap: 4, color: watching ? "var(--success)" : "var(--text-dim)" }}
         >
           <span
+            className="file-viewer-live-indicator"
             style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
               background: watching ? "var(--success)" : "var(--border)",
               display: "inline-block",
               boxShadow: watching ? "0 0 4px var(--success)" : "none",
@@ -722,7 +721,7 @@ function DocumentViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }:
         }
       })
       .catch((nextError) => {
-        if (active && requestId === syncRequestRef.current) setError(String(nextError));
+        if (active && requestId === syncRequestRef.current) setError(errorMessage(nextError));
       });
 
     return () => {
@@ -762,7 +761,7 @@ function DocumentViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }:
           setBust((value) => value + 1);
         })
         .catch((nextError) => {
-          if (active && requestId === syncRequestRef.current) setError(String(nextError));
+          if (active && requestId === syncRequestRef.current) setError(errorMessage(nextError));
         });
     };
 
@@ -804,6 +803,7 @@ function DocumentViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }:
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       <div
+        className="file-viewer-toolbar"
         style={{
           display: "flex",
           alignItems: "center",
@@ -816,21 +816,18 @@ function DocumentViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }:
           flexShrink: 0,
         }}
       >
-        <span style={{ fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={filePath}>
+        <span className="file-viewer-path" style={{ fontFamily: "var(--font-mono)" }} title={filePath}>
           {getRelativeFilePath(filePath, cwd)}
         </span>
         <span style={{ marginLeft: "auto" }}>{ext === "docx" ? "docx preview" : "pdf"}</span>
         {size != null && <span>{formatSize(size)}</span>}
-        <DownloadLink filePath={filePath} sourceSessionId={sourceSessionId} />
         <span
           title={watching ? t("i18n.liveSync") : t("i18n.notWatching")}
           style={{ display: "flex", alignItems: "center", gap: 4, color: watching ? "var(--success)" : "var(--text-dim)", flexShrink: 0 }}
         >
           <span
+            className="file-viewer-live-indicator"
             style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
               background: watching ? "var(--success)" : "var(--border)",
               display: "inline-block",
               boxShadow: watching ? "0 0 4px var(--success)" : "none",
@@ -838,6 +835,7 @@ function DocumentViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }:
           />
           {watching ? "live" : "static"}
         </span>
+        <DownloadLink filePath={filePath} sourceSessionId={sourceSessionId} />
       </div>
       <div style={{ flex: 1, minHeight: 0, background: "var(--bg-panel)" }}>
         {error ? (
@@ -1000,7 +998,7 @@ function TextFileViewer({
       })
       .catch((e) => {
         if (requestId !== contentRequestRef.current) return null;
-        setError(String(e));
+        setError(errorMessage(e));
         return null;
       });
   }, [sourceSessionId]);
@@ -1351,7 +1349,7 @@ function TextFileViewer({
 
         <div className="file-viewer-controls">
           {displayModes.length > 1 && (
-            <div className="file-viewer-mode-switch" aria-label={t("i18n.fileViewMode")}>
+            <div className="file-viewer-mode-switch" role="group" aria-label={t("i18n.fileViewMode")}>
               {displayModes.map((mode) => {
                 const active = effectiveDisplayMode === mode;
                 return (
@@ -1456,8 +1454,8 @@ function TextFileViewer({
           >
             {frontmatter?.data && <FrontmatterCard data={frontmatter.data} />}
             <ReactMarkdown
-              remarkPlugins={markdownPreviewRemarkPlugins}
-              rehypePlugins={markdownPreviewRehypePlugins}
+              remarkPlugins={markdownRemarkPlugins}
+              rehypePlugins={markdownRehypePlugins}
               components={{
                 code({ className, children, ...props }) {
                   const lang = className?.replace("language-", "").toLowerCase() ?? "";

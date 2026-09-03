@@ -12,6 +12,7 @@ import type {
   SessionTreeNode,
   UserMessage,
 } from "@/lib/types";
+import { errorMessage } from "@/lib/error-message";
 import { isBlockingExtensionUiRequest } from "@/lib/browser-notifications";
 import { normalizeToolCalls } from "@/lib/normalize";
 import { createClientId } from "@/lib/client-id";
@@ -522,7 +523,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         return true;
       } catch (e) {
         if (!isCurrentLoad()) return isCurrentStateLoad();
-        setError(String(e));
+        setError(errorMessage(e));
         return false;
       } finally {
         if (showLoading && !messagesLoaded) setLoading(false);
@@ -867,7 +868,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       return true;
     } catch (refreshError) {
       if (isCurrentRefresh()) {
-        const detail = refreshError instanceof Error ? refreshError.message : String(refreshError);
+        const detail = errorMessage(refreshError);
         addNotice({ type: "error", message: t("chat.transcriptRefreshFailed", { error: detail }) });
       }
       return false;
@@ -1523,7 +1524,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           ? prev
           : [...prev.slice(0, optimisticIndex), ...prev.slice(optimisticIndex + 1)];
       });
-      addNotice({ type: "error", message: e instanceof Error ? e.message : String(e) });
+      addNotice({ type: "error", message: errorMessage(e) });
       restoreSubmission(message, images, composerDraftKey);
       optimisticUserMessageKeyRef.current = null;
       // Rejection only describes this submission. Another tab or an event we
@@ -1560,7 +1561,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       promoteNewSession(1, inputText);
     } catch (e) {
       console.error("Failed to execute shell command:", e);
-      addNotice({ type: "error", message: e instanceof Error ? e.message : String(e) });
+      addNotice({ type: "error", message: errorMessage(e) });
       restoreSubmission(inputText, undefined, composerDraftKey);
     } finally {
       bashRunningRef.current = false;
@@ -1677,7 +1678,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setCurrentModelOverride(previousOverride);
       addNotice({
         type: "error",
-        message: t("chat.switchModelFailed", { error: e instanceof Error ? e.message : String(e) }),
+        message: t("chat.switchModelFailed", { error: errorMessage(e) }),
       });
       // A failed response can still follow a server-side write (for example, a
       // dropped connection), so let the session file settle the displayed model.
@@ -1700,7 +1701,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setCompactResult(readCompactResult(result, "manual"));
       await loadSession(sid, true);
     } catch (e) {
-      setCompactError(e instanceof Error ? e.message : String(e));
+      setCompactError(errorMessage(e));
       setCompactResult(null);
     } finally {
       setIsCompacting(false);
@@ -1830,7 +1831,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           return { handled: false };
       }
     } catch (e) {
-      return complete({ handled: true, error: e instanceof Error ? e.message : String(e) });
+      return complete({ handled: true, error: errorMessage(e) });
     } finally {
       if (commandName === "compact") setIsCompacting(false);
     }
@@ -1867,7 +1868,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       if (isPromptRejectedError(e)) restore();
       addNotice({
         type: "error",
-        message: e instanceof Error ? e.message : String(e),
+        message: errorMessage(e),
       });
     }
   }, [addNotice, composerDraftKey, restoreSubmission, t]);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { errorMessage } from "@/lib/error-message";
 import { useI18n } from "@/hooks/useI18n";
 import type {
   SkillInfo as Skill,
@@ -34,6 +35,7 @@ import {
   ConfigSplitView,
   ConfigSwitch,
   shortenPath,
+  ConfigScopePicker,
 } from "./SettingsUi";
 
 function sourceLabel(skill: Skill): string {
@@ -263,7 +265,7 @@ function AddSkillPanel({
       setResults(d.results ?? []);
       if ((d.results ?? []).length === 0) setSearchError(t("i18n.noSkills"));
     } catch (e) {
-      setSearchError(String(e));
+      setSearchError(errorMessage(e));
     } finally {
       setSearching(false);
     }
@@ -289,7 +291,7 @@ function AddSkillPanel({
         );
         onInstalled();
       } catch (e) {
-        setInstallError(String(e));
+        setInstallError(errorMessage(e));
       } finally {
         setInstalling(null);
       }
@@ -347,40 +349,11 @@ function AddSkillPanel({
 
         {/* Scope + install path row */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              display: "flex",
-              borderRadius: 5,
-              border: "1px solid var(--border)",
-              overflow: "hidden",
-              fontSize: 12,
-              flexShrink: 0,
-            }}
-          >
-            {(["global", "project"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => {
-                  if (s === "global" || projectResourcesLoaded) setScope(s);
-                }}
-                disabled={s === "project" && !projectResourcesLoaded}
-                title={s === "project" && !projectResourcesLoaded ? t("trust.projectScopeUnavailable") : undefined}
-                style={{
-                  padding: "3px 10px",
-                  border: "none",
-                  cursor: s === "project" && !projectResourcesLoaded ? "not-allowed" : "pointer",
-                  background: scope === s ? "var(--bg-selected)" : "none",
-                  color: scope === s ? "var(--text)" : "var(--text-dim)",
-                  fontWeight: scope === s ? 600 : 400,
-                  opacity: s === "project" && !projectResourcesLoaded ? 0.45 : 1,
-                  borderRight:
-                    s === "global" ? "1px solid var(--border)" : "none",
-                }}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          <ConfigScopePicker
+            value={scope}
+            projectEnabled={projectResourcesLoaded}
+            onChange={setScope}
+          />
           <span
             style={{
               fontSize: 12,
@@ -575,7 +548,7 @@ export function SkillsConfig({
       });
       return list;
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
       return [];
     } finally {
       setLoading(false);
@@ -627,7 +600,7 @@ export function SkillsConfig({
         return next;
       });
     } catch (e) {
-      setUpdateError(e instanceof Error ? e.message : String(e));
+      setUpdateError(errorMessage(e));
     } finally {
       setCheckingUpdates((current) => {
         const next = new Set(current);
@@ -674,7 +647,7 @@ export function SkillsConfig({
         },
       }));
     } catch (e) {
-      setUpdateError(e instanceof Error ? e.message : String(e));
+      setUpdateError(errorMessage(e));
     } finally {
       setUpdatingSkill(null);
     }
@@ -706,7 +679,7 @@ export function SkillsConfig({
         ),
       );
     } catch (e) {
-      setSaveError(String(e));
+      setSaveError(errorMessage(e));
     } finally {
       setToggling((s) => {
         const n = new Set(s);

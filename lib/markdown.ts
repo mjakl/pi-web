@@ -345,19 +345,7 @@ export const markdownRemarkPlugins: ReactMarkdownOptions["remarkPlugins"] = [
   [remarkGfm, remarkGfmOptions],
   remarkMath,
 ];
-export const markdownPreviewRemarkPlugins: ReactMarkdownOptions["remarkPlugins"] = [
-  [remarkFrontmatter, ["yaml"]],
-  [remarkGfm, remarkGfmOptions],
-  remarkMath,
-];
-
 export const markdownRehypePlugins: ReactMarkdownOptions["rehypePlugins"] = [
-  rehypeRaw,
-  [rehypeSanitize, markdownSanitizeSchema],
-  [rehypeKatex, { throwOnError: false, strict: false }],
-];
-
-export const markdownPreviewRehypePlugins: ReactMarkdownOptions["rehypePlugins"] = [
   rehypeRaw,
   [rehypeSanitize, markdownSanitizeSchema],
   [rehypeKatex, { throwOnError: false, strict: false }],

@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useTheme, type ThemePreference } from "@/hooks/useTheme";
+import { errorMessage } from "@/lib/error-message";
 import { sendAgentCommand } from "@/lib/agent-client";
 import type { ShellToolSettingsResponse } from "@/lib/api-types";
 import { getPreferredToolPreset, setPreferredToolPreset } from "@/lib/tool-preset-preference";
@@ -93,7 +94,7 @@ function GeneralSettings({ sessionId, toolPresetControl, soundEnabled, onSoundTo
         if (!cancelled) setShellSettings(data);
       })
       .catch((cause) => {
-        if (!cancelled) setShellError(cause instanceof Error ? cause.message : String(cause));
+        if (!cancelled) setShellError(errorMessage(cause));
       });
     return () => { cancelled = true; };
   }, []);
@@ -115,7 +116,7 @@ function GeneralSettings({ sessionId, toolPresetControl, soundEnabled, onSoundTo
         onSessionReloaded();
       }
     } catch (cause) {
-      setShellError(cause instanceof Error ? cause.message : String(cause));
+      setShellError(errorMessage(cause));
     } finally {
       setShellSaving(false);
     }

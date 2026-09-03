@@ -10,6 +10,7 @@ import {
   joinFilePath,
   normalizeFilePathSlashes,
 } from "@/lib/file-paths";
+import { errorMessage } from "@/lib/error-message";
 import type { GitFileStatus, GitFileStatusKind, GitStatusResponse } from "@/lib/git-types";
 import type { FileIndexEntry } from "@/lib/file-fuzzy";
 import { buildSearchTree, type SearchTreeNode } from "@/lib/search-tree";
@@ -681,7 +682,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
       setUploadProgress(100);
       applyUploadResult(data);
     } catch (uploadFailure) {
-      setUploadError(uploadFailure instanceof Error ? uploadFailure.message : String(uploadFailure));
+      setUploadError(errorMessage(uploadFailure));
     } finally {
       setUploadPhase("idle");
     }
@@ -719,7 +720,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
 
       await performUpload(files, "error");
     } catch (uploadFailure) {
-      setUploadError(uploadFailure instanceof Error ? uploadFailure.message : String(uploadFailure));
+      setUploadError(errorMessage(uploadFailure));
     } finally {
       setUploadPhase("idle");
     }
@@ -761,7 +762,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
     let cancelled = false;
     fetchEntries(cwd, t)
       .then((entries) => { if (!cancelled) setRoots(entries); })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
+      .catch((e) => { if (!cancelled) setError(errorMessage(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [cwd, refreshKey, t, treeRefreshKey]);

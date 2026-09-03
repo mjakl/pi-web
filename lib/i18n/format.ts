@@ -21,6 +21,16 @@ export function translateMessage(key: string, params: TranslationParams = {}): s
   return interpolateMessage(message, params);
 }
 
+/**
+ * Compact count for tight UI: 1.2M, 12k, 999. Kept hand-rolled rather than
+ * Intl compact notation, which renders an uppercase "K".
+ */
+export function formatCompactCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${Math.round(value / 1_000)}k`;
+  return value.toLocaleString("en");
+}
+
 /** Formats a message timestamp in English with a 24-hour clock. */
 export function formatTimestamp(timestamp: number, now = new Date()): string {
   const date = new Date(timestamp);

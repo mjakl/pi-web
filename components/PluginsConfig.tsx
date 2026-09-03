@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { errorMessage } from "@/lib/error-message";
 import { sendAgentCommand } from "@/lib/agent-client";
 import type { PluginPackageInfo, PluginsResponse } from "@/lib/api-types";
 import { useI18n } from "@/hooks/useI18n";
@@ -31,6 +32,7 @@ import {
   ConfigStatusDot,
   ConfigSwitch,
   shortenPath,
+  ConfigScopePicker,
 } from "./SettingsUi";
 
 type PluginScope = PluginPackageInfo["scope"];
@@ -194,56 +196,6 @@ function ScopeTag({ scope }: { scope: PluginScope }) {
   );
 }
 
-function SegmentedScope({
-  value,
-  projectResourcesLoaded,
-  onChange,
-}: {
-  value: PluginScope;
-  projectResourcesLoaded: boolean;
-  onChange: (scope: PluginScope) => void;
-}) {
-  const { t } = useI18n();
-  return (
-    <div
-      style={{
-        display: "inline-flex",
-        border: "1px solid var(--border)",
-        borderRadius: 7,
-        overflow: "hidden",
-        height: 30,
-      }}
-    >
-      {(["global", "project"] as PluginScope[]).map((scope) => {
-        const active = value === scope;
-        const disabled = scope === "project" && !projectResourcesLoaded;
-        return (
-          <button
-            key={scope}
-            onClick={() => {
-              if (!disabled) onChange(scope);
-            }}
-            disabled={disabled}
-            title={disabled ? t("trust.projectScopeUnavailable") : undefined}
-            style={{
-              width: 76,
-              border: "none",
-              borderRight: scope === "global" ? "1px solid var(--border)" : "none",
-              background: active ? "var(--bg-selected)" : "none",
-              color: active ? "var(--text)" : "var(--text-muted)",
-              cursor: disabled ? "not-allowed" : "pointer",
-              opacity: disabled ? 0.45 : 1,
-              fontSize: 12,
-            }}
-          >
-            {scope}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function AddPluginPanel({
   cwd,
   source,
@@ -342,9 +294,9 @@ function AddPluginPanel({
       </ConfigField>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <SegmentedScope
+        <ConfigScopePicker
           value={scope}
-          projectResourcesLoaded={projectResourcesLoaded}
+          projectEnabled={projectResourcesLoaded}
           onChange={onScopeChange}
         />
         <ConfigButton
@@ -609,7 +561,7 @@ export function PluginsConfig({
         return next.packages[0] ? packageKey(next.packages[0]) : null;
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -651,7 +603,7 @@ export function PluginsConfig({
         setActionMessage(t(messageKeys[action]));
       }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err));
+      setActionError(errorMessage(err));
     } finally {
       setBusyKey(null);
     }
@@ -680,7 +632,7 @@ export function PluginsConfig({
       setInstallSource("");
       setActionMessage(t("i18n.packageInstalled"));
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err));
+      setActionError(errorMessage(err));
     } finally {
       setBusyKey(null);
     }
@@ -697,7 +649,7 @@ export function PluginsConfig({
       await loadPlugins();
       setActionMessage(t("i18n.sessionReloaded"));
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err));
+      setActionError(errorMessage(err));
     } finally {
       setBusyKey(null);
     }

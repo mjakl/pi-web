@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { errorMessage } from "@/lib/error-message";
 import { createPortal } from "react-dom";
 import { useI18n } from "@/hooks/useI18n";
 
@@ -78,7 +79,7 @@ export function DirectoryPicker({ onCancel, onSelect, initialPath, busy = false,
       setDirectories(data.directories ?? []);
       setDrives(data.drives ?? null);
     } catch (cause) {
-      setLoadError(cause instanceof Error ? cause.message : String(cause));
+      setLoadError(errorMessage(cause));
     } finally {
       setLoading(false);
     }

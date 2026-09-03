@@ -1,6 +1,7 @@
 "use client";
 
 import type { ButtonHTMLAttributes, CSSProperties, HTMLAttributes, ReactNode } from "react";
+import { useI18n } from "@/hooks/useI18n";
 
 type ConfigButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 type ConfigButtonSize = "small" | "default";
@@ -257,5 +258,41 @@ export function ConfigStatusDot({ active, color }: { active?: boolean; color?: s
       className={`config-status-dot${active ? " is-active" : active === false ? " is-inactive" : ""}`}
       style={color ? { backgroundColor: color } : undefined}
     />
+  );
+}
+
+/**
+ * Global / project scope picker. Skills and Plugins each had their own copy
+ * that behaved identically and differed only in padding, weight and which
+ * muted token the inactive label used.
+ */
+export function ConfigScopePicker({
+  value,
+  projectEnabled,
+  onChange,
+}: {
+  value: "global" | "project";
+  projectEnabled: boolean;
+  onChange: (scope: "global" | "project") => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="config-scope-picker">
+      {(["global", "project"] as const).map((scope) => {
+        const disabled = scope === "project" && !projectEnabled;
+        return (
+          <button
+            key={scope}
+            type="button"
+            aria-pressed={value === scope}
+            onClick={() => { if (!disabled) onChange(scope); }}
+            disabled={disabled}
+            title={disabled ? t("trust.projectScopeUnavailable") : undefined}
+          >
+            {scope}
+          </button>
+        );
+      })}
+    </div>
   );
 }

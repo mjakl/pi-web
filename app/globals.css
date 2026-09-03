@@ -1599,3 +1599,10 @@ span.linenumber {
     scroll-behavior: auto !important;
   }
 }
+
+/* Session row hover. Was React state re-rendering the row on every pointer
+   enter and leave, when the background was the only thing that changed. A
+   selected row keeps --bg-selected because it sets that inline. */
+.session-row:hover {
+  background: var(--bg-hover);
+}

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SessionInfo } from "@/lib/types";
-import { dispatchSessionRowContextMenu } from "@/lib/session-row-context-menu";
 import { formatRelativeTime } from "@/lib/i18n/format";
 import { useI18n } from "@/hooks/useI18n";
 
@@ -149,7 +148,6 @@ export function SessionItem({
   onDeleted?: (id: string) => void;
 }) {
   const { t } = useI18n();
-  const [hovered, setHovered] = useState(false);
   const [actionSurface, setActionSurface] = useState<ActionSurface>(IDLE_ACTION_SURFACE);
   const [renameValue, setRenameValue] = useState("");
   const [stopping, setStopping] = useState(false);
@@ -376,29 +374,12 @@ export function SessionItem({
     else void performDelete();
   }, [performDelete, performStop, startRename]);
 
-  const handleContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const handled = dispatchSessionRowContextMenu({
-      id: session.id,
-      path: session.path,
-      cwd: session.cwd,
-      name: session.name,
-      clientX: e.clientX,
-      clientY: e.clientY,
-      refresh: () => { onRenamed?.(); },
-    });
-    if (!handled) return;
-    e.preventDefault();
-    e.stopPropagation();
-  }, [onRenamed, session.cwd, session.id, session.name, session.path]);
-
   // Fixed-height outer wrapper — content swaps in place so the list never reflows.
   return (
     <div
+      className="session-row"
       data-session-inventory-id={session.id}
       onClick={renderedSurface.kind === "idle" || renderedSurface.kind === "menu" ? onClick : undefined}
-      onContextMenu={renderedSurface.kind === "idle" || renderedSurface.kind === "menu" ? handleContextMenu : undefined}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => { setHovered(false); }}
       style={{
         height: SESSION_ITEM_HEIGHT,
         display: "flex",
@@ -406,7 +387,7 @@ export function SessionItem({
         paddingLeft: 14,
         paddingRight: 8,
         cursor: renderedSurface.kind === "idle" || renderedSurface.kind === "menu" ? "pointer" : "default",
-        background: isSelected ? "var(--bg-selected)" : hovered ? "var(--bg-hover)" : "transparent",
+        background: isSelected ? "var(--bg-selected)" : undefined,
         borderLeft: isSelected ? "2px solid var(--accent)" : "2px solid transparent",
         transition: "background 0.1s",
         opacity: stopping || deleting ? 0.5 : 1,
@@ -541,7 +522,7 @@ export function SessionItem({
               </button>
             ) : <span />}
             {session.messageCount === undefined ? (
-              <span aria-label={t("sidebar.loading")}>…</span>
+              <span role="status" aria-label={t("sidebar.loading")}>…</span>
             ) : (
               <span
                 title={t("sidebar.messagesCount", { count: session.messageCount })}

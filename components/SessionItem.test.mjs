@@ -122,7 +122,7 @@ test("a session row titles itself from the name, then the first message, then th
 
 test("a stopped session row shows the stopped marker and its message count", () => {
   const html = renderItem(baseSession);
-  assert.match(html, /^<div data-session-inventory-id="abcdef1234567890"/);
+  assert.match(html, /^<div class="session-row" data-session-inventory-id="abcdef1234567890"/);
   assert.match(html, /aria-label="Session stopped"/);
   assert.doesNotMatch(html, /aria-label="New session activity"/);
   assert.match(html, />3 msgs</);

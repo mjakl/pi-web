@@ -7,6 +7,8 @@ import { SessionSidebar } from "./SessionSidebar";
 import { ChatWindow, type ToolPresetControl } from "./ChatWindow";
 import { FileViewer } from "./FileViewer";
 import { TabBar } from "./TabBar";
+import { formatCompactCount } from "@/lib/i18n/format";
+import { errorMessage } from "@/lib/error-message";
 import { openFileTab, saveFileViewerState, type Tab } from "@/lib/file-tab-state";
 import { SettingsPanel, SettingsSectionIcon } from "./SettingsPanel";
 import { createClientId } from "@/lib/client-id";
@@ -500,7 +502,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        setInitialCwdError(error instanceof Error ? error.message : String(error));
+        setInitialCwdError(errorMessage(error));
         setInitialCwdStatus("error");
       });
 
@@ -882,7 +884,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
       setModelsRefreshKey((key) => key + 1);
       setSessionKey((key) => key + 1);
     } catch (error) {
-      setProjectTrustError(error instanceof Error ? error.message : String(error));
+      setProjectTrustError(errorMessage(error));
     } finally {
       setProjectTrustBusy(false);
     }
@@ -1211,11 +1213,6 @@ export function AppShell({ piVersion }: { piVersion: string }) {
     if (!mobile && (!showChat || (!sessionStats && !contextUsage))) return null;
 
     const tokens = sessionStats?.tokens;
-    const formatCompact = (value: number) => value >= 1_000_000
-      ? `${(value / 1_000_000).toFixed(1)}M`
-      : value >= 1000
-        ? `${(value / 1000).toFixed(0)}k`
-        : String(value);
     let contextColor = "var(--text-muted)";
     let desktopContextText: string | null = null;
     let mobileContextText: string | null = null;
@@ -1224,8 +1221,8 @@ export function AppShell({ piVersion }: { piVersion: string }) {
       if (contextWarningLevel === "red") contextColor = "var(--danger)";
       else if (contextWarningLevel === "yellow") contextColor = "rgba(234,179,8,0.95)";
       desktopContextText = percent !== null
-        ? `${percent.toFixed(0)}% / ${formatCompact(contextUsage.contextWindow)}`
-        : `? / ${formatCompact(contextUsage.contextWindow)}`;
+        ? `${percent.toFixed(0)}% / ${formatCompactCount(contextUsage.contextWindow)}`
+        : `? / ${formatCompactCount(contextUsage.contextWindow)}`;
       mobileContextText = percent !== null ? `${percent.toFixed(0)}%` : null;
     }
 
@@ -1293,7 +1290,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <line x1="5" y1="8.5" x2="5" y2="1.5" /><polyline points="2 4 5 1.5 8 4" />
                 </svg>
-                {formatCompact(tokens.input)}
+                {formatCompactCount(tokens.input)}
               </span>
             )}
             {tokens && tokens.output > 0 && (
@@ -1301,7 +1298,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <line x1="5" y1="1.5" x2="5" y2="8.5" /><polyline points="2 6 5 8.5 8 6" />
                 </svg>
-                {formatCompact(tokens.output)}
+                {formatCompactCount(tokens.output)}
               </span>
             )}
             {mobileContextText && (
@@ -1322,7 +1319,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
                 <svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <line x1="5" y1="8.5" x2="5" y2="1.5" /><polyline points="2 4 5 1.5 8 4" />
                 </svg>
-                {formatCompact(tokens.input)}
+                {formatCompactCount(tokens.input)}
               </span>
             )}
             {tokens && tokens.output > 0 && (
@@ -1330,7 +1327,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
                 <svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <line x1="5" y1="1.5" x2="5" y2="8.5" /><polyline points="2 6 5 8.5 8 6" />
                 </svg>
-                {formatCompact(tokens.output)}
+                {formatCompactCount(tokens.output)}
               </span>
             )}
             {tokens && tokens.cacheRead > 0 && (
@@ -1338,7 +1335,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
                 <svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M8.5 5a3.5 3.5 0 1 1-1-2.45" /><polyline points="6.5 1.5 8.5 2.5 7.5 4.5" />
                 </svg>
-                {formatCompact(tokens.cacheRead)}
+                {formatCompactCount(tokens.cacheRead)}
               </span>
             )}
             {desktopContextText && (
@@ -1719,9 +1716,8 @@ export function AppShell({ piVersion }: { piVersion: string }) {
                        [translate("session.total"), sessionStats.tokens.total.toLocaleString("en")],
                     ];
                     const ctx = contextUsage ?? sessionStats.contextUsage;
-                    const formatCompact = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(0)}k` : String(n);
                     const extraTokenRows = [
-                       ...(ctx?.contextWindow ? [[translate("session.context"), `${ctx.percent !== null ? `${ctx.percent.toFixed(1)}%` : "?"} / ${formatCompact(ctx.contextWindow)}`]] : []),
+                       ...(ctx?.contextWindow ? [[translate("session.context"), `${ctx.percent !== null ? `${ctx.percent.toFixed(1)}%` : "?"} / ${formatCompactCount(ctx.contextWindow)}`]] : []),
                        // Cache hit rate = cache reads / (input + cache writes + cache reads) — the denominator covers all input-class tokens.
                        ...(sessionStats.tokens.cacheRead + sessionStats.tokens.cacheWrite > 0 && sessionStats.tokens.cacheRead + sessionStats.tokens.cacheWrite + sessionStats.tokens.input > 0
                          ? [[translate("session.cacheHitRate"), `${(sessionStats.tokens.cacheRead / (sessionStats.tokens.cacheRead + sessionStats.tokens.cacheWrite + sessionStats.tokens.input) * 100).toFixed(1)}%`]]

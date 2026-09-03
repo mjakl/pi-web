@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
+import { errorMessage } from "@/lib/error-message";
 import { createClientId } from "@/lib/client-id";
 import type { SessionInfo } from "@/lib/types";
 import { SESSION_METADATA_BATCH_SIZE, type SessionRowMetadata } from "@/lib/session-metadata-types";
@@ -543,7 +544,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
       return true;
     } catch (e) {
       if (inventoryAttempt !== latestInventoryAttemptRef.current) return false;
-      if (!(e instanceof DOMException && e.name === "AbortError")) setError(String(e));
+      if (!(e instanceof DOMException && e.name === "AbortError")) setError(errorMessage(e));
       setLoading(false);
       return false;
     }
@@ -877,7 +878,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
       setCustomPathOpen(false);
       setDropdownOpen(false);
     } catch (e) {
-      setCustomPathError(e instanceof Error ? e.message : String(e));
+      setCustomPathError(errorMessage(e));
     } finally {
       setCustomPathValidating(false);
     }
@@ -934,7 +935,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
       setSelectedCwd(data.path);
       setWtRefreshKey((k) => k + 1);
     } catch (e) {
-      setWtError(e instanceof Error ? e.message : String(e));
+      setWtError(errorMessage(e));
     } finally {
       setWtBusy(false);
     }
@@ -964,7 +965,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
       if (currentWorktreePath === path) setSelectedCwd(worktreeState.projectRoot);
       setWtRefreshKey((k) => k + 1);
     } catch (e) {
-      setWtError(e instanceof Error ? e.message : String(e));
+      setWtError(errorMessage(e));
     } finally {
       setWtBusy(false);
     }
