@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useState, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
-import { getFileIcon, FolderIcon } from "./FileIcons";
+import { getFileIcon, FolderIcon, MentionIcon } from "./FileIcons";
 import {
   encodeFilePathForApi,
   getFileDirectory,
@@ -183,15 +183,6 @@ function uploadFiles(
     };
     xhr.send(formData);
   });
-}
-
-function MentionIcon({ size = 11 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="4" />
-      <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
-    </svg>
-  );
 }
 
 function DismissButton({ onClick, title }: { onClick: () => void; title: string }) {
@@ -391,7 +382,7 @@ function TreeNode({
               whiteSpace: "nowrap",
             }}
           >
-            <MentionIcon />
+            <MentionIcon size={11} />
             {t("files.mention")}
           </button>
         )}
@@ -907,7 +898,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
                   aria-label={uploadSummary.uploaded.length === 1 ? t("files.addUploadedFile") : t("files.addAllUploadedFiles")}
                   style={{ height: 22, padding: "0 7px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, flexShrink: 0, border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg-panel)", color: "var(--accent)", cursor: "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}
                 >
-                  <MentionIcon />
+                  <MentionIcon size={11} />
                   {t("files.mention")}
                 </button>
               )}

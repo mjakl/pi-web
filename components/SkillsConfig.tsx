@@ -33,12 +33,8 @@ import {
   ConfigSidebarText,
   ConfigSplitView,
   ConfigSwitch,
+  shortenPath,
 } from "./SettingsUi";
-
-function shortenPath(p: string): string {
-  // Match common home dir patterns: /Users/xxx, /home/xxx
-  return p.replace(/^\/(?:Users|home)\/[^/]+/, "~");
-}
 
 function sourceLabel(skill: Skill): string {
   const src = skill.sourceInfo?.source;
