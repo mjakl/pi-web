@@ -513,7 +513,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center text-text-muted">
+      <div className="chat-status">
          {t("chat.loadingSession")}
       </div>
     );
@@ -521,7 +521,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
 
   if (error) {
     return (
-      <div className="flex h-full items-center justify-center text-red-400">
+      <div className="chat-status is-error">
         {error}
       </div>
     );
@@ -529,7 +529,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
 
   return (
     <div
-      className="relative flex h-full min-w-0 flex-col overflow-hidden"
+      className="chat-window"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -537,19 +537,19 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
       onDrop={handleDrop}
     >
       {isDragOver && (
-        <div className="pointer-events-none absolute inset-0 z-50 flex animate-[drop-zone-in_0.15s_ease_both] items-center justify-center bg-[rgba(37,99,235,0.06)] backdrop-blur-[1px]">
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="chat-drop-zone">
+          <div className="chat-drop-zone-ripples">
             {[0, 0.8, 1.6].map((delay) => (
               <div
                 key={delay}
-                className="absolute h-[720px] w-[720px] rounded-full border-[1.5px] border-solid border-[rgba(37,99,235,0.5)] animate-[drop-ripple_2.4s_ease-out_infinite_backwards]"
+                className="chat-drop-zone-ripple"
                 style={{ transformOrigin: "center", animationDelay: `${delay}s` }}
               />
             ))}
           </div>
           <svg
             width="280" height="280" viewBox="0 0 140 140" fill="none" xmlns="http://www.w3.org/2000/svg"
-            className="drop-shadow-[0_6px_18px_rgba(37,99,235,0.18)]"
+            className="chat-drop-zone-icon"
           >
             <rect x="28" y="44" width="84" height="60" rx="8" fill="rgba(37,99,235,0.08)" stroke="rgba(37,99,235,0.50)" strokeWidth="1.8"/>
             <path d="M36 100 L54 72 L68 88 L80 74 L104 100Z" fill="rgba(37,99,235,0.16)" stroke="rgba(37,99,235,0.40)" strokeWidth="1.4" strokeLinejoin="round"/>
@@ -600,11 +600,11 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
       </div>
 
       {isEmptyNew ? (
-        <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-8">
-          <div className="w-full max-w-[820px]">
+        <div className="chat-empty">
+          <div style={{ width: "100%", maxWidth: 820 }}>
             <div
-              className="mb-3"
               style={{
+                marginBottom: "0.75rem",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
@@ -633,8 +633,8 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
         </div>
       ) : (
       <>
-      <div className="relative flex min-w-0 flex-1 overflow-hidden">
-        <div ref={scrollContainerRef} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pt-4 [scrollbar-width:none]">
+      <div className="chat-body">
+        <div ref={scrollContainerRef} className="chat-scroll">
           <div style={{ minWidth: 0, padding: `0 ${CHAT_COLUMN_PADDING}px` }}>
             <div ref={messageContentRef} style={{ width: "100%", minWidth: 0, maxWidth: 820, margin: "0 auto" }}>
             {(() => {
@@ -818,7 +818,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
               return (
                 <>
                   {hasMore && (
-                     <div ref={sentinelRef} className="py-3 text-center text-xs text-text-muted">
+                     <div ref={sentinelRef} className="chat-load-earlier">
                        {t("chat.loadEarlier")}
                     </div>
                   )}
@@ -831,14 +831,14 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
             )}
 
             {agentRunning && !hasStreamingContent && agentPhase && (
-              <div className="break-words py-2 text-[13px] text-text-muted">
-                <span className="animate-[pulse_1.5s_infinite]">{phaseLabel(agentPhase, t)}</span>
+              <div className="chat-activity">
+                <span className="chat-activity-label">{phaseLabel(agentPhase, t)}</span>
               </div>
             )}
 
             {bashRunning && !pendingBash && (
-              <div className="py-2 text-[13px] text-text-muted">
-                 <span className="animate-[pulse_1.5s_infinite]">{t("chat.runningCommand")}</span>
+              <div className="chat-activity">
+                 <span className="chat-activity-label">{t("chat.runningCommand")}</span>
               </div>
             )}
 
@@ -871,7 +871,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
         )}
       </div>
 
-      <div className="relative">
+      <div style={{ position: "relative" }}>
         {chatInputElement}
         <ExtensionStatusBar statuses={extensionStatuses} widgets={extensionWidgets} />
       </div>
