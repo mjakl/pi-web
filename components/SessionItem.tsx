@@ -1,12 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { SessionInfo } from "@/lib/types";
 import { dispatchSessionRowContextMenu } from "@/lib/session-row-context-menu";
 import { formatRelativeTime } from "@/lib/i18n/format";
 import { useI18n } from "@/hooks/useI18n";
 
 export const SESSION_ITEM_HEIGHT = 54;
+
+const menuItemStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  height: 34,
+  padding: "0 10px",
+  border: 0,
+  borderRadius: 5,
+  background: "transparent",
+  color: "var(--text)",
+  cursor: "pointer",
+  textAlign: "left",
+  fontSize: 12,
+};
 
 const SESSION_INDICATORS = {
   running: {
@@ -115,6 +130,12 @@ export function SessionItem({
 }) {
   const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{
+    top: number;
+    left: number;
+    isActive: boolean;
+    transient: boolean;
+  }>();
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [confirmStop, setConfirmStop] = useState(false);
@@ -122,6 +143,15 @@ export function SessionItem({
   const [stopping, setStopping] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const confirmationRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const menuId = useId();
+  const openMenuPosition = menuPosition
+    && menuPosition.isActive === Boolean(isActive)
+    && menuPosition.transient === Boolean(session.transient)
+    ? menuPosition
+    : undefined;
 
   // Select the whole name once the rename input is mounted (startRename's
   // immediate setTimeout can fire before the input exists).
@@ -132,11 +162,48 @@ export function SessionItem({
     }
   }, [renaming]);
 
+  useEffect(() => {
+    if (confirmStop || confirmDelete) confirmationRef.current?.focus();
+  }, [confirmDelete, confirmStop]);
+
+  useEffect(() => {
+    if (menuPosition && !openMenuPosition) setMenuPosition(undefined);
+  }, [menuPosition, openMenuPosition]);
+
+  useEffect(() => {
+    if (!openMenuPosition) return;
+
+    const focusFrame = requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus());
+    const dismissOutside = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!menuRef.current?.contains(target) && !menuTriggerRef.current?.contains(target)) setMenuPosition(undefined);
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setMenuPosition(undefined);
+      menuTriggerRef.current?.focus();
+    };
+    const dismissOnViewportChange = () => setMenuPosition(undefined);
+
+    document.addEventListener("pointerdown", dismissOutside, true);
+    document.addEventListener("keydown", dismissOnEscape);
+    window.addEventListener("resize", dismissOnViewportChange);
+    window.addEventListener("scroll", dismissOnViewportChange, true);
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener("pointerdown", dismissOutside, true);
+      document.removeEventListener("keydown", dismissOnEscape);
+      window.removeEventListener("resize", dismissOnViewportChange);
+      window.removeEventListener("scroll", dismissOnViewportChange, true);
+    };
+  }, [openMenuPosition]);
+
   const firstMessage = session.firstMessage ?? "";
   const title = session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12);
 
-  const startRename = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const startRename = useCallback(() => {
     if (session.transient) return;
     setRenameValue(session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12));
     setRenaming(true);
@@ -224,6 +291,34 @@ export function SessionItem({
     setConfirmDelete(false);
   }, []);
 
+  const hasActions = isActive || !session.transient;
+
+  const toggleMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (openMenuPosition) {
+      setMenuPosition(undefined);
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const width = 144;
+    const height = (Number(Boolean(isActive)) + (session.transient ? 0 : 2)) * 34 + 8;
+    setMenuPosition({
+      left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
+      top: rect.bottom + 4 + height <= window.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4),
+      isActive: Boolean(isActive),
+      transient: Boolean(session.transient),
+    });
+  }, [isActive, openMenuPosition, session.transient]);
+
+  const chooseMenuAction = useCallback((e: React.MouseEvent, action: "stop" | "rename" | "delete") => {
+    e.stopPropagation();
+    setMenuPosition(undefined);
+    if (action === "rename") startRename();
+    else if (action === "stop") handleStopClick(e);
+    else handleDeleteClick(e);
+  }, [handleDeleteClick, handleStopClick, startRename]);
+
   const handleContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const handled = dispatchSessionRowContextMenu({
       id: session.id,
@@ -275,6 +370,7 @@ export function SessionItem({
           </div>
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
             <button
+              ref={confirmationRef}
               onClick={handleStopConfirm}
               style={{
                 height: 30, padding: "0 9px", background: "#ef4444", border: "none",
@@ -302,6 +398,7 @@ export function SessionItem({
           </div>
           <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
             <button
+              ref={confirmationRef}
               onClick={handleDeleteConfirm}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
@@ -406,95 +503,63 @@ export function SessionItem({
             </div>
           </div>
 
-          {/* Action buttons — shown on hover */}
-          {hovered && (isActive || !session.transient) && (
-            <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          <div style={{ width: 28, height: 32, flexShrink: 0, alignSelf: "flex-start", marginTop: 5 }}>
+            {hasActions && (
+              <button
+                ref={menuTriggerRef}
+                type="button"
+                aria-label={t("sidebar.sessionActions")}
+                aria-controls={menuId}
+                aria-expanded={Boolean(openMenuPosition)}
+                onClick={toggleMenu}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 28, height: 28, padding: 0,
+                  background: openMenuPosition ? "var(--bg-selected)" : "transparent",
+                  border: "1px solid transparent", borderRadius: 6,
+                  color: "var(--text-muted)", cursor: "pointer",
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="12" r="1.8" />
+                  <circle cx="12" cy="12" r="1.8" />
+                  <circle cx="19" cy="12" r="1.8" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {openMenuPosition && createPortal(
+            <div
+              ref={menuRef}
+              id={menuId}
+              role="group"
+              aria-label={t("sidebar.sessionActions")}
+              style={{
+                position: "fixed", top: openMenuPosition.top, left: openMenuPosition.left, zIndex: 1000,
+                width: "min(144px, calc(100vw - 16px))", maxHeight: "calc(100vh - 16px)", overflowY: "auto",
+                padding: 4, background: "var(--bg)", border: "1px solid var(--border)",
+                borderRadius: 7, boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
               {isActive && (
-                <button
-                  onClick={handleStopClick}
-                  title={t("sidebar.stopWithShiftClick")}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 32, height: 32, padding: 0,
-                    background: "var(--bg-hover)", border: "1px solid var(--border)",
-                    borderRadius: 7, color: "var(--text-muted)", cursor: "pointer", flexShrink: 0,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "rgba(239,68,68,0.08)";
-                    e.currentTarget.style.color = "#ef4444";
-                    e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "var(--bg-hover)";
-                    e.currentTarget.style.color = "var(--text-muted)";
-                    e.currentTarget.style.borderColor = "var(--border)";
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <rect x="6" y="6" width="12" height="12" rx="1" />
-                  </svg>
+                <button type="button" title={t("sidebar.stopWithShiftClick")} onClick={(e) => chooseMenuAction(e, "stop")} style={menuItemStyle}>
+                  {t("sidebar.stop")}
                 </button>
               )}
               {!session.transient && (
                 <>
-              <button
-                onClick={startRename}
-                title={t("sidebar.rename")}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 32, height: 32, padding: 0,
-                  background: "var(--bg-hover)", border: "1px solid var(--border)",
-                  borderRadius: 7, color: "var(--text-muted)",
-                  cursor: "pointer", flexShrink: 0,
-                  transition: "background 0.12s, color 0.12s, border-color 0.12s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "var(--bg-selected)";
-                  e.currentTarget.style.color = "var(--accent)";
-                  e.currentTarget.style.borderColor = "rgba(37,99,235,0.35)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "var(--bg-hover)";
-                  e.currentTarget.style.color = "var(--text-muted)";
-                  e.currentTarget.style.borderColor = "var(--border)";
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                </svg>
-              </button>
-              <button
-                onClick={handleDeleteClick}
-                title={t("sidebar.deleteWithShiftClick")}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 32, height: 32, padding: 0,
-                  background: "var(--bg-hover)", border: "1px solid var(--border)",
-                  borderRadius: 7, color: "var(--text-muted)",
-                  cursor: "pointer", flexShrink: 0,
-                  transition: "background 0.12s, color 0.12s, border-color 0.12s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(239,68,68,0.08)";
-                  e.currentTarget.style.color = "#ef4444";
-                  e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "var(--bg-hover)";
-                  e.currentTarget.style.color = "var(--text-muted)";
-                  e.currentTarget.style.borderColor = "var(--border)";
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                  <path d="M10 11v6M14 11v6" />
-                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                </svg>
-              </button>
+                  <button type="button" onClick={(e) => chooseMenuAction(e, "rename")} style={menuItemStyle}>
+                    {t("sidebar.rename")}
+                  </button>
+                  <button type="button" title={t("sidebar.deleteWithShiftClick")} onClick={(e) => chooseMenuAction(e, "delete")} style={{ ...menuItemStyle, color: "#ef4444" }}>
+                    {t("sidebar.delete")}
+                  </button>
                 </>
               )}
-            </div>
+            </div>,
+            document.body,
           )}
         </>
       )}
