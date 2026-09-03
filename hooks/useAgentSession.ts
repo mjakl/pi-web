@@ -46,6 +46,7 @@ import {
   CHAT_SCROLL_REATTACH_TOLERANCE,
   CHAT_SCROLL_TAIL_TOLERANCE,
   getLiveFollowAttached,
+  getSnapshotTail,
 } from "@/lib/chat-lazy-load";
 import {
   INITIAL_STREAMING_STATE,
@@ -457,6 +458,15 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (next.metadata) onSessionMetadataChange?.(next.metadata);
   }, [onSessionMetadataChange, setToolPresetState]);
 
+  // Ask the snapshot endpoint for at least what is already loaded. Without
+  // this every reload (agent_end, prompt_done, /compact, a bash command, a
+  // model change) refetches only the newest page, so scrolling back through
+  // history and then sending a prompt snapped the transcript shut.
+  const loadedTail = useCallback(
+    (): number | null => getSnapshotTail(dataRef.current?.context.messages?.length ?? 0),
+    [],
+  );
+
   const loadSession = useCallback(async (sid: string, showLoading = false, includeState = false) => {
     const request: PersistedSnapshotRequest = {
       order: ++persistedOrderRef.current,
@@ -486,6 +496,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         await precedingWrites;
         if (!isCurrentLoad()) return isCurrentStateLoad();
         const params = new URLSearchParams({ deferThinking: "1", deferMedia: "1" });
+        const tail = loadedTail();
+        if (tail) params.set("tail", String(tail));
         const res = await fetch(`/api/sessions/${encodeURIComponent(sid)}?${params}`);
         if (!isCurrentLoad()) return isCurrentStateLoad();
         if (res.status === 404) {
@@ -540,7 +552,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         return null;
       }
     } : undefined);
-  }, [applyPersistedSnapshot, commitPersistedSnapshot, currentPersistedAuthority]);
+  }, [loadedTail, applyPersistedSnapshot, commitPersistedSnapshot, currentPersistedAuthority]);
 
   const loadContext = useCallback(async (
     sid: string,
@@ -837,6 +849,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       if (!isCurrentRefresh()) return false;
       const previousPersisted = dataRef.current?.context.messages ?? [];
       const params = new URLSearchParams({ deferThinking: "1", deferMedia: "1" });
+      const refreshTail = loadedTail();
+      if (refreshTail) params.set("tail", String(refreshTail));
       const response = await fetch(`/api/sessions/${encodeURIComponent(sid)}?${params}`, {
         cache: "no-store",
       });
@@ -858,7 +872,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
       return false;
     }
-  }, [addNotice, applyPersistedSnapshot, commitPersistedSnapshot, currentPersistedAuthority, t]);
+  }, [loadedTail, addNotice, applyPersistedSnapshot, commitPersistedSnapshot, currentPersistedAuthority, t]);
 
   const handleExtensionUiRequest = useCallback((request: ExtensionUiRequest) => {
     if (isBlockingExtensionUiRequest(request)) onAttentionNeeded?.(request);

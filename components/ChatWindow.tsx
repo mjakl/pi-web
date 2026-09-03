@@ -23,9 +23,7 @@ import type { ToolEntry, ToolPreset } from "@/lib/tool-presets";
 import {
   captureScrollDistance,
   getPromptAnchorSpacerHeight,
-  getVisibleRenderWindow,
   restoreScrollTop,
-  VISIBLE_PAGE_SIZE,
 } from "@/lib/chat-lazy-load";
 
 export interface ToolPresetControl {
@@ -253,9 +251,9 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
   }, [sessionBusy, handleAbort]);
 
   // --- Lazy-load historical messages ---
-  // Only render the last N messages initially. When the user scrolls to the
-  // top, load another page while keeping the scroll position stable.
-  const [visibleCount, setVisibleCount] = useState(VISIBLE_PAGE_SIZE);
+  // Everything loaded is rendered. Paging is the server's `tail`/cursor: when
+  // the user scrolls to the top, fetch the previous page and prepend it while
+  // keeping the scroll position stable.
   const sentinelRef = useRef<HTMLDivElement>(null);
   const prevScrollDistanceRef = useRef<number | null>(null);
   const loadingOlderRef = useRef(false);
@@ -289,21 +287,15 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
     return () => observer.disconnect();
   }, [historyCursor, hasEarlierMessages, session, activeLeafId, loadContext, sessionIdRef, scrollContainerRef]);
 
-  // Keep the rendered window at least as large as what's loaded, so prepended
-  // (older) pages stay visible instead of being sliced off the top.
-  useEffect(() => {
-    setVisibleCount((current) => Math.max(current, messages.length));
-  }, [messages.length]);
-
-  // After visibleCount increases (more messages prepended), restore the
-  // scroll position so the viewport doesn't jump.
+  // After an older page is prepended, restore the scroll position so the
+  // viewport doesn't jump.
   useEffect(() => {
     if (prevScrollDistanceRef.current == null) return;
     const container = scrollContainerRef.current;
     if (!container) return;
     container.scrollTop = restoreScrollTop(container.scrollHeight, prevScrollDistanceRef.current);
     prevScrollDistanceRef.current = null;
-  }, [visibleCount, scrollContainerRef]);
+  }, [messages.length, scrollContainerRef]);
   // Push session stats up to AppShell for the top bar.
   // Compare scalar fields to avoid loops from new object identity each render.
   const statsKey = sessionStats
@@ -376,10 +368,6 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
     return history.reverse();
   }, [messages]);
   const messageRefs = useMessageRefs(visibleMessages.length);
-  const revealHistoryForMinimap = useCallback(() => {
-    setVisibleCount((current) => Math.max(current, messages.length * 2));
-  }, [messages.length]);
-
   const isEmptyNew = isNew && messages.length === 0 && !streamState.isStreaming && !sessionBusy;
   const hasStreamingContent = Boolean(streamState.streamingMessage?.content.length);
   const messageCwd = session?.cwd ?? newSessionCwd ?? undefined;
@@ -833,16 +821,14 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
                 }
                 idx = endIdx;
               }
-              const { startIndex } = getVisibleRenderWindow(rendered.length, visibleCount);
-              const hasMore = startIndex > 0 || hasEarlierMessages;
               return (
                 <>
-                  {hasMore && (
+                  {hasEarlierMessages && (
                      <div ref={sentinelRef} className="chat-load-earlier">
                        {t("chat.loadEarlier")}
                     </div>
                   )}
-                  {rendered.slice(startIndex)}
+                  {rendered}
                 </>
               );
             })()}
@@ -886,7 +872,6 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
             streamingMessage={streamState.streamingMessage}
             scrollContainer={scrollContainerRef}
             messageRefs={messageRefs}
-            onRevealHistory={revealHistoryForMinimap}
           />
         )}
       </div>

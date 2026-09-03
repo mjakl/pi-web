@@ -17,7 +17,6 @@ interface Props {
   streamingMessage: Partial<AgentMessage> | null;
   scrollContainer: RefObject<HTMLDivElement | null>;
   messageRefs: RefObject<(HTMLDivElement | null)[]>;
-  onRevealHistory: () => void;
 }
 
 const MINIMAP_WIDTH = 36;
@@ -232,7 +231,6 @@ export function ChatMinimap({
   streamingMessage,
   scrollContainer,
   messageRefs,
-  onRevealHistory,
 }: Props) {
   const { t } = useI18n();
   const [visible, setVisible] = useState(false);
@@ -443,7 +441,6 @@ export function ChatMinimap({
     lockActiveNode(node.index);
     if (node.targetTurn.scrollTop === null) {
       pendingNavigationRef.current = { nodeIndex: node.index, target: "user" };
-      onRevealHistory();
       return;
     }
     const targetTop = Math.max(
@@ -451,7 +448,7 @@ export function ChatMinimap({
       node.targetTurn.scrollTop - scrollEl.clientHeight * 0.3,
     );
     scrollEl.scrollTo({ top: targetTop, behavior });
-  }, [lockActiveNode, onRevealHistory, scrollContainer]);
+  }, [lockActiveNode, scrollContainer]);
 
   const scrollToAssistant = useCallback((node: NodeInfo, assistantIndex: number) => {
     const scrollEl = scrollContainer.current;
@@ -463,7 +460,6 @@ export function ChatMinimap({
         target: "assistant",
         assistantIndex,
       };
-      onRevealHistory();
       return;
     }
     const containerRect = scrollEl.getBoundingClientRect();
@@ -476,7 +472,7 @@ export function ChatMinimap({
     );
     lockActiveNode(node.index);
     scrollEl.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
-  }, [lockActiveNode, onRevealHistory, scrollContainer]);
+  }, [lockActiveNode, scrollContainer]);
 
   const findNearestNode = useCallback((ratio: number): NodeInfo | null => {
     const { nodes, gap, fillsHeight } = nodeLayoutRef.current;
@@ -512,7 +508,6 @@ export function ChatMinimap({
         assistantIndex,
         headingIndex,
       };
-      onRevealHistory();
       return;
     }
     const heading = answerElement.querySelectorAll<HTMLElement>("h1, h2, h3").item(headingIndex);
@@ -527,7 +522,7 @@ export function ChatMinimap({
     );
     lockActiveNode(node.index);
     scrollEl.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
-  }, [lockActiveNode, onRevealHistory, scrollContainer]);
+  }, [lockActiveNode, scrollContainer]);
 
   const cancelPreviewHide = useCallback(() => {
     if (!previewHideTimerRef.current) return;

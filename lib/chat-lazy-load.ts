@@ -1,15 +1,22 @@
-export const VISIBLE_PAGE_SIZE = 50;
+/**
+ * Page size for GET /api/sessions/[id]. The client mirrors these so a reload
+ * after a turn can ask for what is already on screen instead of snapping back
+ * to the newest page and discarding history the user paged in.
+ */
+export const SESSION_TAIL_DEFAULT = 50;
+export const SESSION_TAIL_MAX = 1000;
+
+/**
+ * Tail size a snapshot reload should request, or null when the server default
+ * already covers what is loaded.
+ */
+export function getSnapshotTail(loadedCount: number): number | null {
+  if (loadedCount <= SESSION_TAIL_DEFAULT) return null;
+  return Math.min(loadedCount, SESSION_TAIL_MAX);
+}
+
 export const CHAT_SCROLL_TAIL_TOLERANCE = 8;
 export const CHAT_SCROLL_REATTACH_TOLERANCE = 96;
-
-export function getVisibleRenderWindow(totalCount: number, visibleCount: number): {
-  startIndex: number;
-  hasMore: boolean;
-} {
-  const clampedVisibleCount = Math.min(Math.max(visibleCount, 0), Math.max(totalCount, 0));
-  const startIndex = Math.max(0, totalCount - clampedVisibleCount);
-  return { startIndex, hasMore: startIndex > 0 };
-}
 
 export function captureScrollDistance(scrollHeight: number, scrollTop: number): number {
   return scrollHeight - scrollTop;

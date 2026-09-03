@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { SESSION_TAIL_DEFAULT, SESSION_TAIL_MAX } from "@/lib/chat-lazy-load";
 import { unlinkSync } from "fs";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import {
@@ -37,7 +38,7 @@ export async function GET(
     const deferThinking = searchParams.has("deferThinking");
     const deferToolResultImages = searchParams.has("deferMedia");
     const rawTail = Number(searchParams.get("tail"));
-    const tail = Number.isFinite(rawTail) && rawTail > 0 ? Math.min(rawTail, 1000) : 50;
+    const tail = Number.isFinite(rawTail) && rawTail > 0 ? Math.min(rawTail, SESSION_TAIL_MAX) : SESSION_TAIL_DEFAULT;
 
     const readSnapshot = async (fingerprint: SessionMetadataFingerprint | null) => {
       const sm = liveSessionManager ?? SessionManager.open(resolvedPath!);
