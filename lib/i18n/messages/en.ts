@@ -302,7 +302,6 @@ export const enMessages: Record<string, string> = {
     "chat.inputHistory": "Input history",
     "chat.steerTitle": "Interrupt the current run and inject this message now",
     "chat.followUpTitle": "Queue this message after the agent finishes",
-    "chat.locateAssistantMessage": "Locate assistant message",
     "chat.selectModel": "Select model",
     "chat.noModels": "No models",
     "chat.switchingModel": "Switching model",

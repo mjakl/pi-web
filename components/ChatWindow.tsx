@@ -1,6 +1,6 @@
 "use client";
 import { registerAbortHandler } from "@/hooks/useKeyboardShortcuts";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AgentMessage, AssistantContentBlock, AssistantMessage, BashExecutionMessage, BlockingExtensionUiRequest, ExtensionUiRequest, SessionInfo, SessionTreeNode, ToolResultMessage, UserMessage } from "@/lib/types";
 import { normalizeCustomPanelLines } from "@/lib/ansi";
 import { asBracketedPaste, toTerminalKeyData } from "@/lib/terminal-input";
@@ -341,7 +341,7 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
 
   const { isDragOver, handleDragEnter, handleDragOver, handleDragLeave, handleDrop } = useDragDrop(onDrop);
 
-  const visibleMessages = messages.filter((m) => isMessageGroupAnchor(m) || m.role === "assistant");
+  const anchorCount = messages.reduce((count, m) => count + (isMessageGroupAnchor(m) ? 1 : 0), 0);
   // Stable Map identity: `messages` doesn't change during streaming updates
   // (the streaming message lives in streamState), so memoized MessageViews
   // skip re-rendering on every message_update event. An inline `new Map()`
@@ -367,7 +367,7 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
     }
     return history.reverse();
   }, [messages]);
-  const messageRefs = useMessageRefs(visibleMessages.length);
+  const messageRefs = useMessageRefs(anchorCount);
   const isEmptyNew = isNew && messages.length === 0 && !streamState.isStreaming && !sessionBusy;
   const hasStreamingContent = Boolean(streamState.streamingMessage?.content.length);
   const messageCwd = session?.cwd ?? newSessionCwd ?? undefined;
@@ -660,16 +660,17 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
                 if (isMessageGroupAnchor(messages[i])) { lastAnchorIdx = i; break; }
               }
 
-              const visibleRefIndexByMessage = new Map<number, number>();
+              // Only group anchors get a minimap ref — one dot per turn.
+              const anchorRefIndexByMessage = new Map<number, number>();
               let refIdx = 0;
               messages.forEach((msg, idx) => {
-                if (isMessageGroupAnchor(msg) || msg.role === "assistant") {
-                  visibleRefIndexByMessage.set(idx, refIdx++);
-                }
+                if (isMessageGroupAnchor(msg)) anchorRefIndexByMessage.set(idx, refIdx++);
               });
 
-              const attachVisibleRef = (idx: number, refIndex: number) => (el: HTMLDivElement | null) => {
-                messageRefs.current[refIndex] = el;
+              // refIndex is optional so the prompt anchor never depends on the
+              // minimap's indexing.
+              const attachVisibleRef = (idx: number, refIndex: number | undefined) => (el: HTMLDivElement | null) => {
+                if (refIndex !== undefined) messageRefs.current[refIndex] = el;
                 if (idx === lastUserIdx) { (lastUserMsgRef as { current: HTMLDivElement | null }).current = el; }
               };
 
@@ -680,7 +681,7 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
                     ? entryIds[idx - 1]
                     : undefined;
                 const isVisible = isMessageGroupAnchor(msg) || msg.role === "assistant";
-                const currentRefIdx = visibleRefIndexByMessage.get(idx);
+                const currentRefIdx = anchorRefIndexByMessage.get(idx);
                 const keyPrefix = options.keyPrefix ?? "message";
                 let showTimestamp = false;
                 if (msg.role === "assistant") {
@@ -716,7 +717,7 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
                     writtenFiles={options.writtenFiles}
                   />
                 );
-                if (!isVisible || options.attachRef === false || currentRefIdx === undefined) return view;
+                if (!isVisible || options.attachRef === false) return view;
                 return (
                   <div key={`${keyPrefix}-${idx}`} ref={attachVisibleRef(idx, currentRefIdx)}>
                     {view}
@@ -776,10 +777,6 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
 
                 const processCount = visibleProcessIndices.length + (finalProcessMessage ? 1 : 0);
                 if (processCount > 0) {
-                  const processRefIdx = visibleProcessIndices
-                    .map((processIdx) => visibleRefIndexByMessage.get(processIdx))
-                    .find((value): value is number => typeof value === "number")
-                    ?? (finalAnswerMessage ? undefined : visibleRefIndexByMessage.get(finalAssistantIdx));
                   const processGroup = (
                     <ProcessDetailsGroup
                       messageCount={processCount}
@@ -792,12 +789,9 @@ export function ChatWindow({ piVersion, session, sessionActive, sessionRunning, 
                     </ProcessDetailsGroup>
                   );
                   rendered.push(
-                    <div
-                      key={`process-group-${userIdx}-${finalAssistantIdx}`}
-                      ref={processRefIdx === undefined ? undefined : (el) => { messageRefs.current[processRefIdx] = el; }}
-                    >
+                    <Fragment key={`process-group-${userIdx}-${finalAssistantIdx}`}>
                       {processGroup}
-                    </div>,
+                    </Fragment>,
                   );
                 }
 
