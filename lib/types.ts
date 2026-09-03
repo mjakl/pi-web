@@ -114,6 +114,12 @@ export interface BashExecutionMessage {
 
 export type AgentMessage = UserMessage | AssistantMessage | ToolResultMessage | CustomMessage | BashExecutionMessage;
 
+// Live session event as delivered to browser listeners.
+export interface AgentEvent {
+  type: string;
+  [key: string]: unknown;
+}
+
 export type ExtensionUiRequest =
   | {
       type: "extension_ui_request";
