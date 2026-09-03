@@ -56,7 +56,7 @@ import { getLastSettingsSection, type SettingsSection } from "@/lib/settings-nav
 type SessionCopyField = "file" | "id" | "projectDir" | "gitBranch" | "gitWorktree";
 const TOP_BAR_ICON_BUTTON_SIZE = 36;
 
-export function AppShell() {
+export function AppShell({ piVersion }: { piVersion: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [initialNavigation] = useState(() => getInitialNavigation(searchParams));
@@ -922,6 +922,7 @@ export function AppShell() {
   const sidebarContent = (
     <>
       <SessionSidebar
+        piVersion={piVersion}
         selectedSessionId={selectedSession?.id ?? null}
         onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}
@@ -1907,6 +1908,7 @@ export function AppShell() {
           {showChat ? (
             <ChatWindow
               key={sessionKey}
+              piVersion={piVersion}
               session={selectedSession}
               sessionActive={Boolean(selectedSession && activeSessionIds.has(selectedSession.id))}
               sessionRunning={Boolean(selectedSession && runningSessionIds.has(selectedSession.id))}

@@ -52,6 +52,19 @@ test("CLI writes help and parse errors before exiting", () => {
   assert.match(invalid.stderr, /Use --help to see available options/);
 });
 
+test("fails before Next startup with actionable host Pi guidance", () => {
+  const result = spawnSync(process.execPath, [cliPath], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: fileURLToPath(new URL(".", import.meta.url)),
+      PI_WEB_HOSTNAME: "127.0.0.1",
+    },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Host Pi validation failed: no pi executable was found on PATH.*>=0\.84\.3 <0\.85\.0.*Install or update Pi.*first on PATH.*restart Pi Web/s);
+});
+
 test("preserves port and hostname options", () => {
   assert.deepEqual(
     parseLaunchOptions(["-p", "8080", "-H", "0.0.0.0"], {}),

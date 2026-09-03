@@ -80,6 +80,7 @@ function ToolbarIconButton({
 }
 
 interface Props {
+  piVersion: string;
   selectedSessionId: string | null;
   onSelectSession: (session: SessionInfo, isRestore?: boolean) => void;
   onNewSession?: (sessionId: string, cwd: string) => void;
@@ -272,7 +273,7 @@ function AnimatedDropdown({ open, children, style }: { open: boolean; children: 
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, onSessionsChange, onRefreshSelectedSession }: Props) {
+export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, onSessionsChange, onRefreshSelectedSession }: Props) {
   const { t } = useI18n();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [inventoryRevision, setInventoryRevision] = useState(0);
@@ -1112,7 +1113,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <PiWebTitle />
+          <PiWebTitle piVersion={piVersion} />
           <div style={{ display: "flex", gap: 6 }}>
             <button
               onClick={handleNewSession}
