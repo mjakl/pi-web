@@ -213,6 +213,7 @@ export const enMessages: Record<string, string> = {
     "chat.expandProcess": "Expand process details",
     "chat.filesWritten": "Files changed",
     "chat.openWrittenFile": "Open {name}",
+    "chat.jumpToLatest": "Jump to latest",
     "chat.loadEarlier": "Scroll up to load earlier messages",
     "chat.extensionRequest": "extension request",
     "chat.cancel": "Cancel",

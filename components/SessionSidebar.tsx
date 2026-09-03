@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import { errorMessage } from "@/lib/error-message";
 import { createClientId } from "@/lib/client-id";
+import { SettingsSectionIcon } from "./SettingsPanel";
 import type { SessionInfo } from "@/lib/types";
 import { SESSION_METADATA_BATCH_SIZE, type SessionRowMetadata } from "@/lib/session-metadata-types";
 import {
@@ -116,6 +117,8 @@ interface Props {
   onSessionsChange?: (sessions: SessionInfo[], inventoryAttempt: number) => void;
   onRefreshSelectedSession?: () => Promise<boolean>;
   actionsAvailable: boolean;
+  /** Opens the settings dialog at the last used section. */
+  onOpenSettings: () => void;
 }
 
 interface WorktreeEntry {
@@ -274,7 +277,7 @@ function AnimatedDropdown({ open, children, style }: { open: boolean; children: 
   );
 }
 
-export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, beginSessionInventoryAttempt, onSessionsChange, onRefreshSelectedSession, actionsAvailable }: Props) {
+export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, beginSessionInventoryAttempt, onSessionsChange, onRefreshSelectedSession, actionsAvailable, onOpenSettings }: Props) {
   const { t } = useI18n();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [inventoryRevision, setInventoryRevision] = useState(0);
@@ -1214,6 +1217,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
                 e.currentTarget.style.borderColor = "var(--border)";
               }}
                title={t("sidebar.refresh")}
+              aria-label={t("sidebar.refresh")}
             >
               {sessionRefreshDone ? (
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1225,6 +1229,14 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
                   <path d="M3 3v5h5" />
                 </svg>
               )}
+            </button>
+            <button
+              onClick={onOpenSettings}
+              className="sidebar-icon-button"
+              title={t("common.settings")}
+              aria-label={t("common.settings")}
+            >
+              <SettingsSectionIcon section="general" size={15} strokeWidth={2} />
             </button>
           </div>
         </div>

@@ -1606,3 +1606,60 @@ span.linenumber {
 .session-row:hover {
   background: var(--bg-hover);
 }
+
+/* Small square icon button in the sidebar header row. */
+.sidebar-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.sidebar-icon-button:hover {
+  background: var(--bg-selected);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.sidebar-icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Jump-to-latest control at the foot of the chat minimap rail. */
+.chat-minimap-jump {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.chat-minimap-jump:hover {
+  background: var(--bg-selected);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.chat-minimap-jump:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
