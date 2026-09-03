@@ -13,6 +13,7 @@ import type {
 } from "@/lib/types";
 import { isBlockingExtensionUiRequest } from "@/lib/browser-notifications";
 import { normalizeToolCalls } from "@/lib/normalize";
+import { createNoticeId, noticeReducer, type NoticeType } from "@/lib/notice-queue";
 import { isPromptRejectedError, sendAgentCommand } from "@/lib/agent-client";
 import { clearDraft, rekeyDraft, restoreDraftSubmission } from "@/lib/draft-store";
 import { getPreferredToolPreset, setPreferredToolPreset } from "@/lib/tool-preset-preference";
@@ -87,24 +88,6 @@ function normalizeQueuedMessages(q?: { steering?: string[]; followUp?: string[] 
 
 type ExtensionUiDialogRequest = Extract<ExtensionUiRequest, { method: "select" | "confirm" | "input" | "editor" }>;
 type ExtensionUiCustomRequest = Extract<ExtensionUiRequest, { method: "custom" }>;
-export type NoticeType = "info" | "success" | "warning" | "error";
-
-export type NoticeItem = {
-  id: string;
-  message: string;
-  type: NoticeType;
-  exiting?: boolean;
-};
-
-type NoticeState = {
-  visible: NoticeItem[];
-  pending: NoticeItem[];
-};
-
-type NoticeAction =
-  | { type: "add"; notice: NoticeItem }
-  | { type: "mark_oldest_exiting" }
-  | { type: "remove"; id: string };
 
 export type AgentPhase =
   | { kind: "waiting_model" }
@@ -166,64 +149,11 @@ const AGENT_STATE_RECONCILE_MS = 15_000;
 const BASH_STATE_RECONCILE_MS = 1_000;
 const EVENT_STREAM_READY_TIMEOUT_MS = 60_000;
 const EVENT_STREAM_RECONNECT_DELAY_MS = 1_000;
-const MAX_NOTICES = 5;
 const NOTICE_VISIBLE_MS = 5000;
 const NOTICE_EXIT_ANIMATION_MS = 180;
-function createNoticeId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function markOldestNoticeExiting(notices: NoticeItem[]): NoticeItem[] {
-  const index = notices.findIndex((notice) => !notice.exiting);
-  if (index === -1) return notices;
-  return notices.map((notice, i) => (
-    i === index ? { ...notice, exiting: true } : notice
-  ));
-}
-
-function fillPendingNotices(visible: NoticeItem[], pending: NoticeItem[]): NoticeState {
-  let nextVisible = visible;
-  let nextPending = pending;
-  while (nextPending.length > 0 && nextVisible.length < MAX_NOTICES) {
-    const [next, ...rest] = nextPending;
-    nextVisible = [...nextVisible, next];
-    nextPending = rest;
-  }
-  if (nextPending.length > 0 && !nextVisible.some((notice) => notice.exiting)) {
-    nextVisible = markOldestNoticeExiting(nextVisible);
-  }
-  return { visible: nextVisible, pending: nextPending };
-}
-
-function noticeReducer(state: NoticeState, action: NoticeAction): NoticeState {
-  switch (action.type) {
-    case "add": {
-      if (state.visible.some((notice) => notice.exiting) || state.visible.length >= MAX_NOTICES) {
-        return {
-          visible: state.visible.some((notice) => notice.exiting)
-            ? state.visible
-            : markOldestNoticeExiting(state.visible),
-          pending: [...state.pending, action.notice],
-        };
-      }
-      return { ...state, visible: [...state.visible, action.notice] };
-    }
-    case "mark_oldest_exiting":
-      return { ...state, visible: markOldestNoticeExiting(state.visible) };
-    case "remove": {
-      const visible = state.visible.filter((notice) => notice.id !== action.id);
-      return fillPendingNotices(visible, state.pending);
-    }
-    default:
-      return state;
-  }
 }
 
 function readCompactResult(result: unknown, reason: string): CompactResultInfo | null {
