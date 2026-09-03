@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
+import { createClientId } from "@/lib/client-id";
 import type { SessionInfo } from "@/lib/types";
 import { SESSION_METADATA_BATCH_SIZE, type SessionRowMetadata } from "@/lib/session-metadata-types";
 import {
@@ -1002,9 +1003,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
     if (!selectedCwd) return;
     // Generate a temporary UUID client-side — no backend call needed.
     // Pi will be spawned lazily when the user sends the first message.
-    const tempId = typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    const tempId = createClientId();
     onNewSession?.(tempId, selectedCwd);
   }, [selectedCwd, onNewSession]);
 

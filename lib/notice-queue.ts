@@ -19,13 +19,6 @@ export type NoticeAction =
 
 const MAX_NOTICES = 5;
 
-export function createNoticeId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
 function markOldestNoticeExiting(notices: NoticeItem[]): NoticeItem[] {
   const index = notices.findIndex((notice) => !notice.exiting);
   if (index === -1) return notices;

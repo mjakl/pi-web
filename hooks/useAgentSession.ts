@@ -14,7 +14,8 @@ import type {
 } from "@/lib/types";
 import { isBlockingExtensionUiRequest } from "@/lib/browser-notifications";
 import { normalizeToolCalls } from "@/lib/normalize";
-import { createNoticeId, noticeReducer, type NoticeType } from "@/lib/notice-queue";
+import { createClientId } from "@/lib/client-id";
+import { noticeReducer, type NoticeType } from "@/lib/notice-queue";
 import { isPromptRejectedError, sendAgentCommand } from "@/lib/agent-client";
 import { clearDraft, rekeyDraft, restoreDraftSubmission } from "@/lib/draft-store";
 import { getPreferredToolPreset, setPreferredToolPreset } from "@/lib/tool-preset-preference";
@@ -807,7 +808,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     dispatchNotice({
       type: "add",
       notice: {
-        id: notice.id ?? createNoticeId(),
+        id: notice.id ?? createClientId(),
         message,
         type: notice.type ?? "info",
       },

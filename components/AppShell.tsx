@@ -9,6 +9,7 @@ import { FileViewer } from "./FileViewer";
 import { TabBar } from "./TabBar";
 import { openFileTab, saveFileViewerState, type Tab } from "@/lib/file-tab-state";
 import { SettingsPanel, SettingsSectionIcon } from "./SettingsPanel";
+import { createClientId } from "@/lib/client-id";
 import { ProjectTrustDialog } from "./ProjectTrustDialog";
 import { BranchNavigator, hasSessionBranches } from "./BranchNavigator";
 import { SystemPromptPanel } from "./SystemPromptPanel";
@@ -546,6 +547,18 @@ export function AppShell({ piVersion }: { piVersion: string }) {
       });
   }, [router]);
 
+  // Every session switch clears the same derived view state. Keeping this in
+  // one place is what stops a fourth copy from drifting again.
+  const resetSessionView = useCallback(() => {
+    setSessionKey((k) => k + 1);
+    setBranchTree([]);
+    setBranchActiveLeafId(null);
+    branchLeafChangeFnRef.current = null;
+    setSystemPrompt(null);
+    setSystemTools(null);
+    setSystemInfoLoading(false);
+    setActiveTopPanel(null);
+  }, []);
   const handleCwdChange = useCallback((
     cwd: string | null,
     projectRoot?: string | null,
@@ -581,9 +594,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
     }
     // Close any session that belongs to a different project — it no longer
     // matches the selected project directory.
-    const draftId = typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    const draftId = createClientId();
     setNewSessionDraftId(draftId);
     activeNewSessionDraftKeyRef.current = `new:${draftId}:${cwd}`;
     setSelectedSession(null);
@@ -591,13 +602,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
       if (prev && prev !== cwd) return null;
       return prev;
     });
-    setSessionKey((k) => k + 1);
-    setBranchTree([]);
-    setBranchActiveLeafId(null);
-    setSystemPrompt(null);
-    setSystemTools(null);
-    setSystemInfoLoading(false);
-    setActiveTopPanel(null);
+    resetSessionView();
     if (currentProject !== newProject) {
       // File tabs are keyed by absolute path, so tabs opened in the previous
       // project must not linger. Same-project worktree switches keep them.
@@ -609,7 +614,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
       restoreWorkspaceContext(newProject);
     }
     router.replace("/", { scroll: false });
-  }, [activeCwd, invalidateWorkspaceRestore, newSessionCwd, router, selectedSession, restoreWorkspaceContext]);
+  }, [resetSessionView, activeCwd, invalidateWorkspaceRestore, newSessionCwd, router, selectedSession, restoreWorkspaceContext]);
 
   const handleSelectSession = useCallback((session: SessionInfo, isRestore = false) => {
     invalidateWorkspaceRestore();
@@ -628,13 +633,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
     }
     setNewSessionCwd(null);
     setSelectedSession(session);
-    setSessionKey((k) => k + 1);
-    setBranchTree([]);
-    setBranchActiveLeafId(null);
-    branchLeafChangeFnRef.current = null;
-    setSystemPrompt(null);
-    setSystemTools(null);
-    setSystemInfoLoading(false);
+    resetSessionView();
     setInitialSessionRestored(true);
     // On mobile, collapse the overlay drawer so the chat is revealed after pick.
     if (isMobile && !isRestore) setSidebarOpen(false);
@@ -648,7 +647,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
     if (!isRestore) {
       router.replace(`?session=${encodeURIComponent(session.id)}`, { scroll: false });
     }
-  }, [invalidateWorkspaceRestore, router, isMobile, selectedSession]);
+  }, [resetSessionView, invalidateWorkspaceRestore, router, isMobile, selectedSession]);
 
   const handleNewSession = useCallback((sessionId: string, cwd: string) => {
     invalidateWorkspaceRestore();
@@ -657,16 +656,10 @@ export function AppShell({ piVersion }: { piVersion: string }) {
     setNewSessionDraftId(sessionId);
     setSelectedSession(null);
     setNewSessionCwd(cwd);
-    setSessionKey((k) => k + 1);
-    setBranchTree([]);
-    setBranchActiveLeafId(null);
-    setSystemPrompt(null);
-    setSystemTools(null);
-    setSystemInfoLoading(false);
-    setActiveTopPanel(null);
+    resetSessionView();
     if (isMobile) setSidebarOpen(false);
     router.replace("/", { scroll: false });
-  }, [invalidateWorkspaceRestore, router, isMobile]);
+  }, [resetSessionView, invalidateWorkspaceRestore, router, isMobile]);
 
   // Global keyboard shortcuts (handles Esc, Ctrl+Alt+N etc.)
   useGlobalKeyboardShortcuts({
@@ -780,23 +773,15 @@ export function AppShell({ piVersion }: { piVersion: string }) {
     setRefreshKey((k) => k + 1);
     if (selectedSession?.id === sessionId) {
       const cwd = selectedSession.cwd;
-      const draftId = typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      const draftId = createClientId();
       setNewSessionDraftId(draftId);
       activeNewSessionDraftKeyRef.current = cwd ? `new:${draftId}:${cwd}` : null;
       setSelectedSession(null);
       setNewSessionCwd(cwd ?? null);
-      setSessionKey((k) => k + 1);
-      setBranchTree([]);
-      setBranchActiveLeafId(null);
-      setSystemPrompt(null);
-      setSystemTools(null);
-      setSystemInfoLoading(false);
-      setActiveTopPanel(null);
+      resetSessionView();
       router.replace("/", { scroll: false });
     }
-  }, [invalidateWorkspaceRestore, selectedSession, router]);
+  }, [resetSessionView, invalidateWorkspaceRestore, selectedSession, router]);
 
   const handleOpenFile = useCallback((
     filePath: string,
@@ -907,15 +892,12 @@ export function AppShell({ piVersion }: { piVersion: string }) {
   const activeCwdName = activeCwd ? getFileName(activeCwd) || activeCwd : null;
   const windowTitle = activeCwdName ? `${activeCwdName} - Pi Web` : "Pi Web";
 
+  // Set once per title change. A MutationObserver here used to force the
+  // title back on any head mutation, which reverted an extension's
+  // ui.setTitle within a frame. Next writes <title> from static metadata at
+  // SSR and never rewrites it after hydration, so one assignment is enough.
   useEffect(() => {
-    const syncWindowTitle = () => {
-      if (document.title !== windowTitle) document.title = windowTitle;
-    };
-
-    syncWindowTitle();
-    const observer = new MutationObserver(syncWindowTitle);
-    observer.observe(document.head, { childList: true, subtree: true, characterData: true });
-    return () => observer.disconnect();
+    if (document.title !== windowTitle) document.title = windowTitle;
   }, [windowTitle]);
 
   const sidebarContent = (

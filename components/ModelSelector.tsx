@@ -63,6 +63,7 @@ export function ModelSelector({
   const isMobile = useIsMobile();
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [anchorRect, setAnchorRect] = useState<{ top: number; right: number; bottom: number; left: number; width: number } | null>(null);
   const [filter, setFilter] = useState("");
@@ -81,6 +82,39 @@ export function ModelSelector({
   const currentName = selectedLabel ?? (value
     ? sortedOptions.find((option) => option.modelId === value.modelId && option.provider === value.provider)?.name ?? value.modelId
     : emptyLabel ?? t(sortedOptions.length > 0 ? "chat.selectModel" : "chat.noModels"));
+
+  // anchorRect is snapshotted on click, so anything that moves the trigger
+  // afterwards strands the panel. On mobile the filter input opens the
+  // keyboard, which shrinks the shell and slides the trigger out from under
+  // it. Re-measure rather than dismiss: the keyboard opening is expected.
+  useEffect(() => {
+    if (!open) return;
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    let frame: number | null = null;
+    const remeasure = () => {
+      frame = null;
+      const rect = trigger.getBoundingClientRect();
+      setAnchorRect({ top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left, width: rect.width });
+    };
+    const schedule = () => {
+      if (frame === null) frame = requestAnimationFrame(remeasure);
+    };
+
+    const viewport = window.visualViewport;
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, true);
+    viewport?.addEventListener("resize", schedule);
+    viewport?.addEventListener("scroll", schedule);
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, true);
+      viewport?.removeEventListener("resize", schedule);
+      viewport?.removeEventListener("scroll", schedule);
+    };
+  }, [open]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -161,6 +195,7 @@ export function ModelSelector({
       }}
     >
       <button
+        ref={triggerRef}
         type="button"
         aria-label={ariaLabel}
         aria-haspopup="listbox"
