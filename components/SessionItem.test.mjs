@@ -760,6 +760,19 @@ test("the fixed right rail keeps metadata and actions from changing left-row geo
   await view.unmount();
 });
 
+test("inactive session titles are muted", async () => {
+  const session = { ...baseSession, name: "Quiet session" };
+  const view = await mountItem(session, { isActive: false });
+  try {
+    const title = view.container.querySelector('[title="Quiet session"]');
+    assert.equal(title.style.color, "var(--text-muted)");
+    await view.rerender(session, { isActive: true });
+    assert.equal(view.container.querySelector('[title="Quiet session"]').style.color, "var(--text)");
+  } finally {
+    await view.unmount();
+  }
+});
+
 test("a selected running worktree session shows running, unread, and branch state", () => {
   const html = renderItem(
     { ...baseSession, name: "Feature work", isWorktree: true, branch: "feature/seams", messageCount: undefined },

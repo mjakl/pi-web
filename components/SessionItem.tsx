@@ -552,7 +552,7 @@ export function SessionItem({
                 fontSize: 12,
                 fontWeight: isSelected ? 500 : 400,
                 lineHeight: 1.4,
-                color: "var(--text)",
+                color: isActive ? "var(--text)" : "var(--text-muted)",
               }}
               title={title}
             >
