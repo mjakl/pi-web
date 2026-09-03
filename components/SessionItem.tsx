@@ -23,9 +23,7 @@ type MenuPosition = {
 type ActionSurface =
   | { kind: "idle" }
   | { kind: "menu"; position: MenuPosition }
-  | { kind: "rename" }
-  | { kind: "confirm-stop" }
-  | { kind: "confirm-delete" };
+  | { kind: "rename" };
 
 type FocusPolicy = "none" | "trigger" | "trigger-if-owned" | "surface" | HTMLElement;
 
@@ -157,7 +155,6 @@ export function SessionItem({
   const [stopping, setStopping] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const confirmationRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const menuHadFocusRef = useRef(false);
@@ -166,8 +163,6 @@ export function SessionItem({
   const actionsAvailableRef = useRef(actionsAvailable);
   const hasActionsRef = useRef(false);
   const menuId = useId();
-  const stopDescriptionId = `${menuId}-stop-description`;
-  const deleteDescriptionId = `${menuId}-delete-description`;
   const eligibleForActions = isActive || !session.transient;
   const hasActions = actionsAvailable && eligibleForActions;
   const renderedSurface = actionsAvailable ? actionSurface : IDLE_ACTION_SURFACE;
@@ -213,7 +208,6 @@ export function SessionItem({
         inputRef.current?.focus();
         inputRef.current?.select();
       }
-      else confirmationRef.current?.focus();
     }
   }, [actionSurface, actionsAvailable, renderedSurface, transitionActionSurface]);
 
@@ -307,11 +301,6 @@ export function SessionItem({
     }
   }, [isActive, onStopped, session.id, session.transient, transitionActionSurface]);
 
-  const handleStopConfirm = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    void performStop();
-  }, [performStop]);
-
   const performDelete = useCallback(async () => {
     if (session.transient) return;
     setDeleting(true);
@@ -325,16 +314,6 @@ export function SessionItem({
       transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     }
   }, [session.id, session.transient, onDeleted, transitionActionSurface]);
-
-  const handleDeleteConfirm = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    void performDelete();
-  }, [performDelete]);
-
-  const handleCancel = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
-  }, [transitionActionSurface]);
 
   const closeWhenFocusLeaves = useCallback((e: React.FocusEvent) => {
     if (renderedSurfaceRef.current.kind !== "menu") return;
@@ -387,12 +366,9 @@ export function SessionItem({
   const chooseMenuAction = useCallback((e: React.MouseEvent, action: "stop" | "rename" | "delete") => {
     e.stopPropagation();
     if (action === "rename") startRename();
-    else if (action === "stop") {
-      if (e.shiftKey) void performStop();
-      else transitionActionSurface({ kind: "confirm-stop" }, "surface");
-    } else if (e.shiftKey) void performDelete();
-    else transitionActionSurface({ kind: "confirm-delete" }, "surface");
-  }, [performDelete, performStop, startRename, transitionActionSurface]);
+    else if (action === "stop") void performStop();
+    else void performDelete();
+  }, [performDelete, performStop, startRename]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const handled = dispatchSessionRowContextMenu({
@@ -424,92 +400,15 @@ export function SessionItem({
         paddingLeft: 14,
         paddingRight: 8,
         cursor: renderedSurface.kind === "idle" || renderedSurface.kind === "menu" ? "pointer" : "default",
-        background: renderedSurface.kind === "confirm-stop" || renderedSurface.kind === "confirm-delete"
-          ? "rgba(239,68,68,0.06)"
-          : isSelected ? "var(--bg-selected)" : hovered ? "var(--bg-hover)" : "transparent",
-        borderLeft: renderedSurface.kind === "confirm-stop" || renderedSurface.kind === "confirm-delete"
-          ? "2px solid #ef4444"
-          : isSelected ? "2px solid var(--accent)" : "2px solid transparent",
+        background: isSelected ? "var(--bg-selected)" : hovered ? "var(--bg-hover)" : "transparent",
+        borderLeft: isSelected ? "2px solid var(--accent)" : "2px solid transparent",
         transition: "background 0.1s",
         opacity: stopping || deleting ? 0.5 : 1,
         gap: 6,
         overflow: "hidden",
       }}
     >
-      {renderedSurface.kind === "confirm-stop" ? (
-        <>
-          <div id={stopDescriptionId} style={{ flex: 1, minWidth: 0, fontSize: 10, lineHeight: 1.25, color: "var(--text)", overflowWrap: "anywhere" }}>
-            {t("sidebar.stopSessionWarning")}
-          </div>
-          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-            <button
-              ref={confirmationRef}
-              aria-describedby={stopDescriptionId}
-              onClick={handleStopConfirm}
-              style={{
-                height: 30, padding: "0 9px", background: "#ef4444", border: "none",
-                borderRadius: 6, color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 600,
-              }}
-            >
-              {t("sidebar.stop")}
-            </button>
-            <button
-              aria-describedby={stopDescriptionId}
-              onClick={handleCancel}
-              style={{
-                height: 30, padding: "0 8px", background: "var(--bg)", border: "1px solid var(--border)",
-                borderRadius: 6, color: "var(--text-muted)", cursor: "pointer", fontSize: 11, fontWeight: 500,
-              }}
-            >
-              {t("sidebar.cancel")}
-            </button>
-          </div>
-        </>
-      ) : renderedSurface.kind === "confirm-delete" ? (
-        /* ── Delete confirmation: same height, two flat buttons ── */
-        <>
-          <div id={deleteDescriptionId} style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {t("sidebar.deleteSession", { title })}
-          </div>
-          <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
-            <button
-              ref={confirmationRef}
-              aria-describedby={deleteDescriptionId}
-              onClick={handleDeleteConfirm}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
-                height: 30, padding: "0 11px",
-                background: "#ef4444", border: "none",
-                borderRadius: 6, color: "#fff",
-                cursor: "pointer", fontSize: 12, fontWeight: 600,
-                whiteSpace: "nowrap",
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                <path d="M10 11v6M14 11v6" />
-                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-              </svg>
-              {t("sidebar.delete")}
-            </button>
-            <button
-              aria-describedby={deleteDescriptionId}
-              onClick={handleCancel}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                height: 30, padding: "0 11px",
-                background: "var(--bg)", border: "1px solid var(--border)",
-                borderRadius: 6, color: "var(--text-muted)",
-                cursor: "pointer", fontSize: 12, fontWeight: 500,
-                whiteSpace: "nowrap",
-              }}
-            >
-              {t("sidebar.cancel")}
-            </button>
-          </div>
-        </>
-      ) : renderedSurface.kind === "rename" ? (
+      {renderedSurface.kind === "rename" ? (
         /* ── Rename: input fills the same row ── */
         <input
           ref={inputRef}
@@ -558,11 +457,6 @@ export function SessionItem({
               }}
               title={title}
             >
-              {shortcutLabel && (
-                <kbd aria-hidden="true" style={{ flexShrink: 0, color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 10 }}>
-                  {shortcutLabel}
-                </kbd>
-              )}
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
                 {title}
               </span>
@@ -603,7 +497,18 @@ export function SessionItem({
               fontSize: 11,
             }}
           >
-            {hasActions ? (
+            {shortcutLabel ? (
+              <kbd
+                aria-hidden="true"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 28, height: 28,
+                  color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 10,
+                }}
+              >
+                {shortcutLabel}
+              </kbd>
+            ) : hasActions ? (
               <button
                 ref={menuTriggerRef}
                 type="button"
@@ -658,7 +563,7 @@ export function SessionItem({
               onKeyDown={handleMenuKeyDown}
             >
               {isActive && (
-                <button type="button" title={t("sidebar.stopWithShiftClick")} onClick={(e) => chooseMenuAction(e, "stop")} style={menuItemStyle}>
+                <button type="button" onClick={(e) => chooseMenuAction(e, "stop")} style={menuItemStyle}>
                   {t("sidebar.stop")}
                 </button>
               )}
@@ -667,7 +572,7 @@ export function SessionItem({
                   <button type="button" onClick={(e) => chooseMenuAction(e, "rename")} style={menuItemStyle}>
                     {t("sidebar.rename")}
                   </button>
-                  <button type="button" title={t("sidebar.deleteWithShiftClick")} onClick={(e) => chooseMenuAction(e, "delete")} style={{ ...menuItemStyle, color: "#ef4444" }}>
+                  <button type="button" onClick={(e) => chooseMenuAction(e, "delete")} style={{ ...menuItemStyle, color: "#ef4444" }}>
                     {t("sidebar.delete")}
                   </button>
                 </>

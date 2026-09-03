@@ -95,15 +95,6 @@ function accessibleName(element) {
   return element.getAttribute("aria-label") ?? element.textContent.trim();
 }
 
-function accessibleDescription(element) {
-  return (element.getAttribute("aria-describedby") ?? "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((id) => document.getElementById(id)?.textContent.trim() ?? "")
-    .filter(Boolean)
-    .join(" ");
-}
-
 test("each session indicator keeps its own label, colour, and glyph", () => {
   const running = renderIndicator("running");
   assert.match(running, /^<span title="Agent running…" aria-label="Agent running…" style="width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var\(--accent\)">/);
@@ -197,66 +188,39 @@ test("Escape claimed by the popup does not reach window shortcuts", async () => 
   }
 });
 
-test("Stop and Delete move focus into confirmation, then Cancel restores the action trigger", async () => {
-  for (const action of ["Stop", "Delete"]) {
-    const view = await mountItem(baseSession, { isActive: true });
-    try {
-      const trigger = view.container.querySelector("button[aria-controls]");
-      await click(trigger);
-      const item = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === action);
-      await click(item);
-
-      const primary = [...view.container.querySelectorAll("button")].find((button) => button.textContent.trim() === action);
-      assert.equal(document.activeElement === primary, true);
-
-      const cancel = [...view.container.querySelectorAll("button")].find((button) => button.textContent.trim() === "Cancel");
-      cancel.focus();
-      assert.equal(document.activeElement, cancel);
-      await click(cancel);
-      assert.equal(document.activeElement, view.container.querySelector("button[aria-controls]"));
-    } finally {
-      await view.unmount();
-    }
-  }
-});
-
-test("successful Stop restores focus to the persisted session trigger", async () => {
+test("menu Stop and Delete execute immediately and restore the action trigger", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(null, { status: 200 });
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push([String(url), init?.method]);
+    return new Response(null, { status: 200 });
+  };
   let stopped = false;
-  const view = await mountItem(baseSession, { isActive: true, onStopped: () => { stopped = true; } });
+  let deleted = false;
+  const view = await mountItem(baseSession, {
+    isActive: true,
+    onStopped: () => { stopped = true; },
+    onDeleted: () => { deleted = true; },
+  });
   try {
     await click(view.container.querySelector("button[aria-controls]"));
     await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Stop"));
-    const confirm = [...view.container.querySelectorAll("button")].find((button) => button.textContent.trim() === "Stop");
-    confirm.focus();
-    await click(confirm);
 
     assert.equal(stopped, true);
     assert.equal(document.activeElement, view.container.querySelector("button[aria-controls]"));
-  } finally {
-    await view.unmount();
-    globalThis.fetch = originalFetch;
-  }
-});
 
-test("Stop bypass restores focus when the persisted trigger remains", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(null, { status: 200 });
-  const view = await mountItem(baseSession, { isActive: true });
-  const trigger = view.container.querySelector("button[aria-controls]");
-  let focused;
-  try {
-    await click(trigger);
-    const stop = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Stop");
-    stop.focus();
-    await click(stop, { shiftKey: true });
-    focused = document.activeElement;
+    await click(view.container.querySelector("button[aria-controls]"));
+    await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Delete"));
+
+    assert.equal(deleted, true);
+    assert.deepEqual(requests, [
+      ["/api/agent/abcdef1234567890", "DELETE"],
+      ["/api/sessions/abcdef1234567890", "DELETE"],
+    ]);
   } finally {
     await view.unmount();
     globalThis.fetch = originalFetch;
   }
-  assert.equal(focused, trigger);
 });
 
 test("failed destructive actions restore focus when their trigger remains", async () => {
@@ -284,7 +248,7 @@ test("failed destructive actions restore focus when their trigger remains", asyn
         await click(trigger);
         const action = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === scenario.action);
         action.focus();
-        await click(action, { shiftKey: true });
+        await click(action);
         focusResults.push([document.activeElement, trigger]);
       } finally {
         await view.unmount();
@@ -307,10 +271,9 @@ test("Delete treats 404 and 500 responses as failures", async () => {
       let focused;
       try {
         await click(trigger);
-        await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Delete"));
-        const confirm = [...view.container.querySelectorAll("button")].find((button) => button.textContent.trim() === "Delete");
-        confirm.focus();
-        await click(confirm);
+        const deleteItem = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Delete");
+        deleteItem.focus();
+        await click(deleteItem);
         focused = document.activeElement;
       } finally {
         await view.unmount();
@@ -408,41 +371,11 @@ test("Rename Escape restores the action trigger", async () => {
 test("focused inline action surfaces expose their accessible context", async () => {
   const view = await mountItem(baseSession, { isActive: true });
   try {
-    const openAction = async (action) => {
-      await click(view.container.querySelector("button[aria-controls]"));
-      await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === action));
-    };
+    await click(view.container.querySelector("button[aria-controls]"));
+    await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Rename"));
 
-    await openAction("Rename");
     const input = view.container.querySelector("input");
     assert.equal(accessibleName(input), "Rename session abcdef123456");
-    await pressKey(input, "Escape");
-
-    await openAction("Stop");
-    for (const button of view.container.querySelectorAll("button")) {
-      assert.equal(accessibleDescription(button), "Stop active work, extension processes, and temporary logs?");
-    }
-    await click([...view.container.querySelectorAll("button")].find((button) => button.textContent.trim() === "Cancel"));
-
-    await openAction("Delete");
-    for (const button of view.container.querySelectorAll("button")) {
-      assert.equal(accessibleDescription(button), "Delete abcdef123456?");
-    }
-  } finally {
-    await view.unmount();
-  }
-});
-
-test("Delete confirmation exposes the full session title to assistive technology", async () => {
-  const title = "Release notes for customer alpha and launch readiness";
-  const view = await mountItem({ ...baseSession, name: title });
-  try {
-    await click(view.container.querySelector("button[aria-controls]"));
-    await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Delete"));
-
-    for (const button of view.container.querySelectorAll("button")) {
-      assert.equal(accessibleDescription(button), `Delete ${title}?`);
-    }
   } finally {
     await view.unmount();
   }
@@ -478,12 +411,12 @@ test("reopening actions never applies trigger focus deferred during hiding", asy
   document.body.append(outside);
   try {
     await click(view.container.querySelector("button[aria-controls]"));
-    await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Stop"));
-    const cancel = [...view.container.querySelectorAll("button")].find((button) => button.textContent.trim() === "Cancel");
-    cancel.focus();
+    await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Rename"));
+    const input = view.container.querySelector("input");
+    input.focus();
 
     await view.rerenderAfter(
-      () => cancel.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
+      () => input.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
       baseSession,
       { isActive: true, actionsAvailable: false },
     );
@@ -682,43 +615,29 @@ test("Escape and outside presses dismiss the menu, with Escape restoring trigger
   await view.unmount();
 });
 
-test("menu actions preserve rename and Stop/Delete confirmations without selecting the row", async () => {
-  for (const action of ["Rename", "Stop", "Delete"]) {
-    let selections = 0;
-    const view = await mountItem(baseSession, { isActive: true, onClick: () => { selections += 1; } });
-    await click(view.container.querySelector("button[aria-controls]"));
-    const item = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === action);
-    await click(item);
-
-    if (action === "Rename") assert.ok(view.container.querySelector("input"));
-    if (action === "Stop") assert.match(view.container.textContent, /Stop active work/);
-    if (action === "Delete") assert.match(view.container.textContent, /Delete abcdef123456\?/);
-    assert.equal(selections, 0);
-    await view.unmount();
-  }
-});
-
-test("Shift-click bypasses Stop and Delete confirmations", async () => {
+test("menu actions run without selecting the row", async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];
   globalThis.fetch = async (url, init) => {
-    requests.push([url, init?.method]);
+    requests.push([String(url), init?.method]);
     return new Response(null, { status: 200 });
   };
-
   try {
-    const view = await mountItem(baseSession, { isActive: true });
-    for (const action of ["Stop", "Delete"]) {
+    for (const action of ["Rename", "Stop", "Delete"]) {
+      let selections = 0;
+      const view = await mountItem(baseSession, { isActive: true, onClick: () => { selections += 1; } });
       await click(view.container.querySelector("button[aria-controls]"));
       const item = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === action);
-      await click(item, { shiftKey: true });
-      assert.doesNotMatch(view.container.textContent, /Stop active work|Delete abcdef123456\?/);
+      await click(item);
+
+      if (action === "Rename") assert.ok(view.container.querySelector("input"));
+      assert.equal(selections, 0);
+      await view.unmount();
     }
     assert.deepEqual(requests, [
       ["/api/agent/abcdef1234567890", "DELETE"],
       ["/api/sessions/abcdef1234567890", "DELETE"],
     ]);
-    await view.unmount();
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -758,6 +677,18 @@ test("the fixed right rail keeps metadata and actions from changing left-row geo
   await act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   assert.equal(left.getAttribute("style"), leftStyle);
   await view.unmount();
+});
+
+test("the shortcut hint replaces the menu trigger in the actions rail", () => {
+  assert.match(
+    renderItem(baseSession, { shortcutLabel: "Ctrl+1" }),
+    /<kbd[^>]*>Ctrl\+1<\/kbd>/,
+  );
+  assert.doesNotMatch(
+    renderItem(baseSession, { shortcutLabel: "Ctrl+1" }),
+    /aria-label="Session actions for abcdef123456"/,
+  );
+  assert.match(renderItem(baseSession), /aria-label="Session actions for abcdef123456"/);
 });
 
 test("inactive session titles are muted", async () => {
