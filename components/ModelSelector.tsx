@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
@@ -63,6 +63,7 @@ export function ModelSelector({
   const isMobile = useIsMobile();
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const filterInputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [anchorRect, setAnchorRect] = useState<{ top: number; right: number; bottom: number; left: number; width: number } | null>(null);
@@ -116,19 +117,15 @@ export function ModelSelector({
     };
   }, [open]);
 
-  useEffect(() => {
-    const handleOutsideClick = (event: MouseEvent) => {
-      if (
-        rootRef.current && !rootRef.current.contains(event.target as Node)
-        && panelRef.current && !panelRef.current.contains(event.target as Node)
-      ) {
-        setOpen(false);
-        setFilter("");
-      }
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, []);
+  // Shown as a native popover: the browser owns light dismiss and top layer.
+  // Focus the filter by hand because autoFocus would run while the popover is
+  // still display:none, so the attribute alone never lands.
+  const panelShown = open && Boolean(anchorRect);
+  useLayoutEffect(() => {
+    if (!panelShown) return;
+    panelRef.current?.showPopover?.();
+    filterInputRef.current?.focus();
+  }, [panelShown]);
 
   useEffect(() => {
     if (!locked) return;
@@ -266,10 +263,17 @@ export function ModelSelector({
         return (
           <div
             ref={panelRef}
+            popover="auto"
+            onToggle={(e) => {
+              if ((e as unknown as { newState?: string }).newState !== "closed") return;
+              setOpen(false);
+              setFilter("");
+            }}
             role="listbox"
             aria-label={ariaLabel}
             style={{
-              position: "fixed",
+              // Undo the UA popover sheet, which centres with inset:0/margin:auto.
+              position: "fixed", inset: "auto", margin: 0,
               ...verticalPosition,
               ...horizontalPosition,
               zIndex: 500,
@@ -286,11 +290,11 @@ export function ModelSelector({
             {showFilter && (
               <div style={{ flexShrink: 0, padding: "6px 8px", borderBottom: "1px solid var(--border)" }}>
                 <input
+                  ref={filterInputRef}
                   value={filter}
                   onChange={(event) => setFilter(event.target.value)}
                   placeholder={t("chat.filterModels")}
                   aria-label={t("chat.filterModels")}
-                  autoFocus
                   autoComplete="off"
                   spellCheck={false}
                   style={{
