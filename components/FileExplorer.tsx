@@ -78,11 +78,11 @@ interface PendingConflict {
   nonReplaceable: string[];
 }
 
-async function fetchEntries(dirPath: string): Promise<FileNode[]> {
+async function fetchEntries(dirPath: string, t: Translate): Promise<FileNode[]> {
   const encoded = encodeFilePathForApi(dirPath);
   const res = await fetch(`/api/files/${encoded}?type=list`);
   if (!res.ok) {
-    let message = `Failed to load files (HTTP ${res.status})`;
+    let message = t("files.loadFailed", { status: res.status });
     try {
       const data = await res.json() as { error?: string };
       if (data.error) message = data.error;
@@ -155,6 +155,7 @@ function uploadFiles(
   files: File[],
   strategy: UploadConflictStrategy,
   onProgress: (progress: number) => void,
+  t: Translate,
 ): Promise<{ status: number; data: UploadResponse }> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
@@ -170,8 +171,8 @@ function uploadFiles(
         onProgress(Math.round((event.loaded / event.total) * 100));
       }
     };
-    xhr.onerror = () => reject(new Error("Network error while uploading files"));
-    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.onerror = () => reject(new Error(t("files.uploadNetworkError")));
+    xhr.onabort = () => reject(new Error(t("files.uploadCancelled")));
     xhr.onload = () => {
       let data: UploadResponse = {};
       try {
@@ -247,7 +248,7 @@ function TreeNode({
     if (loaded && !force) return;
     setLoading(true);
     try {
-      const entries = await fetchEntries(node.fullPath);
+      const entries = await fetchEntries(node.fullPath, t);
       setChildren(entries);
       setLoaded(true);
     } catch {
@@ -255,7 +256,7 @@ function TreeNode({
     } finally {
       setLoading(false);
     }
-  }, [loaded, node.fullPath]);
+  }, [loaded, node.fullPath, t]);
 
   // Re-fetch children when the tree refreshes and the directory is open.
   useEffect(() => {
@@ -665,7 +666,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
     setUploadPhase("uploading");
 
     try {
-      const { status, data } = await uploadFiles(cwd, files, strategy, setUploadProgress);
+      const { status, data } = await uploadFiles(cwd, files, strategy, setUploadProgress, t);
       if (status === 409 && data.conflicts?.length) {
         setPendingConflict({
           files,
@@ -675,7 +676,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
         return;
       }
       if (status < 200 || status >= 300) {
-        throw new Error(data.error ?? `Upload failed (HTTP ${status})`);
+        throw new Error(data.error ?? t("files.uploadFailed", { status }));
       }
       setUploadProgress(100);
       applyUploadResult(data);
@@ -684,7 +685,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
     } finally {
       setUploadPhase("idle");
     }
-  }, [applyUploadResult, cwd]);
+  }, [applyUploadResult, cwd, t]);
 
   const prepareUpload = useCallback(async (files: File[]) => {
     if (files.length === 0 || uploadBusy) return;
@@ -705,7 +706,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
         },
       );
       const data = await res.json().catch(() => ({})) as UploadResponse;
-      if (!res.ok) throw new Error(data.error ?? `Upload check failed (HTTP ${res.status})`);
+      if (!res.ok) throw new Error(data.error ?? t("files.uploadCheckFailed", { status: res.status }));
 
       if (data.conflicts?.length) {
         setPendingConflict({
@@ -722,7 +723,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
     } finally {
       setUploadPhase("idle");
     }
-  }, [cwd, performUpload, uploadBusy]);
+  }, [cwd, performUpload, t, uploadBusy]);
 
   const handleUploadInput = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
@@ -758,12 +759,12 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
     setLoading(cwdChanged);
     setError(null);
     let cancelled = false;
-    fetchEntries(cwd)
+    fetchEntries(cwd, t)
       .then((entries) => { if (!cancelled) setRoots(entries); })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [cwd, refreshKey, treeRefreshKey]);
+  }, [cwd, refreshKey, t, treeRefreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1011,7 +1012,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
       {(changesCollapsed || gitFiles.length === 0) && (!fileSearchOpen || !hasSearchQuery) && (
         <div style={{ padding: "2px 4px" }}>
           {loading ? (
-            <div style={{ padding: "8px 12px", fontSize: 11, color: "var(--text-dim)" }}>Loading files...</div>
+            <div style={{ padding: "8px 12px", fontSize: 11, color: "var(--text-dim)" }}>{t("chat.loadingFiles")}</div>
           ) : error ? (
             <div style={{ padding: "8px 12px", fontSize: 11, color: "#f87171" }}>{error}</div>
           ) : (

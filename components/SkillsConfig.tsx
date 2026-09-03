@@ -126,7 +126,7 @@ function SkillDetail({
       </div>
 
       {skill.install?.skillsShUrl && (
-        <ConfigField label="Source">
+        <ConfigField label={t("i18n.source")}>
           <a
             href={skill.install.skillsShUrl}
             target="_blank"
@@ -142,7 +142,7 @@ function SkillDetail({
       )}
 
       {skill.install && (
-        <ConfigField label="Version">
+        <ConfigField label={t("i18n.version")}>
           <div className="skill-version-row">
             <span className="skill-version-value">
               {shortVersion(updateStatus?.currentVersion ?? skill.install.versionHash)}
@@ -198,13 +198,13 @@ function SkillDetail({
         </ConfigField>
       )}
 
-      <ConfigField label="Name">
+      <ConfigField label={t("i18n.name")}>
         <span className="skill-name-value">
           {skill.name}
         </span>
       </ConfigField>
 
-      <ConfigField label="Description">
+      <ConfigField label={t("i18n.description")}>
         <span className="skill-description">
           {skill.description}
         </span>
@@ -261,13 +261,13 @@ function AddSkillPanel({
         return;
       }
       setResults(d.results ?? []);
-      if ((d.results ?? []).length === 0) setSearchError("No skills found");
+      if ((d.results ?? []).length === 0) setSearchError(t("i18n.noSkills"));
     } catch (e) {
       setSearchError(String(e));
     } finally {
       setSearching(false);
     }
-  }, []);
+  }, [t]);
 
   const install = useCallback(
     async (pkg: string) => {

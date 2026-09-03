@@ -142,6 +142,20 @@ test("renders the shared field model selector as a disabled gray control", () =>
   assert.match(html, />Parent default</);
 });
 
+test("labels the model selector from the English message package", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(ModelSelector, {
+      options: [{ provider: "openai", modelId: "gpt-5.6-sol", name: "GPT-5.6 Sol" }],
+      value: null,
+      onChange() {},
+      ariaLabel: "Model",
+    }),
+  );
+
+  assert.match(html, />Select model</);
+  assert.match(html, /title="Change model"/);
+});
+
 test("caps an upward menu to the visible space above its anchor", () => {
   assert.equal(getUpwardMenuMaxHeight(343, 36), 299);
   assert.equal(getUpwardMenuMaxHeight(40, 36), 0);

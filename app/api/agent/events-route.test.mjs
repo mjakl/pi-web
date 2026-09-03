@@ -115,7 +115,8 @@ test("a passive request for a stopped persisted session is refused", async (t) =
   const response = await requestEvents(id);
 
   assert.equal(response.status, 409);
-  assert.equal(await response.text(), "Session is stopped");
+  assert.match(response.headers.get("Content-Type"), /^application\/json/);
+  assert.deepEqual(await response.json(), { error: "Session is stopped" });
 });
 
 test("explicit activation starts a stopped session through the shared start lock", async (t) => {
@@ -142,5 +143,6 @@ test("an unknown session is not found even with activation requested", async (t)
   const response = await requestEvents(`events-route-missing-${process.pid}`, "?activate");
 
   assert.equal(response.status, 404);
-  assert.equal(await response.text(), "Session not found");
+  assert.match(response.headers.get("Content-Type"), /^application\/json/);
+  assert.deepEqual(await response.json(), { error: "Session not found" });
 });

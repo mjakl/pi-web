@@ -21,6 +21,7 @@ import type { SessionStatsInfo } from "@/lib/pi-types";
 import { mergeSessionStats, type SessionFileStats } from "@/lib/session-stats";
 import { userMessageKey } from "@/lib/prompt-recovery";
 import { AgentEventConnection } from "@/lib/agent-event-connection";
+import { useI18n } from "@/hooks/useI18n";
 import type { AgentEventLike } from "@/lib/agent-event-wire";
 import { getToolExecutionProgress } from "@/lib/tool-execution-progress";
 import {
@@ -266,6 +267,7 @@ type SlashCommandsResponse = {
 };
 
 export function useAgentSession(opts: UseAgentSessionOptions) {
+  const { t } = useI18n();
   const {
     session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked,
     modelsRefreshKey, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsPanelOpen,
@@ -1172,12 +1174,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         break;
       }
       case "prompt_error":
-        addNotice({ type: "error", message: (event.errorMessage as string | undefined) ?? "Command failed" });
+        addNotice({ type: "error", message: (event.errorMessage as string | undefined) ?? t("chat.commandFailed") });
         break;
       case "extension_error":
         addNotice({
           type: "error",
-          message: (event.error as string | undefined) ?? "Extension command failed",
+          message: (event.error as string | undefined) ?? t("chat.extensionCommandFailed"),
         });
         break;
       case "message_start":
@@ -1317,7 +1319,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         handleExtensionUiRequest(event as ExtensionUiRequest);
         break;
     }
-  }, [addNotice, cancelEventStreamGrace, closeEvents, handleExtensionUiRequest, loadSession, notifyPromptStage, onAgentEnd, scheduleEventStreamClose, scrollToBottom, settleUiStage]);
+  }, [addNotice, cancelEventStreamGrace, closeEvents, handleExtensionUiRequest, loadSession, notifyPromptStage, onAgentEnd, scheduleEventStreamClose, scrollToBottom, settleUiStage, t]);
   handleAgentEventRef.current = handleAgentEvent;
 
   const handleSend = useCallback(async (message: string, images?: AttachedImage[]) => {
@@ -1373,7 +1375,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         const existingSid = sessionIdRef.current ?? await ensuringNewSessionRef.current;
         const sid = existingSid ?? await ensureNewSession();
 
-        if (!sid) throw new Error("Unable to create a session for the prompt");
+        if (!sid) throw new Error(t("chat.promptSessionUnavailable"));
         sentSessionId = sid;
         if (selectedModel) {
           setPendingModel(selectedModel);
@@ -1399,7 +1401,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           ...(piImages?.length ? { images: piImages } : {}),
         });
       } else {
-        throw new Error("No active session for the prompt");
+        throw new Error(t("chat.noActiveSessionForPrompt"));
       }
       if (isSlashCommandPrompt && sentSessionId) {
         void waitForPromptSettlement(sentSessionId, promptRunId);
@@ -1437,7 +1439,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setAgentPhase(null);
       dispatch({ type: "end" });
     }
-  }, [isNew, newSessionCwd, newSessionModel, session, ensureNewSession, ensureEventsConnected, promoteNewSession, waitForPromptSettlement, addNotice, cancelEventStreamGrace, closeEvents, composerDraftKey, reconcileAgentState, restoreSubmission]);
+  }, [isNew, newSessionCwd, newSessionModel, session, ensureNewSession, ensureEventsConnected, promoteNewSession, waitForPromptSettlement, addNotice, cancelEventStreamGrace, closeEvents, composerDraftKey, reconcileAgentState, restoreSubmission, t]);
 
   const executeBash = useCallback(async (command: string, excludeFromContext: boolean) => {
     if (agentRunningRef.current || bashRunningRef.current) return;
@@ -1447,7 +1449,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     setBashRunning(true);
     try {
       const sid = sessionIdRef.current ?? session?.id ?? await ensureNewSession();
-      if (!sid) throw new Error("Unable to create a session for the shell command");
+      if (!sid) throw new Error(t("chat.shellSessionUnavailable"));
       await sendAgentCommand(sid, {
         type: "bash",
         command,
@@ -1464,7 +1466,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setPendingBash(null);
       setBashRunning(false);
     }
-  }, [addNotice, composerDraftKey, ensureNewSession, loadSession, promoteNewSession, restoreSubmission, session]);
+  }, [addNotice, composerDraftKey, ensureNewSession, loadSession, promoteNewSession, restoreSubmission, session, t]);
   executeBashRef.current = executeBash;
 
   const handleAbort = useCallback(async () => {
@@ -1560,7 +1562,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setCurrentModelOverride(previousOverride);
       addNotice({
         type: "error",
-        message: `Failed to switch model: ${e instanceof Error ? e.message : String(e)}`,
+        message: t("chat.switchModelFailed", { error: e instanceof Error ? e.message : String(e) }),
       });
       // A failed response can still follow a server-side write (for example, a
       // dropped connection), so let the session file settle the displayed model.
@@ -1569,7 +1571,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       modelSwitchPendingRef.current = false;
       setModelSwitching(false);
     }
-  }, [addNotice, currentModelOverride, isNew, loadSession, setNewSessionModel]);
+  }, [addNotice, currentModelOverride, isNew, loadSession, setNewSessionModel, t]);
 
   const handleCompact = useCallback(async () => {
     const sid = sessionIdRef.current;
@@ -1630,7 +1632,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       if (result.error) {
         addNotice({ type: "error", message: result.error });
       } else if (result.action !== "openSessionStats") {
-        addNotice({ type: "success", message: result.message ?? "Command completed" });
+        addNotice({ type: "success", message: result.message ?? t("chat.commandCompleted") });
       }
       return result;
     };
@@ -1638,7 +1640,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     try {
       switch (commandName) {
         case "compact": {
-          if (!sid || isCompacting) return complete({ handled: true, error: "No active session to compact" });
+          if (!sid || isCompacting) return complete({ handled: true, error: t("chat.noActiveSessionToCompact") });
           setIsCompacting(true);
           setCompactError(null);
           setCompactResult(null);
@@ -1648,11 +1650,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           });
           setCompactResult(readCompactResult(result, "manual"));
           if (await loadSession(sid, true)) promoteNewSession();
-          return complete({ handled: true, message: "Compacted context" });
+          return complete({ handled: true, message: t("chat.compactedContext") });
         }
 
         case "reload": {
-          if (!sid) return complete({ handled: true, error: "No active session to reload" });
+          if (!sid) return complete({ handled: true, error: t("chat.noActiveSessionToReload") });
           await sendAgentCommand(sid, { type: "reload" });
           await Promise.all([
             loadSession(sid, false, true),
@@ -1660,19 +1662,19 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             loadSlashCommands(),
             loadModels(),
           ]);
-          return complete({ handled: true, message: "Reloaded session resources" });
+          return complete({ handled: true, message: t("chat.reloadedSessionResources") });
         }
 
         case "name": {
-          if (!sid) return complete({ handled: true, error: "No active session to name" });
-          if (!args) return complete({ handled: true, error: "Usage: /name <name>" });
+          if (!sid) return complete({ handled: true, error: t("chat.noActiveSessionToName") });
+          if (!args) return complete({ handled: true, error: t("chat.nameUsage") });
           await sendAgentCommand(sid, { type: "set_session_name", name: args });
           if (await loadSession(sid)) promoteNewSession();
-          return complete({ handled: true, message: `Session renamed to ${args}` });
+          return complete({ handled: true, message: t("chat.sessionRenamed", { name: args }) });
         }
 
         case "session": {
-          if (!sid) return complete({ handled: true, error: "No active session" });
+          if (!sid) return complete({ handled: true, error: t("i18n.noActiveSession") });
           const stats = await sendAgentCommand<SessionStatsInfo>(sid, { type: "get_session_stats" });
           if (stats) {
             setSessionStatsOverride(stats);
@@ -1682,27 +1684,27 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         }
 
         case "copy": {
-          if (!sid) return complete({ handled: true, error: "No active session" });
+          if (!sid) return complete({ handled: true, error: t("i18n.noActiveSession") });
           const data = await sendAgentCommand<LastAssistantTextResponse>(sid, { type: "get_last_assistant_text" });
           const textToCopy = data?.text ?? "";
-          if (!textToCopy) return complete({ handled: true, error: "No assistant message to copy" });
+          if (!textToCopy) return complete({ handled: true, error: t("chat.noAssistantMessageToCopy") });
           await navigator.clipboard.writeText(textToCopy);
-          return complete({ handled: true, message: "Copied last assistant message" });
+          return complete({ handled: true, message: t("chat.copiedLastAssistantMessage") });
         }
 
         case "clone": {
-          if (!sid) return complete({ handled: true, error: "No active session to clone" });
+          if (!sid) return complete({ handled: true, error: t("chat.noActiveSessionToClone") });
           if (agentRunningRef.current || bashRunningRef.current) {
-            return complete({ handled: true, error: "Cannot clone while the session is running" });
+            return complete({ handled: true, error: t("chat.cannotCloneWhileRunning") });
           }
           const result = await sendAgentCommand<{ cancelled?: boolean; newSessionId?: string }>(sid, {
             type: "clone",
             leafId: activeLeafId,
           });
           if (result?.cancelled || !result?.newSessionId) {
-            return complete({ handled: true, error: "Cannot clone an empty or unsaved session" });
+            return complete({ handled: true, error: t("chat.cannotCloneUnsavedSession") });
           }
-          const completed = complete({ handled: true, message: "Cloned current session branch" });
+          const completed = complete({ handled: true, message: t("chat.clonedSessionBranch") });
           onSessionForked?.(result.newSessionId);
           return completed;
         }
@@ -1715,7 +1717,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } finally {
       if (commandName === "compact") setIsCompacting(false);
     }
-  }, [activeLeafId, addNotice, ensureNewSession, isCompacting, loadModels, loadSession, loadSlashCommands, loadTools, promoteNewSession, onSessionForked, onSessionStatsPanelOpen]);
+  }, [activeLeafId, addNotice, ensureNewSession, isCompacting, loadModels, loadSession, loadSlashCommands, loadTools, promoteNewSession, onSessionForked, onSessionStatsPanelOpen, t]);
 
   // Let AgentSession.prompt decide atomically whether to queue against the
   // current run or start a new turn if it settled while the request was in
@@ -1729,7 +1731,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     const restore = () => restoreSubmission(message, images, composerDraftKey);
     if (!sid) {
       restore();
-      addNotice({ type: "error", message: "No active session for the queued message" });
+      addNotice({ type: "error", message: t("chat.noActiveSessionForQueuedMessage") });
       return;
     }
     const piImages = images?.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType }));
@@ -1751,7 +1753,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         message: e instanceof Error ? e.message : String(e),
       });
     }
-  }, [addNotice, composerDraftKey, restoreSubmission]);
+  }, [addNotice, composerDraftKey, restoreSubmission, t]);
 
   const handleSteer = useCallback(async (message: string, images?: AttachedImage[]) => {
     await sendStreamingPrompt(message, "steer", images);
@@ -1793,9 +1795,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
     } catch (e) {
       console.error("Failed to recall queued messages:", e);
-      addNotice({ type: "error", message: "Failed to recall queued messages" });
+      addNotice({ type: "error", message: t("chat.recallQueuedFailed") });
     }
-  }, [opts.chatInputRef, addNotice]);
+  }, [opts.chatInputRef, addNotice, t]);
 
   const handleThinkingLevelChange = useCallback(async (level: ThinkingLevelOption) => {
     setThinkingLevel(level);

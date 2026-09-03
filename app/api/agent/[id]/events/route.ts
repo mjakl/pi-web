@@ -22,9 +22,9 @@ export async function GET(
     sessionPromise = Promise.resolve(activeSession);
   } else {
     const filePath = await resolveSessionPath(id);
-    if (!filePath) return new Response("Session not found", { status: 404 });
+    if (!filePath) return Response.json({ error: "Session not found" }, { status: 404 });
     const activate = new URL(req.url).searchParams.has("activate");
-    if (!activate) return new Response("Session is stopped", { status: 409 });
+    if (!activate) return Response.json({ error: "Session is stopped" }, { status: 409 });
     if (req.signal.aborted) return new Response(null, { status: 204 });
     sessionPromise = activateRpcSession(operation, filePath);
   }

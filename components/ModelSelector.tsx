@@ -80,7 +80,7 @@ export function ModelSelector({
 
   const currentName = selectedLabel ?? (value
     ? sortedOptions.find((option) => option.modelId === value.modelId && option.provider === value.provider)?.name ?? value.modelId
-    : emptyLabel ?? (sortedOptions.length > 0 ? "Select model" : "No models"));
+    : emptyLabel ?? t(sortedOptions.length > 0 ? "chat.selectModel" : "chat.noModels"));
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -167,7 +167,7 @@ export function ModelSelector({
         aria-expanded={open}
         aria-busy={busy || undefined}
         disabled={locked}
-        title={busy ? "Switching model" : locked ? currentName : sortedOptions.length > 0 || onClear ? "Change model" : "No available models"}
+        title={busy ? t("chat.switchingModel") : locked ? currentName : sortedOptions.length > 0 || onClear ? t("chat.changeModel") : t("chat.noAvailableModels")}
         style={buttonStyle}
         onClick={(event) => {
           const rect = event.currentTarget.getBoundingClientRect();
@@ -276,7 +276,7 @@ export function ModelSelector({
             )}
             <div style={{ minHeight: 0, overflowY: "auto" }}>
               {onClear && !filter.trim() && (
-                <ModelOptionButton active={!value} label={emptyLabel ?? "Default"} onClick={() => {
+                <ModelOptionButton active={!value} label={emptyLabel ?? t("i18n.default")} onClick={() => {
                   setOpen(false);
                   setFilter("");
                   onClear();
@@ -284,7 +284,7 @@ export function ModelSelector({
               )}
               {modelsByProvider.length === 0 ? (
                 <div style={{ padding: "8px 12px", color: "var(--text-dim)", fontSize: 12, whiteSpace: "nowrap" }}>
-                  {filter.trim() ? t("chat.noMatchingModels") : "No available models"}
+                  {filter.trim() ? t("chat.noMatchingModels") : t("chat.noAvailableModels")}
                 </div>
               ) : modelsByProvider.map((group, index) => (
                 <div key={group.provider}>
