@@ -3,21 +3,26 @@
 import { useMemo, type MouseEvent } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { resolveLocalFileHref } from "@/lib/file-links";
-import { encodeFilePathForApi } from "@/lib/file-paths";
+import { getFileApiUrl } from "@/lib/file-paths";
 import { markdownRehypePlugins, markdownRemarkPlugins, normalizeDisplayMath } from "@/lib/markdown";
 import { ImagePreview } from "./ImagePreview";
 import { MermaidBlock, CodeBlock } from "./MermaidBlock";
 
 interface MarkdownBodyProps {
   children: string;
-  sessionId?: string;
+  sessionId?: string | null;
+  /** Base for resolving relative links; defaults to cwd. */
+  baseDir?: string;
+  /** Render mermaid diagrams instead of their source. */
+  mermaidDefaultPreview?: boolean;
   className?: string;
   isStreaming?: boolean;
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
 }
 
-export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile, sessionId }: MarkdownBodyProps) {
+export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile, sessionId, baseDir, mermaidDefaultPreview }: MarkdownBodyProps) {
+  const linkBase = baseDir ?? cwd;
   const normalizedMarkdown = useMemo(() => normalizeDisplayMath(children), [children]);
   // Stable renderer identities keep stateful blocks mounted across message hover updates.
   const components = useMemo<Components>(() => ({
@@ -30,7 +35,7 @@ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile
       const isBlock = className?.includes("language-") || raw.includes("\n");
       if (isBlock) {
         if (lang === "mermaid") {
-          return <MermaidBlock code={raw.replace(/\n$/, "")} isStreaming={isStreaming} />;
+          return <MermaidBlock code={raw.replace(/\n$/, "")} isStreaming={isStreaming} defaultPreview={mermaidDefaultPreview} />;
         }
         return <CodeBlock code={raw.replace(/\n$/, "")} lang={lang} isStreaming={isStreaming} />;
       }
@@ -54,7 +59,7 @@ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile
       if (href?.startsWith("#")) {
         return <a href={`#user-content-${href.slice(1)}`} {...props}>{children}</a>;
       }
-      const filePath = onOpenFile ? resolveLocalFileHref(href, cwd) : null;
+      const filePath = onOpenFile ? resolveLocalFileHref(href, linkBase, cwd ?? linkBase) : null;
       const openFile = onOpenFile;
       if (!filePath || !openFile) {
         // Only a real external scheme earns a new tab. Everything else stays
@@ -84,14 +89,8 @@ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile
     },
     img({ src, alt, ...props }) {
       delete props.node;
-      const filePath = typeof src === "string" ? resolveLocalFileHref(src, cwd) : null;
-      const query = new URLSearchParams({ type: "read" });
-      // Without the session, a path outside every allowed root is a 403 even
-      // though the session that wrote it is allowed to read it.
-      if (sessionId) query.set("sessionId", sessionId);
-      const imageSrc = filePath
-        ? `/api/files/${encodeFilePathForApi(filePath)}?${query}`
-        : src;
+      const filePath = typeof src === "string" ? resolveLocalFileHref(src, linkBase, cwd ?? linkBase) : null;
+      const imageSrc = filePath ? getFileApiUrl(filePath, "read", sessionId) : src;
       // A src the sanitizer stripped renders as a zero-height block, so show
       // the alt text instead of nothing.
       if (typeof imageSrc !== "string" || imageSrc === "") return <>{alt}</>;
@@ -110,7 +109,7 @@ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile
         </div>
       );
     },
-  }), [cwd, isStreaming, onOpenFile, sessionId]);
+  }), [cwd, linkBase, isStreaming, onOpenFile, sessionId, mermaidDefaultPreview]);
 
   return (
     <div className={["markdown-body", className].filter(Boolean).join(" ")}>

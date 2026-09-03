@@ -15,6 +15,23 @@ export function encodeFilePathForApi(filePath: string): string {
     .join("/");
 }
 
+/** URL for the file API. The only place this shape is built. */
+export function getFileApiUrl(
+  filePath: string,
+  type: "read" | "download" | "meta" | "preview" | "watch",
+  sourceSessionId?: string | null,
+  params: Record<string, string | number | undefined> = {},
+): string {
+  const searchParams = new URLSearchParams({ type });
+  // Without the session, a path outside every allowed root is refused even
+  // though the session that produced it may read it.
+  if (sourceSessionId) searchParams.set("sessionId", sourceSessionId);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) searchParams.set(key, String(value));
+  }
+  return `/api/files/${encodeFilePathForApi(filePath)}?${searchParams.toString()}`;
+}
+
 export function getFileName(filePath: string): string {
   const normalized = normalizeFilePathSlashes(filePath).replace(/\/+$/, "");
   return normalized.split("/").pop() ?? normalized;

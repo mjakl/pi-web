@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo, type CSSProperties, type MouseEvent } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, type CSSProperties } from "react";
 import {
   Prism as SyntaxHighlighter,
   createElement as renderSyntaxNode,
@@ -8,7 +8,6 @@ import {
 } from "react-syntax-highlighter";
 import { vs } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
-import ReactMarkdown from "react-markdown";
 import { useTheme } from "@/hooks/useTheme";
 import {
   DOCX_PREVIEW_MAX_BYTES,
@@ -18,13 +17,10 @@ import {
   isImagePath,
 } from "@/lib/file-types";
 import { errorMessage } from "@/lib/error-message";
-import { encodeFilePathForApi, getFileDirectory, getFileName, getRelativeFilePath } from "@/lib/file-paths";
-import { resolveLocalFileHref } from "@/lib/file-links";
+import { getFileApiUrl, getFileDirectory, getFileName, getRelativeFilePath } from "@/lib/file-paths";
 import { MentionIcon } from "./FileIcons";
 import { parseFrontmatter } from "@/lib/frontmatter";
-import { markdownRehypePlugins, markdownRemarkPlugins, normalizeDisplayMath } from "@/lib/markdown";
-import { ImagePreview } from "./ImagePreview";
-import { CodeBlock, MermaidBlock } from "./MermaidBlock";
+import { MarkdownBody } from "./MarkdownBody";
 import { FrontmatterCard } from "./FrontmatterCard";
 import { parseUnifiedPatch } from "@/lib/patch";
 import type { GitFileDiffResponse } from "@/lib/git-types";
@@ -197,21 +193,6 @@ function SourceCodeRenderer({ rows, stylesheet, useInlineStyles, wrapLines }: So
       </span>
     );
   });
-}
-
-function getFileApiUrl(
-  filePath: string,
-  type: "read" | "download" | "meta" | "preview" | "watch",
-  sourceSessionId?: string | null,
-  params: Record<string, string | number | undefined> = {},
-): string {
-  const encoded = encodeFilePathForApi(filePath);
-  const searchParams = new URLSearchParams({ type });
-  if (sourceSessionId) searchParams.set("sessionId", sourceSessionId);
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) searchParams.set(key, String(value));
-  }
-  return `/api/files/${encoded}?${searchParams.toString()}`;
 }
 
 function DownloadLink({ filePath, sourceSessionId }: { filePath: string; sourceSessionId?: string | null }) {
@@ -1123,10 +1104,8 @@ function TextFileViewer({
     }
   }, [requestedInitialDisplayMode, hasGitDiff, updateDisplayMode]);
 
-  const markdownPreview = useMemo(
-    () => (data?.language === "markdown" ? normalizeDisplayMath(data.content) : ""),
-    [data],
-  );
+  // MarkdownBody normalizes display math itself.
+  const markdownPreview = data?.language === "markdown" ? data.content : "";
 
   const frontmatter = useMemo(
     () => (data?.language === "markdown" ? parseFrontmatter(data.content) : null),
@@ -1449,95 +1428,18 @@ function TextFileViewer({
              title={t("i18n.htmlPreview")}
           />
         ) : isMarkdown && effectiveDisplayMode === "preview" ? (
-          <div
-            className="markdown-body markdown-file-preview"
-            style={{ padding: "24px 32px" }}
-          >
+          <div className="markdown-file-preview-shell" style={{ padding: "24px 32px" }}>
             {frontmatter?.data && <FrontmatterCard data={frontmatter.data} />}
-            <ReactMarkdown
-              remarkPlugins={markdownRemarkPlugins}
-              rehypePlugins={markdownRehypePlugins}
-              components={{
-                code({ className, children, ...props }) {
-                  delete props.node;
-                  const lang = className?.replace("language-", "").toLowerCase() ?? "";
-                  const raw = children == null ? "" : String(children);
-                  const isBlock = className?.includes("language-") || raw.includes("\n");
-                  if (isBlock) {
-                    if (lang === "mermaid") {
-                      return <MermaidBlock code={raw.replace(/\n$/, "")} defaultPreview />;
-                    }
-                    return <CodeBlock code={raw.replace(/\n$/, "")} lang={lang} />;
-                  }
-                  return (
-                    <code className={className} {...props}>
-                      {children}
-                    </code>
-                  );
-                },
-                pre({ children }) {
-                  // Render the code block directly — CodeBlock provides its own wrapping.
-                  // For non-mermaid blocks, pass through to default pre rendering.
-                  return <>{children}</>;
-                },
-                a({ href, children, ...props }) {
-                  delete props.node;
-                  const linkedFile = onOpenFile
-                    ? resolveLocalFileHref(href, markdownDirectory, cwd ?? markdownDirectory)
-                    : null;
-                  if (href?.startsWith("#")) {
-                    return <a href={`#user-content-${href.slice(1)}`} {...props}>{children}</a>;
-                  }
-                  if (!linkedFile || !onOpenFile) {
-                    // Without a target this navigated the whole app away from
-                    // itself, losing the session.
-                    const external = /^(https?|mailto):/i.test(href ?? "");
-                    return (
-                      <a href={href} {...props} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
-                        {children}
-                      </a>
-                    );
-                  }
-
-                  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
-                    if (event.defaultPrevented || event.button !== 0) return;
-                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-                    event.preventDefault();
-                    onOpenFile(linkedFile);
-                  };
-
-                  return <a href={href} {...props} onClick={handleClick}>{children}</a>;
-                },
-                img({ src, alt, ...props }) {
-                  delete props.node;
-                  const imagePath = typeof src === "string"
-                    ? resolveLocalFileHref(src, markdownDirectory, cwd ?? markdownDirectory)
-                    : null;
-                  const imageSrc = imagePath
-                    ? getFileApiUrl(imagePath, "read", sourceSessionId)
-                    : src;
-                  if (typeof imageSrc !== "string" || imageSrc === "") return <>{alt}</>;
-                  return (
-                    <ImagePreview src={imageSrc} alt={alt ?? ""}>
-                      {/* Dynamic local paths are served directly by the file API. */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={imageSrc} alt={alt ?? ""} loading="lazy" {...props} />
-                    </ImagePreview>
-                  );
-                },
-                table({ children }) {
-                  // .markdown-body is overflow-x: hidden, so without this a wide
-                  // table is clipped with no way to scroll it.
-                  return (
-                    <div className="markdown-table-wrap">
-                      <table>{children}</table>
-                    </div>
-                  );
-                },
-              }}
+            <MarkdownBody
+              className="markdown-file-preview"
+              baseDir={markdownDirectory}
+              cwd={cwd ?? markdownDirectory}
+              sessionId={sourceSessionId}
+              mermaidDefaultPreview
+              onOpenFile={onOpenFile}
             >
               {markdownPreview}
-            </ReactMarkdown>
+            </MarkdownBody>
           </div>
         ) : useLightweightSource ? (
           <div
