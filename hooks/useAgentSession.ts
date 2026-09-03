@@ -30,6 +30,7 @@ import {
   mergeTranscriptRefreshMessages,
   projectPersistedSnapshot,
   runSessionLoadPhases,
+  runTranscriptNavigation,
   type BranchContextRequest,
   type PaginationRequest,
   type PersistedAuthority,
@@ -1412,6 +1413,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       return;
     }
 
+    const precedingPersistedWrites = persistedWriteTailRef.current;
     const promptRunId = promptRunIdRef.current + 1;
     cancelEventStreamGrace();
     rpcPromptPendingRef.current = true;
@@ -1439,6 +1441,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     let promptRequestStarted = false;
 
     try {
+      await precedingPersistedWrites;
       if (isNew && newSessionCwd) {
         const selectedModel = newSessionModel;
         const existingSid = sessionIdRef.current ?? await ensuringNewSessionRef.current;
@@ -1591,12 +1594,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     // The previous branch's cursor cannot authorize pagination on this branch.
     setHistoryCursor(null);
     setHasEarlierMessages(false);
-    await runPersistedWrite(async () => {
-      if (leafId) {
-        await sendAgentCommand(sid, { type: "navigate_tree", targetId: leafId }).catch(() => {});
-      }
-      await loadContext(sid, leafId, undefined, branchRequest);
-    });
+    await runTranscriptNavigation(
+      () => runPersistedWrite(async () => {
+        if (leafId) {
+          await sendAgentCommand(sid, { type: "navigate_tree", targetId: leafId }).catch(() => {});
+        }
+      }),
+      () => loadContext(sid, leafId, undefined, branchRequest),
+    );
   }, [loadContext, runPersistedWrite]);
 
   const handleNavigate = useCallback(async (entryId: string) => {

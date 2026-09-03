@@ -141,6 +141,14 @@ export function projectPersistedSnapshot<T extends {
   };
 }
 
+export async function runTranscriptNavigation(
+  persistNavigation: () => Promise<unknown>,
+  loadContext: () => Promise<void>,
+): Promise<void> {
+  await persistNavigation();
+  await loadContext();
+}
+
 export async function runSessionLoadPhases<T>(
   loadTranscript: () => Promise<boolean>,
   loadState?: () => Promise<T>,
