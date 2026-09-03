@@ -19,6 +19,7 @@ import {
 } from "@/lib/file-types";
 import { encodeFilePathForApi, getFileDirectory, getFileName, getRelativeFilePath } from "@/lib/file-paths";
 import { resolveLocalFileHref } from "@/lib/file-links";
+import { MentionIcon } from "./FileIcons";
 import { parseFrontmatter } from "@/lib/frontmatter";
 import { markdownPreviewRehypePlugins, markdownPreviewRemarkPlugins, normalizeDisplayMath } from "@/lib/markdown";
 import { CodeBlock, MermaidBlock } from "./MermaidBlock";
@@ -93,15 +94,6 @@ type SourceCodeRendererProps = Parameters<NonNullable<SyntaxHighlighterProps["re
 interface SelectedLineRange {
   startLine: number;
   endLine: number;
-}
-
-function MentionIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="4" />
-      <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
-    </svg>
-  );
 }
 
 function closestSourceLine(node: Node): HTMLElement | null {
@@ -423,25 +415,33 @@ function DiffView({ patch }: { patch: string }) {
   );
 }
 
-function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Props) {
-  const { t } = useI18n();
+/**
+ * Live-watch a media file. `bust` increments whenever the viewer should reload
+ * the file (on connect and on each change), `size` follows the server's
+ * metadata, and `resetMetadata` clears viewer-derived values such as
+ * dimensions or duration whenever the file identity changes or a reload
+ * starts. `resetMetadata` must be referentially stable.
+ */
+function useWatchedFile(
+  filePath: string,
+  sourceSessionId: string | null | undefined,
+  watchEnabled: boolean,
+  resetMetadata: () => void,
+) {
   const [watching, setWatching] = useState(false);
   const [bust, setBust] = useState(0);
   const [size, setSize] = useState<number | null>(null);
-  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const syncRequestRef = useRef(0);
 
-  const ext = getFileName(filePath).toLowerCase().split(".").pop() ?? "";
-
   useEffect(() => {
     setBust(0);
     setSize(null);
-    setNaturalSize(null);
+    resetMetadata();
     setError(null);
     setWatching(false);
-  }, [filePath, sourceSessionId]);
+  }, [filePath, resetMetadata, sourceSessionId]);
 
   useEffect(() => {
     setWatching(false);
@@ -465,7 +465,7 @@ function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
             return;
           }
           if (typeof next.size === "number") setSize(next.size);
-          setNaturalSize(null);
+          resetMetadata();
           setError(null);
           setBust((value) => value + 1);
         })
@@ -487,7 +487,7 @@ function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
         const d = JSON.parse((e as MessageEvent).data) as { size?: number };
         if (typeof d.size === "number") setSize(d.size);
       } catch { /* ignore */ }
-      setNaturalSize(null);
+      resetMetadata();
       setError(null);
       setBust((b) => b + 1);
     });
@@ -502,7 +502,18 @@ function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
       es.close();
       if (esRef.current === es) esRef.current = null;
     };
-  }, [filePath, sourceSessionId, watchEnabled]);
+  }, [filePath, resetMetadata, sourceSessionId, watchEnabled]);
+
+  return { watching, bust, size, error, setError };
+}
+
+function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Props) {
+  const { t } = useI18n();
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
+  const resetNaturalSize = useCallback(() => setNaturalSize(null), []);
+  const { watching, bust, size, error, setError } = useWatchedFile(filePath, sourceSessionId, watchEnabled, resetNaturalSize);
+
+  const ext = getFileName(filePath).toLowerCase().split(".").pop() ?? "";
 
   const src = getFileApiUrl(filePath, "read", sourceSessionId, bust ? { v: bust } : undefined);
 
@@ -597,84 +608,11 @@ function formatDuration(seconds: number): string {
 
 function AudioViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Props) {
   const { t } = useI18n();
-  const [watching, setWatching] = useState(false);
-  const [bust, setBust] = useState(0);
-  const [size, setSize] = useState<number | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const esRef = useRef<EventSource | null>(null);
-  const syncRequestRef = useRef(0);
+  const resetDuration = useCallback(() => setDuration(null), []);
+  const { watching, bust, size, error, setError } = useWatchedFile(filePath, sourceSessionId, watchEnabled, resetDuration);
 
   const ext = getFileName(filePath).toLowerCase().split(".").pop() ?? "";
-
-  useEffect(() => {
-    setBust(0);
-    setSize(null);
-    setDuration(null);
-    setError(null);
-    setWatching(false);
-  }, [filePath, sourceSessionId]);
-
-  useEffect(() => {
-    setWatching(false);
-
-    if (esRef.current) {
-      esRef.current.close();
-      esRef.current = null;
-    }
-
-    if (!watchEnabled) return;
-
-    let active = true;
-    const synchronize = () => {
-      const requestId = ++syncRequestRef.current;
-      fetch(getFileApiUrl(filePath, "meta", sourceSessionId))
-        .then((response) => response.json())
-        .then((next: { size?: number; error?: string }) => {
-          if (!active || requestId !== syncRequestRef.current) return;
-          if (next.error) {
-            setError(next.error);
-            return;
-          }
-          if (typeof next.size === "number") setSize(next.size);
-          setDuration(null);
-          setError(null);
-          setBust((value) => value + 1);
-        })
-        .catch((nextError) => {
-          if (active && requestId === syncRequestRef.current) setError(String(nextError));
-        });
-    };
-
-    const es = new EventSource(getFileApiUrl(filePath, "watch", sourceSessionId));
-    esRef.current = es;
-
-    es.addEventListener("connected", () => {
-      setWatching(true);
-      synchronize();
-    });
-    es.addEventListener("change", (e) => {
-      syncRequestRef.current += 1;
-      try {
-        const d = JSON.parse((e as MessageEvent).data) as { size?: number };
-        if (typeof d.size === "number") setSize(d.size);
-      } catch { /* ignore */ }
-      setDuration(null);
-      setError(null);
-      setBust((b) => b + 1);
-    });
-    const markDisconnected = () => {
-      setWatching(false);
-    };
-    es.addEventListener("error", markDisconnected);
-    es.onerror = markDisconnected;
-
-    return () => {
-      active = false;
-      es.close();
-      if (esRef.current === es) esRef.current = null;
-    };
-  }, [filePath, sourceSessionId, watchEnabled]);
 
   const src = getFileApiUrl(filePath, "read", sourceSessionId, bust ? { v: bust } : undefined);
 

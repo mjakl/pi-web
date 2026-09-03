@@ -158,10 +158,6 @@ const API_OPTIONS = ["openai-completions", "openai-responses", "anthropic-messag
 
 // ── Form field helpers ────────────────────────────────────────────────────────
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <ConfigField label={label}>{children}</ConfigField>;
-}
-
 const inputStyle = {
   padding: "6px 9px",
   background: "var(--bg-panel)",
@@ -282,10 +278,6 @@ function Check({ label, checked, onChange }: { label: string; checked: boolean; 
   );
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <ConfigSectionTitle>{children}</ConfigSectionTitle>;
-}
-
 // ── Provider detail ───────────────────────────────────────────────────────────
 
 function ProviderDetail({ name, provider, onChange, onRename, onDelete, onAddModels }: {
@@ -384,14 +376,14 @@ function ProviderDetail({ name, provider, onChange, onRename, onDelete, onAddMod
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-         <SectionTitle>{t("i18n.provider")}</SectionTitle>
+         <ConfigSectionTitle>{t("i18n.provider")}</ConfigSectionTitle>
         <button onClick={onDelete}
           style={{ padding: "3px 8px", background: "none", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, color: "#ef4444", cursor: "pointer", fontSize: 11 }}>
            {t("i18n.delete")}
         </button>
       </div>
 
-       <Field label={t("i18n.providerName")}>
+       <ConfigField label={t("i18n.providerName")}>
         <TextInput value={editingName} onChange={setEditingName} placeholder="provider-name" mono />
         {editingName !== name && editingName.trim() && (
           <button onClick={() => onRename(editingName.trim())}
@@ -399,26 +391,26 @@ function ProviderDetail({ name, provider, onChange, onRename, onDelete, onAddMod
              {t("i18n.rename")}
           </button>
         )}
-      </Field>
+      </ConfigField>
 
-      <Field label="Base URL">
+      <ConfigField label="Base URL">
         <TextInput value={provider.baseUrl ?? ""} onChange={(v) => set("baseUrl", v || undefined)}
           placeholder="https://api.example.com/v1" mono />
-      </Field>
+      </ConfigField>
 
-      <Field label="API Key">
+      <ConfigField label="API Key">
         <SecretTextInput value={provider.apiKey ?? ""} onChange={(v) => set("apiKey", v || undefined)}
           placeholder="ENV_VAR_NAME, !shell-command, or literal key" mono />
         <span style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
           Prefix with <code style={{ fontFamily: "var(--font-mono)" }}>!</code> to run a shell command, or use an env var name
         </span>
-      </Field>
+      </ConfigField>
 
-      <Field label="API">
+      <ConfigField label="API">
         <Select value={provider.api ?? "openai-completions"} onChange={(v) => set("api", v)} options={API_OPTIONS} required />
-      </Field>
+      </ConfigField>
 
-      <Field label="Headers">
+      <ConfigField label="Headers">
         <HeaderListEditor
           headers={provider.headers}
           onChange={(headers) => set("headers", headers)}
@@ -426,7 +418,7 @@ function ProviderDetail({ name, provider, onChange, onRename, onDelete, onAddMod
         <span style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
           Added to every request from this provider (e.g. User-Agent). Useful for gateways with bot detection.
         </span>
-      </Field>
+      </ConfigField>
 
       <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
         {discoveryState.phase !== "success" && (
@@ -1017,7 +1009,7 @@ function ModelDetail({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-         <SectionTitle>{t("i18n.model")}</SectionTitle>
+         <ConfigSectionTitle>{t("i18n.model")}</ConfigSectionTitle>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {testSummary && (
             <span
@@ -1077,8 +1069,8 @@ function ModelDetail({
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <Field label="ID *"><TextInput value={model.id} onChange={(v) => set("id", v)} placeholder="model-id" mono /></Field>
-        <Field label="Name"><TextInput value={model.name ?? ""} onChange={(v) => set("name", v || undefined)} placeholder="Display name" /></Field>
+        <ConfigField label="ID *"><TextInput value={model.id} onChange={(v) => set("id", v)} placeholder="model-id" mono /></ConfigField>
+        <ConfigField label="Name"><TextInput value={model.name ?? ""} onChange={(v) => set("name", v || undefined)} placeholder="Display name" /></ConfigField>
       </div>
 
       <div style={{ padding: "2px 0" }}>
@@ -1133,7 +1125,7 @@ function ModelDetail({
       </div>
 
       <div>
-        <SectionTitle>{t("models.capabilities")}</SectionTitle>
+        <ConfigSectionTitle>{t("models.capabilities")}</ConfigSectionTitle>
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 8 }}>
           <Check label={t("models.reasoning")} checked={model.reasoning ?? false} onChange={(v) => set("reasoning", v || undefined)} />
           <Check label={t("models.imageInput")} checked={model.input?.includes("image") ?? false}
@@ -1143,7 +1135,7 @@ function ModelDetail({
 
       <section>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <SectionTitle>{t("models.modelSpecs")}</SectionTitle>
+          <ConfigSectionTitle>{t("models.modelSpecs")}</ConfigSectionTitle>
           <button
             type="button"
             onClick={toggleCostEditing}
@@ -1155,14 +1147,14 @@ function ModelDetail({
         </div>
 
         <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
-          <Field label={t("models.contextWindow")}>
+          <ConfigField label={t("models.contextWindow")}>
             <NumInput value={model.contextWindow !== undefined ? String(model.contextWindow) : ""}
               onChange={(v) => set("contextWindow", v ? parseInt(v) : undefined)} placeholder="128000" />
-          </Field>
-          <Field label={t("models.maxOutputTokens")}>
+          </ConfigField>
+          <ConfigField label={t("models.maxOutputTokens")}>
             <NumInput value={model.maxTokens !== undefined ? String(model.maxTokens) : ""}
               onChange={(v) => set("maxTokens", v ? parseInt(v) : undefined)} placeholder="16384" />
-          </Field>
+          </ConfigField>
         </div>
 
         <div style={{ marginTop: 16 }}>
@@ -1172,9 +1164,9 @@ function ModelDetail({
           {costEditing ? (
             <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
               {costFields.map(({ key, label }) => (
-                <Field key={key} label={label}>
+                <ConfigField key={key} label={label}>
                   <NumInput value={costDraft[key]} onChange={(v) => setCost(key, v)} placeholder="0" />
-                </Field>
+                </ConfigField>
               ))}
               {hasModelCostDraftValue(costDraft) && !parseCompleteModelCost(costDraft) && (
                 <div aria-live="polite" style={{ gridColumn: "1 / -1", color: "#d97706", fontSize: 10 }}>
@@ -1236,11 +1228,11 @@ function ModelDetail({
 
         {advancedOpen && (
           <div id="model-advanced-settings" style={{ display: "flex", flexDirection: "column", gap: 14, padding: "4px 0 16px" }}>
-            <Field label={t("models.apiOverride")}>
+            <ConfigField label={t("models.apiOverride")}>
               <Select value={model.api ?? ""} onChange={(v) => set("api", v || undefined)} options={API_OPTIONS} />
-            </Field>
+            </ConfigField>
 
-            <Field label={t("models.headers")}>
+            <ConfigField label={t("models.headers")}>
               <HeaderListEditor
                 headers={model.headers}
                 onChange={(headers) => set("headers", headers)}
@@ -1248,11 +1240,11 @@ function ModelDetail({
               <span style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
                 {t("models.headersHelp")}
               </span>
-            </Field>
+            </ConfigField>
 
             {model.reasoning && (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <SectionTitle>{t("models.compatibility")}</SectionTitle>
+                <ConfigSectionTitle>{t("models.compatibility")}</ConfigSectionTitle>
                 <Check
                   label={t("models.deepSeekThinkingCompat")}
                   checked={hasDeepseekCompat(model)}
@@ -1265,7 +1257,7 @@ function ModelDetail({
                 />
                 <div style={{ marginTop: 4 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
-                    <SectionTitle>{t("models.thinkingLevelMap")}</SectionTitle>
+                    <ConfigSectionTitle>{t("models.thinkingLevelMap")}</ConfigSectionTitle>
                     {model.thinkingLevelMap && (
                       <button
                         type="button"
@@ -1419,7 +1411,7 @@ function OAuthDetail({ provider, onRefresh }: { provider: OAuthProvider; onRefre
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-           <SectionTitle>{t("i18n.subscription")}</SectionTitle>
+           <ConfigSectionTitle>{t("i18n.subscription")}</ConfigSectionTitle>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: provider.loggedIn ? "#4ade80" : "var(--border)", display: "inline-block" }} />
           <span style={{ fontSize: 11, color: provider.loggedIn ? "#4ade80" : "var(--text-dim)" }}>
@@ -1612,7 +1604,7 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-         <SectionTitle>API Key</SectionTitle>
+         <ConfigSectionTitle>API Key</ConfigSectionTitle>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: provider.configured ? "#4ade80" : "var(--border)", display: "inline-block" }} />
           <span style={{ fontSize: 11, color: provider.configured ? "#4ade80" : "var(--text-dim)" }}>
@@ -1627,7 +1619,7 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
           : `Enter your ${provider.displayName} API key to enable ${provider.modelCount} model${provider.modelCount !== 1 ? "s" : ""}.`}
       </p>
 
-      <Field label="API Key">
+      <ConfigField label="API Key">
         <div style={{ display: "flex", gap: 6 }}>
           <SecretTextInput
             value={apiKey}
@@ -1660,7 +1652,7 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
              {savedOk ? t("i18n.saved") : saving ? t("i18n.saving") : t("i18n.save")}
           </button>
         </div>
-      </Field>
+      </ConfigField>
 
       {error && <p style={{ margin: 0, fontSize: 12, color: "#f87171" }}>{error}</p>}
 

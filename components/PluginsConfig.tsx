@@ -30,14 +30,11 @@ import {
   ConfigSplitView,
   ConfigStatusDot,
   ConfigSwitch,
+  shortenPath,
 } from "./SettingsUi";
 
 type PluginScope = PluginPackageInfo["scope"];
 type PluginAction = "install" | "remove" | "update" | "disable" | "enable";
-
-function shortenPath(path: string): string {
-  return path.replace(/^\/(?:Users|home)\/[^/]+/, "~");
-}
 
 function normalizePluginSourceInput(value: string): string {
   const match = value.trim().match(/^\$?\s*pi\s+install\s+(\S+)\s*$/);

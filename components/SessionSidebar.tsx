@@ -2006,22 +2006,12 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   );
 }
 
-function RunningSessionIndicator() {
-  const { t } = useI18n();
-  return (
-    <span
-      title={t("sidebar.agentRunning")}
-      aria-label={t("sidebar.agentRunning")}
-      style={{
-        width: 14,
-        height: 14,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        color: "var(--accent)",
-      }}
-    >
+const SESSION_INDICATORS = {
+  running: {
+    title: "sidebar.agentRunning",
+    label: "sidebar.agentRunning",
+    color: "var(--accent)",
+    icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ display: "block" }}>
         <g>
           <path
@@ -2040,72 +2030,33 @@ function RunningSessionIndicator() {
           />
         </g>
       </svg>
-    </span>
-  );
-}
-
-function ActiveSessionIndicator() {
-  const { t } = useI18n();
-  return (
-    <span
-      title={t("sidebar.sessionActive")}
-      aria-label={t("sidebar.sessionActive")}
-      style={{
-        width: 14,
-        height: 14,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        color: "#16a34a",
-      }}
-    >
+    ),
+  },
+  active: {
+    title: "sidebar.sessionActive",
+    label: "sidebar.sessionActive",
+    color: "#16a34a",
+    icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
         <circle cx="7" cy="7" r="3" fill="currentColor" />
       </svg>
-    </span>
-  );
-}
-
-function StoppedSessionIndicator() {
-  const { t } = useI18n();
-  return (
-    <span
-      title={t("sidebar.sessionStopped")}
-      aria-label={t("sidebar.sessionStopped")}
-      style={{
-        width: 14,
-        height: 14,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        color: "var(--text-dim)",
-      }}
-    >
+    ),
+  },
+  stopped: {
+    title: "sidebar.sessionStopped",
+    label: "sidebar.sessionStopped",
+    color: "var(--text-dim)",
+    icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
         <rect x="4" y="4" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
       </svg>
-    </span>
-  );
-}
-
-function UnreadSessionIndicator() {
-  const { t } = useI18n();
-  return (
-    <span
-      title={t("sidebar.newActivity")}
-      aria-label={t("sidebar.newSessionActivity")}
-      style={{
-        width: 14,
-        height: 14,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        color: "#0891b2",
-      }}
-    >
+    ),
+  },
+  unread: {
+    title: "sidebar.newActivity",
+    label: "sidebar.newSessionActivity",
+    color: "#0891b2",
+    icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ display: "block" }}>
         <circle cx="7" cy="7" r="2.5" fill="currentColor" />
         <circle cx="7" cy="7" r="3" stroke="currentColor" strokeWidth="1.4" opacity="0.32">
@@ -2113,6 +2064,28 @@ function UnreadSessionIndicator() {
           <animate attributeName="opacity" values="0.32;0;0.32" dur="1.6s" repeatCount="indefinite" />
         </circle>
       </svg>
+    ),
+  },
+};
+
+export function SessionIndicator({ kind }: { kind: keyof typeof SESSION_INDICATORS }) {
+  const { t } = useI18n();
+  const { title, label, color, icon } = SESSION_INDICATORS[kind];
+  return (
+    <span
+      title={t(title)}
+      aria-label={t(label)}
+      style={{
+        width: 14,
+        height: 14,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        color,
+      }}
+    >
+      {icon}
     </span>
   );
 }
@@ -2448,8 +2421,8 @@ function SessionItem({
               </span>
             </div>
             <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 8, color: "var(--text-dim)", fontSize: 11, minWidth: 0 }}>
-              {isRunning ? <RunningSessionIndicator /> : isActive ? <ActiveSessionIndicator /> : <StoppedSessionIndicator />}
-              {isUnread && <UnreadSessionIndicator />}
+              <SessionIndicator kind={isRunning ? "running" : isActive ? "active" : "stopped"} />
+              {isUnread && <SessionIndicator kind="unread" />}
               <span title={session.modified}>{formatRelativeTime(session.modified)}</span>
               {session.messageCount === undefined ? (
                 <span aria-label={t("sidebar.loading")}>…</span>

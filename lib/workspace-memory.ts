@@ -12,22 +12,9 @@
  * Stored in localStorage; best-effort (silently ignored when unavailable).
  */
 
+import { getBrowserStorage, type StorageLike } from "./browser-storage";
+
 const STORAGE_KEY = "pi-web:last-open-by-workspace";
-
-interface StorageLike {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-  removeItem(key: string): void;
-}
-
-function getBrowserStorage(): StorageLike | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
 
 function readMap(storage: StorageLike): Record<string, string | undefined> {
   const raw = storage.getItem(STORAGE_KEY);

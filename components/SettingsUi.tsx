@@ -16,6 +16,11 @@ interface ConfigPanelShellProps {
   height?: string;
 }
 
+/** Replace a /Users/<name> or /home/<name> prefix with ~ for display. */
+export function shortenPath(path: string): string {
+  return path.replace(/^\/(?:Users|home)\/[^/]+/, "~");
+}
+
 export function ConfigPanelShell({
   embedded,
   title,

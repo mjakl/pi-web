@@ -66,6 +66,15 @@ export function GenericFileIcon({ size = 14 }: IconProps) {
   return <CatppuccinIcon name="_file" size={size} />;
 }
 
+export function MentionIcon({ size = 14 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
+    </svg>
+  );
+}
+
 const EXTENSION_ICONS: Record<string, CatppuccinIconName> = {
   ts: "typescript",
   tsx: "typescript-react",

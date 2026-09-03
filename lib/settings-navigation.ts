@@ -1,3 +1,5 @@
+import { getBrowserStorage, type StorageLike } from "./browser-storage";
+
 const SETTINGS_SECTION_VALUES = [
   "general",
   "models",
@@ -11,23 +13,9 @@ export type SettingsDetailSection = Exclude<SettingsSection, "general">;
 const STORAGE_KEY = "pi-web:settings-navigation";
 const PROJECT_SECTIONS = new Set<SettingsSection>(["skills", "plugins"]);
 
-interface StorageLike {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-}
-
 interface SettingsNavigationState {
   section?: string;
   selections?: Record<string, string>;
-}
-
-function getBrowserStorage(): StorageLike | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
 }
 
 function isSettingsSection(value: unknown): value is SettingsSection {
