@@ -9,8 +9,7 @@ import { dirname, isAbsolute, join, normalize as normalizePath, relative, resolv
 import type { AgentMessage, ImageContent, SessionEntry, SessionHeader, SessionInfo, SessionContext } from "./types";
 import type { SessionEntry as PiSessionEntry } from "@earendil-works/pi-coding-agent";
 import { normalizeToolCalls } from "./normalize";
-import { projectIdentityKey } from "./project-identity";
-import { sessionPathKey } from "./session-path";
+import { pathIdentityKey } from "./paths";
 import { MAX_TOOL_RESULT_IMAGE_BYTES, TOOL_RESULT_IMAGE_MIMES } from "./tool-result-images";
 import { resolveProject, type ProjectInfo } from "./worktree";
 
@@ -72,7 +71,7 @@ export async function attachSessionProjectInfo(sessions: SessionInfo[]): Promise
       ...session,
       projectRoot,
       ...(projectEntryPath !== session.cwd ? { projectEntryPath } : {}),
-      projectKey: projectIdentityKey(projectRoot),
+      projectKey: pathIdentityKey(projectRoot),
       ...(project?.branch ? { branch: project.branch } : {}),
       ...(project?.isWorktree ? { isWorktree: true } : {}),
     };
@@ -163,12 +162,12 @@ export async function listAllSessions(): Promise<SessionInfo[]> {
     }
   }
 
-  const pathToId = new Map(inventory.map((session) => [sessionPathKey(session.path), session.id]));
+  const pathToId = new Map(inventory.map((session) => [pathIdentityKey(session.path), session.id]));
   const sessions = inventory.map(({ parentSessionPath, ...session }) => {
     if (!parentSessionPath) return session;
     return {
       ...session,
-      parentSessionId: pathToId.get(sessionPathKey(parentSessionPath)),
+      parentSessionId: pathToId.get(pathIdentityKey(parentSessionPath)),
     };
   });
   return attachSessionProjectInfo(sessions);
@@ -300,7 +299,7 @@ export async function resolveSessionPath(sessionId: string): Promise<string | nu
 }
 
 export async function resolveSessionIdByPath(filePath: string): Promise<string | undefined> {
-  const pathKey = sessionPathKey(filePath);
+  const pathKey = pathIdentityKey(filePath);
   const cached = getPathToIdCache().get(pathKey);
   if (cached) return cached;
 
@@ -313,11 +312,11 @@ export async function resolveSessionIdByPath(filePath: string): Promise<string |
 
 export function cacheSessionPath(sessionId: string, filePath: string): void {
   const normalizedPath = normalizePath(filePath);
-  const pathKey = sessionPathKey(normalizedPath);
+  const pathKey = pathIdentityKey(normalizedPath);
   const pathCache = getPathCache();
   const reverseCache = getPathToIdCache();
   const previousPath = pathCache.get(sessionId);
-  const previousPathKey = previousPath ? sessionPathKey(previousPath) : undefined;
+  const previousPathKey = previousPath ? pathIdentityKey(previousPath) : undefined;
   const previousSessionId = reverseCache.get(pathKey);
   const previousOwnerPath = previousSessionId ? pathCache.get(previousSessionId) : undefined;
   if (previousPathKey && previousPathKey !== pathKey && reverseCache.get(previousPathKey) === sessionId) {
@@ -327,7 +326,7 @@ export function cacheSessionPath(sessionId: string, filePath: string): void {
     previousSessionId &&
     previousSessionId !== sessionId &&
     previousOwnerPath &&
-    sessionPathKey(previousOwnerPath) === pathKey
+    pathIdentityKey(previousOwnerPath) === pathKey
   ) {
     pathCache.delete(previousSessionId);
   }
@@ -340,7 +339,7 @@ export function invalidateSessionPathCache(sessionId: string): void {
   const reverseCache = getPathToIdCache();
   const filePath = pathCache.get(sessionId);
   pathCache.delete(sessionId);
-  const pathKey = filePath ? sessionPathKey(filePath) : undefined;
+  const pathKey = filePath ? pathIdentityKey(filePath) : undefined;
   if (pathKey && reverseCache.get(pathKey) === sessionId) {
     reverseCache.delete(pathKey);
   }
@@ -400,12 +399,12 @@ export function reparentChildSessions(filePath: string): void {
     }
   }
 
-  const targetPathKey = sessionPathKey(filePath);
+  const targetPathKey = pathIdentityKey(filePath);
   const dir = dirname(filePath);
   let siblings: string[];
   try {
     siblings = readdirSync(dir).filter(
-      (file) => file.endsWith(".jsonl") && sessionPathKey(join(dir, file)) !== targetPathKey,
+      (file) => file.endsWith(".jsonl") && pathIdentityKey(join(dir, file)) !== targetPathKey,
     );
   } catch {
     return;
@@ -414,7 +413,7 @@ export function reparentChildSessions(filePath: string): void {
     const childPath = join(dir, file);
     try {
       const parentSession = readSessionHeader(childPath)?.parentSession;
-      if (!parentSession || sessionPathKey(parentSession) !== targetPathKey) continue;
+      if (!parentSession || pathIdentityKey(parentSession) !== targetPathKey) continue;
 
       const lines = readFileSync(childPath, "utf8").split("\n");
       if (hasLegacyBuiltInSubagentMetadata(lines)) continue;

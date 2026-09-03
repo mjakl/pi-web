@@ -11,7 +11,7 @@ const jiti = createJiti(import.meta.url, {
   moduleCache: false,
 });
 const { POST } = await jiti.import("./route.ts");
-const { projectIdentityKey } = await jiti.import("../../../../lib/project-identity.ts");
+const { pathIdentityKey } = await jiti.import("../../../../lib/paths.ts");
 
 test("validated cwd responses include server-resolved project identity", async (t) => {
   const cwd = await mkdtemp(path.join(os.tmpdir(), "pi-web-cwd-validate-"));
@@ -28,6 +28,6 @@ test("validated cwd responses include server-resolved project identity", async (
     success: true,
     cwd,
     projectRoot: cwd,
-    projectKey: projectIdentityKey(cwd),
+    projectKey: pathIdentityKey(cwd),
   });
 });
