@@ -100,6 +100,19 @@ const TOOL_PRESET_MAP: Record<ToolPresetLabel, ToolPreset> = {
 const COMPOSITION_END_ENTER_GRACE_MS = 100;
 const TEXT_COLLATOR = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 const ANCHORED_MENU_GAP = 8;
+type StreamingAction = "steer" | "followup";
+
+export function getStreamingSubmissionAction(
+  selected: StreamingAction,
+  hasSteer: boolean,
+  hasFollowUp: boolean,
+): StreamingAction | null {
+  if (selected === "steer" && hasSteer) return "steer";
+  if (selected === "followup" && hasFollowUp) return "followup";
+  if (hasSteer) return "steer";
+  if (hasFollowUp) return "followup";
+  return null;
+}
 
 export function getUpwardMenuMaxHeight(menuBottom: number, visibleTop: number, gap = ANCHORED_MENU_GAP): number {
   return Math.max(0, Math.floor(menuBottom - visibleTop - gap));
@@ -444,6 +457,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const [toolDropdownOpen, setToolDropdownOpen] = useState(false);
   const [thinkingDropdownOpen, setThinkingDropdownOpen] = useState(false);
   const [controlsMenuOpen, setControlsMenuOpen] = useState(false);
+  const [streamingAction, setStreamingAction] = useState<StreamingAction>("steer");
+  const [streamingActionMenuOpen, setStreamingActionMenuOpen] = useState(false);
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>(() => (
     draftKey ? draftImagesToAttachedImages(getDraft(draftKey)?.images) : []
   ));
@@ -473,6 +488,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const toolDropdownRef = useRef<HTMLDivElement>(null);
   const thinkingDropdownRef = useRef<HTMLDivElement>(null);
   const controlsMenuRef = useRef<HTMLDivElement>(null);
+  const streamingActionRef = useRef<HTMLDivElement>(null);
   const historyMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
@@ -832,6 +848,17 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     : t(slashQuery ? "chat.matches" : "chat.commands", { count: filteredSlashCommands.length });
   const hasInputText = Boolean(value.trim());
   const canQueueStreamingMessage = hasInputText || attachedImages.length > 0;
+  const hasStreamingActions = isStreaming && Boolean(onSteer || onFollowUp);
+  const streamingSubmissionAction = getStreamingSubmissionAction(
+    streamingAction,
+    Boolean(onSteer),
+    Boolean(onFollowUp),
+  );
+
+  useEffect(() => {
+    setStreamingAction("steer");
+    setStreamingActionMenuOpen(false);
+  }, [hasStreamingActions]);
 
   // ── @ file autocomplete ──────────────────────────────────────────────────
   // Recomputed from the text before the caret on every change/caret move.
@@ -1015,7 +1042,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     });
   }, []);
 
-  const sendQueued = useCallback((mode: "steer" | "followup") => {
+  const sendQueued = useCallback((mode: StreamingAction) => {
     const msg = value.trim();
     if (!msg && !attachedImages.length) return;
     onAudioUnlock?.();
@@ -1026,16 +1053,24 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     const streamingBehavior = mode === "steer" ? "steer" : "followUp";
     if (msg.startsWith("/") && onPromptWithStreamingBehavior) {
       clearInput();
+      setStreamingAction("steer");
+      setStreamingActionMenuOpen(false);
       onPromptWithStreamingBehavior(msg, streamingBehavior, attachedImages.length ? attachedImages : undefined);
       return;
     }
+    const submit = mode === "steer" ? onSteer : onFollowUp;
+    if (!submit) return;
     clearInput();
-    if (mode === "steer" && onSteer) {
-      onSteer(msg, attachedImages.length ? attachedImages : undefined);
-    } else if (mode === "followup" && onFollowUp) {
-      onFollowUp(msg, attachedImages.length ? attachedImages : undefined);
-    }
+    setStreamingAction("steer");
+    setStreamingActionMenuOpen(false);
+    submit(msg, attachedImages.length ? attachedImages : undefined);
   }, [value, attachedImages, onBuiltinCommand, onPromptWithStreamingBehavior, onSteer, onFollowUp, clearInput, onAudioUnlock, runBuiltinCommand]);
+
+  const selectStreamingAction = useCallback((action: StreamingAction) => {
+    setStreamingAction(action);
+    setStreamingActionMenuOpen(false);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, []);
 
   const getNextSlashIndex = useCallback((direction: "up" | "down" | "left" | "right") => {
     const lastIndex = displayedSlashCommands.length - 1;
@@ -1189,6 +1224,12 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         }
       }
 
+      if (e.key === "Escape" && !isComposing && streamingActionMenuOpen) {
+        e.preventDefault();
+        setStreamingActionMenuOpen(false);
+        return;
+      }
+
       if (e.key === "ArrowUp" && !isComposing && !isStreaming && inputHistory.length > 0 && value.trim().length === 0) {
         e.preventDefault();
         setSlashMenuOpen(false);
@@ -1207,15 +1248,14 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
       if (sendShortcut) {
         e.preventDefault();
-        if (isStreaming && (onSteer || onFollowUp)) {
-          // Default Enter sends as steer if available, else followup
-          sendQueued(onSteer ? "steer" : "followup");
+        if (isStreaming && streamingSubmissionAction) {
+          sendQueued(streamingSubmissionAction);
         } else {
           handleSend();
         }
       }
     },
-    [isMobile, isStreaming, onSteer, onFollowUp, onAbort, slashMenuOpen, slashQuery, displayedSlashCommands, slashActiveIndex, applySlashCommand, sendQueued, handleSend, getNextSlashIndex, atMenuOpen, atQuery, atMatches, atActiveIndex, applyAtCompletion, historyMenuOpen, inputHistory, historyActiveIndex, applyHistoryInput, value]
+    [isMobile, isStreaming, streamingSubmissionAction, streamingActionMenuOpen, onAbort, slashMenuOpen, slashQuery, displayedSlashCommands, slashActiveIndex, applySlashCommand, sendQueued, handleSend, getNextSlashIndex, atMenuOpen, atQuery, atMatches, atActiveIndex, applyAtCompletion, historyMenuOpen, inputHistory, historyActiveIndex, applyHistoryInput, value]
   );
 
   const handleInput = useCallback(() => {
@@ -1374,6 +1414,9 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       }
       if (controlsMenuRef.current && !controlsMenuRef.current.contains(e.target as Node)) {
         setControlsMenuOpen(false);
+      }
+      if (streamingActionRef.current && !streamingActionRef.current.contains(e.target as Node)) {
+        setStreamingActionMenuOpen(false);
       }
       if (historyMenuRef.current && !historyMenuRef.current.contains(e.target as Node) && !textareaRef.current?.contains(e.target as Node)) {
         setHistoryMenuOpen(false);
@@ -1962,84 +2005,146 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             }}
           />
 
-          {isStreaming ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, alignSelf: "flex-end" }}>
-              {onSteer && (
+          <div
+            className="composer-action-slot"
+            style={{ width: 128, minWidth: 128, height: 34, flexShrink: 0, alignSelf: "flex-end" }}
+          >
+            {hasStreamingActions && streamingSubmissionAction ? (
+              <div
+                ref={streamingActionRef}
+                onKeyDown={(e) => {
+                  if (e.key !== "Escape" || !streamingActionMenuOpen) return;
+                  e.preventDefault();
+                  setStreamingActionMenuOpen(false);
+                  textareaRef.current?.focus();
+                }}
+                style={{ position: "relative", display: "flex", width: "100%", height: "100%" }}
+              >
                 <button
-                  onClick={() => sendQueued("steer")}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => sendQueued(streamingSubmissionAction)}
                   disabled={!canQueueStreamingMessage}
-                  title={t("chat.steerTitle")}
+                  title={t(streamingSubmissionAction === "steer" ? "chat.steerTitle" : "chat.followUpTitle")}
                   style={{
-                    display: "flex", alignItems: "center", gap: 5,
-                    padding: "7px 12px",
-                    background: canQueueStreamingMessage ? "rgba(234,179,8,0.12)" : "none",
-                    border: "1px solid rgba(234,179,8,0.35)",
-                    borderRadius: 8,
-                    color: canQueueStreamingMessage ? "rgba(180,130,0,1)" : "var(--text-dim)",
+                    minWidth: 0, flex: 1,
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                    padding: "7px 8px",
+                    background: canQueueStreamingMessage
+                      ? streamingSubmissionAction === "steer" ? "rgba(234,179,8,0.12)" : "rgba(129,140,248,0.12)"
+                      : "none",
+                    border: `1px solid ${streamingSubmissionAction === "steer" ? "rgba(234,179,8,0.35)" : "rgba(129,140,248,0.35)"}`,
+                    borderRight: "none",
+                    borderRadius: "8px 0 0 8px",
+                    color: canQueueStreamingMessage
+                      ? streamingSubmissionAction === "steer" ? "rgba(180,130,0,1)" : "rgba(99,102,241,1)"
+                      : "var(--text-dim)",
                     cursor: canQueueStreamingMessage ? "pointer" : "not-allowed",
                     fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em",
+                    whiteSpace: "nowrap",
                     transition: "background 0.12s",
                   }}
                 >
-                  <svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 1 L9 5 L5 9" /><line x1="1" y1="5" x2="9" y2="5" />
-                  </svg>
-                  {t("chat.steer")}
+                  {streamingSubmissionAction === "steer" ? (
+                    <svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 1 L9 5 L5 9" /><line x1="1" y1="5" x2="9" y2="5" />
+                    </svg>
+                  ) : (
+                    <svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="5" y1="1" x2="5" y2="6" /><polyline points="2.5 3.5 5 1 7.5 3.5" />
+                      <line x1="2" y1="9" x2="8" y2="9" />
+                    </svg>
+                  )}
+                  {t(streamingSubmissionAction === "steer" ? "chat.steer" : "chat.followUp")}
                 </button>
-              )}
-              {onFollowUp && (
                 <button
-                  onClick={() => sendQueued("followup")}
-                  disabled={!canQueueStreamingMessage}
-                  title={t("chat.followUpTitle")}
+                  type="button"
+                  aria-label={t("chat.selectRunAction")}
+                  aria-expanded={streamingActionMenuOpen}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setStreamingActionMenuOpen((open) => !open)}
                   style={{
-                    display: "flex", alignItems: "center", gap: 5,
-                    padding: "7px 12px",
-                    background: canQueueStreamingMessage ? "rgba(129,140,248,0.12)" : "none",
-                    border: "1px solid rgba(129,140,248,0.35)",
-                    borderRadius: 8,
-                    color: canQueueStreamingMessage ? "rgba(99,102,241,1)" : "var(--text-dim)",
-                    cursor: canQueueStreamingMessage ? "pointer" : "not-allowed",
-                    fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em",
-                    transition: "background 0.12s",
+                    width: 30, flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    padding: 0,
+                    background: streamingSubmissionAction === "steer" ? "rgba(234,179,8,0.12)" : "rgba(129,140,248,0.12)",
+                    border: `1px solid ${streamingSubmissionAction === "steer" ? "rgba(234,179,8,0.35)" : "rgba(129,140,248,0.35)"}`,
+                    borderRadius: "0 8px 8px 0",
+                    color: streamingSubmissionAction === "steer" ? "rgba(180,130,0,1)" : "rgba(99,102,241,1)",
+                    cursor: "pointer",
                   }}
                 >
-                  <svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="5" y1="1" x2="5" y2="6" /><polyline points="2.5 3.5 5 1 7.5 3.5" />
-                    <line x1="2" y1="9" x2="8" y2="9" />
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="2 3.5 5 6.5 8 3.5" />
                   </svg>
-                  {t("chat.followUp")}
                 </button>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={!value.trim() && !attachedImages.length}
-              style={{
-                flexShrink: 0,
-                alignSelf: "flex-end",
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "7px 14px",
-                background: (value.trim() || attachedImages.length) ? "var(--accent)" : "var(--bg-panel)",
-                border: "none",
-                borderRadius: 8,
-                color: (value.trim() || attachedImages.length) ? "#fff" : "var(--text-dim)",
-                cursor: (value.trim() || attachedImages.length) ? "pointer" : "not-allowed",
-                fontSize: 13,
-                fontWeight: 600,
-                letterSpacing: "-0.01em",
-                boxShadow: (value.trim() || attachedImages.length) ? "0 1px 3px rgba(37,99,235,0.25)" : "none",
-                transition: "background 0.15s, box-shadow 0.15s",
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="2" y1="7" x2="11" y2="7" />
-                <polyline points="7.5 3 12 7 7.5 11" />
-              </svg>
-              {t("chat.send")}
-            </button>
-          )}
+                <div
+                  hidden={!streamingActionMenuOpen}
+                  role="group"
+                  aria-label={t("chat.selectRunAction")}
+                  style={{
+                    position: "absolute", right: 0, bottom: "calc(100% + 6px)", zIndex: 130,
+                    width: "100%", padding: 4,
+                    background: "var(--bg)", border: "1px solid var(--border)",
+                    borderRadius: 8, boxShadow: "0 -4px 16px rgba(0,0,0,0.10)",
+                  }}
+                >
+                  {(["steer", "followup"] as const)
+                    .filter((action) => action === "steer" ? onSteer : onFollowUp)
+                    .map((action) => (
+                    <button
+                      key={action}
+                      type="button"
+                      aria-pressed={streamingSubmissionAction === action}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => selectStreamingAction(action)}
+                      style={{
+                        width: "100%", padding: "7px 8px",
+                        display: "flex", alignItems: "center", gap: 7,
+                        background: streamingSubmissionAction === action ? "var(--bg-selected)" : "none",
+                        border: "none", borderRadius: 6,
+                        color: "var(--text)", cursor: "pointer",
+                        fontSize: 12, fontWeight: streamingSubmissionAction === action ? 600 : 400,
+                        textAlign: "left", whiteSpace: "nowrap",
+                      }}
+                    >
+                      <span aria-hidden="true" style={{ width: 10 }}>
+                        {streamingSubmissionAction === action ? "✓" : ""}
+                      </span>
+                      {t(action === "steer" ? "chat.steer" : "chat.followUp")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : !isStreaming ? (
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!value.trim() && !attachedImages.length}
+                style={{
+                  width: "100%", height: "100%",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  padding: "7px 14px",
+                  background: (value.trim() || attachedImages.length) ? "var(--accent)" : "var(--bg-panel)",
+                  border: "none",
+                  borderRadius: 8,
+                  color: (value.trim() || attachedImages.length) ? "#fff" : "var(--text-dim)",
+                  cursor: (value.trim() || attachedImages.length) ? "pointer" : "not-allowed",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  letterSpacing: "-0.01em",
+                  boxShadow: (value.trim() || attachedImages.length) ? "0 1px 3px rgba(37,99,235,0.25)" : "none",
+                  transition: "background 0.15s, box-shadow 0.15s",
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="2" y1="7" x2="11" y2="7" />
+                  <polyline points="7.5 3 12 7 7.5 11" />
+                </svg>
+                {t("chat.send")}
+              </button>
+            ) : null}
+          </div>
           </div>
         </div>
 

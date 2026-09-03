@@ -241,6 +241,7 @@ export const enMessages: Record<string, string> = {
     "chat.messagePlaceholder": "Message… Type / for commands, @ for files",
     "chat.steer": "Steer",
     "chat.followUp": "Follow-up",
+    "chat.selectRunAction": "Select run action",
     "chat.send": "Send",
     "chat.attachImage": "Attach image",
     "chat.previewImage": "Preview image",
