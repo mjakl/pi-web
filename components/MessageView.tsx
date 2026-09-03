@@ -1717,7 +1717,6 @@ function formatUsage(usage: {
   if (usage.output) parts.push(`${usage.output.toLocaleString("en")} out`);
   if (usage.cacheRead) parts.push(`${usage.cacheRead.toLocaleString("en")} cache R`);
   if (usage.cacheWrite) parts.push(`${usage.cacheWrite.toLocaleString("en")} cache W`);
-  if (usage.cost?.total) parts.push(`$${usage.cost.total.toFixed(4)}`);
   return parts.join(" · ");
 }
 
