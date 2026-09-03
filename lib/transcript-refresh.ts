@@ -1,11 +1,22 @@
-import type { AgentMessage } from "./types";
+import type { AgentMessage, SessionContext, SessionInfo } from "./types";
 import { userMessageKey } from "./prompt-recovery";
+import { getPresetFromToolNames } from "./tool-presets";
 
 export interface TranscriptRefreshVersion {
   requestId: number;
   sessionId: string;
   runId: number;
   transcriptRevision: number;
+}
+
+export function advancePersistedSnapshotVersion(current: {
+  requestId: number;
+  transcriptRevision: number;
+}) {
+  return {
+    requestId: current.requestId + 1,
+    transcriptRevision: current.transcriptRevision + 1,
+  };
 }
 
 export function isCurrentTranscriptRefresh(
@@ -70,6 +81,27 @@ export function mergeTranscriptRefreshMessages(
 
 export function getPersistedThinkingLevel(level: string | null): string {
   return level ?? "auto";
+}
+
+export function projectPersistedSnapshot<T extends {
+  info?: SessionInfo | null;
+  leafId: string | null;
+  toolNames?: string[];
+  context: SessionContext;
+}>(data: T) {
+  return {
+    data,
+    activeLeafId: data.leafId,
+    persistedMessages: data.context.messages,
+    entryIds: data.context.entryIds,
+    historyCursor: data.context.oldestEntryId,
+    hasEarlierMessages: data.context.hasMore,
+    toolPreset: data.toolNames === undefined ? "default" as const : getPresetFromToolNames(data.toolNames),
+    thinkingLevel: getPersistedThinkingLevel(data.context.thinkingLevel),
+    sessionStatsOverride: null,
+    error: null,
+    metadata: data.info ?? null,
+  };
 }
 
 export async function runSessionLoadPhases<T>(

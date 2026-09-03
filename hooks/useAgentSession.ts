@@ -7,6 +7,7 @@ import type {
   ExtensionStatusItem,
   ExtensionUiRequest,
   ExtensionWidgetItem,
+  SessionContext,
   SessionInfo,
   SessionTreeNode,
   UserMessage,
@@ -17,14 +18,15 @@ import { createNoticeId, noticeReducer, type NoticeType } from "@/lib/notice-que
 import { isPromptRejectedError, sendAgentCommand } from "@/lib/agent-client";
 import { clearDraft, rekeyDraft, restoreDraftSubmission } from "@/lib/draft-store";
 import { getPreferredToolPreset, setPreferredToolPreset } from "@/lib/tool-preset-preference";
-import { getPresetFromToolNames, getToolNamesForPreset, type ToolEntry, type ToolPreset } from "@/lib/tool-presets";
+import { getToolNamesForPreset, type ToolEntry, type ToolPreset } from "@/lib/tool-presets";
 import type { SessionStatsInfo } from "@/lib/pi-types";
 import { mergeSessionStats, type SessionFileStats } from "@/lib/session-stats";
 import { userMessageKey } from "@/lib/prompt-recovery";
 import {
-  getPersistedThinkingLevel,
+  advancePersistedSnapshotVersion,
   isCurrentTranscriptRefresh,
   mergeTranscriptRefreshMessages,
+  projectPersistedSnapshot,
   runSessionLoadPhases,
   runTranscriptNavigation,
   type TranscriptRefreshVersion,
@@ -52,14 +54,7 @@ export interface SessionData {
   tree: SessionTreeNode[];
   leafId: string | null;
   toolNames?: string[];
-  context: {
-    messages: AgentMessage[];
-    entryIds: string[];
-    oldestEntryId: string | null;
-    hasMore: boolean;
-    thinkingLevel: string;
-    model: { provider: string; modelId: string } | null;
-  };
+  context: SessionContext;
   /** Cumulative usage over ALL session-file entries (incl. compacted history). */
   stats?: SessionFileStats;
 }
@@ -400,6 +395,27 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } satisfies SessionStatsInfo;
   }, [messages, sessionStatsOverride, contextUsage, data?.context.messages, data?.filePath, data?.totalActiveMs, data?.stats, session?.id, session?.name]);
 
+  const applyPersistedSnapshot = useCallback((
+    snapshot: SessionData,
+    messagePolicy: "replace" | ((current: AgentMessage[]) => AgentMessage[]),
+  ) => {
+    const next = projectPersistedSnapshot(snapshot);
+    transcriptRevisionRef.current += 1;
+    dataRef.current = next.data;
+    setData(next.data);
+    setActiveLeafId(next.activeLeafId);
+    setMessages(messagePolicy === "replace" ? next.persistedMessages : messagePolicy);
+    setEntryIds(next.entryIds);
+    setHistoryCursor(next.historyCursor);
+    setHasEarlierMessages(next.hasEarlierMessages);
+    setToolPresetState(next.toolPreset);
+    setCurrentModelOverride((current) => modelSwitchPendingRef.current ? current : null);
+    setThinkingLevel(next.thinkingLevel as ThinkingLevelOption);
+    setSessionStatsOverride(next.sessionStatsOverride);
+    setError(next.error);
+    if (next.metadata) onSessionMetadataChange?.(next.metadata);
+  }, [onSessionMetadataChange, setToolPresetState]);
+
   const loadSession = useCallback(async (sid: string, showLoading = false, includeState = false) => {
     const loadRunId = promptRunIdRef.current;
     const requestId = ++sessionLoadRequestIdRef.current;
@@ -440,20 +456,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const d = await res.json() as SessionData;
         if (!isCurrentLoad()) return isCurrentStateLoad();
-        const persistedMessages = d.context.messages;
-        transcriptRevisionRef.current += 1;
-        dataRef.current = d;
-        setData(d);
-        setActiveLeafId(d.leafId);
-        setMessages(persistedMessages);
-        setEntryIds(d.context.entryIds ?? []);
-        setHistoryCursor(d.context.oldestEntryId);
-        setHasEarlierMessages(d.context.hasMore);
-        setToolPresetState(d.toolNames !== undefined ? getPresetFromToolNames(d.toolNames) : "default");
-        setCurrentModelOverride((current) => modelSwitchPendingRef.current ? current : null);
-        setError(null);
-        setThinkingLevel(getPersistedThinkingLevel(d.context.thinkingLevel) as ThinkingLevelOption);
-
+        applyPersistedSnapshot(d, "replace");
         messagesLoaded = true;
         if (showLoading) setLoading(false);
         return true;
@@ -489,7 +492,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         return null;
       }
     } : undefined);
-  }, [setToolPresetState]);
+  }, [applyPersistedSnapshot]);
 
   const loadContext = useCallback(async (sid: string, leafId: string | null, before?: string | null) => {
     const transcriptRevision = transcriptRevisionRef.current;
@@ -531,9 +534,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
   }, []);
 
-  const invalidateTranscriptRequests = useCallback(() => {
-    sessionLoadRequestIdRef.current += 1;
-    transcriptRevisionRef.current += 1;
+  const invalidatePersistedSnapshotRequests = useCallback(() => {
+    const next = advancePersistedSnapshotVersion({
+      requestId: sessionLoadRequestIdRef.current,
+      transcriptRevision: transcriptRevisionRef.current,
+    });
+    sessionLoadRequestIdRef.current = next.requestId;
+    transcriptRevisionRef.current = next.transcriptRevision;
   }, []);
 
   const loadTools = useCallback(async (sid: string) => {
@@ -754,11 +761,16 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (!sid || sessionIdRef.current !== sid) return false;
 
     const previousPersisted = dataRef.current?.context.messages ?? [];
+    const next = advancePersistedSnapshotVersion({
+      requestId: sessionLoadRequestIdRef.current,
+      transcriptRevision: transcriptRevisionRef.current,
+    });
+    sessionLoadRequestIdRef.current = next.requestId;
+    transcriptRevisionRef.current = next.transcriptRevision;
     const request: TranscriptRefreshVersion = {
-      requestId: ++sessionLoadRequestIdRef.current,
+      ...next,
       sessionId: sid,
       runId: promptRunIdRef.current,
-      transcriptRevision: ++transcriptRevisionRef.current,
     };
     const currentVersion = (): TranscriptRefreshVersion => ({
       requestId: sessionLoadRequestIdRef.current,
@@ -776,22 +788,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       const refreshed = await response.json() as SessionData;
       if (!sessionHookMountedRef.current || !isCurrentTranscriptRefresh(request, currentVersion())) return false;
 
-      transcriptRevisionRef.current += 1;
-      dataRef.current = refreshed;
-      setData(refreshed);
-      setActiveLeafId(refreshed.leafId);
-      setThinkingLevel(getPersistedThinkingLevel(refreshed.context.thinkingLevel) as ThinkingLevelOption);
-      setMessages((current) => mergeTranscriptRefreshMessages(
+      applyPersistedSnapshot(refreshed, (current) => mergeTranscriptRefreshMessages(
         refreshed.context.messages,
         current,
         previousPersisted,
       ));
-      setEntryIds(refreshed.context.entryIds ?? []);
-      setHistoryCursor(refreshed.context.oldestEntryId);
-      setHasEarlierMessages(refreshed.context.hasMore);
-      setSessionStatsOverride(null);
-      setError(null);
-      if (refreshed.info) onSessionMetadataChange?.(refreshed.info);
       return true;
     } catch (refreshError) {
       if (sessionHookMountedRef.current && isCurrentTranscriptRefresh(request, currentVersion())) {
@@ -800,7 +801,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
       return false;
     }
-  }, [addNotice, onSessionMetadataChange, t]);
+  }, [addNotice, applyPersistedSnapshot, t]);
 
   const handleExtensionUiRequest = useCallback((request: ExtensionUiRequest) => {
     if (isBlockingExtensionUiRequest(request)) onAttentionNeeded?.(request);
@@ -1539,11 +1540,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (!sid) return;
     setActiveLeafId(entryId);
     await runTranscriptNavigation(
-      invalidateTranscriptRequests,
+      invalidatePersistedSnapshotRequests,
       () => sendAgentCommand(sid, { type: "navigate_tree", targetId: entryId }).catch(() => {}),
       () => loadContext(sid, entryId),
     );
-  }, [invalidateTranscriptRequests, loadContext]);
+  }, [invalidatePersistedSnapshotRequests, loadContext]);
 
   const handleLeafChange = useCallback(async (leafId: string | null) => {
     if (bashRunningRef.current) return;
@@ -1551,13 +1552,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     const sid = sessionIdRef.current;
     if (!sid) return;
     await runTranscriptNavigation(
-      invalidateTranscriptRequests,
+      invalidatePersistedSnapshotRequests,
       () => leafId
         ? sendAgentCommand(sid, { type: "navigate_tree", targetId: leafId }).catch(() => {})
         : Promise.resolve(),
       () => loadContext(sid, leafId),
     );
-  }, [invalidateTranscriptRequests, loadContext]);
+  }, [invalidatePersistedSnapshotRequests, loadContext]);
 
   const handleModelChange = useCallback(async (provider: string, modelId: string) => {
     if (isNew) {
@@ -1846,6 +1847,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, [isNew]);
 
   const handleToolPresetChange = useCallback(async (preset: ToolPreset) => {
+    invalidatePersistedSnapshotRequests();
     const toolNames = getToolNamesForPreset(preset);
     setPreferredToolPreset(preset);
     setToolPresetState(preset);
@@ -1875,7 +1877,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } catch (e) {
       console.error("Failed to set tools:", e);
     }
-  }, [cancelEventStreamGrace, closeEvents, ensureEventsConnected, loadTools, setToolPresetState]);
+  }, [cancelEventStreamGrace, closeEvents, ensureEventsConnected, invalidatePersistedSnapshotRequests, loadTools, setToolPresetState]);
 
   const scrollUserMsgToTop = useCallback(() => {
     const container = scrollContainerRef.current;
