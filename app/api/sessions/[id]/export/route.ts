@@ -6,6 +6,7 @@ import { basename, dirname, join } from "path";
 import { promisify } from "util";
 import { fileURLToPath, pathToFileURL } from "url";
 import { NextResponse } from "next/server";
+import { contentDisposition } from "@/lib/content-disposition";
 import { resolveSessionPath } from "@/lib/session-reader";
 
 const execFileAsync = promisify(execFile);
@@ -25,18 +26,6 @@ async function getPiPackageDir(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-function encodeHeaderValue(value: string): string {
-  return encodeURIComponent(value).replace(/[!'()*]/g, (ch) =>
-    `%${ch.charCodeAt(0).toString(16).toUpperCase()}`
-  );
-}
-
-function getContentDisposition(fileName: string, inline: boolean): string {
-  const fallback = fileName.replace(/[^\x20-\x7E]|["\\;\r\n]/g, "_") || "session.html";
-  const disposition = inline ? "inline" : "attachment";
-  return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encodeHeaderValue(fileName)}`;
 }
 
 async function getPiCliPath(): Promise<string | null> {
@@ -264,7 +253,7 @@ export async function GET(
       return new Response(patchedHtml, {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
-          "Content-Disposition": getContentDisposition(fileName, inline),
+          "Content-Disposition": contentDisposition(inline ? "inline" : "attachment", fileName, "session.html"),
           "Cache-Control": "no-cache",
           "Content-Security-Policy": "frame-ancestors 'none'",
           "X-Content-Type-Options": "nosniff",

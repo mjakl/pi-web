@@ -184,6 +184,11 @@ declare global {
 
 const SESSION_ID_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
 
+/** The id shape a session header may carry; also bounds ids taken from requests. */
+export function isValidSessionId(sessionId: unknown): sessionId is string {
+  return typeof sessionId === "string" && SESSION_ID_PATTERN.test(sessionId);
+}
+
 function defaultSessionsDir(): string {
   return join(getAgentDir(), "sessions");
 }
@@ -205,7 +210,7 @@ function resolvePathWithinDefaultSessions(
 async function findSessionPathById(sessionId: string): Promise<string | null> {
   // The filename is only a candidate hint; the bounded header check remains
   // authoritative so future layouts and malformed files use the full fallback.
-  if (!SESSION_ID_PATTERN.test(sessionId)) return null;
+  if (!isValidSessionId(sessionId)) return null;
 
   let projectDirs: Dirent[];
   const sessionsDir = resolvePath(defaultSessionsDir());
@@ -348,8 +353,7 @@ export function readSessionHeader(filePath: string): SessionHeader | null {
     const header = JSON.parse(firstLine) as Partial<SessionHeader>;
     if (
       header.type !== "session"
-      || typeof header.id !== "string"
-      || !SESSION_ID_PATTERN.test(header.id)
+      || !isValidSessionId(header.id)
       || typeof header.cwd !== "string"
       || !isAbsolute(header.cwd)
       || typeof header.timestamp !== "string"
