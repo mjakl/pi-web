@@ -90,6 +90,67 @@ async function click(element) {
   });
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function sidebarForInventoryTest(refreshKey, beginSessionInventoryAttempt, onSessionsChange) {
+  return React.createElement(SessionSidebar, {
+    piVersion: "test",
+    selectedSessionId: null,
+    onSelectSession() {},
+    beginSessionInventoryAttempt,
+    onSessionsChange,
+    refreshKey,
+    actionsAvailable: true,
+  });
+}
+
+function emptyInventoryResponse() {
+  return Response.json({ sessions: [], activeSessionIds: [], runningSessionIds: [] });
+}
+
+function createInventoryHarness(onSessionsChange) {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url) => {
+    if (String(url).startsWith("/api/sessions")) {
+      const request = deferred();
+      requests.push(request);
+      return request.promise;
+    }
+    if (url === "/api/home") return Response.json({ home: "/tmp" });
+    if (url === "/api/agent/running") return emptyInventoryResponse();
+    return Response.json({});
+  };
+
+  let nextAttempt = 0;
+  const begin = () => ++nextAttempt;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  return {
+    requests,
+    container,
+    get nextAttempt() { return nextAttempt; },
+    render: (refreshKey) => act(async () => {
+      root.render(sidebarForInventoryTest(refreshKey, begin, onSessionsChange));
+      await Promise.resolve();
+    }),
+    cleanup: async () => {
+      await act(() => root.unmount());
+      container.remove();
+      globalThis.fetch = originalFetch;
+    },
+  };
+}
+
 test("a closed sidebar is inert and hidden from accessibility navigation until reopened", async () => {
   const container = document.createElement("div");
   document.body.append(container);
@@ -169,54 +230,114 @@ test("closing the actual sidebar removes its body portal and reopening starts wi
 });
 
 test("session inventory publishes the token issued before its delayed fetch", async () => {
-  const originalFetch = globalThis.fetch;
-  let completeInventory;
-  globalThis.fetch = async (url) => {
-    if (url === "/api/sessions") {
-      return new Promise((resolve) => { completeInventory = resolve; });
-    }
-    if (url === "/api/home") return Response.json({ home: "/tmp" });
-    if (url === "/api/agent/running") {
-      return Response.json({ activeSessionIds: [], runningSessionIds: [] });
-    }
-    return Response.json({});
-  };
-
   const publications = [];
-  let nextAttempt = 0;
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-
+  const harness = createInventoryHarness((sessions, inventoryAttempt) => {
+    publications.push({ sessions, inventoryAttempt });
+  });
   try {
+    await harness.render(0);
+    assert.equal(harness.nextAttempt, 1);
     await act(async () => {
-      root.render(React.createElement(SessionSidebar, {
-        piVersion: "test",
-        selectedSessionId: null,
-        onSelectSession() {},
-        beginSessionInventoryAttempt: () => ++nextAttempt,
-        onSessionsChange: (sessions, inventoryAttempt) => {
-          publications.push({ sessions, inventoryAttempt });
-        },
-        actionsAvailable: true,
-      }));
+      harness.requests[0].resolve(emptyInventoryResponse());
       await Promise.resolve();
     });
-    assert.equal(nextAttempt, 1);
-
-    await act(async () => {
-      completeInventory(Response.json({
-        sessions: [],
-        activeSessionIds: [],
-        runningSessionIds: [],
-      }));
-      await Promise.resolve();
-    });
-
     assert.equal(publications.at(-1).inventoryAttempt, 1);
   } finally {
-    await act(() => root.unmount());
-    container.remove();
-    globalThis.fetch = originalFetch;
+    await harness.cleanup();
+  }
+});
+
+test("a stale inventory failure cannot replace a newer success or its loading state", async () => {
+  const harness = createInventoryHarness();
+  try {
+    await harness.render(0);
+    await harness.render(1);
+    await act(async () => {
+      harness.requests[1].resolve(emptyInventoryResponse());
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+
+    await act(async () => {
+      harness.requests[0].reject(new Error("stale inventory failure"));
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("stale inventory failure"), false);
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("an older pending success may recover from a newer inventory failure", async () => {
+  const harness = createInventoryHarness();
+  try {
+    await harness.render(0);
+    await harness.render(1);
+    await act(async () => {
+      harness.requests[1].reject(new Error("current inventory failure"));
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("current inventory failure"), true);
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+
+    await act(async () => {
+      harness.requests[0].resolve(emptyInventoryResponse());
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("current inventory failure"), false);
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("a stale inventory abort cannot overwrite newer completion state", async () => {
+  const harness = createInventoryHarness();
+  try {
+    await harness.render(0);
+    await harness.render(1);
+    await act(async () => {
+      harness.requests[1].resolve(emptyInventoryResponse());
+      await Promise.resolve();
+    });
+    await act(async () => {
+      harness.requests[0].reject(new DOMException("stale abort", "AbortError"));
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("stale abort"), false);
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("the current inventory failure reports its error and finishes loading", async () => {
+  const harness = createInventoryHarness();
+  try {
+    await harness.render(0);
+    await act(async () => {
+      harness.requests[0].resolve(new Response(null, { status: 500 }));
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("HTTP 500"), true);
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("the current inventory abort finishes loading without reporting an error", async () => {
+  const harness = createInventoryHarness();
+  try {
+    await harness.render(0);
+    await act(async () => {
+      harness.requests[0].reject(new DOMException("current abort", "AbortError"));
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("current abort"), false);
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+  } finally {
+    await harness.cleanup();
   }
 });

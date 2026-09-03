@@ -322,6 +322,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
   const sessionListRef = useRef<HTMLDivElement>(null);
   const metadataQueueRef = useRef<Map<string, SessionInfo>>(new Map());
   const metadataLoadedRef = useRef<Map<string, string>>(new Map());
+  const latestInventoryAttemptRef = useRef(0);
   const acceptedInventoryAttemptRef = useRef(0);
   const metadataRequestRunningRef = useRef(false);
   const metadataAbortRef = useRef<AbortController | null>(null);
@@ -473,6 +474,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
     showSuccess = !showLoading,
   ): Promise<boolean> => {
     const inventoryAttempt = beginSessionInventoryAttempt();
+    latestInventoryAttemptRef.current = inventoryAttempt;
     try {
       if (showLoading) setLoading(true);
       const res = await fetch(force ? "/api/sessions?force=1" : "/api/sessions", {
@@ -536,13 +538,14 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
         return next.size === prev.size ? prev : next;
       });
       setError(null);
+      setLoading(false);
       if (showSuccess) showSessionRefreshSuccess();
       return true;
     } catch (e) {
-      setError(String(e));
+      if (inventoryAttempt !== latestInventoryAttemptRef.current) return false;
+      if (!(e instanceof DOMException && e.name === "AbortError")) setError(String(e));
+      setLoading(false);
       return false;
-    } finally {
-      if (showLoading) setLoading(false);
     }
   }, [beginSessionInventoryAttempt, showSessionRefreshSuccess]);
 
