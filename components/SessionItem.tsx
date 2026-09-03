@@ -135,6 +135,8 @@ export function SessionItem({
   const [menuPosition, setMenuPosition] = useState<{
     top: number;
     left: number;
+    anchorTop: number;
+    anchorLeft: number;
     isActive: boolean;
     transient: boolean;
   }>();
@@ -155,6 +157,13 @@ export function SessionItem({
     || (menuPosition.isActive === Boolean(isActive)
       && menuPosition.transient === Boolean(session.transient));
 
+  const dismissMenu = useCallback((restoreTriggerFocus: boolean) => {
+    const shouldRestoreFocus = restoreTriggerFocus && menuHadFocusRef.current && hasActions;
+    menuHadFocusRef.current = false;
+    setMenuPosition(undefined);
+    if (shouldRestoreFocus) menuTriggerRef.current?.focus();
+  }, [hasActions]);
+
   // Select the whole name once the rename input is mounted (startRename's
   // immediate setTimeout can fire before the input exists).
   useEffect(() => {
@@ -169,12 +178,12 @@ export function SessionItem({
   }, [confirmDelete, confirmStop]);
 
   useLayoutEffect(() => {
-    if (!menuPosition || menuEligibilityValid) return;
-    const restoreFocus = menuHadFocusRef.current && hasActions;
-    setMenuPosition(undefined);
-    menuHadFocusRef.current = false;
-    if (restoreFocus) menuTriggerRef.current?.focus();
-  }, [hasActions, menuEligibilityValid, menuPosition]);
+    if (!menuPosition) return;
+    const rect = menuTriggerRef.current?.getBoundingClientRect();
+    const anchorMoved = rect
+      && (rect.top !== menuPosition.anchorTop || rect.left !== menuPosition.anchorLeft);
+    if (!menuEligibilityValid || anchorMoved) dismissMenu(true);
+  });
 
   useEffect(() => {
     if (!menuPosition || !menuEligibilityValid) return;
@@ -182,7 +191,7 @@ export function SessionItem({
     const focusFrame = requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus());
     const dismissOutside = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!menuRef.current?.contains(target) && !menuTriggerRef.current?.contains(target)) setMenuPosition(undefined);
+      if (!menuRef.current?.contains(target) && !menuTriggerRef.current?.contains(target)) dismissMenu(false);
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -191,11 +200,11 @@ export function SessionItem({
       setMenuPosition(undefined);
       menuTriggerRef.current?.focus();
     };
-    const dismissOnResize = () => setMenuPosition(undefined);
+    const dismissOnResize = () => dismissMenu(true);
     const dismissOnScroll = (event: Event) => {
       const target = event.target;
       if (target instanceof Node && menuRef.current?.contains(target)) return;
-      setMenuPosition(undefined);
+      dismissMenu(true);
     };
 
     document.addEventListener("pointerdown", dismissOutside, true);
@@ -209,7 +218,7 @@ export function SessionItem({
       window.removeEventListener("resize", dismissOnResize);
       window.removeEventListener("scroll", dismissOnScroll, true);
     };
-  }, [menuEligibilityValid, menuPosition]);
+  }, [dismissMenu, menuEligibilityValid, menuPosition]);
 
   const firstMessage = session.firstMessage ?? "";
   const title = session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12);
@@ -334,7 +343,7 @@ export function SessionItem({
   const toggleMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     if (menuPosition) {
-      setMenuPosition(undefined);
+      dismissMenu(false);
       return;
     }
 
@@ -344,18 +353,20 @@ export function SessionItem({
     setMenuPosition({
       left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
       top: rect.bottom + 4 + height <= window.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4),
+      anchorTop: rect.top,
+      anchorLeft: rect.left,
       isActive: Boolean(isActive),
       transient: Boolean(session.transient),
     });
-  }, [isActive, menuPosition, session.transient]);
+  }, [dismissMenu, isActive, menuPosition, session.transient]);
 
   const chooseMenuAction = useCallback((e: React.MouseEvent, action: "stop" | "rename" | "delete") => {
     e.stopPropagation();
-    setMenuPosition(undefined);
+    dismissMenu(false);
     if (action === "rename") startRename();
     else if (action === "stop") handleStopClick(e);
     else handleDeleteClick(e);
-  }, [handleDeleteClick, handleStopClick, startRename]);
+  }, [dismissMenu, handleDeleteClick, handleStopClick, startRename]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const handled = dispatchSessionRowContextMenu({
@@ -550,6 +561,7 @@ export function SessionItem({
                 aria-controls={menuId}
                 aria-expanded={Boolean(menuPosition)}
                 onClick={toggleMenu}
+                onFocus={() => { menuHadFocusRef.current = false; }}
                 onBlur={closeWhenFocusLeaves}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",

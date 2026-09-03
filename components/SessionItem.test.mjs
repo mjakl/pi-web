@@ -261,17 +261,58 @@ test("moving focus outside the trigger and popup closes the popup", async () => 
   }
 });
 
-test("popup scrolling stays open while outside scrolling closes it", async () => {
+test("popup scrolling stays open and focused while outside scrolling closes with trigger focus", async () => {
   const view = await mountItem(baseSession, { isActive: true });
   try {
     const trigger = view.container.querySelector("button[aria-controls]");
     await click(trigger);
     const group = document.querySelector('[role="group"]');
+    const action = group.querySelector("button");
+    action.focus();
     await act(() => group.dispatchEvent(new Event("scroll")));
     assert.equal(document.querySelector('[role="group"]') === group, true);
+    assert.equal(document.activeElement === action, true);
 
     await act(() => view.container.dispatchEvent(new Event("scroll")));
     assert.equal(document.querySelector('[role="group"]') === null, true);
+    assert.equal(document.activeElement === trigger, true);
+  } finally {
+    await view.unmount();
+  }
+});
+
+test("resize dismissal restores focus when the popup owned it", async () => {
+  const view = await mountItem(baseSession);
+  try {
+    const trigger = view.container.querySelector("button[aria-controls]");
+    await click(trigger);
+    document.querySelector('[role="group"] button').focus();
+    await act(() => window.dispatchEvent(new Event("resize")));
+    assert.equal(document.querySelector('[role="group"]') === null, true);
+    assert.equal(document.activeElement === trigger, true);
+  } finally {
+    await view.unmount();
+  }
+});
+
+test("anchor movement closes the popup before paint while an unchanged anchor keeps it open", async () => {
+  const view = await mountItem(baseSession);
+  try {
+    const trigger = view.container.querySelector("button[aria-controls]");
+    let top = 20;
+    trigger.getBoundingClientRect = () => ({ top, right: 200, bottom: top + 28, left: 172, width: 28, height: 28 });
+    await click(trigger);
+    const action = document.querySelector('[role="group"] button');
+    action.focus();
+
+    await view.rerender({ ...baseSession });
+    assert.ok(document.querySelector('[role="group"]'));
+    assert.equal(document.activeElement === action, true);
+
+    top = 74;
+    await view.rerender({ ...baseSession });
+    assert.equal(document.querySelector('[role="group"]') === null, true);
+    assert.equal(document.activeElement === trigger, true);
   } finally {
     await view.unmount();
   }
