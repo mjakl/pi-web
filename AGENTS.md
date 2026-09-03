@@ -179,8 +179,10 @@ Start with these owners instead of a broad file inventory:
 - Always inspect `git diff --stat`, `git diff --check`, and the final diff for
   generated state, user data, secrets, and unrelated rewrites before handoff.
 - For a change to `dependencies`, the `build` script, or the `files` list,
-  prove the published package still starts: `npm pack`, install the tarball
-  with `--omit=dev`, and run its `pi-web` bin. A consumer install never
-  contains the packages bundled into `.next`, and the build keeps `--webpack`
-  because a Turbopack build reaches `serverExternalPackages` through
+  prove the published package still starts: in a scratch copy of the tree,
+  run `npm run build`, then `npm pack`, install the tarball with
+  `--omit=dev`, and run its `pi-web` bin. `npm pack` has no build step and
+  ships whatever `.next` exists. A consumer install never contains the
+  packages bundled into `.next`, and the build keeps `--webpack` because a
+  Turbopack build reaches `serverExternalPackages` through
   `.next/node_modules/<package>-<hash>` symlinks that `npm pack` drops.
