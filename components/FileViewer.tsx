@@ -57,10 +57,10 @@ interface FileData {
 }
 
 const SOURCE_HIGHLIGHT_MAX_LINES = 1_000;
-const DISPLAY_MODE_LABELS: Record<DisplayMode, string> = {
-  source: "Source",
-  preview: "Preview",
-  diff: "Diff",
+const DISPLAY_MODE_LABEL_KEYS: Record<DisplayMode, string> = {
+  source: "i18n.source",
+  preview: "i18n.preview",
+  diff: "i18n.diff",
 };
 
 const FILE_CODE_STYLE: CSSProperties = {
@@ -584,7 +584,7 @@ function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
               const img = e.currentTarget;
               setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
             }}
-            onError={() => setError("Failed to load image")}
+            onError={() => setError(t("files.imageLoadFailed"))}
             style={{
               maxWidth: "100%",
               maxHeight: "100%",
@@ -677,7 +677,7 @@ function AudioViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
             preload="metadata"
             src={src}
             onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-            onError={() => setError("Failed to load audio")}
+            onError={() => setError(t("files.audioLoadFailed"))}
             style={{ width: "100%" }}
           />
         </div>
@@ -717,7 +717,7 @@ function DocumentViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }:
         if (typeof d.size === "number") {
           setSize(d.size);
           if (!isPdf && d.size > DOCX_PREVIEW_MAX_BYTES) {
-            setError("DOCX too large for preview (>10MB)");
+            setError(t("files.docxTooLarge"));
           }
         }
       })
@@ -728,7 +728,7 @@ function DocumentViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }:
     return () => {
       active = false;
     };
-  }, [filePath, isPdf, sourceSessionId]);
+  }, [filePath, isPdf, sourceSessionId, t]);
 
   useEffect(() => {
     setWatching(false);
@@ -754,7 +754,7 @@ function DocumentViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }:
           if (typeof d.size === "number") {
             setSize(d.size);
             if (!isPdf && d.size > DOCX_PREVIEW_MAX_BYTES) {
-              setError("DOCX too large for preview (>10MB)");
+              setError(t("files.docxTooLarge"));
               return;
             }
           }
@@ -780,7 +780,7 @@ function DocumentViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }:
         if (typeof d.size === "number") {
           setSize(d.size);
           if (!isPdf && d.size > DOCX_PREVIEW_MAX_BYTES) {
-            setError("DOCX too large for preview (>10MB)");
+            setError(t("files.docxTooLarge"));
             return;
           }
         }
@@ -799,7 +799,7 @@ function DocumentViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }:
       es.close();
       if (esRef.current === es) esRef.current = null;
     };
-  }, [filePath, isPdf, sourceSessionId, watchEnabled]);
+  }, [filePath, isPdf, sourceSessionId, t, watchEnabled]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -1367,7 +1367,7 @@ function TextFileViewer({
                       color: active ? "var(--text)" : "var(--text-muted)",
                     }}
                   >
-                    {DISPLAY_MODE_LABELS[mode]}
+                    {t(DISPLAY_MODE_LABEL_KEYS[mode])}
                   </button>
                 );
               })}

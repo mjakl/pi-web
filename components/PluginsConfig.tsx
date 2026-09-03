@@ -308,7 +308,7 @@ function AddPluginPanel({
         </div>
       </div>
 
-      <ConfigField label="Source">
+      <ConfigField label={t("i18n.source")}>
         <input
           id="plugin-source"
           ref={inputRef}
@@ -640,22 +640,22 @@ export function PluginsConfig({
       if (action === "remove") {
         setSelected(next.packages[0] ? packageKey(next.packages[0]) : null);
         if (next.packages.length === 0) setAddMode(true);
-        setActionMessage("Package removed.");
+        setActionMessage(t("i18n.packageRemoved"));
       } else {
-        const messages: Record<Exclude<PluginAction, "remove">, string> = {
-          install: "Package installed.",
-          update: "Package updated.",
-          disable: "Package disabled.",
-          enable: "Package enabled.",
+        const messageKeys: Record<Exclude<PluginAction, "remove">, string> = {
+          install: "i18n.packageInstalled",
+          update: "i18n.packageUpdated",
+          disable: "i18n.packageDisabled",
+          enable: "i18n.packageEnabled",
         };
-        setActionMessage(messages[action]);
+        setActionMessage(t(messageKeys[action]));
       }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyKey(null);
     }
-  }, [cwd]);
+  }, [cwd, t]);
 
   const installPlugin = useCallback(async () => {
     const source = normalizePluginSourceInput(installSource).trim();
@@ -678,13 +678,13 @@ export function PluginsConfig({
       setSelected(installed ? packageKey(installed) : key);
       setAddMode(false);
       setInstallSource("");
-      setActionMessage("Package installed.");
+      setActionMessage(t("i18n.packageInstalled"));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyKey(null);
     }
-  }, [cwd, installScope, installSource]);
+  }, [cwd, installScope, installSource, t]);
 
   const reloadSession = useCallback(async () => {
     if (!sessionId) return;
@@ -695,13 +695,13 @@ export function PluginsConfig({
       await sendAgentCommand(sessionId, { type: "reload" });
       onReloaded?.();
       await loadPlugins();
-      setActionMessage("Session reloaded.");
+      setActionMessage(t("i18n.sessionReloaded"));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyKey(null);
     }
-  }, [loadPlugins, onReloaded, sessionId]);
+  }, [loadPlugins, onReloaded, sessionId, t]);
 
   const addBusy = busyKey?.startsWith("install:") ?? false;
 
@@ -719,7 +719,7 @@ export function PluginsConfig({
             <ConfigSidebarList>
               {loading ? (
                 <div className="config-sidebar-message">
-                  Loading...
+                  {t("i18n.loading")}
                 </div>
               ) : error ? (
                 <div className="config-sidebar-message is-error">
@@ -727,7 +727,7 @@ export function PluginsConfig({
                 </div>
               ) : packages.length === 0 ? (
                 <div className="config-sidebar-message is-empty">
-                  No plugins configured
+                  {t("i18n.noPluginsConfigured")}
                 </div>
               ) : (
                 groupedPackages.map((group) => (

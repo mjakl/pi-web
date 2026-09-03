@@ -147,7 +147,12 @@ function SafeMarkdownBody({ children, className, ...props }: React.ComponentProp
 // push the conversation off screen; overflow scrolls inside the bubble.
 const USER_BUBBLE_MAX_HEIGHT = 300;
 
-function loadThinkingContent(sessionId: string, entryId: string, blockIndex: number): Promise<string> {
+function loadThinkingContent(
+  sessionId: string,
+  entryId: string,
+  blockIndex: number,
+  t: ReturnType<typeof useI18n>["t"],
+): Promise<string> {
   const key = `${sessionId}:${entryId}:${blockIndex}`;
   const cached = thinkingContentCache.get(key);
   if (cached) {
@@ -161,7 +166,7 @@ function loadThinkingContent(sessionId: string, entryId: string, blockIndex: num
   ).then(async (response) => {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json() as { thinking?: unknown };
-    if (typeof data.thinking !== "string") throw new Error("Invalid thinking response");
+    if (typeof data.thinking !== "string") throw new Error(t("i18n.invalidThinkingResponse"));
     return data.thinking;
   }).catch((error) => {
     thinkingContentCache.delete(key);
@@ -929,7 +934,7 @@ function ThinkingBlock({ block, duration, sessionId, entryId, blockIndex }: {
     setLoading(true);
     setError(null);
     try {
-      setContent(await loadThinkingContent(sessionId, entryId, blockIndex));
+      setContent(await loadThinkingContent(sessionId, entryId, blockIndex, t));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
