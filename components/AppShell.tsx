@@ -930,6 +930,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
         onActiveSessionIdsChange={handleActiveSessionIdsChange}
         onRunningSessionIdsChange={handleRunningSessionIdsChange}
         onSessionsChange={handleSessionsChange}
+        actionsAvailable={sidebarOpen}
       />
       <div style={{ padding: "8px", flexShrink: 0, display: "flex", justifyContent: "space-between", gap: 4 }}>
         {([

@@ -18,8 +18,11 @@ Object.assign(globalThis, {
   document: window.document,
   Node: window.Node,
   HTMLElement: window.HTMLElement,
+  HTMLButtonElement: window.HTMLButtonElement,
   Event: window.Event,
   MouseEvent: window.MouseEvent,
+  KeyboardEvent: window.KeyboardEvent,
+  PointerEvent: window.PointerEvent,
   MutationObserver: window.MutationObserver,
   localStorage: window.localStorage,
   getComputedStyle: window.getComputedStyle.bind(window),
@@ -67,6 +70,25 @@ function appShell() {
   );
 }
 
+const sidebarSession = {
+  id: "sidebar-session",
+  path: "/tmp/sessions/sidebar-session.jsonl",
+  cwd: "/tmp/project",
+  created: "2026-09-01T10:00:00.000Z",
+  modified: "2026-09-01T10:05:00.000Z",
+  fileSize: 100,
+  name: "Sidebar session",
+  firstMessage: "Test sidebar actions",
+  messageCount: 1,
+};
+
+async function click(element) {
+  await act(async () => {
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
 test("a closed sidebar is inert and hidden from accessibility navigation until reopened", async () => {
   const container = document.createElement("div");
   document.body.append(container);
@@ -100,5 +122,47 @@ test("a closed sidebar is inert and hidden from accessibility navigation until r
   } finally {
     await act(() => root.unmount());
     container.remove();
+  }
+});
+
+test("closing the actual sidebar removes its body portal and reopening starts with actions closed", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).startsWith("/api/sessions")) return Response.json({
+      sessions: [sidebarSession],
+      activeSessionIds: [],
+      runningSessionIds: [],
+    });
+    if (url === "/api/home") return Response.json({ home: "/tmp" });
+    if (url === "/api/agent/running") return Response.json({ activeSessionIds: [], runningSessionIds: [] });
+    return Response.json({});
+  };
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  try {
+    await act(async () => {
+      root.render(appShell());
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    const trigger = container.querySelector('[aria-label="Session actions for Sidebar session"]');
+    assert.ok(trigger);
+    await click(trigger);
+    assert.ok(document.body.querySelector('[role="group"][aria-label="Session actions for Sidebar session"]'));
+
+    await click(container.querySelector('button[aria-label="Hide sidebar"]'));
+    assert.equal(document.body.querySelector('[role="group"][aria-label="Session actions for Sidebar session"]'), null);
+
+    await click(container.querySelector('button[aria-label="Show sidebar"]'));
+    const reopenedTrigger = container.querySelector('[aria-label="Session actions for Sidebar session"]');
+    assert.equal(reopenedTrigger.getAttribute("aria-expanded"), "false");
+    await click(reopenedTrigger);
+    assert.ok(document.body.querySelector('[role="group"][aria-label="Session actions for Sidebar session"]'));
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+    globalThis.fetch = originalFetch;
   }
 });

@@ -47,6 +47,7 @@ function sessionItemProps(session, props = {}) {
   return {
     session,
     isSelected: false,
+    actionsAvailable: true,
     onClick() {},
     ...props,
   };
@@ -65,6 +66,12 @@ async function mountItem(session, props = {}) {
     container,
     async rerender(nextSession, nextProps = {}) {
       await act(() => root.render(React.createElement(SessionItem, sessionItemProps(nextSession, nextProps))));
+    },
+    async rerenderAfter(callback, nextSession, nextProps = {}) {
+      await act(() => {
+        callback();
+        root.render(React.createElement(SessionItem, sessionItemProps(nextSession, nextProps)));
+      });
     },
     async unmount() {
       await act(() => root.unmount());
@@ -176,19 +183,121 @@ test("Escape claimed by the popup does not reach window shortcuts", async () => 
   }
 });
 
-test("Stop and Delete move focus into their inline confirmation", async () => {
+test("Stop and Delete move focus into confirmation, then Cancel restores the action trigger", async () => {
   for (const action of ["Stop", "Delete"]) {
     const view = await mountItem(baseSession, { isActive: true });
     try {
-      await click(view.container.querySelector("button[aria-controls]"));
+      const trigger = view.container.querySelector("button[aria-controls]");
+      await click(trigger);
       const item = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === action);
       await click(item);
 
       const primary = [...view.container.querySelectorAll("button")].find((button) => button.textContent.trim() === action);
       assert.equal(document.activeElement === primary, true);
+
+      const cancel = [...view.container.querySelectorAll("button")].find((button) => button.textContent.trim() === "Cancel");
+      cancel.focus();
+      assert.equal(document.activeElement, cancel);
+      await click(cancel);
+      assert.equal(document.activeElement, view.container.querySelector("button[aria-controls]"));
     } finally {
       await view.unmount();
     }
+  }
+});
+
+test("Rename Escape restores the action trigger", async () => {
+  const view = await mountItem(baseSession);
+  try {
+    const trigger = view.container.querySelector("button[aria-controls]");
+    await click(trigger);
+    const rename = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Rename");
+    await click(rename);
+
+    const input = view.container.querySelector("input");
+    assert.equal(document.activeElement, input);
+    await pressKey(input, "Escape");
+    assert.equal(view.container.querySelector("input"), null);
+    assert.equal(document.activeElement, view.container.querySelector("button[aria-controls]"));
+  } finally {
+    await view.unmount();
+  }
+});
+
+test("unavailable actions close inline surfaces without restoring focus into hidden UI", async () => {
+  for (const action of ["Rename", "Stop", "Delete"]) {
+    const view = await mountItem(baseSession, { isActive: true });
+    try {
+      await click(view.container.querySelector("button[aria-controls]"));
+      const item = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === action);
+      await click(item);
+      assert.equal(view.container.contains(document.activeElement), true);
+
+      await view.rerender(baseSession, { isActive: true, actionsAvailable: false });
+      assert.equal(document.querySelector('[role="group"]'), null);
+      assert.equal(view.container.querySelector("input"), null);
+      assert.equal(view.container.querySelector("button[aria-controls]"), null);
+      assert.equal(view.container.contains(document.activeElement), false);
+
+      await view.rerender(baseSession, { isActive: true, actionsAvailable: true });
+      assert.equal(view.container.querySelector("button[aria-controls]").getAttribute("aria-expanded"), "false");
+      assert.doesNotMatch(view.container.textContent, /Stop active work|Delete abcdef123456\?/);
+    } finally {
+      await view.unmount();
+    }
+  }
+});
+
+test("reopening actions never applies trigger focus deferred during hiding", async () => {
+  const view = await mountItem(baseSession, { isActive: true });
+  const outside = document.createElement("button");
+  document.body.append(outside);
+  try {
+    await click(view.container.querySelector("button[aria-controls]"));
+    await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Stop"));
+    const cancel = [...view.container.querySelectorAll("button")].find((button) => button.textContent.trim() === "Cancel");
+    cancel.focus();
+
+    await view.rerenderAfter(
+      () => cancel.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
+      baseSession,
+      { isActive: true, actionsAvailable: false },
+    );
+    outside.focus();
+    await view.rerender(baseSession, { isActive: true, actionsAvailable: true });
+    assert.equal(document.activeElement, outside);
+  } finally {
+    outside.remove();
+    await view.unmount();
+  }
+});
+
+test("hiding a dirty Rename surface discards the draft without PATCHing it", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push([url, init?.method]);
+    return new Response(null, { status: 200 });
+  };
+
+  const view = await mountItem(baseSession);
+  try {
+    await click(view.container.querySelector("button[aria-controls]"));
+    await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Rename"));
+    const input = view.container.querySelector("input");
+    await act(() => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, "Dirty draft");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assert.equal(input.value, "Dirty draft");
+    await view.rerender(baseSession);
+    assert.equal(view.container.querySelector("input").value, "Dirty draft");
+
+    await view.rerender(baseSession, { actionsAvailable: false });
+    assert.deepEqual(requests, []);
+  } finally {
+    await view.unmount();
+    globalThis.fetch = originalFetch;
   }
 });
 
