@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { wireChildProcessLifecycle } from "../bin/process-lifecycle.js";
+import { wireChildProcessLifecycle } from "./process-lifecycle.js";
 
 function createProcesses() {
   const parent = new EventEmitter();

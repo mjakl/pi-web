@@ -5,8 +5,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { getHelpText, parseLaunchOptions } = require("../bin/pi-web-options.js");
-const cliPath = fileURLToPath(new URL("../bin/pi-web.js", import.meta.url));
+const { getHelpText, parseLaunchOptions } = require("./pi-web-options.js");
+const cliPath = fileURLToPath(new URL("./pi-web.js", import.meta.url));
 
 test("uses loopback startup defaults", () => {
   assert.deepEqual(parseLaunchOptions([], {}), {
