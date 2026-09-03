@@ -1,3 +1,5 @@
+// Browser-safe string helpers for file paths. Node path logic lives in
+// lib/paths.ts, which the client bundle must not import.
 export function normalizeFilePathSlashes(filePath: string): string {
   if (/^[a-zA-Z]:[\\/]/.test(filePath) || filePath.startsWith("\\\\")) {
     return filePath.replace(/\\/g, "/");

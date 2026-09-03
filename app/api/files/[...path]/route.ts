@@ -15,7 +15,8 @@ import {
 } from "@/lib/file-types";
 import { isIgnoredDirent, resolveDirentIsDirectory } from "@/lib/file-dirent";
 import { contentDisposition } from "@/lib/content-disposition";
-import { isFilePathReferencedBySession } from "@/lib/session-file-references";
+import { isReferencedBySession } from "@/lib/session-file-references";
+import { isFilePathReferencedByEntries } from "@/lib/session-file-references-core";
 import {
   inspectUploadTargets,
   parseUploadConflictStrategy,
@@ -404,7 +405,7 @@ export async function GET(
     const allowedBySessionReference =
       !allowedByRoot &&
       type !== "list" &&
-      await isFilePathReferencedBySession(filePath, sessionId);
+      await isReferencedBySession(filePath, sessionId, isFilePathReferencedByEntries);
     if (!allowedByRoot && !allowedBySessionReference) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }

@@ -1,3 +1,5 @@
+// Pure porcelain parsing, kept apart from lib/git-changes.ts so it is testable
+// without spawning git.
 import type { GitFileStatus } from "./git-types";
 
 export interface GitPorcelainEntry {

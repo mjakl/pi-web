@@ -1,3 +1,5 @@
+// Pure URL and response helpers imported by the browser. The credential lookup
+// that needs the Pi SDK lives in lib/model-discovery-auth.ts.
 export interface DiscoveredModel {
   id: string;
   name?: string;

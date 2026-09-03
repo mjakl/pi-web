@@ -744,10 +744,3 @@ export function ChatMinimap({
     </div>
   );
 }
-
-// Hook to create a stable array of refs for messages
-export function useMessageRefs(count: number): RefObject<(HTMLDivElement | null)[]> {
-  const refs = useRef<(HTMLDivElement | null)[]>([]);
-  refs.current = Array(count).fill(null).map((_, i) => refs.current[i] ?? null);
-  return refs;
-}

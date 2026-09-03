@@ -3,7 +3,7 @@ import { existsSync } from "fs";
 import { addWorktree, findCurrentWorktreePath, listWorktrees, removeWorktree, resolveProject } from "@/lib/worktree";
 import { allowFileRoot, getAllowedFileRoots } from "@/lib/file-access";
 import { isExistingPathWithinRoots, isPathWithinRoots } from "@/lib/path-security";
-import { projectIdentityKey } from "@/lib/project-identity";
+import { pathIdentityKey } from "@/lib/paths";
 
 /** Same gate as /api/files: only session cwds / project roots / explicitly
  *  allowed dirs may be inspected or mutated through this endpoint. */
@@ -43,7 +43,7 @@ export async function GET(req: Request) {
     for (const w of worktrees) allowFileRoot(w.path);
     return NextResponse.json({
       projectRoot: project.projectRoot,
-      projectKey: projectIdentityKey(project.projectRoot),
+      projectKey: pathIdentityKey(project.projectRoot),
       isGit,
       isTopLevel: project.isTopLevel,
       currentWorktreePath,

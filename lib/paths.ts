@@ -1,4 +1,4 @@
-import { normalize, parse, sep } from "path";
+import { normalize, posix, win32 } from "path";
 
 // ============================================================================
 // Path primitives.
@@ -16,9 +16,10 @@ import { normalize, parse, sep } from "path";
 //                   re-normalize their inputs anyway (see path-security.ts),
 //                   so this form is about consistent keys, not correctness.
 //
-// Comparison always goes through samePath()/isPathWithinRoots(), never `===`:
-// git emits POSIX-style paths even on Windows, and Windows itself is
-// case-insensitive, so raw string equality silently fails on both counts.
+// Comparison always goes through samePath()/isPathWithinRoots(), never `===`,
+// and map keys through pathIdentityKey(): git emits POSIX-style paths even on
+// Windows, and Windows itself is case-insensitive, so raw string equality
+// silently fails on both counts.
 // ============================================================================
 
 const WINDOWS_ABSOLUTE_RE = /^[a-zA-Z]:[\\/]/;
@@ -53,12 +54,22 @@ export function toSlashPath(p: string): string {
   return p.replace(/\\/g, "/");
 }
 
-function normalizeForComparison(p: string): string {
-  const normalized = normalize(toNativePath(p));
-  const rootLength = parse(normalized).root.length;
+/**
+ * Stable, internal identity for a path: normalized for `platform`, without
+ * trailing separators, and case-folded on Windows because the default Windows
+ * filesystem is case-insensitive. Keep the original path for display and
+ * filesystem operations; use the key only for grouping and equality. The
+ * explicit platform argument keeps the Windows rules testable on other hosts.
+ */
+export function pathIdentityKey(p: string, platform: NodeJS.Platform = process.platform): string {
+  if (!p) return p;
+  const pathApi = platform === "win32" ? win32 : posix;
+  const normalized = pathApi.normalize(p);
+  const rootLength = pathApi.parse(normalized).root.length;
   let end = normalized.length;
-  while (end > rootLength && normalized[end - 1] === sep) end--;
-  return normalized.slice(0, end);
+  while (end > rootLength && normalized[end - 1] === pathApi.sep) end--;
+  const trimmed = normalized.slice(0, end);
+  return platform === "win32" ? trimmed.toLowerCase() : trimmed;
 }
 
 /**
@@ -69,12 +80,5 @@ function normalizeForComparison(p: string): string {
  * Compares lexically: callers wanting symlinks resolved should realpath first.
  */
 export function samePath(a: string, b: string): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  const normalizedA = normalizeForComparison(a);
-  const normalizedB = normalizeForComparison(b);
-  if (process.platform === "win32") {
-    return normalizedA.toLowerCase() === normalizedB.toLowerCase();
-  }
-  return normalizedA === normalizedB;
+  return pathIdentityKey(a) === pathIdentityKey(b);
 }

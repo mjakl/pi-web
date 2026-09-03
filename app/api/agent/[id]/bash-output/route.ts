@@ -7,7 +7,8 @@ import {
   readUtf8FileWithinLimit,
   resolveBashOutputPath,
 } from "@/lib/bash-output";
-import { isBashOutputPathReferencedBySession } from "@/lib/session-file-references";
+import { isReferencedBySession } from "@/lib/session-file-references";
+import { isBashOutputPathReferencedByEntries } from "@/lib/session-file-references-core";
 
 // GET /api/agent/[id]/bash-output?path=<absPath>
 // Reads a bash output temp file referenced by this session. Inline display is
@@ -36,7 +37,7 @@ export async function GET(
     return NextResponse.json({ error: "invalid path" }, { status: 400 });
   }
 
-  if (!await isBashOutputPathReferencedBySession(resolved, id)) {
+  if (!await isReferencedBySession(resolved, id, isBashOutputPathReferencedByEntries)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
