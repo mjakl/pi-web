@@ -10,8 +10,6 @@ import {
   getRunningRpcSessionIds,
 } from "@/lib/rpc-manager";
 
-export const dynamic = "force-dynamic";
-
 export async function GET() {
   try {
     const [persistedSessions, runtimeSessions] = await Promise.all([

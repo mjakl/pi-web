@@ -10,8 +10,6 @@ import { resolveSessionPath } from "@/lib/session-reader";
 
 const execFileAsync = promisify(execFile);
 
-export const runtime = "nodejs";
-
 type PiCodingAgentModule = {
   getPackageDir: () => string;
 };

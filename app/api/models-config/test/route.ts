@@ -6,8 +6,6 @@ import { completeSimple, type AssistantMessage } from "@earendil-works/pi-ai/com
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { hasJsonContentType } from "@/lib/request-content-type";
 
-export const dynamic = "force-dynamic";
-
 const TEST_TIMEOUT_MS = 20_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {

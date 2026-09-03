@@ -3,8 +3,6 @@ import { NextResponse } from "next/server";
 import { invalidateModelsCache } from "@/lib/models-cache";
 import { removeStoredCredentialIfType, storeProviderCredential } from "@/lib/provider-credential-store";
 
-export const dynamic = "force-dynamic";
-
 type Params = { params: Promise<{ provider: string }> };
 
 // POST /api/auth/api-key/[provider]  body: { apiKey: string }

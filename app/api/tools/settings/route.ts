@@ -5,8 +5,6 @@ import {
   writePowerShellToolEnabled,
 } from "@/lib/powershell-settings";
 
-export const dynamic = "force-dynamic";
-
 export async function GET() {
   try {
     return NextResponse.json({

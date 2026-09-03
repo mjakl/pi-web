@@ -7,8 +7,6 @@ import { loadSkillsWithInstallInfo } from "@/lib/skills-service";
 import { setDisableModelInvocation } from "@/lib/skill-frontmatter";
 import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
 
-export const dynamic = "force-dynamic";
-
 // GET /api/skills?cwd=<path>
 // Uses DefaultResourceLoader (same logic as AgentSession startup) so settings.json
 // skill paths, package skills, and .agents/skills directories are all included.
