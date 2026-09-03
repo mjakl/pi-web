@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react
 import { useRouter, useSearchParams } from "next/navigation";
 import { useGlobalKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { SessionSidebar } from "./SessionSidebar";
-import { ChatWindow } from "./ChatWindow";
+import { ChatWindow, type ToolPresetControl } from "./ChatWindow";
 import { FileViewer } from "./FileViewer";
 import { TabBar } from "./TabBar";
 import { openFileTab, saveFileViewerState, type Tab } from "@/lib/file-tab-state";
@@ -126,6 +126,7 @@ export function AppShell() {
   const [sessionKey, setSessionKey] = useState(0);
   const [explorerRefreshKey, setExplorerRefreshKey] = useState(0);
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
+  const [toolPresetControl, setToolPresetControl] = useState<ToolPresetControl | null>(null);
   const [modelsRefreshKey, setModelsRefreshKey] = useState(0);
   const [projectTrust, setProjectTrust] = useState<ProjectTrustStatus | null>(null);
   const [projectTrustDialogOpen, setProjectTrustDialogOpen] = useState(false);
@@ -1912,8 +1913,8 @@ export function AppShell() {
               onSessionStatsPanelOpen={openSessionStatsPanel}
               onContextUsageChange={handleContextUsageChange}
               onOpenFile={handleOpenLinkedFile}
+              onToolPresetControlChange={setToolPresetControl}
               soundEnabled={soundEnabled}
-              onSoundToggle={onSoundToggle}
               playDoneSound={playDoneSound}
               unlockAudio={unlockAudio}
             />
@@ -2067,6 +2068,9 @@ export function AppShell() {
         cwd={projectTrustCwd}
         sessionId={selectedSession?.id ?? null}
         initialSection={settingsSection}
+        toolPresetControl={toolPresetControl}
+        soundEnabled={soundEnabled}
+        onSoundToggle={onSoundToggle}
         onClose={() => {
           setSettingsSection(null);
           setModelsRefreshKey((key) => key + 1);

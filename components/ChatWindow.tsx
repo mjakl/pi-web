@@ -18,7 +18,7 @@ import { useDragDrop } from "@/hooks/useDragDrop";
 import { useMessageRefs } from "@/hooks/useMessageRefs";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { SessionStatsInfo } from "@/lib/pi-types";
-import type { ToolEntry } from "@/lib/tool-presets";
+import type { ToolEntry, ToolPreset } from "@/lib/tool-presets";
 import {
   captureScrollDistance,
   getPromptAnchorSpacerHeight,
@@ -26,6 +26,12 @@ import {
   restoreScrollTop,
   VISIBLE_PAGE_SIZE,
 } from "@/lib/chat-lazy-load";
+
+export interface ToolPresetControl {
+  preset: ToolPreset;
+  disabled: boolean;
+  onChange: (preset: ToolPreset) => void;
+}
 
 interface Props {
   session: SessionInfo | null;
@@ -47,10 +53,10 @@ interface Props {
   onSessionStatsPanelOpen?: () => void;
   onContextUsageChange?: (usage: { percent: number | null; contextWindow: number; tokens: number | null } | null) => void;
   onOpenFile?: (filePath: string) => void;
-  /** Completion sound state + controls, owned by AppShell so tasks finishing in
-   *  a non-active workspace can still ring. */
+  onToolPresetControlChange?: (control: ToolPresetControl | null) => void;
+  /** Completion sound state is owned by AppShell so tasks finishing in a
+   *  non-active workspace can still ring. */
   soundEnabled?: boolean;
-  onSoundToggle?: () => void;
   playDoneSound?: () => void;
   unlockAudio?: () => void;
 }
@@ -176,7 +182,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = fa
   );
 }
 
-export function ChatWindow({ session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
+export function ChatWindow({ session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, onToolPresetControlChange, soundEnabled = true, playDoneSound = () => {}, unlockAudio }: Props) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
 
@@ -219,6 +225,15 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsPanelOpen,
   });
   const sessionBusy = agentRunning || bashRunning;
+
+  useEffect(() => {
+    onToolPresetControlChange?.({
+      preset: toolPreset,
+      disabled: loading || Boolean(error) || sessionBusy,
+      onChange: handleToolPresetChange,
+    });
+    return () => onToolPresetControlChange?.(null);
+  }, [error, handleToolPresetChange, loading, onToolPresetControlChange, sessionBusy, toolPreset]);
 
   useEffect(() => {
     if (!extensionDialog || soundedExtensionDialogIdRef.current === extensionDialog.id) return;
@@ -491,8 +506,6 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
       isCompacting={isCompacting}
       compactError={compactError}
       compactResult={compactResult}
-      toolPreset={toolPreset}
-      onToolPresetChange={session || isNew ? handleToolPresetChange : undefined}
       thinkingLevel={thinkingLevel}
       onThinkingLevelChange={session || isNew ? handleThinkingLevelChange : undefined}
       availableThinkingLevels={availableThinkingLevels}
@@ -505,8 +518,6 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
       slashCommandsLoading={slashCommandsLoading}
       onLoadSlashCommands={loadSlashCommands}
       onBuiltinCommand={handleBuiltinSlashCommand}
-      soundEnabled={soundEnabled}
-      onSoundToggle={onSoundToggle}
       onAudioUnlock={unlockAudio}
       draftKey={session?.id ?? newSessionDraftKey ?? undefined}
       cwd={session?.cwd ?? newSessionCwd}

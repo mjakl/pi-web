@@ -57,34 +57,42 @@ test("keeps the model selector visible when a model error leaves no options", ()
   assert.match(html, /title="No available models"/);
 });
 
-test("renders the read-only tool preset as the active selection", () => {
+test("groups model and reasoning on the left and keeps Compact separate", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
       onSend() {},
       onAbort() {},
-      onToolPresetChange() {},
+      onModelChange() {},
+      onThinkingLevelChange() {},
+      onCompact() {},
       isStreaming: false,
-      toolPreset: "read-only",
+      model: { provider: "openai", modelId: "gpt-5.4" },
+      modelList: [{ provider: "openai", id: "gpt-5.4", name: "GPT-5.4" }],
+      thinkingLevel: "high",
     }),
   );
 
-  assert.match(html, /title="Change tool preset: read-only"/);
-  assert.match(html, />read-only<\/span>/);
+  const settingsGroup = html.indexOf('class="composer-settings-group"');
+  const model = html.indexOf('title="Change model"');
+  const reasoning = html.indexOf('aria-label="Change reasoning level"');
+  const immediateActions = html.indexOf('class="composer-immediate-actions"');
+  const compact = html.indexOf('aria-label="Compact context"');
+  assert.ok(settingsGroup < model && model < reasoning && reasoning < immediateActions && immediateActions < compact);
 });
 
-test("renders the empty tool preset as Chat only", () => {
+test("does not render tool or completion sound settings in the composer", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
       onSend() {},
       onAbort() {},
       onToolPresetChange() {},
+      onSoundToggle() {},
       isStreaming: false,
-      toolPreset: "none",
     }),
   );
 
-  assert.match(html, /title="Change tool preset: Chat only"/);
-  assert.match(html, />Chat only<\/span>/);
+  assert.doesNotMatch(html, /Change tool preset/);
+  assert.doesNotMatch(html, /completion sound/i);
 });
 
 test("shows and locks the optimistic model while a switch is pending", () => {
