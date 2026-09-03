@@ -106,3 +106,55 @@ test("does not normalize escaped delimiters or link destinations", () => {
   assert.equal(normalizeDisplayMath(escaped), escaped);
   assert.equal(normalizeDisplayMath(link), link);
 });
+
+test("does not print undefined while a code fence is still opening", () => {
+  const opening = renderToStaticMarkup(
+    React.createElement(MarkdownBody, { cwd: "/home/me/project", isStreaming: true }, "```ts\n"),
+  );
+
+  assert.doesNotMatch(opening, /undefined/);
+  assert.doesNotMatch(renderMarkdown("```ts\n```"), /undefined/);
+});
+
+test("keeps inline code free of react-markdown metadata", () => {
+  assert.doesNotMatch(renderMarkdown("some `inline` code"), /\snode=/);
+});
+
+test("keeps in-page anchors in the page and matched to their target", () => {
+  // rehype-sanitize prefixes ids with user-content-, so hrefs must match.
+  const anchor = renderMarkdown("[go](#sec)");
+  assert.match(anchor, /href="#user-content-sec"/);
+  assert.doesNotMatch(anchor, /target="_blank"/);
+
+  assert.match(renderMarkdown("x[^1]\n\n[^1]: note"), /href="#user-content-user-content-fn-1"/);
+});
+
+test("only opens a real external scheme in a new tab", () => {
+  assert.match(renderMarkdown("[m](mailto:a@b.example)"), /target="_blank"/);
+  // An empty href would otherwise reopen the whole app in a new tab.
+  assert.doesNotMatch(renderMarkdown("[x]()"), /target="_blank"/);
+  assert.doesNotMatch(renderMarkdown("[m](Makefile)"), /target="_blank"/);
+});
+
+test("serves local images through the file API and passes the session", () => {
+  assert.match(renderMarkdown("![a](./a.png)"), /\/api\/files\/home\/me\/project\/a\.png\?type=read/);
+
+  const scoped = renderToStaticMarkup(
+    React.createElement(MarkdownBody, { cwd: "/home/me/project", sessionId: "abc" }, "![a](./a.png)"),
+  );
+  assert.match(scoped, /sessionId=abc/);
+});
+
+test("shows the alt text when an image source cannot be rendered", () => {
+  // A Windows drive path is stripped by the sanitizer; a src-less <img> is
+  // display:block with no intrinsic size, so it would collapse to nothing.
+  const html = renderMarkdown("![the alt](C:\\\\shots\\\\x.png)");
+
+  assert.match(html, /the alt/);
+  assert.doesNotMatch(html, /<img/);
+});
+
+test("leaves a remote image untouched and still blocks javascript urls", () => {
+  assert.match(renderMarkdown("![c](https://example.com/c.png)"), /src="https:\/\/example\.com\/c\.png"/);
+  assert.doesNotMatch(renderMarkdown("[x](javascript:alert(1))"), /javascript:/i);
+});

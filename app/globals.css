@@ -360,19 +360,35 @@ pre, code {
   color: var(--text);
   word-break: break-word;
 }
+/* The chat column is a fixed 820px, which is ~105 characters at 14px. Cap the
+   measure on prose only -- code blocks, tables and images still need the room. */
+.markdown-body > p,
+.markdown-body > ul,
+.markdown-body > ol,
+.markdown-body > blockquote,
+.markdown-body > h1,
+.markdown-body > h2,
+.markdown-body > h3,
+.markdown-body > h4,
+.markdown-body > h5,
+.markdown-body > h6 {
+  max-width: 68ch;
+}
 .markdown-body p { margin: 0 0 8px; }
 .markdown-body p:last-child { margin-bottom: 0; }
 .markdown-body h1, .markdown-body h2, .markdown-body h3,
 .markdown-body h4, .markdown-body h5, .markdown-body h6 {
   font-weight: 600;
-  margin: 10px 0 5px;
+  margin: 18px 0 6px;
   color: var(--text);
   line-height: 1.35;
   letter-spacing: 0;
 }
+.markdown-body > :first-child { margin-top: 0; }
 .markdown-body h1 { font-size: 1.16em; }
 .markdown-body h2 { font-size: 1.08em; }
-.markdown-body h3 { font-size: 0.98em; color: color-mix(in srgb, var(--text) 88%, var(--text-muted)); }
+.markdown-body h3 { font-size: 1em; }
+.markdown-body h4, .markdown-body h5, .markdown-body h6 { font-size: 0.94em; }
 .markdown-body ul, .markdown-body ol {
   padding-left: 22px;
   margin: 5px 0 8px;
@@ -382,6 +398,7 @@ pre, code {
 .markdown-body ul > li { list-style-type: disc; }
 .markdown-body ol > li { list-style-type: decimal; }
 .markdown-body li > p { margin: 0; }
+.markdown-body li > p + p { margin-top: 8px; }
 .markdown-body li::marker {
   color: color-mix(in srgb, var(--accent) 72%, var(--text-muted));
   font-weight: 600;
@@ -390,7 +407,6 @@ pre, code {
   color: color-mix(in srgb, var(--text) 88%, var(--accent));
   font-weight: 700;
 }
-.markdown-body em { color: var(--text-muted); }
 .markdown-body a {
   color: var(--accent);
   text-decoration: underline;

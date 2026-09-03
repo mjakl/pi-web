@@ -5,23 +5,28 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import { resolveLocalFileHref } from "@/lib/file-links";
 import { encodeFilePathForApi } from "@/lib/file-paths";
 import { markdownRehypePlugins, markdownRemarkPlugins, normalizeDisplayMath } from "@/lib/markdown";
+import { ImagePreview } from "./ImagePreview";
 import { MermaidBlock, CodeBlock } from "./MermaidBlock";
 
 interface MarkdownBodyProps {
   children: string;
+  sessionId?: string;
   className?: string;
   isStreaming?: boolean;
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
 }
 
-export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile }: MarkdownBodyProps) {
+export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile, sessionId }: MarkdownBodyProps) {
   const normalizedMarkdown = useMemo(() => normalizeDisplayMath(children), [children]);
   // Stable renderer identities keep stateful blocks mounted across message hover updates.
   const components = useMemo<Components>(() => ({
     code({ className, children, ...props }) {
+      delete props.node;
       const lang = className?.replace("language-", "").toLowerCase() ?? "";
-      const raw = String(children);
+      // react-markdown passes undefined for an empty <code>, which happens on
+      // the frame a fence opens mid-stream. String(undefined) printed the word.
+      const raw = children == null ? "" : String(children);
       const isBlock = className?.includes("language-") || raw.includes("\n");
       if (isBlock) {
         if (lang === "mermaid") {
@@ -44,11 +49,19 @@ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile
     a({ href, children, ...props }) {
       // `node` is react-markdown metadata, not a DOM attribute.
       delete props.node;
+      // rehype-sanitize prefixes ids with user-content-, but leaves hrefs
+      // alone, so an in-page anchor has to be prefixed to match its target.
+      if (href?.startsWith("#")) {
+        return <a href={`#user-content-${href.slice(1)}`} {...props}>{children}</a>;
+      }
       const filePath = onOpenFile ? resolveLocalFileHref(href, cwd) : null;
       const openFile = onOpenFile;
       if (!filePath || !openFile) {
+        // Only a real external scheme earns a new tab. Everything else stays
+        // in place rather than navigating the app away from itself.
+        const external = /^(https?|mailto):/i.test(href ?? "");
         return (
-          <a href={href} {...props} target="_blank" rel="noopener noreferrer">
+          <a href={href} {...props} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
             {children}
           </a>
         );
@@ -72,12 +85,23 @@ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile
     img({ src, alt, ...props }) {
       delete props.node;
       const filePath = typeof src === "string" ? resolveLocalFileHref(src, cwd) : null;
+      const query = new URLSearchParams({ type: "read" });
+      // Without the session, a path outside every allowed root is a 403 even
+      // though the session that wrote it is allowed to read it.
+      if (sessionId) query.set("sessionId", sessionId);
       const imageSrc = filePath
-        ? `/api/files/${encodeFilePathForApi(filePath)}?type=read`
+        ? `/api/files/${encodeFilePathForApi(filePath)}?${query}`
         : src;
-      // Dynamic local paths are served directly by the file API.
-      // eslint-disable-next-line @next/next/no-img-element
-      return <img src={imageSrc} alt={alt ?? ""} loading="lazy" {...props} />;
+      // A src the sanitizer stripped renders as a zero-height block, so show
+      // the alt text instead of nothing.
+      if (typeof imageSrc !== "string" || imageSrc === "") return <>{alt}</>;
+      return (
+        <ImagePreview src={imageSrc} alt={alt ?? ""}>
+          {/* Dynamic local paths are served directly by the file API. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imageSrc} alt={alt ?? ""} loading="lazy" {...props} />
+        </ImagePreview>
+      );
     },
     table({ children }) {
       return (
@@ -86,7 +110,7 @@ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile
         </div>
       );
     },
-  }), [cwd, isStreaming, onOpenFile]);
+  }), [cwd, isStreaming, onOpenFile, sessionId]);
 
   return (
     <div className={["markdown-body", className].filter(Boolean).join(" ")}>

@@ -288,6 +288,9 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, headerAction, isS
             fontSize: 12.5,
             lineHeight: 1.62,
             borderRadius: 0,
+            // The light Prism theme ships its own border, which doubled up
+            // inside .markdown-code-block's. The dark theme sets none.
+            border: 0,
             background: "color-mix(in srgb, var(--bg) 92%, var(--bg-panel))",
           }}
           codeTagProps={{ style: { fontFamily: "var(--font-mono)" } }}

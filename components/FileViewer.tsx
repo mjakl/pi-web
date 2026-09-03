@@ -23,6 +23,7 @@ import { resolveLocalFileHref } from "@/lib/file-links";
 import { MentionIcon } from "./FileIcons";
 import { parseFrontmatter } from "@/lib/frontmatter";
 import { markdownRehypePlugins, markdownRemarkPlugins, normalizeDisplayMath } from "@/lib/markdown";
+import { ImagePreview } from "./ImagePreview";
 import { CodeBlock, MermaidBlock } from "./MermaidBlock";
 import { FrontmatterCard } from "./FrontmatterCard";
 import { parseUnifiedPatch } from "@/lib/patch";
@@ -1458,8 +1459,9 @@ function TextFileViewer({
               rehypePlugins={markdownRehypePlugins}
               components={{
                 code({ className, children, ...props }) {
+                  delete props.node;
                   const lang = className?.replace("language-", "").toLowerCase() ?? "";
-                  const raw = String(children);
+                  const raw = children == null ? "" : String(children);
                   const isBlock = className?.includes("language-") || raw.includes("\n");
                   if (isBlock) {
                     if (lang === "mermaid") {
@@ -1483,8 +1485,18 @@ function TextFileViewer({
                   const linkedFile = onOpenFile
                     ? resolveLocalFileHref(href, markdownDirectory, cwd ?? markdownDirectory)
                     : null;
+                  if (href?.startsWith("#")) {
+                    return <a href={`#user-content-${href.slice(1)}`} {...props}>{children}</a>;
+                  }
                   if (!linkedFile || !onOpenFile) {
-                    return <a href={href} {...props}>{children}</a>;
+                    // Without a target this navigated the whole app away from
+                    // itself, losing the session.
+                    const external = /^(https?|mailto):/i.test(href ?? "");
+                    return (
+                      <a href={href} {...props} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+                        {children}
+                      </a>
+                    );
                   }
 
                   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -1504,9 +1516,23 @@ function TextFileViewer({
                   const imageSrc = imagePath
                     ? getFileApiUrl(imagePath, "read", sourceSessionId)
                     : src;
-                  // Dynamic local paths are served directly by the file API.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  return <img src={imageSrc} alt={alt ?? ""} loading="lazy" {...props} />;
+                  if (typeof imageSrc !== "string" || imageSrc === "") return <>{alt}</>;
+                  return (
+                    <ImagePreview src={imageSrc} alt={alt ?? ""}>
+                      {/* Dynamic local paths are served directly by the file API. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={imageSrc} alt={alt ?? ""} loading="lazy" {...props} />
+                    </ImagePreview>
+                  );
+                },
+                table({ children }) {
+                  // .markdown-body is overflow-x: hidden, so without this a wide
+                  // table is clipped with no way to scroll it.
+                  return (
+                    <div className="markdown-table-wrap">
+                      <table>{children}</table>
+                    </div>
+                  );
                 },
               }}
             >
