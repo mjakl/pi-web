@@ -1737,7 +1737,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               alignItems: "center",
               background: "var(--bg)",
               border: `1px solid ${bashMode ? "var(--tool-bg)" : isStreaming && (onSteer || onFollowUp)
-                ? "rgba(234,179,8,0.4)"
+                ? streamingSubmissionAction === "followup" ? "rgba(129,140,248,0.4)" : "rgba(234,179,8,0.4)"
                 : "color-mix(in srgb, var(--border) 70%, transparent)"}`,
               borderRadius: 14,
               padding: "10px 10px 10px 14px",
@@ -1795,6 +1795,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             }}
           />
 
+          {/* Phones drop the word and shrink this to 72px in app/globals.css. */}
           <div
             className="composer-action-slot"
             style={{ width: 128, minWidth: 128, height: 34, flexShrink: 0, alignSelf: "flex-end" }}
@@ -1812,6 +1813,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               >
                 <button
                   type="button"
+                  className="composer-action-primary"
+                  aria-label={t(streamingSubmissionAction === "steer" ? "chat.steer" : "chat.followUp")}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => sendQueued(streamingSubmissionAction)}
                   disabled={!canQueueStreamingMessage}
@@ -1845,10 +1848,13 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                       <line x1="2" y1="9" x2="8" y2="9" />
                     </svg>
                   )}
-                  {t(streamingSubmissionAction === "steer" ? "chat.steer" : "chat.followUp")}
+                  <span className="composer-action-label">
+                    {t(streamingSubmissionAction === "steer" ? "chat.steer" : "chat.followUp")}
+                  </span>
                 </button>
                 <button
                   type="button"
+                  className="composer-action-menu-toggle"
                   aria-label={t("chat.selectRunAction")}
                   aria-expanded={streamingActionMenuOpen}
                   onMouseDown={(e) => e.preventDefault()}
@@ -1874,7 +1880,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   aria-label={t("chat.selectRunAction")}
                   style={{
                     position: "absolute", right: 0, bottom: "calc(100% + 6px)", zIndex: 130,
-                    width: "100%", padding: 4,
+                    width: "max-content", minWidth: "100%", padding: 4,
                     background: "var(--bg)", border: "1px solid var(--border)",
                     borderRadius: 8, boxShadow: "0 -4px 16px rgba(0,0,0,0.10)",
                   }}
@@ -1909,6 +1915,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             ) : !isStreaming ? (
               <button
                 type="button"
+                className="composer-action-primary"
+                aria-label={t("chat.send")}
                 onClick={handleSend}
                 disabled={!value.trim() && !attachedImages.length}
                 style={{
@@ -1931,7 +1939,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   <line x1="2" y1="7" x2="11" y2="7" />
                   <polyline points="7.5 3 12 7 7.5 11" />
                 </svg>
-                {t("chat.send")}
+                <span className="composer-action-label">{t("chat.send")}</span>
               </button>
             ) : null}
           </div>

@@ -189,11 +189,33 @@ test("keeps one composer action slot across idle, agent, and non-agent busy stat
   for (const html of [idle, agent, busy]) {
     assert.match(html, /class="composer-action-slot" style="width:128px;min-width:128px/);
   }
-  assert.match(idle, />Send<\/button>/);
-  assert.match(agent, />Steer<\/button>/);
+  // Hooks the phone media query targets; deleting one silently restores the 128px slot.
+  assert.match(idle, /class="composer-action-primary"/);
+  assert.match(agent, /class="composer-action-primary"/);
+  assert.match(agent, /class="composer-action-menu-toggle"/);
+  // The accessible name survives the word being hidden below 640px.
+  assert.match(idle, /aria-label="Send"/);
+  assert.match(agent, /aria-label="Steer"/);
+  assert.match(idle, /class="composer-action-label">Send<\/span>/);
+  assert.match(agent, /class="composer-action-label">Steer<\/span>/);
+  // The menu must outgrow the shrunken slot instead of being clipped by it.
+  assert.match(agent, /width:max-content;min-width:100%/);
   assert.match(agent, /aria-label="Select run action"/);
   assert.match(agent, /hidden=""/);
   assert.doesNotMatch(busy, /aria-label="Select run action"/);
+});
+
+test("tints the composer border for the selected run mode", () => {
+  const render = (props) => renderToStaticMarkup(React.createElement(ChatInput, {
+    onSend() {},
+    onAbort() {},
+    isStreaming: true,
+    ...props,
+  }));
+
+  assert.match(render({ onSteer() {} }), /border:1px solid rgba\(234,179,8,0\.4\)/);
+  assert.match(render({ onFollowUp() {} }), /border:1px solid rgba\(129,140,248,0\.4\)/);
+  assert.doesNotMatch(render({}), /rgba\(234,179,8,0\.4\)/);
 });
 
 test("uses the selected streaming action and falls back only when unavailable", () => {

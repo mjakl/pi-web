@@ -1695,3 +1695,37 @@ span.linenumber {
     bottom: 14px;
   }
 }
+
+/* Composer submit control. The slot's desktop geometry stays inline in
+   ChatInput.tsx; phones drop the button's word and hand the width back to the
+   textarea. A media query rather than useIsMobile(): getServerSnapshot()
+   returns false, so a JS branch would paint the 128px slot and snap to 72px
+   after hydration on every phone load. 72px leaves the split button's primary
+   half at 42px beside the unchanged 30px chevron. */
+@media (max-width: 640px) {
+  .composer-action-slot {
+    width: 72px !important;
+    min-width: 72px !important;
+  }
+
+  .composer-action-label {
+    display: none;
+  }
+}
+
+/* Grow the touch target into the input row's own 10px vertical padding instead
+   of making the composer taller. Vertical only: widening either half would
+   change which button a boundary tap hits. */
+@media (pointer: coarse) {
+  .composer-action-primary,
+  .composer-action-menu-toggle {
+    position: relative;
+  }
+
+  .composer-action-primary::after,
+  .composer-action-menu-toggle::after {
+    content: "";
+    position: absolute;
+    inset: -5px 0;
+  }
+}
