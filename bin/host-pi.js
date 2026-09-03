@@ -224,11 +224,10 @@ function rootEntry(found, packageName) {
 }
 
 function executableVersion(executable, env, platform) {
-  const result = spawnSync(executable, ["--version"], {
-    encoding: "utf8",
-    env,
-    shell: platform === "win32",
-  });
+  const commandShim = platform === "win32" && /\.(?:cmd|bat)$/i.test(executable);
+  const result = commandShim
+    ? spawnSync(`"${executable}" --version`, { encoding: "utf8", env, shell: true })
+    : spawnSync(executable, ["--version"], { encoding: "utf8", env });
   if (result.error || result.status !== 0) throw new Error("the first non-checkout pi failed to report its version with \"pi --version\"");
   const match = /\b\d+\.\d+\.\d+\b/.exec(`${result.stdout || ""}\n${result.stderr || ""}`);
   if (!match) throw new Error("the first non-checkout pi reported an invalid version");

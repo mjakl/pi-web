@@ -128,6 +128,23 @@ test("honors PATHEXT order and rejects an executable/package version mismatch", 
   assert.equal(selected, adjacentCmd);
 });
 
+test("runs Windows command shims when their PATH contains spaces", (t) => {
+  const base = tempDir(t);
+  const root = path.join(base, "Windows User");
+  const host = makePi(root, "0.84.3", "0.84.3", "pi.CMD");
+  fs.writeFileSync(host.executable, "#!/bin/sh\necho 0.84.3\n");
+  fs.chmodSync(host.executable, 0o755);
+
+  const runtime = resolveHostPi({
+    platform: "win32",
+    checkoutDir: path.join(base, "checkout"),
+    env: { ...process.env, PATH: host.binDir, PATHEXT: ".CMD" },
+  });
+
+  assert.equal(runtime.executable, host.executable);
+  assert.equal(runtime.version, "0.84.3");
+});
+
 test("macOS resolves the first executable Pi from PATH", (t) => {
   const base = tempDir(t);
   const host = makePi(path.join(base, "host"));
