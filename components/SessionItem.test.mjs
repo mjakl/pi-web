@@ -581,6 +581,25 @@ test("popup scrolling stays open and focused while outside scrolling closes with
   }
 });
 
+test("a blur that focuses nothing keeps the popup mounted", async () => {
+  // iOS does not focus a button on tap: it blurs whatever had focus and
+  // reports no relatedTarget. The popup opens with focus on its first action,
+  // so treating that as focus leaving closed it before the click landed.
+  const view = await mountItem(baseSession, { isActive: true });
+  try {
+    const trigger = view.container.querySelector("button[aria-controls]");
+    await click(trigger);
+    const group = document.querySelector('[role="group"]');
+    const stop = [...group.querySelectorAll("button")].find((button) => button.textContent === "Stop");
+    assert.equal(document.activeElement === stop, true);
+
+    await act(() => stop.blur());
+    assert.equal(document.querySelector('[role="group"]') === group, true);
+  } finally {
+    await view.unmount();
+  }
+});
+
 test("a window scroll that moves nothing keeps the popup mounted", async () => {
   // iOS fires a window-level scroll alongside the resize for every URL-bar and
   // keyboard animation. Nothing moved, so dismissing there dropped the press

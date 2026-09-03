@@ -354,6 +354,13 @@ export function SessionItem({
   const closeWhenFocusLeaves = useCallback((e: React.FocusEvent) => {
     if (renderedSurfaceRef.current.kind !== "menu") return;
     const next = e.relatedTarget as Node | null;
+    // Focus going nowhere is not focus leaving the popup. iOS does not focus a
+    // button on tap: it blurs whatever had focus and reports no relatedTarget,
+    // and the popup opens with focus on its first action -- so every tap on
+    // Stop closed the popup before the click landed, dropping the press on the
+    // row underneath. An outside press is already covered by the pointerdown
+    // listener, Escape by its keydown, and Tab by handleMenuKeyDown.
+    if (!next) return;
     if (menuRef.current?.contains(next) || menuTriggerRef.current?.contains(next)) return;
     transitionActionSurface(IDLE_ACTION_SURFACE, "none");
   }, [transitionActionSurface]);
