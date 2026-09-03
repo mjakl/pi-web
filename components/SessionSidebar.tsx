@@ -3,6 +3,11 @@
 import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import type { SessionInfo } from "@/lib/types";
 import { SESSION_METADATA_BATCH_SIZE, type SessionRowMetadata } from "@/lib/session-metadata-types";
+import {
+  canAcceptInventoryResult,
+  hasSessionRowMetadata,
+  sessionInfoFingerprint as sessionFingerprint,
+} from "@/lib/transcript-refresh";
 import { loadExplorerOpen, saveExplorerOpen } from "@/lib/file-explorer-state";
 import { getProjectActivity, getRecentProjects, sessionsForProject } from "@/lib/project-groups";
 import { workspaceKeyOf } from "@/lib/workspace-memory";
@@ -105,7 +110,8 @@ interface Props {
   onBackgroundTaskDone?: () => void;
   onActiveSessionIdsChange?: (ids: Set<string>) => void;
   onRunningSessionIdsChange?: (ids: Set<string>) => void;
-  onSessionsChange?: (sessions: SessionInfo[]) => void;
+  beginSessionInventoryAttempt: () => number;
+  onSessionsChange?: (sessions: SessionInfo[], inventoryAttempt: number) => void;
   onRefreshSelectedSession?: () => Promise<boolean>;
   actionsAvailable: boolean;
 }
@@ -147,14 +153,6 @@ const LAST_CUSTOM_CWD_STORAGE_KEY = "pi-web:last-custom-cwd";
 const RUNNING_SESSIONS_POLL_MS = 2500;
 const SESSION_METADATA_RETRY_DELAY_MS = 1000;
 const SESSION_METADATA_OVERSCAN_PX = SESSION_ITEM_HEIGHT * 2;
-
-function sessionFingerprint(session: SessionInfo): string | null {
-  return session.fileSize === undefined ? null : `${session.modified}\0${session.fileSize}`;
-}
-
-function hasSessionRowMetadata(session: SessionInfo): boolean {
-  return typeof session.messageCount === "number" && typeof session.firstMessage === "string";
-}
 
 function loadLastCustomCwd(): string {
   if (typeof window === "undefined") return "";
@@ -274,7 +272,7 @@ function AnimatedDropdown({ open, children, style }: { open: boolean; children: 
   );
 }
 
-export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, onSessionsChange, onRefreshSelectedSession, actionsAvailable }: Props) {
+export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, beginSessionInventoryAttempt, onSessionsChange, onRefreshSelectedSession, actionsAvailable }: Props) {
   const { t } = useI18n();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [inventoryRevision, setInventoryRevision] = useState(0);
@@ -324,6 +322,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
   const sessionListRef = useRef<HTMLDivElement>(null);
   const metadataQueueRef = useRef<Map<string, SessionInfo>>(new Map());
   const metadataLoadedRef = useRef<Map<string, string>>(new Map());
+  const acceptedInventoryAttemptRef = useRef(0);
   const metadataRequestRunningRef = useRef(false);
   const metadataAbortRef = useRef<AbortController | null>(null);
   const metadataStaleRefreshRef = useRef<Set<string>>(new Set());
@@ -473,6 +472,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
     force = false,
     showSuccess = !showLoading,
   ): Promise<boolean> => {
+    const inventoryAttempt = beginSessionInventoryAttempt();
     try {
       if (showLoading) setLoading(true);
       const res = await fetch(force ? "/api/sessions?force=1" : "/api/sessions", {
@@ -484,6 +484,8 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
         activeSessionIds?: string[];
         runningSessionIds?: string[];
       };
+      if (!canAcceptInventoryResult(inventoryAttempt, acceptedInventoryAttemptRef.current)) return false;
+      acceptedInventoryAttemptRef.current = inventoryAttempt;
       setAllSessions((current) => {
         const previousById = new Map(current.map((session) => [session.id, session]));
         const nextById = new Map(data.sessions.map((session) => [session.id, session]));
@@ -542,7 +544,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [showSessionRefreshSuccess]);
+  }, [beginSessionInventoryAttempt, showSessionRefreshSuccess]);
 
   const handleSessionRefresh = useCallback(() => {
     const requestId = ++sessionRefreshRequestIdRef.current;
@@ -652,7 +654,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
   }, [onRunningSessionIdsChange, runningSessionIds]);
 
   useEffect(() => {
-    onSessionsChange?.(allSessions);
+    onSessionsChange?.(allSessions, acceptedInventoryAttemptRef.current);
   }, [allSessions, onSessionsChange]);
 
   useEffect(() => {

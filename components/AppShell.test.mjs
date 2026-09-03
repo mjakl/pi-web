@@ -48,6 +48,7 @@ const { createRoot } = await jiti.import("react-dom/client");
 const { AppRouterContext } = await jiti.import("next/dist/shared/lib/app-router-context.shared-runtime.js");
 const { SearchParamsContext } = await jiti.import("next/dist/shared/lib/hooks-client-context.shared-runtime.js");
 const { AppShell } = await jiti.import("./AppShell.tsx");
+const { SessionSidebar } = await jiti.import("./SessionSidebar.tsx");
 
 const router = {
   back() {},
@@ -160,6 +161,59 @@ test("closing the actual sidebar removes its body portal and reopening starts wi
     assert.equal(reopenedTrigger.getAttribute("aria-expanded"), "false");
     await click(reopenedTrigger);
     assert.ok(document.body.querySelector('[role="group"][aria-label="Session actions for Sidebar session"]'));
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("session inventory publishes the token issued before its delayed fetch", async () => {
+  const originalFetch = globalThis.fetch;
+  let completeInventory;
+  globalThis.fetch = async (url) => {
+    if (url === "/api/sessions") {
+      return new Promise((resolve) => { completeInventory = resolve; });
+    }
+    if (url === "/api/home") return Response.json({ home: "/tmp" });
+    if (url === "/api/agent/running") {
+      return Response.json({ activeSessionIds: [], runningSessionIds: [] });
+    }
+    return Response.json({});
+  };
+
+  const publications = [];
+  let nextAttempt = 0;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  try {
+    await act(async () => {
+      root.render(React.createElement(SessionSidebar, {
+        piVersion: "test",
+        selectedSessionId: null,
+        onSelectSession() {},
+        beginSessionInventoryAttempt: () => ++nextAttempt,
+        onSessionsChange: (sessions, inventoryAttempt) => {
+          publications.push({ sessions, inventoryAttempt });
+        },
+        actionsAvailable: true,
+      }));
+      await Promise.resolve();
+    });
+    assert.equal(nextAttempt, 1);
+
+    await act(async () => {
+      completeInventory(Response.json({
+        sessions: [],
+        activeSessionIds: [],
+        runningSessionIds: [],
+      }));
+      await Promise.resolve();
+    });
+
+    assert.equal(publications.at(-1).inventoryAttempt, 1);
   } finally {
     await act(() => root.unmount());
     container.remove();

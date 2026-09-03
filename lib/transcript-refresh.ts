@@ -28,6 +28,87 @@ export interface BranchContextRequest {
   runId: number;
 }
 
+export interface SelectedSessionMetadataAuthority {
+  sessionId: string;
+  fingerprint: string | null;
+  inventoryFloor: number;
+}
+
+export interface SelectedSessionMetadataState {
+  session: SessionInfo | null;
+  authority: SelectedSessionMetadataAuthority | null;
+}
+
+export function sessionInfoFingerprint(
+  session: Pick<SessionInfo, "fileSize" | "modified">,
+): string | null {
+  return session.fileSize === undefined ? null : `${session.modified}\0${session.fileSize}`;
+}
+
+export function hasSessionRowMetadata(session: SessionInfo): boolean {
+  return typeof session.messageCount === "number" && typeof session.firstMessage === "string";
+}
+
+export function acceptSelectedSessionMetadata(
+  current: SelectedSessionMetadataState,
+  updated: SessionInfo,
+  inventoryFloor: number,
+): SelectedSessionMetadataState {
+  if (current.session?.id !== updated.id) return current;
+  return {
+    session: updated,
+    authority: {
+      sessionId: updated.id,
+      fingerprint: sessionInfoFingerprint(updated),
+      inventoryFloor,
+    },
+  };
+}
+
+export function reconcileSelectedSessionInventory(
+  current: SelectedSessionMetadataState,
+  incoming: SessionInfo | undefined,
+  inventoryAttempt: number,
+): SelectedSessionMetadataState {
+  const { session } = current;
+  const fingerprint = session ? sessionInfoFingerprint(session) : null;
+  const authority = current.authority
+    && session
+    && current.authority.sessionId === session.id
+    && current.authority.fingerprint === fingerprint
+    && (fingerprint !== null || session.transient)
+    ? current.authority
+    : null;
+
+  if (authority && inventoryAttempt <= authority.inventoryFloor) {
+    return { session, authority };
+  }
+  if (!session || !incoming) return { session, authority: null };
+
+  const incomingFingerprint = sessionInfoFingerprint(incoming);
+  const preserveMetadata = incomingFingerprint !== null && incomingFingerprint === fingerprint;
+  const incomingHydrated = hasSessionRowMetadata(incoming);
+  return {
+    session: {
+      ...session,
+      ...incoming,
+      fileSize: incoming.fileSize,
+      name: incomingHydrated ? incoming.name : preserveMetadata ? session.name : undefined,
+      messageCount: incomingHydrated
+        ? incoming.messageCount
+        : preserveMetadata ? session.messageCount : undefined,
+      firstMessage: incomingHydrated
+        ? incoming.firstMessage
+        : preserveMetadata ? session.firstMessage : undefined,
+    },
+    authority: null,
+  };
+}
+
+export function canAcceptInventoryResult(attempt: number, acceptedAttempt: number): boolean {
+  return attempt > acceptedAttempt;
+}
+
 export function canAcceptPersistedSnapshot(
   request: PersistedSnapshotRequest,
   current: PersistedAuthority,
@@ -150,9 +231,9 @@ export async function runTranscriptNavigation(
 }
 
 export async function runSessionLoadPhases<T>(
-  loadTranscript: () => Promise<boolean>,
+  loadTranscript: () => Promise<unknown>,
   loadState?: () => Promise<T>,
 ): Promise<T | null> {
-  if (!await loadTranscript() || !loadState) return null;
-  return loadState();
+  await loadTranscript();
+  return loadState ? loadState() : null;
 }
