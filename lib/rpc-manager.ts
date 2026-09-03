@@ -12,6 +12,7 @@ import {
   createProjectCommandBashOperations,
   preferUserBashExtension,
 } from "./project-command-env";
+import { extractTextContent, sessionTitleFromFirstMessage } from "./session-metadata";
 import { cacheSessionPath } from "./session-reader";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
 import { persistExplicitStartupPreferences } from "./startup-preferences";
@@ -1767,16 +1768,6 @@ export async function setRpcSessionTools(
   }
 }
 
-function runtimeMessageText(entry: SessionMessageEntry): string {
-  if (entry.message.role === "bashExecution") return "";
-  const content = entry.message.content;
-  if (typeof content === "string") return content;
-  return content
-    .map((block) => block.type === "text" ? block.text : "")
-    .filter(Boolean)
-    .join(" ");
-}
-
 function runtimeMessageActivityMs(entry: SessionMessageEntry): number | undefined {
   if (entry.message.role !== "user" && entry.message.role !== "assistant") return undefined;
   if (typeof entry.message.timestamp === "number") return entry.message.timestamp;
@@ -1826,7 +1817,7 @@ export function getRpcSessionInfos(): SessionInfo[] {
       created,
       modified: new Date(lastActivityMs).toISOString(),
       messageCount: messages.length,
-      firstMessage: firstUserMessage ? runtimeMessageText(firstUserMessage) || "(no messages)" : "(no messages)",
+      firstMessage: sessionTitleFromFirstMessage(firstUserMessage ? extractTextContent(firstUserMessage.message) : ""),
       transient: !persisted,
     });
   }
