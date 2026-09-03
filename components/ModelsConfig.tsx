@@ -18,7 +18,7 @@ import {
   type HeaderRow,
   type ModelCostDraft,
   type ModelCostKey,
-} from "./models-config-helpers";
+} from "@/lib/models-config-helpers";
 import {
   ConfigButton,
   ConfigDetail,

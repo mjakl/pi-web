@@ -3,17 +3,7 @@
 import { useState } from "react";
 import { getFileIcon } from "./FileIcons";
 import { useI18n } from "@/hooks/useI18n";
-import type { FileViewerDisplayMode, FileViewerState } from "@/lib/file-viewer-state";
-
-export interface Tab {
-  id: string;
-  label: string;
-  filePath: string;
-  sourceSessionId?: string | null;
-  initialDisplayMode?: FileViewerDisplayMode;
-  viewerState?: FileViewerState;
-  viewerRevision?: number;
-}
+import type { Tab } from "@/lib/file-tab-state";
 
 interface Props {
   tabs: Tab[];

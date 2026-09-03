@@ -1,5 +1,14 @@
-import type { FileViewerState } from "@/lib/file-viewer-state";
-import type { Tab } from "./TabBar";
+import type { FileViewerDisplayMode, FileViewerState } from "./file-viewer-state";
+
+export interface Tab {
+  id: string;
+  label: string;
+  filePath: string;
+  sourceSessionId?: string | null;
+  initialDisplayMode?: FileViewerDisplayMode;
+  viewerState?: FileViewerState;
+  viewerRevision?: number;
+}
 
 interface OpenFileTabInput {
   fileName: string;
