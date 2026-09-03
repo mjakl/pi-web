@@ -82,3 +82,31 @@ test("other streamed previews are nosniff without a document policy", async (t) 
   assert.equal(response.headers.get("Content-Security-Policy"), null);
   assert.deepEqual(body, png);
 });
+
+test("rejects a path-like sessionId reference for a file outside the allowed roots", async (t) => {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-web-stream-route-agent-"));
+  const outside = await realpath(await mkdtemp(join(tmpdir(), "pi-web-stream-route-outside-")));
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  const previousRoots = globalThis.__piAdditionalAllowedRoots;
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  globalThis.__piAdditionalAllowedRoots = undefined;
+  t.after(async () => {
+    if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    globalThis.__piAdditionalAllowedRoots = previousRoots;
+    await rm(agentDir, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  });
+  await mkdir(join(agentDir, "sessions"));
+  const filePath = join(outside, "secret.txt");
+  await writeFile(filePath, "secret");
+
+  const sessionId = encodeURIComponent("../../sessions/foo");
+  const response = await GET(
+    new NextRequest(`http://localhost/api/files${filePath}?type=read&sessionId=${sessionId}`),
+    { params: Promise.resolve({ path: filePath.split("/").filter(Boolean) }) },
+  );
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "Access denied" });
+});

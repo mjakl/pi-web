@@ -3,7 +3,7 @@ import {
   buildContextEntries as piBuildContextEntries,
   getAgentDir,
 } from "@earendil-works/pi-coding-agent";
-import { closeSync, type Dirent, existsSync, openSync, readSync, statSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import { closeSync, type Dirent, existsSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from "fs";
 import { readdir } from "fs/promises";
 import { dirname, isAbsolute, join, normalize as normalizePath, relative, resolve as resolvePath, sep } from "path";
 import type { AgentMessage, ImageContent, SessionEntry, SessionHeader, SessionInfo, SessionContext } from "./types";
