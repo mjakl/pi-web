@@ -22,8 +22,10 @@ import type { SessionStatsInfo } from "@/lib/pi-types";
 import { mergeSessionStats, type SessionFileStats } from "@/lib/session-stats";
 import { userMessageKey } from "@/lib/prompt-recovery";
 import {
+  getPersistedThinkingLevel,
   isCurrentTranscriptRefresh,
   mergeTranscriptRefreshMessages,
+  runSessionLoadPhases,
   runTranscriptNavigation,
   type TranscriptRefreshVersion,
 } from "@/lib/transcript-refresh";
@@ -291,6 +293,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const thinkingLevelOverrideRef = useRef<Exclude<ThinkingLevelOption, "auto"> | null>(null);
   const promptRunIdRef = useRef(0);
   const sessionLoadRequestIdRef = useRef(0);
+  const sessionStateLoadRequestIdRef = useRef(0);
   const transcriptRevisionRef = useRef(0);
   const optimisticUserMessageKeyRef = useRef<string | null>(null);
   const modelSwitchPendingRef = useRef(false);
@@ -400,58 +403,75 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const loadSession = useCallback(async (sid: string, showLoading = false, includeState = false) => {
     const loadRunId = promptRunIdRef.current;
     const requestId = ++sessionLoadRequestIdRef.current;
+    const stateRequestId = includeState ? ++sessionStateLoadRequestIdRef.current : null;
     const isCurrentLoad = () => (
       sessionHookMountedRef.current
       && sessionIdRef.current === sid
       && promptRunIdRef.current === loadRunId
       && sessionLoadRequestIdRef.current === requestId
     );
-    let messagesLoaded = false;
-    try {
-      if (showLoading) setLoading(true);
-      const params = new URLSearchParams({ deferThinking: "1", deferMedia: "1" });
-      const res = await fetch(`/api/sessions/${encodeURIComponent(sid)}?${params}`);
-      if (!isCurrentLoad()) return null;
-      if (res.status === 404) {
-        if (showLoading) {
-          setData(null);
-          setActiveLeafId(null);
-          setMessages([]);
-          setEntryIds([]);
-          setHistoryCursor(null);
-          setHasEarlierMessages(false);
-          setError(null);
+    const isCurrentStateLoad = () => (
+      stateRequestId !== null
+      && sessionHookMountedRef.current
+      && sessionIdRef.current === sid
+      && promptRunIdRef.current === loadRunId
+      && sessionStateLoadRequestIdRef.current === stateRequestId
+    );
+
+    return runSessionLoadPhases(async () => {
+      let messagesLoaded = false;
+      try {
+        if (showLoading) setLoading(true);
+        const params = new URLSearchParams({ deferThinking: "1", deferMedia: "1" });
+        const res = await fetch(`/api/sessions/${encodeURIComponent(sid)}?${params}`);
+        if (!isCurrentLoad()) return isCurrentStateLoad();
+        if (res.status === 404) {
+          if (showLoading) {
+            setData(null);
+            setActiveLeafId(null);
+            setMessages([]);
+            setEntryIds([]);
+            setHistoryCursor(null);
+            setHasEarlierMessages(false);
+            setError(null);
+          }
+          return false;
         }
-        return null;
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const d = await res.json() as SessionData;
-      if (!isCurrentLoad()) return null;
-      const persistedMessages = d.context.messages;
-      transcriptRevisionRef.current += 1;
-      dataRef.current = d;
-      setData(d);
-      setActiveLeafId(d.leafId);
-      setMessages(persistedMessages);
-      setEntryIds(d.context.entryIds ?? []);
-      setHistoryCursor(d.context.oldestEntryId);
-      setHasEarlierMessages(d.context.hasMore);
-      setToolPresetState(d.toolNames !== undefined ? getPresetFromToolNames(d.toolNames) : "default");
-      setCurrentModelOverride((current) => modelSwitchPendingRef.current ? current : null);
-      setError(null);
-      if (d.context.thinkingLevel && d.context.thinkingLevel !== "off") {
-        setThinkingLevel(d.context.thinkingLevel as ThinkingLevelOption);
-      }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const d = await res.json() as SessionData;
+        if (!isCurrentLoad()) return isCurrentStateLoad();
+        const persistedMessages = d.context.messages;
+        transcriptRevisionRef.current += 1;
+        dataRef.current = d;
+        setData(d);
+        setActiveLeafId(d.leafId);
+        setMessages(persistedMessages);
+        setEntryIds(d.context.entryIds ?? []);
+        setHistoryCursor(d.context.oldestEntryId);
+        setHasEarlierMessages(d.context.hasMore);
+        setToolPresetState(d.toolNames !== undefined ? getPresetFromToolNames(d.toolNames) : "default");
+        setCurrentModelOverride((current) => modelSwitchPendingRef.current ? current : null);
+        setError(null);
+        const persistedThinkingLevel = getPersistedThinkingLevel(d.context.thinkingLevel);
+        if (persistedThinkingLevel) setThinkingLevel(persistedThinkingLevel as ThinkingLevelOption);
 
-      messagesLoaded = true;
-      if (showLoading) setLoading(false);
-      if (!includeState) return null;
-
+        messagesLoaded = true;
+        if (showLoading) setLoading(false);
+        return true;
+      } catch (e) {
+        if (!isCurrentLoad()) return isCurrentStateLoad();
+        setError(String(e));
+        return false;
+      } finally {
+        if (showLoading && !messagesLoaded) setLoading(false);
+      }
+    }, includeState ? async () => {
+      if (!isCurrentStateLoad()) return null;
       try {
         const stateRes = await fetch(`/api/sessions/${encodeURIComponent(sid)}/state`);
         if (!stateRes.ok) throw new Error(`HTTP ${stateRes.status}`);
         const agentState = await stateRes.json() as { active: boolean; running: boolean; state?: AgentStateResponse };
-        if (!isCurrentLoad()) return null;
+        if (!isCurrentStateLoad()) return null;
 
         const liveState = agentState.state;
         if (liveState) {
@@ -469,12 +489,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         console.error("Failed to load agent state:", e);
         return null;
       }
-    } catch (e) {
-      if (isCurrentLoad()) setError(String(e));
-      return null;
-    } finally {
-      if (showLoading && !messagesLoaded) setLoading(false);
-    }
+    } : undefined);
   }, [setToolPresetState]);
 
   const loadContext = useCallback(async (sid: string, leafId: string | null, before?: string | null) => {
@@ -519,6 +534,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const invalidateTranscriptRequests = useCallback(() => {
     sessionLoadRequestIdRef.current += 1;
+    sessionStateLoadRequestIdRef.current += 1;
     transcriptRevisionRef.current += 1;
   }, []);
 
@@ -766,6 +782,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       dataRef.current = refreshed;
       setData(refreshed);
       setActiveLeafId(refreshed.leafId);
+      const persistedThinkingLevel = getPersistedThinkingLevel(refreshed.context.thinkingLevel);
+      if (persistedThinkingLevel) setThinkingLevel(persistedThinkingLevel as ThinkingLevelOption);
       setMessages((current) => mergeTranscriptRefreshMessages(
         refreshed.context.messages,
         current,

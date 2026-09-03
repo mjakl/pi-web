@@ -68,6 +68,18 @@ export function mergeTranscriptRefreshMessages(
     : [...persisted, ...liveTail.slice(liveIndex)];
 }
 
+export function getPersistedThinkingLevel(level: string): string | null {
+  return level || null;
+}
+
+export async function runSessionLoadPhases<T>(
+  loadTranscript: () => Promise<boolean>,
+  loadState?: () => Promise<T>,
+): Promise<T | null> {
+  if (!await loadTranscript() || !loadState) return null;
+  return loadState();
+}
+
 export async function runTranscriptNavigation(
   invalidate: () => void,
   navigate: () => Promise<unknown>,
