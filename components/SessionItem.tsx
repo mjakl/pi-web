@@ -165,12 +165,16 @@ export function SessionItem({
   const menuHadFocusRef = useRef(false);
   const pendingFocusRef = useRef<FocusPolicy>("none");
   const renderedSurfaceRef = useRef(actionSurface);
+  const actionsAvailableRef = useRef(actionsAvailable);
+  const hasActionsRef = useRef(false);
   const menuId = useId();
   const stopDescriptionId = `${menuId}-stop-description`;
   const deleteDescriptionId = `${menuId}-delete-description`;
   const eligibleForActions = isActive || !session.transient;
   const hasActions = actionsAvailable && eligibleForActions;
   const renderedSurface = actionsAvailable ? actionSurface : IDLE_ACTION_SURFACE;
+  actionsAvailableRef.current = actionsAvailable;
+  hasActionsRef.current = hasActions;
   renderedSurfaceRef.current = renderedSurface;
   const menuPosition = renderedSurface.kind === "menu" ? renderedSurface.position : undefined;
   const menuEligibilityValid = !menuPosition
@@ -178,13 +182,19 @@ export function SessionItem({
       && menuPosition.transient === Boolean(session.transient));
 
   const transitionActionSurface = useCallback((next: ActionSurface, focus: FocusPolicy) => {
-    renderedSurfaceRef.current = actionsAvailable ? next : IDLE_ACTION_SURFACE;
-    pendingFocusRef.current = focus === "trigger-if-owned"
-      ? (menuHadFocusRef.current && hasActions ? "trigger" : "none")
-      : focus;
+    const actionsAvailableNow = actionsAvailableRef.current;
+    const hasActionsNow = hasActionsRef.current;
+    renderedSurfaceRef.current = actionsAvailableNow ? next : IDLE_ACTION_SURFACE;
+    if (!actionsAvailableNow || (focus === "trigger" && !hasActionsNow)) {
+      pendingFocusRef.current = "none";
+    } else if (focus === "trigger-if-owned") {
+      pendingFocusRef.current = menuHadFocusRef.current && hasActionsNow ? "trigger" : "none";
+    } else {
+      pendingFocusRef.current = focus;
+    }
     menuHadFocusRef.current = false;
     setActionSurface(next);
-  }, [actionsAvailable, hasActions]);
+  }, []);
 
   useLayoutEffect(() => {
     if (!actionsAvailable) {
@@ -270,11 +280,12 @@ export function SessionItem({
     // a skill-invoked session stays a no-op instead of persisting raw XML.)
     if (renameValue === title || name === (session.name ?? "")) return;
     try {
-      await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, {
+      const response = await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       onRenamed?.();
     } catch {
       // ignore
@@ -283,18 +294,20 @@ export function SessionItem({
 
   const performStop = useCallback(async () => {
     if (!isActive) return;
-    transitionActionSurface(IDLE_ACTION_SURFACE, "none");
+    if (!session.transient) transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     setStopping(true);
     try {
       const response = await fetch(`/api/agent/${encodeURIComponent(session.id)}`, { method: "DELETE" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (session.transient) transitionActionSurface(IDLE_ACTION_SURFACE, "none");
       onStopped?.(session.id);
     } catch {
-      // The active marker remains, so the user can try again.
+      // Transient sessions keep their trigger only when Stop fails.
+      if (session.transient) transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     } finally {
       setStopping(false);
     }
-  }, [isActive, onStopped, session.id, transitionActionSurface]);
+  }, [isActive, onStopped, session.id, session.transient, transitionActionSurface]);
 
   const handleStopConfirm = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -303,13 +316,15 @@ export function SessionItem({
 
   const performDelete = useCallback(async () => {
     if (session.transient) return;
-    transitionActionSurface(IDLE_ACTION_SURFACE, "none");
     setDeleting(true);
     try {
-      await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "DELETE" });
+      const response = await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      transitionActionSurface(IDLE_ACTION_SURFACE, "none");
       onDeleted?.(session.id);
     } catch {
       setDeleting(false);
+      transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     }
   }, [session.id, session.transient, onDeleted, transitionActionSurface]);
 

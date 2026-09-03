@@ -219,6 +219,173 @@ test("Stop and Delete move focus into confirmation, then Cancel restores the act
   }
 });
 
+test("successful Stop restores focus to the persisted session trigger", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 200 });
+  let stopped = false;
+  const view = await mountItem(baseSession, { isActive: true, onStopped: () => { stopped = true; } });
+  try {
+    await click(view.container.querySelector("button[aria-controls]"));
+    await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Stop"));
+    const confirm = [...view.container.querySelectorAll("button")].find((button) => button.textContent.trim() === "Stop");
+    confirm.focus();
+    await click(confirm);
+
+    assert.equal(stopped, true);
+    assert.equal(document.activeElement, view.container.querySelector("button[aria-controls]"));
+  } finally {
+    await view.unmount();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Stop bypass restores focus when the persisted trigger remains", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 200 });
+  const view = await mountItem(baseSession, { isActive: true });
+  const trigger = view.container.querySelector("button[aria-controls]");
+  let focused;
+  try {
+    await click(trigger);
+    const stop = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Stop");
+    stop.focus();
+    await click(stop, { shiftKey: true });
+    focused = document.activeElement;
+  } finally {
+    await view.unmount();
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(focused, trigger);
+});
+
+test("failed destructive actions restore focus when their trigger remains", async () => {
+  const originalFetch = globalThis.fetch;
+  const cases = [
+    {
+      action: "Stop",
+      session: { ...baseSession, transient: true },
+      response: () => new Response(null, { status: 500 }),
+    },
+    {
+      action: "Delete",
+      session: baseSession,
+      response: () => { throw new Error("network failure"); },
+    },
+  ];
+
+  const focusResults = [];
+  try {
+    for (const scenario of cases) {
+      globalThis.fetch = async () => scenario.response();
+      const view = await mountItem(scenario.session, { isActive: true });
+      const trigger = view.container.querySelector("button[aria-controls]");
+      try {
+        await click(trigger);
+        const action = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === scenario.action);
+        action.focus();
+        await click(action, { shiftKey: true });
+        focusResults.push([document.activeElement, trigger]);
+      } finally {
+        await view.unmount();
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  for (const [focused, trigger] of focusResults) assert.equal(focused, trigger);
+});
+
+test("Delete treats 404 and 500 responses as failures", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const status of [404, 500]) {
+      globalThis.fetch = async () => new Response(null, { status });
+      let deleted = false;
+      const view = await mountItem(baseSession, { isActive: true, onDeleted: () => { deleted = true; } });
+      const trigger = view.container.querySelector("button[aria-controls]");
+      let focused;
+      try {
+        await click(trigger);
+        await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Delete"));
+        const confirm = [...view.container.querySelectorAll("button")].find((button) => button.textContent.trim() === "Delete");
+        confirm.focus();
+        await click(confirm);
+        focused = document.activeElement;
+      } finally {
+        await view.unmount();
+      }
+      assert.equal(deleted, false);
+      assert.equal(focused, trigger);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Rename does not report success for a non-2xx response", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 500 });
+  let renamed = false;
+  const view = await mountItem(baseSession, { onRenamed: () => { renamed = true; } });
+  try {
+    await click(view.container.querySelector("button[aria-controls]"));
+    await click([...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Rename"));
+    const input = view.container.querySelector("input");
+    await act(() => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, "New name");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    assert.equal(renamed, false);
+    assert.equal(document.activeElement, view.container.querySelector("button[aria-controls]"));
+  } finally {
+    await view.unmount();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("delayed failures cannot restore focus after actions become unavailable", async () => {
+  const originalFetch = globalThis.fetch;
+  const outside = document.createElement("button");
+  document.body.append(outside);
+  try {
+    for (const scenario of [
+      { action: "Stop", session: { ...baseSession, transient: true } },
+      { action: "Delete", session: baseSession },
+    ]) {
+      let finishRequest;
+      globalThis.fetch = () => new Promise((resolve) => { finishRequest = resolve; });
+      const view = await mountItem(scenario.session, { isActive: true });
+      try {
+        await click(view.container.querySelector("button[aria-controls]"));
+        const action = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === scenario.action);
+        action.focus();
+        await click(action, { shiftKey: true });
+
+        await view.rerender(scenario.session, { isActive: true, actionsAvailable: false });
+        outside.focus();
+        await act(async () => {
+          finishRequest(new Response(null, { status: 500 }));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        assert.equal(document.activeElement, outside);
+
+        await view.rerender(scenario.session, { isActive: true, actionsAvailable: true });
+        assert.equal(document.activeElement, outside);
+      } finally {
+        await view.unmount();
+      }
+    }
+  } finally {
+    outside.remove();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Rename Escape restores the action trigger", async () => {
   const view = await mountItem(baseSession);
   try {
