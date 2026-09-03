@@ -581,6 +581,29 @@ test("popup scrolling stays open and focused while outside scrolling closes with
   }
 });
 
+test("a window scroll that moves nothing keeps the popup mounted", async () => {
+  // iOS fires a window-level scroll alongside the resize for every URL-bar and
+  // keyboard animation. Nothing moved, so dismissing there dropped the press
+  // onto the row the popup was covering instead of running Stop.
+  const view = await mountItem(baseSession, { isActive: true });
+  try {
+    const trigger = view.container.querySelector("button[aria-controls]");
+    await click(trigger);
+    const group = document.querySelector('[role="group"]');
+    const action = group.querySelector("button");
+    action.focus();
+
+    await act(() => window.dispatchEvent(new Event("scroll")));
+    assert.equal(document.querySelector('[role="group"]') === group, true);
+    assert.equal(document.activeElement === action, true);
+
+    await act(() => document.dispatchEvent(new Event("scroll")));
+    assert.equal(document.querySelector('[role="group"]') === group, true);
+  } finally {
+    await view.unmount();
+  }
+});
+
 test("a resize keeps the popup mounted so a press already under way still lands", async () => {
   // A phone fires resize for every URL-bar and keyboard animation. Unmounting
   // the popup mid-tap sent the press through to the row underneath instead of

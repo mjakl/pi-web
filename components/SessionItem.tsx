@@ -266,6 +266,13 @@ export function SessionItem({
     const dismissOnScroll = (event: Event) => {
       const target = event.target;
       if (target instanceof Node && menuRef.current?.contains(target)) return;
+      // Only a scroll container that actually holds the trigger moves it out
+      // from under the popup. A window- or document-level scroll moves
+      // nothing, and iOS fires one alongside the resize for every URL-bar and
+      // keyboard animation -- dismissing there drops the press already under
+      // way onto whichever row the popup was covering.
+      const trigger = menuTriggerRef.current;
+      if (!trigger || target === document || !(target instanceof Node) || !target.contains(trigger)) return;
       transitionActionSurface(IDLE_ACTION_SURFACE, "trigger-if-owned");
     };
 
