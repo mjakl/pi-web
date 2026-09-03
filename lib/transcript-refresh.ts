@@ -2,46 +2,68 @@ import type { AgentMessage, SessionContext, SessionInfo } from "./types";
 import { userMessageKey } from "./prompt-recovery";
 import { getPresetFromToolNames } from "./tool-presets";
 
-export interface SessionLoadVersion {
-  requestId: number;
+export interface PersistedAuthority {
+  acceptedSnapshotOrder: number;
+  acceptedTranscriptOrder: number;
   sessionId: string;
   runId: number;
 }
 
-export interface TranscriptRefreshVersion {
-  requestId: number;
-  snapshotRequestId: number;
+export interface PersistedSnapshotRequest {
+  order: number;
   sessionId: string;
   runId: number;
 }
 
-export function advancePersistedSnapshotVersion(current: {
-  requestId: number;
-  transcriptRevision: number;
-}) {
-  return {
-    requestId: current.requestId + 1,
-    transcriptRevision: current.transcriptRevision + 1,
-  };
+export interface PaginationRequest {
+  order: number;
+  sessionId: string;
+  transcriptBaseline: number;
+  refreshOrder: number;
 }
 
-export function isCurrentSessionLoad(
-  request: SessionLoadVersion,
-  current: SessionLoadVersion,
-): boolean {
-  return request.requestId === current.requestId
-    && request.sessionId === current.sessionId
-    && request.runId === current.runId;
+export interface BranchContextRequest {
+  intentOrder: number;
+  sessionId: string;
+  runId: number;
 }
 
-export function isCurrentTranscriptRefresh(
-  request: TranscriptRefreshVersion,
-  current: TranscriptRefreshVersion,
+export function canAcceptPersistedSnapshot(
+  request: PersistedSnapshotRequest,
+  current: PersistedAuthority,
+  latestRequestOrder: number,
 ): boolean {
-  return request.requestId === current.requestId
-    && request.snapshotRequestId === current.snapshotRequestId
+  return request.order === latestRequestOrder
     && request.sessionId === current.sessionId
-    && request.runId === current.runId;
+    && request.runId === current.runId
+    && request.order >= current.acceptedSnapshotOrder
+    && request.order >= current.acceptedTranscriptOrder;
+}
+
+export function canAcceptPagination(
+  request: PaginationRequest,
+  current: Pick<PersistedAuthority, "sessionId" | "acceptedTranscriptOrder"> & { latestRefreshOrder: number },
+): boolean {
+  return request.sessionId === current.sessionId
+    && request.transcriptBaseline === current.acceptedTranscriptOrder
+    && request.refreshOrder === current.latestRefreshOrder;
+}
+
+export function canAcceptBranchContext(
+  request: BranchContextRequest,
+  current: PersistedAuthority,
+): boolean {
+  return request.sessionId === current.sessionId
+    && request.runId === current.runId
+    && request.intentOrder === current.acceptedTranscriptOrder;
+}
+
+export function enqueuePersistedWrite<T>(
+  previous: Promise<void>,
+  write: () => Promise<T>,
+): { result: Promise<T>; settled: Promise<void> } {
+  const result = previous.then(write);
+  return { result, settled: result.then(() => undefined, () => undefined) };
 }
 
 function sameExactMessage(left: AgentMessage, right: AgentMessage): boolean {
@@ -125,15 +147,4 @@ export async function runSessionLoadPhases<T>(
 ): Promise<T | null> {
   if (!await loadTranscript() || !loadState) return null;
   return loadState();
-}
-
-export async function runTranscriptNavigation(
-  invalidate: () => void,
-  navigate: () => Promise<unknown>,
-  loadContext: () => Promise<void>,
-): Promise<void> {
-  invalidate();
-  await navigate();
-  invalidate();
-  await loadContext();
 }
