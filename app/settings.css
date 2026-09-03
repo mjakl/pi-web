@@ -942,6 +942,22 @@
   font-size: 12px;
 }
 
+.settings-number-input {
+  width: 120px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-number-input:focus {
+  border-color: var(--accent);
+}
+
 .settings-general-error {
   margin: 8px 0 0;
   color: #ef4444;

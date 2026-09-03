@@ -24,6 +24,8 @@ interface Props {
   toolPresetControl: ToolPresetControl | null;
   soundEnabled: boolean;
   onSoundToggle: () => void;
+  dumbZoneTokens: number;
+  onDumbZoneTokensChange: (tokens: number) => void;
   onClose: () => void;
   onSessionReloaded: () => void;
 }
@@ -58,7 +60,7 @@ function ThemeIcon({ preference }: { preference: ThemePreference }) {
   return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg>;
 }
 
-function GeneralSettings({ sessionId, toolPresetControl, soundEnabled, onSoundToggle, onSessionReloaded }: Pick<Props, "sessionId" | "toolPresetControl" | "soundEnabled" | "onSoundToggle" | "onSessionReloaded">) {
+function GeneralSettings({ sessionId, toolPresetControl, soundEnabled, onSoundToggle, dumbZoneTokens, onDumbZoneTokensChange, onSessionReloaded }: Pick<Props, "sessionId" | "toolPresetControl" | "soundEnabled" | "onSoundToggle" | "dumbZoneTokens" | "onDumbZoneTokensChange" | "onSessionReloaded">) {
   const { t } = useI18n();
   const { preference, setThemePreference } = useTheme();
   const [preferredToolPreset, setPreferredToolPresetState] = useState(getPreferredToolPreset);
@@ -149,6 +151,26 @@ function GeneralSettings({ sessionId, toolPresetControl, soundEnabled, onSoundTo
       </section>
 
       <section className="settings-general-section">
+        <h3 className="settings-general-heading">{t("settings.dumbZone")}</h3>
+        <p className="settings-general-description">{t("settings.dumbZoneDescription")}</p>
+        <div className="settings-shell-option">
+          <label htmlFor="dumb-zone-tokens">{t("settings.dumbZoneTokenThreshold")}</label>
+          <input
+            id="dumb-zone-tokens"
+            className="settings-number-input"
+            type="number"
+            min="1"
+            step="1000"
+            value={dumbZoneTokens}
+            onChange={(event) => {
+              const tokens = event.currentTarget.valueAsNumber;
+              if (Number.isSafeInteger(tokens) && tokens > 0) onDumbZoneTokensChange(tokens);
+            }}
+          />
+        </div>
+      </section>
+
+      <section className="settings-general-section">
         <h3 className="settings-general-heading">{t("settings.toolSelection")}</h3>
         <p className="settings-general-description">{t("settings.toolSelectionDescription")}</p>
         <div role="radiogroup" aria-label={t("chat.changeToolPreset")} className="settings-theme-options settings-tool-options">
@@ -204,7 +226,7 @@ function GeneralSettings({ sessionId, toolPresetControl, soundEnabled, onSoundTo
   );
 }
 
-export function SettingsPanel({ cwd, sessionId, initialSection, toolPresetControl, soundEnabled, onSoundToggle, onClose, onSessionReloaded }: Props) {
+export function SettingsPanel({ cwd, sessionId, initialSection, toolPresetControl, soundEnabled, onSoundToggle, dumbZoneTokens, onDumbZoneTokensChange, onClose, onSessionReloaded }: Props) {
   const { t } = useI18n();
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [mountedSections, setMountedSections] = useState<ReadonlySet<SettingsSection>>(
@@ -299,7 +321,7 @@ export function SettingsPanel({ cwd, sessionId, initialSection, toolPresetContro
         </div>
 
         <main className="settings-dialog-main">
-          {sectionHost("general", <GeneralSettings sessionId={sessionId} toolPresetControl={toolPresetControl} soundEnabled={soundEnabled} onSoundToggle={onSoundToggle} onSessionReloaded={onSessionReloaded} />)}
+          {sectionHost("general", <GeneralSettings sessionId={sessionId} toolPresetControl={toolPresetControl} soundEnabled={soundEnabled} onSoundToggle={onSoundToggle} dumbZoneTokens={dumbZoneTokens} onDumbZoneTokensChange={onDumbZoneTokensChange} onSessionReloaded={onSessionReloaded} />)}
           {sectionHost("models", <ModelsConfig embedded onClose={onClose} />)}
           {cwd && sectionHost("skills", <SkillsConfig embedded key={cwd} cwd={cwd} onClose={onClose} />)}
           {cwd && sectionHost("plugins", <PluginsConfig embedded key={cwd} cwd={cwd} sessionId={sessionId} onClose={onClose} onReloaded={onSessionReloaded} />)}

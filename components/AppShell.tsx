@@ -57,6 +57,11 @@ import type { SessionStatsInfo } from "@/lib/pi-types";
 import type { FileViewerState } from "@/lib/file-viewer-state";
 import type { ToolEntry } from "@/lib/tool-presets";
 import { getLastSettingsSection, type SettingsSection } from "@/lib/settings-navigation";
+import {
+  getContextWarningLevel,
+  getDumbZoneTokens,
+  setDumbZoneTokens as saveDumbZoneTokens,
+} from "@/lib/context-warning";
 
 type SessionCopyField = "file" | "id" | "projectDir" | "gitBranch" | "gitWorktree";
 const TOP_BAR_ICON_BUTTON_SIZE = 36;
@@ -292,6 +297,12 @@ export function AppShell({ piVersion }: { piVersion: string }) {
   const handleContextUsageChange = useCallback((usage: { percent: number | null; contextWindow: number; tokens: number | null } | null) => {
     setContextUsage(usage);
   }, []);
+  const [dumbZoneTokens, setDumbZoneTokens] = useState(getDumbZoneTokens);
+  const handleDumbZoneTokensChange = useCallback((tokens: number) => {
+    setDumbZoneTokens(tokens);
+    saveDumbZoneTokens(tokens);
+  }, []);
+  const contextWarningLevel = getContextWarningLevel(contextUsage, dumbZoneTokens);
 
   // Single active panel — only one dropdown open at a time
   const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "tools" | "session" | null>(null);
@@ -1231,8 +1242,8 @@ export function AppShell({ piVersion }: { piVersion: string }) {
     let mobileContextText: string | null = null;
     if (contextUsage?.contextWindow) {
       const percent = contextUsage.percent;
-      if (percent !== null && percent > 90) contextColor = "#ef4444";
-      else if (percent !== null && percent > 70) contextColor = "rgba(234,179,8,0.95)";
+      if (contextWarningLevel === "red") contextColor = "#ef4444";
+      else if (contextWarningLevel === "yellow") contextColor = "rgba(234,179,8,0.95)";
       desktopContextText = percent !== null
         ? `${percent.toFixed(0)}% / ${formatCompact(contextUsage.contextWindow)}`
         : `? / ${formatCompact(contextUsage.contextWindow)}`;
@@ -1921,6 +1932,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
               onSessionStatsChange={handleSessionStatsChange}
               onSessionStatsPanelOpen={openSessionStatsPanel}
               onContextUsageChange={handleContextUsageChange}
+              compactWarning={contextWarningLevel !== "none"}
               onOpenFile={handleOpenLinkedFile}
               onToolPresetControlChange={setToolPresetControl}
               soundEnabled={soundEnabled}
@@ -2080,6 +2092,8 @@ export function AppShell({ piVersion }: { piVersion: string }) {
         toolPresetControl={toolPresetControl}
         soundEnabled={soundEnabled}
         onSoundToggle={onSoundToggle}
+        dumbZoneTokens={dumbZoneTokens}
+        onDumbZoneTokensChange={handleDumbZoneTokensChange}
         onClose={() => {
           setSettingsSection(null);
           setModelsRefreshKey((key) => key + 1);

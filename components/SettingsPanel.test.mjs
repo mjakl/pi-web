@@ -22,6 +22,8 @@ function renderGeneral(overrides = {}) {
     },
     soundEnabled: true,
     onSoundToggle() {},
+    dumbZoneTokens: 100_000,
+    onDumbZoneTokensChange() {},
     onClose() {},
     onSessionReloaded() {},
     ...overrides,
@@ -36,6 +38,13 @@ test("renders all tool presets and completion sound in General settings", () => 
   assert.match(html, /role="radio" aria-checked="true"[^>]*><span[^>]*>Read only<\/span>/);
   assert.match(html, /Completion sound/);
   assert.match(html, /role="switch" aria-checked="true" aria-label="Disable completion sound"/);
+});
+
+test("renders the dumb-zone token threshold in General settings", () => {
+  const html = renderGeneral({ dumbZoneTokens: 120_000 });
+
+  assert.match(html, /Dumb zone/);
+  assert.match(html, /type="number"[^>]*value="120000"/);
 });
 
 test("disables session tool changes while the session is busy", () => {

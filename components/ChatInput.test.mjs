@@ -427,6 +427,20 @@ test("rekey keeps a synchronously restored draft when React state is still empty
   clearDraft(sessionKey);
 });
 
+test("highlights Compact in green when context needs attention", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(ChatInput, {
+      onSend() {},
+      onAbort() {},
+      onCompact() {},
+      compactWarning: true,
+      isStreaming: false,
+    }),
+  );
+
+  assert.match(html, /background:rgba\(34,197,94,0\.08\);border:1px solid rgba\(34,197,94,0\.3\);[^>]*color:#22c55e[^>]*aria-label="Compact context"/);
+});
+
 test("renders compact errors above the input as a wrapping alert", () => {
   const error = "Compaction failed: OpenAI API error (403): <html>request forbidden</html>";
   const html = renderToStaticMarkup(
