@@ -145,6 +145,28 @@ test("does not render completed assistant messages with only empty text", () => 
   assert.equal(html, "");
 });
 
+test("renders completed usage tokens without dollar cost", () => {
+  const html = renderMessage({
+    role: "assistant",
+    provider: "openai",
+    model: "gpt-test",
+    content: [{ type: "text", text: "Done" }],
+    usage: {
+      input: 1234,
+      output: 56,
+      cacheRead: 78,
+      cacheWrite: 9,
+      cost: { total: 1.2345 },
+    },
+  });
+
+  assert.match(html, /1,234 in/);
+  assert.match(html, /56 out/);
+  assert.match(html, /78 cache R/);
+  assert.match(html, /9 cache W/);
+  assert.doesNotMatch(html, /\$1\.2345/);
+});
+
 test("renders a complete SDK skill expansion as a compact command", () => {
   const html = renderMessage({
     role: "user",

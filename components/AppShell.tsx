@@ -243,7 +243,7 @@ export function AppShell() {
     setSystemInfoLoading(false);
   }, []);
 
-  // Session stats (tokens + cost) — populated by ChatWindow, displayed in top bar
+  // Session stats — populated by ChatWindow, displayed in the top bar and info panel
   const [sessionStats, setSessionStats] = useState<SessionStatsInfo | null>(null);
   const handleSessionStatsChange = useCallback((stats: SessionStatsInfo | null) => {
     setSessionStats(stats);
@@ -1216,14 +1216,11 @@ export function AppShell() {
     if (!mobile && (!showChat || (!sessionStats && !contextUsage))) return null;
 
     const tokens = sessionStats?.tokens;
-    const cost = sessionStats?.cost ?? 0;
     const formatCompact = (value: number) => value >= 1_000_000
       ? `${(value / 1_000_000).toFixed(1)}M`
       : value >= 1000
         ? `${(value / 1000).toFixed(0)}k`
         : String(value);
-    const costText = cost > 0 ? (cost >= 0.01 ? `$${cost.toFixed(2)}` : `<$0.01`) : null;
-
     let contextColor = "var(--text-muted)";
     let desktopContextText: string | null = null;
     let mobileContextText: string | null = null;
@@ -1243,7 +1240,6 @@ export function AppShell() {
       tooltipParts.push(`out: ${tokens.output.toLocaleString("en")}`);
       tooltipParts.push(`cache read: ${tokens.cacheRead.toLocaleString("en")}`);
       tooltipParts.push(`cache write: ${tokens.cacheWrite.toLocaleString("en")}`);
-      if (cost > 0) tooltipParts.push(`cost: $${cost.toFixed(4)}`);
     }
     if (contextUsage?.contextWindow) {
       const percent = contextUsage.percent;
@@ -1253,7 +1249,6 @@ export function AppShell() {
     const covered = mobile && isNarrowMobile && mobileToolbarMoreOpen;
     const hasMobileValues = Boolean(
       (tokens && (tokens.input > 0 || tokens.output > 0))
-      || costText
       || mobileContextText,
     );
 
@@ -1314,11 +1309,6 @@ export function AppShell() {
                 {formatCompact(tokens.output)}
               </span>
             )}
-            {costText && (
-              <span className="mobile-session-stat-cost" style={{ color: "var(--text)", fontWeight: 500, flexShrink: 0 }}>
-                {costText}
-              </span>
-            )}
             {mobileContextText && (
               <span style={{ color: contextColor, flexShrink: 0 }}>
                 {mobileContextText}
@@ -1354,11 +1344,6 @@ export function AppShell() {
                   <path d="M8.5 5a3.5 3.5 0 1 1-1-2.45" /><polyline points="6.5 1.5 8.5 2.5 7.5 4.5" />
                 </svg>
                 {formatCompact(tokens.cacheRead)}
-              </span>
-            )}
-            {costText && (
-              <span style={{ display: "flex", alignItems: "center", color: "var(--text)", fontWeight: 500 }}>
-                {costText}
               </span>
             )}
             {desktopContextText && (
@@ -1477,11 +1462,6 @@ export function AppShell() {
       }
       @container (max-width: 158px) {
         .mobile-session-stat-io {
-          display: none !important;
-        }
-      }
-      @container (max-width: 88px) {
-        .mobile-session-stat-cost {
           display: none !important;
         }
       }
@@ -1744,7 +1724,6 @@ export function AppShell() {
                     const ctx = contextUsage ?? sessionStats.contextUsage;
                     const formatCompact = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(0)}k` : String(n);
                     const extraTokenRows = [
-                       ...(sessionStats.cost > 0 ? [[translate("session.cost"), `$${sessionStats.cost.toFixed(4)}`]] : []),
                        ...(ctx?.contextWindow ? [[translate("session.context"), `${ctx.percent !== null ? `${ctx.percent.toFixed(1)}%` : "?"} / ${formatCompact(ctx.contextWindow)}`]] : []),
                        // Cache hit rate = cache reads / (input + cache writes + cache reads) — the denominator covers all input-class tokens.
                        ...(sessionStats.tokens.cacheRead + sessionStats.tokens.cacheWrite > 0 && sessionStats.tokens.cacheRead + sessionStats.tokens.cacheWrite + sessionStats.tokens.input > 0
