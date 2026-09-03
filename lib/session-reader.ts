@@ -433,7 +433,7 @@ export function getSessionEntries(filePath: string): SessionEntry[] {
 }
 
 function getSessionSettings(entries: SessionEntry[], leafId?: string | null): Pick<SessionContext, "thinkingLevel" | "model"> {
-  if (leafId === null) return { thinkingLevel: "off", model: null };
+  if (leafId === null) return { thinkingLevel: null, model: null };
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
   let current = leafId ? byId.get(leafId) : undefined;
   current ??= entries[entries.length - 1];
@@ -455,7 +455,7 @@ function getSessionSettings(entries: SessionEntry[], leafId?: string | null): Pi
     current = current.parentId ? byId.get(current.parentId) : undefined;
   }
 
-  return { thinkingLevel: thinkingLevel ?? "off", model: model ?? null };
+  return { thinkingLevel: thinkingLevel ?? null, model: model ?? null };
 }
 
 export interface BuildSessionContextOptions {

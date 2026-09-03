@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { existsSync, statSync, unlinkSync } from "fs";
+import { unlinkSync } from "fs";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import {
   attachSessionProjectInfo,
@@ -15,6 +15,8 @@ import { computeSessionTotalActiveMs } from "@/lib/session-timing";
 import { computeSessionStats } from "@/lib/session-stats";
 import type { SessionEntry } from "@/lib/types";
 import { readSessionToolSelection } from "@/lib/session-tool-selection";
+import { readStableSessionFile } from "@/lib/session-metadata";
+import type { SessionMetadataFingerprint } from "@/lib/session-metadata-types";
 
 export async function GET(
   req: Request,
@@ -29,67 +31,77 @@ export async function GET(
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    const sm = liveRpc?.inner.sessionManager ?? SessionManager.open(resolvedPath!);
-    const filePath = liveRpc?.sessionFile || sm.getSessionFile() || resolvedPath || "";
-    const entries = sm.getEntries();
-    const leafId = sm.getLeafId();
-    const tree = projectTreeForResponse(sm.getTree());
+    const liveSessionManager = liveRpc?.inner.sessionManager;
+    const filePath = liveRpc?.sessionFile || liveSessionManager?.getSessionFile() || resolvedPath || "";
     const searchParams = new URL(req.url).searchParams;
     const deferThinking = searchParams.has("deferThinking");
     const deferToolResultImages = searchParams.has("deferMedia");
     const rawTail = Number(searchParams.get("tail"));
     const tail = Number.isFinite(rawTail) && rawTail > 0 ? Math.min(rawTail, 1000) : 50;
-    const context = buildSessionContext(entries as never, leafId, {
-      deferThinking,
-      deferToolResultImages,
-      tail,
-      sessionId: id, // local: lazy URLs for historical tool-result images
-    });
-    const totalActiveMs = computeSessionTotalActiveMs(entries);
-    // Cumulative usage over ALL entries, including history compacted away —
-    // the same aggregation the SDK's getSessionStats() uses. Lets the client
-    // keep monotonic token/cost counters across compaction and page reloads.
-    const stats = computeSessionStats(entries as unknown as SessionEntry[]);
-    const sessionName = sm.getSessionName();
-    const firstUserEntry = entries.find((entry) => entry.type === "message" && entry.message.role === "user");
-    const firstUserMessage = firstUserEntry?.type === "message" ? firstUserEntry.message : undefined;
 
-    const header = sm.getHeader();
-    let modified = header?.timestamp ?? new Date().toISOString();
-    try { modified = statSync(filePath).mtime.toISOString(); } catch { /* use header timestamp */ }
-    const parentSessionId = header?.parentSession
-      ? await resolveSessionIdByPath(header.parentSession)
-      : undefined;
-    const toolNames = readSessionToolSelection(entries as never);
-    const info = header ? (await attachSessionProjectInfo([{
-      path: filePath,
-      id: header.id,
-      cwd: header.cwd ?? "",
-      name: sessionName,
-      created: header.timestamp,
-      modified,
-      messageCount: stats.totalMessages,
-      firstMessage: firstUserMessage
-        ? (() => {
-            const c = (firstUserMessage as { content: unknown }).content;
-            return typeof c === "string" ? c : (Array.isArray(c) ? (c.find((b: { type: string }) => b.type === "text") as { text: string } | undefined)?.text ?? "" : "") || "(no messages)";
-          })()
-        : "(no messages)",
-      parentSessionId,
-      transient: !filePath || !existsSync(filePath),
-    }]))[0] : null;
+    const readSnapshot = async (fingerprint: SessionMetadataFingerprint | null) => {
+      const sm = liveSessionManager ?? SessionManager.open(resolvedPath!);
+      const entries = sm.getEntries();
+      const leafId = sm.getLeafId();
+      const tree = projectTreeForResponse(sm.getTree());
+      const context = buildSessionContext(entries as never, leafId, {
+        deferThinking,
+        deferToolResultImages,
+        tail,
+        sessionId: id, // local: lazy URLs for historical tool-result images
+      });
+      const totalActiveMs = computeSessionTotalActiveMs(entries);
+      // Cumulative usage over ALL entries, including history compacted away —
+      // the same aggregation the SDK's getSessionStats() uses. Lets the client
+      // keep monotonic token/cost counters across compaction and page reloads.
+      const stats = computeSessionStats(entries as unknown as SessionEntry[]);
+      const sessionName = sm.getSessionName();
+      const firstUserEntry = entries.find((entry) => entry.type === "message" && entry.message.role === "user");
+      const firstUserMessage = firstUserEntry?.type === "message" ? firstUserEntry.message : undefined;
+      const header = sm.getHeader();
+      const parentSessionId = header?.parentSession
+        ? await resolveSessionIdByPath(header.parentSession)
+        : undefined;
+      const toolNames = readSessionToolSelection(entries as never);
+      const info = header ? (await attachSessionProjectInfo([{
+        path: filePath,
+        id: header.id,
+        cwd: header.cwd ?? "",
+        name: sessionName,
+        created: header.timestamp,
+        modified: fingerprint?.modified ?? header.timestamp,
+        fileSize: fingerprint?.fileSize,
+        messageCount: stats.totalMessages,
+        firstMessage: firstUserMessage
+          ? (() => {
+              const c = (firstUserMessage as { content: unknown }).content;
+              return typeof c === "string" ? c : (Array.isArray(c) ? (c.find((b: { type: string }) => b.type === "text") as { text: string } | undefined)?.text ?? "" : "") || "(no messages)";
+            })()
+          : "(no messages)",
+        parentSessionId,
+        transient: fingerprint === null,
+      }]))[0] : null;
 
-    return NextResponse.json({
-      sessionId: id,
-      filePath,
-      info,
-      leafId,
-      tree,
-      context,
-      stats,
-      totalActiveMs,
-      ...(toolNames !== undefined ? { toolNames } : {}),
-    });
+      return {
+        sessionId: id,
+        filePath,
+        info,
+        leafId,
+        tree,
+        context,
+        stats,
+        totalActiveMs,
+        ...(toolNames !== undefined ? { toolNames } : {}),
+      };
+    };
+
+    const snapshot = filePath
+      ? await readStableSessionFile(filePath, readSnapshot)
+      : await readSnapshot(null);
+    if (!snapshot) {
+      return NextResponse.json({ error: "Session changed during read" }, { status: 409 });
+    }
+    return NextResponse.json(snapshot);
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }

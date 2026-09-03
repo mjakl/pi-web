@@ -7,6 +7,7 @@ import type {
   ExtensionStatusItem,
   ExtensionUiRequest,
   ExtensionWidgetItem,
+  SessionContext,
   SessionInfo,
   SessionTreeNode,
   UserMessage,
@@ -17,10 +18,25 @@ import { createNoticeId, noticeReducer, type NoticeType } from "@/lib/notice-que
 import { isPromptRejectedError, sendAgentCommand } from "@/lib/agent-client";
 import { clearDraft, rekeyDraft, restoreDraftSubmission } from "@/lib/draft-store";
 import { getPreferredToolPreset, setPreferredToolPreset } from "@/lib/tool-preset-preference";
-import { getPresetFromToolNames, getToolNamesForPreset, type ToolEntry, type ToolPreset } from "@/lib/tool-presets";
+import { getToolNamesForPreset, type ToolEntry, type ToolPreset } from "@/lib/tool-presets";
 import type { SessionStatsInfo } from "@/lib/pi-types";
 import { mergeSessionStats, type SessionFileStats } from "@/lib/session-stats";
 import { userMessageKey } from "@/lib/prompt-recovery";
+import {
+  canAcceptBranchContext,
+  canAcceptPagination,
+  canAcceptPersistedSnapshot,
+  enqueuePersistedWrite,
+  mergeTranscriptRefreshMessages,
+  observedActivityEpochAfter,
+  projectPersistedSnapshot,
+  runSessionLoadPhases,
+  runTranscriptNavigation,
+  type BranchContextRequest,
+  type PaginationRequest,
+  type PersistedAuthority,
+  type PersistedSnapshotRequest,
+} from "@/lib/transcript-refresh";
 import { AgentEventConnection } from "@/lib/agent-event-connection";
 import { useI18n } from "@/hooks/useI18n";
 import type { AgentEventLike } from "@/lib/agent-event-wire";
@@ -39,18 +55,12 @@ import {
 export interface SessionData {
   sessionId: string;
   filePath: string;
+  info?: SessionInfo | null;
   totalActiveMs: number;
   tree: SessionTreeNode[];
   leafId: string | null;
   toolNames?: string[];
-  context: {
-    messages: AgentMessage[];
-    entryIds: string[];
-    oldestEntryId: string | null;
-    hasMore: boolean;
-    thinkingLevel: string;
-    model: { provider: string; modelId: string } | null;
-  };
+  context: SessionContext;
   /** Cumulative usage over ALL session-file entries (incl. compacted history). */
   stats?: SessionFileStats;
 }
@@ -135,6 +145,9 @@ export interface UseAgentSessionOptions {
   onSystemToolsChange?: (tools: ToolEntry[] | null) => void;
   /** Registers an action that lazily starts the session and loads its prompt and tools. */
   onSystemInfoLoaderChange?: (loader: (() => Promise<void>) | null) => void;
+  /** Registers an in-place persisted transcript refresh for the selected session. */
+  onTranscriptRefreshChange?: (refresh: (() => Promise<boolean>) | null) => void;
+  onSessionMetadataChange?: (session: SessionInfo) => void;
   onSessionStatsPanelOpen?: () => void;
   setToolPreset?: (preset: ToolPreset) => void;
 }
@@ -200,7 +213,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const { t } = useI18n();
   const {
     session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked,
-    modelsRefreshKey, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsPanelOpen,
+    modelsRefreshKey, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange,
+    onTranscriptRefreshChange, onSessionMetadataChange, onSessionStatsPanelOpen,
   } = opts;
 
   const isNew = session === null && newSessionCwd !== null;
@@ -279,11 +293,21 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const newSessionModelOverrideRef = useRef<SelectedModel | null>(null);
   const thinkingLevelOverrideRef = useRef<Exclude<ThinkingLevelOption, "auto"> | null>(null);
   const promptRunIdRef = useRef(0);
+  const observedActivityEpochRef = useRef(0);
+  const persistedOrderRef = useRef(0);
+  const acceptedSnapshotOrderRef = useRef(0);
+  const acceptedTranscriptOrderRef = useRef(0);
+  const latestCanonicalOrderRef = useRef(0);
+  const latestRefreshOrderRef = useRef(0);
+  const persistedWriteTailRef = useRef<Promise<void>>(Promise.resolve());
+  const sessionStateLoadRequestIdRef = useRef(0);
   const optimisticUserMessageKeyRef = useRef<string | null>(null);
   const modelSwitchPendingRef = useRef(false);
   const draftKeyAliasesRef = useRef(new Map<string, string>());
   const sessionHookMountedRef = useRef(true);
 
+  const dataRef = useRef(data);
+  dataRef.current = data;
   sessionPropIdRef.current = session?.id ?? null;
   sessionActiveRef.current = runtimeActive;
 
@@ -382,55 +406,121 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } satisfies SessionStatsInfo;
   }, [messages, sessionStatsOverride, contextUsage, data?.context.messages, data?.filePath, data?.totalActiveMs, data?.stats, session?.id, session?.name]);
 
-  const loadSession = useCallback(async (sid: string, showLoading = false, includeState = false) => {
-    const loadRunId = promptRunIdRef.current;
-    const isCurrentLoad = () => (
-      sessionIdRef.current === sid && promptRunIdRef.current === loadRunId
+  const currentPersistedAuthority = useCallback((): PersistedAuthority => ({
+    acceptedSnapshotOrder: acceptedSnapshotOrderRef.current,
+    acceptedTranscriptOrder: acceptedTranscriptOrderRef.current,
+    sessionId: sessionIdRef.current ?? "",
+    runId: promptRunIdRef.current,
+    observedActivityEpoch: observedActivityEpochRef.current,
+  }), []);
+
+  const observeActivity = useCallback((boundary: string) => {
+    observedActivityEpochRef.current = observedActivityEpochAfter(
+      observedActivityEpochRef.current,
+      boundary,
     );
-    let messagesLoaded = false;
-    try {
-      if (showLoading) setLoading(true);
-      const params = new URLSearchParams({ deferThinking: "1", deferMedia: "1" });
-      const res = await fetch(`/api/sessions/${encodeURIComponent(sid)}?${params}`);
-      if (!isCurrentLoad()) return null;
-      if (res.status === 404) {
-        if (showLoading) {
-          setData(null);
-          setActiveLeafId(null);
-          setMessages([]);
-          setEntryIds([]);
-          setHistoryCursor(null);
-          setHasEarlierMessages(false);
-          setError(null);
+  }, []);
+
+  const commitPersistedSnapshot = useCallback((order: number) => {
+    acceptedSnapshotOrderRef.current = order;
+    acceptedTranscriptOrderRef.current = order;
+  }, []);
+
+  const commitLocalSnapshotMutation = useCallback(() => {
+    acceptedSnapshotOrderRef.current = ++persistedOrderRef.current;
+  }, []);
+
+  const runPersistedWrite = useCallback(<T,>(write: () => Promise<T>): Promise<T> => {
+    const queued = enqueuePersistedWrite(persistedWriteTailRef.current, write);
+    persistedWriteTailRef.current = queued.settled;
+    return queued.result;
+  }, []);
+
+  const applyPersistedSnapshot = useCallback((
+    snapshot: SessionData,
+    messagePolicy: "replace" | ((current: AgentMessage[]) => AgentMessage[]),
+  ) => {
+    const next = projectPersistedSnapshot(snapshot);
+    dataRef.current = next.data;
+    setData(next.data);
+    setActiveLeafId(next.activeLeafId);
+    setMessages(messagePolicy === "replace" ? next.persistedMessages : messagePolicy);
+    setEntryIds(next.entryIds);
+    setHistoryCursor(next.historyCursor);
+    setHasEarlierMessages(next.hasEarlierMessages);
+    setToolPresetState(next.toolPreset);
+    setCurrentModelOverride((current) => modelSwitchPendingRef.current ? current : null);
+    setThinkingLevel(next.thinkingLevel as ThinkingLevelOption);
+    setSessionStatsOverride(next.sessionStatsOverride);
+    setError(next.error);
+    if (next.metadata) onSessionMetadataChange?.(next.metadata);
+  }, [onSessionMetadataChange, setToolPresetState]);
+
+  const loadSession = useCallback(async (sid: string, showLoading = false, includeState = false) => {
+    const request: PersistedSnapshotRequest = {
+      order: ++persistedOrderRef.current,
+      sessionId: sid,
+      runId: promptRunIdRef.current,
+      observedActivityEpoch: observedActivityEpochRef.current,
+    };
+    latestCanonicalOrderRef.current = request.order;
+    const precedingWrites = persistedWriteTailRef.current;
+    const stateRequestId = includeState ? ++sessionStateLoadRequestIdRef.current : null;
+    const isCurrentLoad = () => (
+      sessionHookMountedRef.current
+      && canAcceptPersistedSnapshot(request, currentPersistedAuthority(), latestCanonicalOrderRef.current)
+    );
+    const isCurrentStateLoad = () => (
+      stateRequestId !== null
+      && sessionHookMountedRef.current
+      && sessionIdRef.current === sid
+      && promptRunIdRef.current === request.runId
+      && sessionStateLoadRequestIdRef.current === stateRequestId
+    );
+
+    return runSessionLoadPhases(async () => {
+      let messagesLoaded = false;
+      try {
+        if (showLoading) setLoading(true);
+        await precedingWrites;
+        if (!isCurrentLoad()) return isCurrentStateLoad();
+        const params = new URLSearchParams({ deferThinking: "1", deferMedia: "1" });
+        const res = await fetch(`/api/sessions/${encodeURIComponent(sid)}?${params}`);
+        if (!isCurrentLoad()) return isCurrentStateLoad();
+        if (res.status === 404) {
+          if (showLoading) {
+            setData(null);
+            setActiveLeafId(null);
+            setMessages([]);
+            setEntryIds([]);
+            setHistoryCursor(null);
+            setHasEarlierMessages(false);
+            setError(null);
+          }
+          return false;
         }
-        return null;
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const d = await res.json() as SessionData;
+        if (!isCurrentLoad()) return isCurrentStateLoad();
+        commitPersistedSnapshot(request.order);
+        applyPersistedSnapshot(d, "replace");
+        messagesLoaded = true;
+        if (showLoading) setLoading(false);
+        return true;
+      } catch (e) {
+        if (!isCurrentLoad()) return isCurrentStateLoad();
+        setError(String(e));
+        return false;
+      } finally {
+        if (showLoading && !messagesLoaded) setLoading(false);
       }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const d = await res.json() as SessionData;
-      if (!isCurrentLoad()) return null;
-      const persistedMessages = d.context.messages;
-      setData(d);
-      setActiveLeafId(d.leafId);
-      setMessages(persistedMessages);
-      setEntryIds(d.context.entryIds ?? []);
-      setHistoryCursor(d.context.oldestEntryId);
-      setHasEarlierMessages(d.context.hasMore);
-      setToolPresetState(d.toolNames !== undefined ? getPresetFromToolNames(d.toolNames) : "default");
-      setCurrentModelOverride((current) => modelSwitchPendingRef.current ? current : null);
-      setError(null);
-      if (d.context.thinkingLevel && d.context.thinkingLevel !== "off") {
-        setThinkingLevel(d.context.thinkingLevel as ThinkingLevelOption);
-      }
-
-      messagesLoaded = true;
-      if (showLoading) setLoading(false);
-      if (!includeState) return null;
-
+    }, includeState ? async () => {
+      if (!isCurrentStateLoad()) return null;
       try {
         const stateRes = await fetch(`/api/sessions/${encodeURIComponent(sid)}/state`);
         if (!stateRes.ok) throw new Error(`HTTP ${stateRes.status}`);
         const agentState = await stateRes.json() as { active: boolean; running: boolean; state?: AgentStateResponse };
-        if (!isCurrentLoad()) return null;
+        if (!isCurrentStateLoad()) return null;
 
         const liveState = agentState.state;
         if (liveState) {
@@ -448,39 +538,56 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         console.error("Failed to load agent state:", e);
         return null;
       }
-    } catch (e) {
-      if (isCurrentLoad()) setError(String(e));
-      return null;
-    } finally {
-      if (showLoading && !messagesLoaded) setLoading(false);
-    }
-  }, [setToolPresetState]);
+    } : undefined);
+  }, [applyPersistedSnapshot, commitPersistedSnapshot, currentPersistedAuthority]);
 
-  const loadContext = useCallback(async (sid: string, leafId: string | null, before?: string | null) => {
+  const loadContext = useCallback(async (
+    sid: string,
+    leafId: string | null,
+    before?: string | null,
+    branchRequest?: BranchContextRequest,
+  ) => {
+    const paginationRequest: PaginationRequest | null = before ? {
+      order: ++persistedOrderRef.current,
+      sessionId: sid,
+      transcriptBaseline: acceptedTranscriptOrderRef.current,
+      refreshOrder: latestRefreshOrderRef.current,
+    } : null;
+    const isCurrentContext = () => sessionHookMountedRef.current && (branchRequest
+      ? canAcceptBranchContext(branchRequest, currentPersistedAuthority())
+      : paginationRequest !== null && canAcceptPagination(paginationRequest, {
+        sessionId: sessionIdRef.current ?? "",
+        acceptedTranscriptOrder: acceptedTranscriptOrderRef.current,
+        latestRefreshOrder: latestRefreshOrderRef.current,
+      }));
+
+    if (!isCurrentContext()) return;
     try {
       const params = new URLSearchParams({ deferThinking: "1", deferMedia: "1" });
       if (leafId) params.set("leafId", leafId);
       // Page upward: ask the server for the `tail` ancestors preceding `before`,
-      // then prepend them. Omitting `before` fetches the most-recent `tail`.
+      // then prepend them. Omitting `before` fetches the selected branch.
       if (before) params.set("before", before);
       const url = `/api/sessions/${encodeURIComponent(sid)}/context?${params}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const d = await res.json() as { context: SessionData["context"] };
-      if (sessionIdRef.current !== sid) return;
+      if (!isCurrentContext()) return;
+      if (paginationRequest) acceptedTranscriptOrderRef.current = paginationRequest.order;
       setHistoryCursor(d.context.oldestEntryId);
       setHasEarlierMessages(d.context.hasMore);
-      setData((prev) => {
-        if (!prev || prev.sessionId !== sid) return prev;
+      const currentData = dataRef.current;
+      if (currentData?.sessionId === sid) {
         const context = before ? {
-          ...prev.context,
-          messages: [...d.context.messages, ...prev.context.messages],
-          entryIds: [...d.context.entryIds, ...prev.context.entryIds],
+          ...currentData.context,
+          messages: [...d.context.messages, ...currentData.context.messages],
+          entryIds: [...d.context.entryIds, ...currentData.context.entryIds],
           oldestEntryId: d.context.oldestEntryId,
           hasMore: d.context.hasMore,
         } : d.context;
-        return { ...prev, context };
-      });
+        dataRef.current = { ...currentData, context };
+        setData(dataRef.current);
+      }
       if (before) {
         // Older page: prepend so scroll position stays anchored.
         setMessages((prev) => [...d.context.messages, ...prev]);
@@ -492,7 +599,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } catch (e) {
       console.error("Failed to load context:", e);
     }
-  }, []);
+  }, [currentPersistedAuthority]);
 
   const loadTools = useCallback(async (sid: string) => {
     try {
@@ -706,6 +813,51 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       },
     });
   }, []);
+
+  const refreshTranscript = useCallback(async (): Promise<boolean> => {
+    const sid = sessionPropIdRef.current;
+    if (!sid || sessionIdRef.current !== sid) return false;
+
+    const request: PersistedSnapshotRequest = {
+      order: ++persistedOrderRef.current,
+      sessionId: sid,
+      runId: promptRunIdRef.current,
+      observedActivityEpoch: observedActivityEpochRef.current,
+    };
+    latestRefreshOrderRef.current = request.order;
+    const precedingWrites = persistedWriteTailRef.current;
+    const isCurrentRefresh = () => (
+      sessionHookMountedRef.current
+      && canAcceptPersistedSnapshot(request, currentPersistedAuthority(), latestRefreshOrderRef.current)
+    );
+
+    try {
+      await precedingWrites;
+      if (!isCurrentRefresh()) return false;
+      const previousPersisted = dataRef.current?.context.messages ?? [];
+      const params = new URLSearchParams({ deferThinking: "1", deferMedia: "1" });
+      const response = await fetch(`/api/sessions/${encodeURIComponent(sid)}?${params}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const refreshed = await response.json() as SessionData;
+      if (!isCurrentRefresh()) return false;
+
+      commitPersistedSnapshot(request.order);
+      applyPersistedSnapshot(refreshed, (current) => mergeTranscriptRefreshMessages(
+        refreshed.context.messages,
+        current,
+        previousPersisted,
+      ));
+      return true;
+    } catch (refreshError) {
+      if (isCurrentRefresh()) {
+        const detail = refreshError instanceof Error ? refreshError.message : String(refreshError);
+        addNotice({ type: "error", message: t("chat.transcriptRefreshFailed", { error: detail }) });
+      }
+      return false;
+    }
+  }, [addNotice, applyPersistedSnapshot, commitPersistedSnapshot, currentPersistedAuthority, t]);
 
   const handleExtensionUiRequest = useCallback((request: ExtensionUiRequest) => {
     if (isBlockingExtensionUiRequest(request)) onAttentionNeeded?.(request);
@@ -999,6 +1151,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, [agentRunning]);
 
   const handleAgentEvent = useCallback((event: AgentEventLike) => {
+    observeActivity(event.type);
     switch (event.type) {
       case "connected": {
         dispatch({ type: "end" });
@@ -1249,7 +1402,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         handleExtensionUiRequest(event as ExtensionUiRequest);
         break;
     }
-  }, [addNotice, cancelEventStreamGrace, closeEvents, handleExtensionUiRequest, loadSession, notifyPromptStage, onAgentEnd, scheduleEventStreamClose, scrollToBottom, settleUiStage, t]);
+  }, [addNotice, cancelEventStreamGrace, closeEvents, handleExtensionUiRequest, loadSession, notifyPromptStage, observeActivity, onAgentEnd, scheduleEventStreamClose, scrollToBottom, settleUiStage, t]);
   handleAgentEventRef.current = handleAgentEvent;
 
   const handleSend = useCallback(async (message: string, images?: AttachedImage[]) => {
@@ -1273,6 +1426,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       return;
     }
 
+    const precedingPersistedWrites = persistedWriteTailRef.current;
     const promptRunId = promptRunIdRef.current + 1;
     cancelEventStreamGrace();
     rpcPromptPendingRef.current = true;
@@ -1300,6 +1454,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     let promptRequestStarted = false;
 
     try {
+      await precedingPersistedWrites;
       if (isNew && newSessionCwd) {
         const selectedModel = newSessionModel;
         const existingSid = sessionIdRef.current ?? await ensuringNewSessionRef.current;
@@ -1380,6 +1535,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     try {
       const sid = sessionIdRef.current ?? session?.id ?? await ensureNewSession();
       if (!sid) throw new Error(t("chat.shellSessionUnavailable"));
+      observeActivity("bash_admission");
       await sendAgentCommand(sid, {
         type: "bash",
         command,
@@ -1396,7 +1552,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setPendingBash(null);
       setBashRunning(false);
     }
-  }, [addNotice, composerDraftKey, ensureNewSession, loadSession, promoteNewSession, restoreSubmission, session, t]);
+  }, [addNotice, composerDraftKey, ensureNewSession, loadSession, observeActivity, promoteNewSession, restoreSubmission, session, t]);
   executeBashRef.current = executeBash;
 
   const handleAbort = useCallback(async () => {
@@ -1438,28 +1594,41 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
   }, [onSessionForked]);
 
-  const handleNavigate = useCallback(async (entryId: string) => {
+  const navigateTranscriptBranch = useCallback(async (leafId: string | null) => {
     if (bashRunningRef.current) return;
     const sid = sessionIdRef.current;
     if (!sid) return;
-    sendAgentCommand(sid, { type: "navigate_tree", targetId: entryId }).catch(() => {});
-    setActiveLeafId(entryId);
-    await loadContext(sid, entryId);
-  }, [loadContext]);
+    const branchRequest: BranchContextRequest = {
+      intentOrder: ++persistedOrderRef.current,
+      sessionId: sid,
+      runId: promptRunIdRef.current,
+    };
+    acceptedTranscriptOrderRef.current = branchRequest.intentOrder;
+    setActiveLeafId(leafId);
+    // The previous branch's cursor cannot authorize pagination on this branch.
+    setHistoryCursor(null);
+    setHasEarlierMessages(false);
+    await runTranscriptNavigation(
+      () => runPersistedWrite(async () => {
+        if (leafId) {
+          await sendAgentCommand(sid, { type: "navigate_tree", targetId: leafId }).catch(() => {});
+        }
+      }),
+      () => loadContext(sid, leafId, undefined, branchRequest),
+    );
+  }, [loadContext, runPersistedWrite]);
+
+  const handleNavigate = useCallback(async (entryId: string) => {
+    await navigateTranscriptBranch(entryId);
+  }, [navigateTranscriptBranch]);
 
   const handleLeafChange = useCallback(async (leafId: string | null) => {
-    if (bashRunningRef.current) return;
-    setActiveLeafId(leafId);
-    const sid = sessionIdRef.current;
-    if (!sid) return;
-    await loadContext(sid, leafId);
-    if (leafId) {
-      sendAgentCommand(sid, { type: "navigate_tree", targetId: leafId }).catch(() => {});
-    }
-  }, [loadContext]);
+    await navigateTranscriptBranch(leafId);
+  }, [navigateTranscriptBranch]);
 
   const handleModelChange = useCallback(async (provider: string, modelId: string) => {
     if (isNew) {
+      commitLocalSnapshotMutation();
       const selectedModel = { provider, modelId };
       newSessionModelOverrideRef.current = selectedModel;
       setNewSessionModel(selectedModel);
@@ -1467,7 +1636,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       const sid = sessionIdRef.current ?? await ensuringNewSessionRef.current;
       if (!sid) return;
       try {
-        await sendAgentCommand(sid, { type: "set_model", provider, modelId });
+        await runPersistedWrite(() => sendAgentCommand(sid, { type: "set_model", provider, modelId }));
       } catch (e) {
         console.error("Failed to set model:", e);
       }
@@ -1475,13 +1644,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
     const sid = sessionIdRef.current;
     if (!sid || modelSwitchPendingRef.current) return;
+    commitLocalSnapshotMutation();
     const target = { provider, modelId };
     const previousOverride = currentModelOverride;
     modelSwitchPendingRef.current = true;
     setCurrentModelOverride(target);
     setModelSwitching(true);
     try {
-      await sendAgentCommand(sid, { type: "set_model", provider, modelId });
+      await runPersistedWrite(() => sendAgentCommand(sid, { type: "set_model", provider, modelId }));
       // Pi persists model_change synchronously. Reload the canonical session so
       // the model, thinking level, and active leaf all advance together.
       modelSwitchPendingRef.current = false;
@@ -1501,7 +1671,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       modelSwitchPendingRef.current = false;
       setModelSwitching(false);
     }
-  }, [addNotice, currentModelOverride, isNew, loadSession, setNewSessionModel, t]);
+  }, [addNotice, commitLocalSnapshotMutation, currentModelOverride, isNew, loadSession, runPersistedWrite, setNewSessionModel, t]);
 
   const handleCompact = useCallback(async () => {
     const sid = sessionIdRef.current;
@@ -1510,6 +1680,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     setCompactError(null);
     setCompactResult(null);
     try {
+      observeActivity("compaction_admission");
       const result = await sendAgentCommand<CompactCommandResult>(sid, { type: "compact" });
       setCompactResult(readCompactResult(result, "manual"));
       await loadSession(sid, true);
@@ -1519,7 +1690,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } finally {
       setIsCompacting(false);
     }
-  }, [isCompacting, loadSession]);
+  }, [isCompacting, loadSession, observeActivity]);
 
   const loadModels = useCallback(async (signal?: AbortSignal) => {
     const modelCwd = newSessionCwd ?? session?.cwd ?? "";
@@ -1574,6 +1745,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           setIsCompacting(true);
           setCompactError(null);
           setCompactResult(null);
+          observeActivity("compaction_admission");
           const result = await sendAgentCommand<CompactCommandResult>(sid, {
             type: "compact",
             ...(args ? { customInstructions: args } : {}),
@@ -1647,7 +1819,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } finally {
       if (commandName === "compact") setIsCompacting(false);
     }
-  }, [activeLeafId, addNotice, ensureNewSession, isCompacting, loadModels, loadSession, loadSlashCommands, loadTools, promoteNewSession, onSessionForked, onSessionStatsPanelOpen, t]);
+  }, [activeLeafId, addNotice, ensureNewSession, isCompacting, loadModels, loadSession, loadSlashCommands, loadTools, observeActivity, promoteNewSession, onSessionForked, onSessionStatsPanelOpen, t]);
 
   // Let AgentSession.prompt decide atomically whether to queue against the
   // current run or start a new turn if it settled while the request was in
@@ -1730,6 +1902,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, [opts.chatInputRef, addNotice, t]);
 
   const handleThinkingLevelChange = useCallback(async (level: ThinkingLevelOption) => {
+    commitLocalSnapshotMutation();
     setThinkingLevel(level);
     if (isNew && !sessionIdRef.current) {
       thinkingLevelOverrideRef.current = level === "auto" ? null : level;
@@ -1738,26 +1911,30 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     const sid = sessionIdRef.current ?? await ensuringNewSessionRef.current;
     if (!sid) return;
     try {
-      await sendAgentCommand(sid, { type: "set_thinking_level", level });
+      await runPersistedWrite(() => sendAgentCommand(sid, { type: "set_thinking_level", level }));
     } catch (e) {
       console.error("Failed to set thinking level:", e);
     }
-  }, [isNew]);
+  }, [commitLocalSnapshotMutation, isNew, runPersistedWrite]);
 
   const handleToolPresetChange = useCallback(async (preset: ToolPreset) => {
+    commitLocalSnapshotMutation();
     const toolNames = getToolNamesForPreset(preset);
     setPreferredToolPreset(preset);
     setToolPresetState(preset);
     const sid = sessionIdRef.current ?? await ensuringNewSessionRef.current;
     if (!sid) return;
     try {
-      const result = await sendAgentCommand<{ sessionId?: string; recreated?: boolean }>(sid, { type: "set_tools", toolNames });
-      const activeSessionId = result?.sessionId ?? sid;
-      if (result?.recreated || activeSessionId !== sid) {
-        cancelEventStreamGrace();
-        closeEvents();
-        sessionIdRef.current = activeSessionId;
-      }
+      const { result, activeSessionId } = await runPersistedWrite(async () => {
+        const result = await sendAgentCommand<{ sessionId?: string; recreated?: boolean }>(sid, { type: "set_tools", toolNames });
+        const activeSessionId = result?.sessionId ?? sid;
+        if (result?.recreated || activeSessionId !== sid) {
+          cancelEventStreamGrace();
+          closeEvents();
+          sessionIdRef.current = activeSessionId;
+        }
+        return { result, activeSessionId };
+      });
       if (result?.recreated && sessionHookMountedRef.current) {
         await ensureEventsConnected(activeSessionId);
       }
@@ -1774,7 +1951,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } catch (e) {
       console.error("Failed to set tools:", e);
     }
-  }, [cancelEventStreamGrace, closeEvents, ensureEventsConnected, loadTools, setToolPresetState]);
+  }, [cancelEventStreamGrace, closeEvents, commitLocalSnapshotMutation, ensureEventsConnected, loadTools, runPersistedWrite, setToolPresetState]);
 
   const scrollUserMsgToTop = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -1886,6 +2063,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     onSystemInfoLoaderChange?.(loadSystemInfo);
     return () => onSystemInfoLoaderChange?.(null);
   }, [loadSystemInfo, onSystemInfoLoaderChange]);
+
+  useEffect(() => {
+    onTranscriptRefreshChange?.(session ? refreshTranscript : null);
+    return () => onTranscriptRefreshChange?.(null);
+  }, [onTranscriptRefreshChange, refreshTranscript, session]);
 
   useEffect(() => {
     if (!onBranchDataChange) return;

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { appendFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +12,7 @@ const jiti = createJiti(import.meta.url, {
   moduleCache: false,
 });
 const { DELETE: deleteSession, GET: getSessionDetail } = await jiti.import("./[id]/route.ts");
+const { SessionManager } = await jiti.import("@earendil-works/pi-coding-agent");
 const { GET: getSessionState } = await jiti.import("./[id]/state/route.ts");
 const { GET: getSessionContext } = await jiti.import("./[id]/context/route.ts");
 const {
@@ -203,6 +205,114 @@ test("live detail and state routes work without a persisted JSONL file", async (
     running: true,
     state: { isStreaming: true },
   });
+});
+
+test("persisted detail opens the session inside fingerprint verification", async (t) => {
+  const previousRegistry = globalThis.__piSessions;
+  const dir = await mkdtemp(join(tmpdir(), "pi-web-stable-open-"));
+  const id = "stable-open-route-test";
+  const filePath = join(dir, "session.jsonl");
+  const timestamp = "2026-08-12T01:02:03.000Z";
+  const entry = {
+    type: "message",
+    id: "u1",
+    parentId: null,
+    timestamp,
+    message: { role: "user", content: "before open" },
+  };
+  await writeFile(filePath, [
+    JSON.stringify({ type: "session", version: 3, id, cwd: dir, timestamp }),
+    JSON.stringify(entry),
+    "",
+  ].join("\n"));
+  cacheSessionPath(id, filePath);
+  globalThis.__piSessions = new Map();
+
+  const originalOpen = SessionManager.open;
+  SessionManager.open = function (...args) {
+    const manager = originalOpen.apply(this, args);
+    appendFileSync(filePath, `${JSON.stringify({
+      ...entry,
+      id: "u2",
+      parentId: entry.id,
+      message: { role: "user", content: "after open" },
+    })}\n`);
+    return manager;
+  };
+  t.after(async () => {
+    SessionManager.open = originalOpen;
+    globalThis.__piSessions = previousRegistry;
+    invalidateSessionPathCache(id);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const response = await getSessionDetail(
+    new Request(`http://localhost/api/sessions/${id}`),
+    { params: Promise.resolve({ id }) },
+  );
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: "Session changed during read" });
+});
+
+test("detail route never advertises a newer fingerprint for older content", async (t) => {
+  const previousRegistry = globalThis.__piSessions;
+  const dir = await mkdtemp(join(tmpdir(), "pi-web-stable-detail-"));
+  const id = "stable-detail-route-test";
+  const filePath = join(dir, "session.jsonl");
+  const timestamp = "2026-08-12T01:02:03.000Z";
+  const header = { type: "session", version: 3, id, cwd: dir, timestamp };
+  const entry = {
+    type: "message",
+    id: "u1",
+    parentId: null,
+    timestamp,
+    message: { role: "user", content: "before append" },
+  };
+  await writeFile(filePath, `${JSON.stringify(header)}\n${JSON.stringify(entry)}\n`);
+
+  let appended = false;
+  const sessionManager = {
+    getHeader: () => header,
+    getEntries: () => [entry],
+    getLeafId: () => entry.id,
+    getTree: () => [],
+    getSessionName: () => {
+      if (!appended) {
+        appended = true;
+        appendFileSync(filePath, `${JSON.stringify({
+          ...entry,
+          id: "u2",
+          parentId: entry.id,
+          message: { role: "user", content: "after append" },
+        })}\n`);
+      }
+      return undefined;
+    },
+    getSessionFile: () => filePath,
+  };
+  globalThis.__piSessions = new Map([[id, {
+    isAlive: () => true,
+    isActive: () => true,
+    isRunning: () => true,
+    inner: { sessionManager },
+    sessionFile: filePath,
+    sessionId: id,
+    cwd: dir,
+    send: async () => ({}),
+  }]]);
+  t.after(async () => {
+    globalThis.__piSessions = previousRegistry;
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const response = await getSessionDetail(
+    new Request(`http://localhost/api/sessions/${id}`),
+    { params: Promise.resolve({ id }) },
+  );
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: "Session changed during read" });
 });
 
 test("detail and context routes bound history to the tail window", async (t) => {

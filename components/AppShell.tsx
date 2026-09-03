@@ -46,6 +46,11 @@ import {
   SIDEBAR_MIN_WIDTH,
 } from "@/lib/panel-layout";
 import type { BlockingExtensionUiRequest, SessionInfo, SessionTreeNode } from "@/lib/types";
+import {
+  acceptSelectedSessionMetadata,
+  reconcileSelectedSessionInventory,
+  type SelectedSessionMetadataAuthority,
+} from "@/lib/transcript-refresh";
 import type { ProjectTrustStatus } from "@/lib/api-types";
 import type { ChatInputHandle } from "./ChatInput";
 import type { SessionStatsInfo } from "@/lib/pi-types";
@@ -82,22 +87,30 @@ export function AppShell({ piVersion }: { piVersion: string }) {
     if (soundEnabledRef.current) playDoneSound();
   }, [playDoneSound, soundEnabledRef]);
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
-  const handleSessionsChange = useCallback((sessions: SessionInfo[]) => {
+  const inventoryAttemptRef = useRef(0);
+  const selectedMetadataAuthorityRef = useRef<SelectedSessionMetadataAuthority | null>(null);
+  const beginSessionInventoryAttempt = useCallback(() => ++inventoryAttemptRef.current, []);
+  const handleSessionsChange = useCallback((sessions: SessionInfo[], inventoryAttempt: number) => {
     setSelectedSession((current) => {
-      if (!current) return current;
-      const updated = sessions.find((session) => session.id === current.id);
-      if (!updated) return current;
-      const hydrated = updated.messageCount !== undefined && updated.firstMessage !== undefined;
-      const sameFingerprint = updated.fileSize !== undefined
-        && updated.fileSize === current.fileSize
-        && updated.modified === current.modified;
-      return {
-        ...current,
-        ...updated,
-        name: hydrated ? updated.name : sameFingerprint ? current.name : undefined,
-        messageCount: hydrated ? updated.messageCount : sameFingerprint ? current.messageCount : undefined,
-        firstMessage: hydrated ? updated.firstMessage : sameFingerprint ? current.firstMessage : undefined,
-      };
+      const next = reconcileSelectedSessionInventory(
+        { session: current, authority: selectedMetadataAuthorityRef.current },
+        current ? sessions.find((session) => session.id === current.id) : undefined,
+        inventoryAttempt,
+      );
+      selectedMetadataAuthorityRef.current = next.authority;
+      return next.session;
+    });
+  }, []);
+  const handleSessionMetadataChange = useCallback((updated: SessionInfo) => {
+    const inventoryFloor = inventoryAttemptRef.current;
+    setSelectedSession((current) => {
+      const next = acceptSelectedSessionMetadata(
+        { session: current, authority: selectedMetadataAuthorityRef.current },
+        updated,
+        inventoryFloor,
+      );
+      selectedMetadataAuthorityRef.current = next.authority;
+      return next.session;
     });
   }, []);
   const [activeSessionIds, setActiveSessionIds] = useState<Set<string>>(() => new Set());
@@ -226,6 +239,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
   const [systemTools, setSystemTools] = useState<ToolEntry[] | null>(null);
   const [systemInfoLoading, setSystemInfoLoading] = useState(false);
   const systemInfoLoaderRef = useRef<(() => Promise<void>) | null>(null);
+  const transcriptRefreshRef = useRef<(() => Promise<boolean>) | null>(null);
   const systemInfoLoadIdRef = useRef(0);
   const systemBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -243,6 +257,14 @@ export function AppShell({ piVersion }: { piVersion: string }) {
     systemInfoLoaderRef.current = loader;
     setSystemInfoLoading(false);
   }, []);
+
+  const handleTranscriptRefreshChange = useCallback((refresh: (() => Promise<boolean>) | null) => {
+    transcriptRefreshRef.current = refresh;
+  }, []);
+
+  const handleRefreshSelectedSession = useCallback(() => (
+    transcriptRefreshRef.current?.() ?? Promise.resolve(false)
+  ), []);
 
   // Session stats — populated by ChatWindow, displayed in the top bar and info panel
   const [sessionStats, setSessionStats] = useState<SessionStatsInfo | null>(null);
@@ -641,25 +663,6 @@ export function AppShell({ piVersion }: { piVersion: string }) {
     activeCwd,
   });
 
-  // Client-built transient SessionInfo (new session / fork) lacks the
-  // server-computed projectKey, which the same-project check in
-  // handleCwdChange relies on. Hydrate it from the session list so switching
-  // worktrees right after creating a session doesn't close the chat.
-  const hydrateSelectedSession = useCallback((sessionId: string) => {
-    void fetch("/api/sessions", { cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ sessions: SessionInfo[] }>) : null))
-      .then((d) => {
-        const full = d?.sessions.find((s) => s.id === sessionId);
-        if (!full) return;
-        setSelectedSession((prev) => (
-          prev?.id === sessionId
-            ? { ...prev, ...full, transient: full.transient ?? false }
-            : prev
-        ));
-      })
-      .catch(() => {});
-  }, []);
-
   // Called by ChatWindow when a new session gets its real id from pi
   const handleSessionCreated = useCallback((session: SessionInfo, sourceDraftKey: string) => {
     setRefreshKey((k) => k + 1);
@@ -668,9 +671,8 @@ export function AppShell({ piVersion }: { piVersion: string }) {
     activeNewSessionDraftKeyRef.current = null;
     setNewSessionCwd(null);
     setSelectedSession(session);
-    hydrateSelectedSession(session.id);
     router.replace(`?session=${encodeURIComponent(session.id)}`, { scroll: false });
-  }, [invalidateWorkspaceRestore, router, hydrateSelectedSession]);
+  }, [invalidateWorkspaceRestore, router]);
 
   const deliverSessionNotification = useCallback(({
     targetSession,
@@ -715,7 +717,6 @@ export function AppShell({ piVersion }: { piVersion: string }) {
   const handleAgentEnd = useCallback(() => {
     setRefreshKey((k) => k + 1);
     setExplorerRefreshKey((k) => k + 1);
-    if (selectedSession) hydrateSelectedSession(selectedSession.id);
 
     if (!shouldShowBrowserNotification()) return;
     const targetSession = selectedSession;
@@ -725,7 +726,7 @@ export function AppShell({ piVersion }: { piVersion: string }) {
       body: translate("i18n.taskFinished"),
       tag: targetSession ? `pi-session-complete:${targetSession.id}` : "pi-session-complete",
     });
-  }, [deliverSessionNotification, hydrateSelectedSession, selectedSession, translate]);
+  }, [deliverSessionNotification, selectedSession, translate]);
 
   const handleAttentionNeeded = useCallback((request: BlockingExtensionUiRequest) => {
     if (!shouldShowBrowserNotification()) return;
@@ -756,9 +757,8 @@ export function AppShell({ piVersion }: { piVersion: string }) {
       id: newSessionId,
       transient: false,
     }));
-    hydrateSelectedSession(newSessionId);
     router.replace(`?session=${encodeURIComponent(newSessionId)}`, { scroll: false });
-  }, [invalidateWorkspaceRestore, router, hydrateSelectedSession]);
+  }, [invalidateWorkspaceRestore, router]);
 
   const handleInitialRestoreDone = useCallback(() => {
     setInitialSessionRestored(true);
@@ -929,7 +929,9 @@ export function AppShell({ piVersion }: { piVersion: string }) {
         onBackgroundTaskDone={handleBackgroundTaskDone}
         onActiveSessionIdsChange={handleActiveSessionIdsChange}
         onRunningSessionIdsChange={handleRunningSessionIdsChange}
+        beginSessionInventoryAttempt={beginSessionInventoryAttempt}
         onSessionsChange={handleSessionsChange}
+        onRefreshSelectedSession={handleRefreshSelectedSession}
         actionsAvailable={sidebarOpen}
       />
       <div style={{ padding: "8px", flexShrink: 0, display: "flex", justifyContent: "space-between", gap: 4 }}>
@@ -1914,6 +1916,8 @@ export function AppShell({ piVersion }: { piVersion: string }) {
               onSystemPromptChange={handleSystemPromptChange}
               onSystemToolsChange={handleSystemToolsChange}
               onSystemInfoLoaderChange={handleSystemInfoLoaderChange}
+              onTranscriptRefreshChange={handleTranscriptRefreshChange}
+              onSessionMetadataChange={handleSessionMetadataChange}
               onSessionStatsChange={handleSessionStatsChange}
               onSessionStatsPanelOpen={openSessionStatsPanel}
               onContextUsageChange={handleContextUsageChange}

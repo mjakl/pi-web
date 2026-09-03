@@ -48,6 +48,7 @@ const { createRoot } = await jiti.import("react-dom/client");
 const { AppRouterContext } = await jiti.import("next/dist/shared/lib/app-router-context.shared-runtime.js");
 const { SearchParamsContext } = await jiti.import("next/dist/shared/lib/hooks-client-context.shared-runtime.js");
 const { AppShell } = await jiti.import("./AppShell.tsx");
+const { SessionSidebar } = await jiti.import("./SessionSidebar.tsx");
 
 const router = {
   back() {},
@@ -87,6 +88,135 @@ async function click(element) {
     element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function sidebarForInventoryTest(refreshKey, beginSessionInventoryAttempt, onSessionsChange) {
+  return React.createElement(SessionSidebar, {
+    piVersion: "test",
+    selectedSessionId: null,
+    onSelectSession() {},
+    beginSessionInventoryAttempt,
+    onSessionsChange,
+    refreshKey,
+    actionsAvailable: true,
+  });
+}
+
+function emptyInventoryResponse() {
+  return Response.json({ sessions: [], activeSessionIds: [], runningSessionIds: [] });
+}
+
+function refreshSucceeded(container) {
+  return container.querySelector('button[title="Refresh"] polyline') !== null;
+}
+
+function createRefreshHarness({ selected = true, provideTranscriptRefresh = true } = {}) {
+  const originalFetch = globalThis.fetch;
+  const inventoryRequests = [];
+  const transcriptRequests = [];
+  globalThis.fetch = async (url) => {
+    if (String(url).startsWith("/api/sessions")) {
+      const request = deferred();
+      inventoryRequests.push(request);
+      return request.promise;
+    }
+    if (url === "/api/home") return Response.json({ home: "/tmp" });
+    if (url === "/api/agent/running") return emptyInventoryResponse();
+    return Response.json({});
+  };
+
+  let nextAttempt = 0;
+  let refreshKey = 0;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = () => act(async () => {
+    root.render(React.createElement(SessionSidebar, {
+      piVersion: "test",
+      selectedSessionId: selected ? sidebarSession.id : null,
+      onSelectSession() {},
+      beginSessionInventoryAttempt: () => ++nextAttempt,
+      refreshKey,
+      actionsAvailable: true,
+      ...(provideTranscriptRefresh ? {
+        onRefreshSelectedSession: () => {
+          const request = deferred();
+          transcriptRequests.push(request);
+          return request.promise;
+        },
+      } : {}),
+    }));
+    await Promise.resolve();
+  });
+
+  return {
+    inventoryRequests,
+    transcriptRequests,
+    container,
+    render,
+    clickRefresh: () => click(container.querySelector('button[title="Refresh"]')),
+    triggerBackgroundLoad: async () => {
+      refreshKey += 1;
+      await render();
+    },
+    cleanup: async () => {
+      await act(() => root.unmount());
+      container.remove();
+      globalThis.fetch = originalFetch;
+    },
+  };
+}
+
+async function settle(request, value) {
+  await act(async () => {
+    request.resolve(value);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+function createInventoryHarness(onSessionsChange) {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url) => {
+    if (String(url).startsWith("/api/sessions")) {
+      const request = deferred();
+      requests.push(request);
+      return request.promise;
+    }
+    if (url === "/api/home") return Response.json({ home: "/tmp" });
+    if (url === "/api/agent/running") return emptyInventoryResponse();
+    return Response.json({});
+  };
+
+  let nextAttempt = 0;
+  const begin = () => ++nextAttempt;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  return {
+    requests,
+    container,
+    get nextAttempt() { return nextAttempt; },
+    render: (refreshKey) => act(async () => {
+      root.render(sidebarForInventoryTest(refreshKey, begin, onSessionsChange));
+      await Promise.resolve();
+    }),
+    cleanup: async () => {
+      await act(() => root.unmount());
+      container.remove();
+      globalThis.fetch = originalFetch;
+    },
+  };
 }
 
 test("a closed sidebar is inert and hidden from accessibility navigation until reopened", async () => {
@@ -164,5 +294,229 @@ test("closing the actual sidebar removes its body portal and reopening starts wi
     await act(() => root.unmount());
     container.remove();
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("session inventory publishes the token issued before its delayed fetch", async () => {
+  const publications = [];
+  const harness = createInventoryHarness((sessions, inventoryAttempt) => {
+    publications.push({ sessions, inventoryAttempt });
+  });
+  try {
+    await harness.render(0);
+    assert.equal(harness.nextAttempt, 1);
+    await act(async () => {
+      harness.requests[0].resolve(emptyInventoryResponse());
+      await Promise.resolve();
+    });
+    assert.equal(publications.at(-1).inventoryAttempt, 1);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("a stale inventory failure cannot replace a newer success or its loading state", async () => {
+  const harness = createInventoryHarness();
+  try {
+    await harness.render(0);
+    await harness.render(1);
+    await act(async () => {
+      harness.requests[1].resolve(emptyInventoryResponse());
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+
+    await act(async () => {
+      harness.requests[0].reject(new Error("stale inventory failure"));
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("stale inventory failure"), false);
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("an older pending success may recover from a newer inventory failure", async () => {
+  const harness = createInventoryHarness();
+  try {
+    await harness.render(0);
+    await harness.render(1);
+    await act(async () => {
+      harness.requests[1].reject(new Error("current inventory failure"));
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("current inventory failure"), true);
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+
+    await act(async () => {
+      harness.requests[0].resolve(emptyInventoryResponse());
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("current inventory failure"), false);
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("a stale inventory abort cannot overwrite newer completion state", async () => {
+  const harness = createInventoryHarness();
+  try {
+    await harness.render(0);
+    await harness.render(1);
+    await act(async () => {
+      harness.requests[1].resolve(emptyInventoryResponse());
+      await Promise.resolve();
+    });
+    await act(async () => {
+      harness.requests[0].reject(new DOMException("stale abort", "AbortError"));
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("stale abort"), false);
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("the current inventory failure reports its error and finishes loading", async () => {
+  const harness = createInventoryHarness();
+  try {
+    await harness.render(0);
+    await act(async () => {
+      harness.requests[0].resolve(new Response(null, { status: 500 }));
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("HTTP 500"), true);
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("the current inventory abort finishes loading without reporting an error", async () => {
+  const harness = createInventoryHarness();
+  try {
+    await harness.render(0);
+    await act(async () => {
+      harness.requests[0].reject(new DOMException("current abort", "AbortError"));
+      await Promise.resolve();
+    });
+    assert.equal(harness.container.textContent.includes("current abort"), false);
+    assert.equal(harness.container.textContent.includes("Loading..."), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+for (const firstCompletion of ["inventory", "transcript"]) {
+  test(`manual Refresh waits when ${firstCompletion} completes first`, async () => {
+    const harness = createRefreshHarness();
+    try {
+      await harness.render();
+      await settle(harness.inventoryRequests[0], emptyInventoryResponse());
+      await harness.clickRefresh();
+
+      if (firstCompletion === "inventory") {
+        await settle(harness.inventoryRequests[1], emptyInventoryResponse());
+      } else {
+        await settle(harness.transcriptRequests[0], true);
+      }
+      assert.equal(refreshSucceeded(harness.container), false);
+
+      if (firstCompletion === "inventory") {
+        await settle(harness.transcriptRequests[0], true);
+      } else {
+        await settle(harness.inventoryRequests[1], emptyInventoryResponse());
+      }
+      assert.equal(refreshSucceeded(harness.container), true);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+}
+
+for (const failedPhase of ["inventory", "transcript"]) {
+  test(`manual Refresh does not show success when ${failedPhase} fails`, async () => {
+    const harness = createRefreshHarness();
+    try {
+      await harness.render();
+      await settle(harness.inventoryRequests[0], emptyInventoryResponse());
+      await harness.clickRefresh();
+
+      await settle(
+        harness.inventoryRequests[1],
+        failedPhase === "inventory"
+          ? new Response(null, { status: 500 })
+          : emptyInventoryResponse(),
+      );
+      await settle(harness.transcriptRequests[0], failedPhase !== "transcript");
+      assert.equal(refreshSucceeded(harness.container), false);
+      assert.equal(
+        harness.container.textContent.includes("HTTP 500"),
+        failedPhase === "inventory",
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+}
+
+test("manual Refresh needs only inventory success when no session is selected", async () => {
+  const harness = createRefreshHarness({ selected: false });
+  try {
+    await harness.render();
+    await settle(harness.inventoryRequests[0], emptyInventoryResponse());
+    await harness.clickRefresh();
+    await settle(harness.inventoryRequests[1], emptyInventoryResponse());
+    assert.equal(harness.transcriptRequests.length, 0);
+    assert.equal(refreshSucceeded(harness.container), true);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("manual Refresh does not show success when the selected transcript callback is unavailable", async () => {
+  const harness = createRefreshHarness({ provideTranscriptRefresh: false });
+  try {
+    await harness.render();
+    await settle(harness.inventoryRequests[0], emptyInventoryResponse());
+    await harness.clickRefresh();
+    await settle(harness.inventoryRequests[1], emptyInventoryResponse());
+    assert.equal(refreshSucceeded(harness.container), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("a superseded manual Refresh cannot publish late success", async () => {
+  const harness = createRefreshHarness();
+  try {
+    await harness.render();
+    await settle(harness.inventoryRequests[0], emptyInventoryResponse());
+    await harness.clickRefresh();
+    await harness.clickRefresh();
+
+    await settle(harness.inventoryRequests[2], new Response(null, { status: 500 }));
+    await settle(harness.transcriptRequests[1], true);
+    await settle(harness.transcriptRequests[0], true);
+    await settle(harness.inventoryRequests[1], emptyInventoryResponse());
+    assert.equal(refreshSucceeded(harness.container), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("background inventory completion does not show manual Refresh success", async () => {
+  const harness = createRefreshHarness({ selected: false });
+  try {
+    await harness.render();
+    await settle(harness.inventoryRequests[0], emptyInventoryResponse());
+    await harness.triggerBackgroundLoad();
+    await settle(harness.inventoryRequests[1], emptyInventoryResponse());
+    assert.equal(refreshSucceeded(harness.container), false);
+  } finally {
+    await harness.cleanup();
   }
 });
