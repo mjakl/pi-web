@@ -546,22 +546,25 @@ test("boundary Tab closes the portal and follows the trigger's logical position"
   }
 });
 
-test("moving focus outside the trigger and popup closes the popup", async () => {
-  const view = await mountItem(baseSession);
-  const outside = document.createElement("button");
-  document.body.append(outside);
-
+test("the popup is a native popover, so the browser owns dismissal", async () => {
+  // Light dismiss, Escape-to-close and top-layer stacking come from the UA.
+  // happy-dom implements none of them, so this asserts the contract we now
+  // depend on rather than the behaviour, which only a real browser can show.
+  const view = await mountItem(baseSession, { isActive: true });
   try {
     await click(view.container.querySelector("button[aria-controls]"));
-    await act(() => outside.focus());
-    assert.equal(document.querySelector('[role="group"]') === null, true);
+    const group = document.querySelector('[role="group"]');
+    assert.equal(group.getAttribute("popover"), "auto");
+    // Positioning stays ours; the UA sheet centres with inset:0/margin:auto.
+    assert.equal(group.style.position, "fixed");
+    assert.equal(group.style.inset, "auto");
+    assert.equal(group.style.margin, "0px");
   } finally {
-    outside.remove();
     await view.unmount();
   }
 });
 
-test("popup scrolling stays open and focused while outside scrolling closes with trigger focus", async () => {
+test("no scroll dismisses the popup now that light dismiss is the UA's", async () => {
   const view = await mountItem(baseSession, { isActive: true });
   try {
     const trigger = view.container.querySelector("button[aria-controls]");
@@ -569,13 +572,15 @@ test("popup scrolling stays open and focused while outside scrolling closes with
     const group = document.querySelector('[role="group"]');
     const action = group.querySelector("button");
     action.focus();
+
     await act(() => group.dispatchEvent(new Event("scroll")));
     assert.equal(document.querySelector('[role="group"]') === group, true);
     assert.equal(document.activeElement === action, true);
 
+    // A scroll container that holds the trigger used to dismiss. It cannot
+    // drop a press any more, and the popup follows its anchor instead.
     await act(() => view.container.dispatchEvent(new Event("scroll")));
-    assert.equal(document.querySelector('[role="group"]') === null, true);
-    assert.equal(document.activeElement === trigger, true);
+    assert.equal(document.querySelector('[role="group"]') === group, true);
   } finally {
     await view.unmount();
   }

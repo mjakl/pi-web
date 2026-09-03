@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { SessionInfo } from "@/lib/types";
 import { formatRelativeTime } from "@/lib/i18n/format";
 import { useI18n } from "@/hooks/useI18n";
@@ -248,43 +247,36 @@ export function SessionItem({
     if (rect.top !== menuPosition.anchorTop || rect.left !== menuPosition.anchorLeft) repositionMenu();
   });
 
+  // Show as a native popover so the browser owns dismissal. Its light dismiss
+  // is implemented below the DOM event layer, which is where the phone quirks
+  // that dropped a tap on Stop live: a URL-bar resize, the scroll that rides
+  // along with it, and a tap that blurs the focused button without focusing
+  // anything. Escape stays ours because window shortcuts must not also see it,
+  // and positioning stays ours because CSS anchor positioning is too new.
+  // Keyed on open/closed, not on the position: repositioning swaps the
+  // position object every time, and showPopover() on an already-open popover
+  // throws InvalidStateError.
+  const menuShown = Boolean(menuPosition) && menuEligibilityValid;
+  useLayoutEffect(() => {
+    if (!menuShown) return;
+    menuRef.current?.showPopover?.();
+  }, [menuShown]);
+
   useEffect(() => {
     if (!menuPosition || !menuEligibilityValid) return;
 
-    const dismissOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!menuRef.current?.contains(target) && !menuTriggerRef.current?.contains(target)) {
-        transitionActionSurface(IDLE_ACTION_SURFACE, "none");
-      }
-    };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
       transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     };
-    const dismissOnScroll = (event: Event) => {
-      const target = event.target;
-      if (target instanceof Node && menuRef.current?.contains(target)) return;
-      // Only a scroll container that actually holds the trigger moves it out
-      // from under the popup. A window- or document-level scroll moves
-      // nothing, and iOS fires one alongside the resize for every URL-bar and
-      // keyboard animation -- dismissing there drops the press already under
-      // way onto whichever row the popup was covering.
-      const trigger = menuTriggerRef.current;
-      if (!trigger || target === document || !(target instanceof Node) || !target.contains(trigger)) return;
-      transitionActionSurface(IDLE_ACTION_SURFACE, "trigger-if-owned");
-    };
 
-    document.addEventListener("pointerdown", dismissOutside, true);
     document.addEventListener("keydown", dismissOnEscape);
     window.addEventListener("resize", repositionMenu);
-    window.addEventListener("scroll", dismissOnScroll, true);
     return () => {
-      document.removeEventListener("pointerdown", dismissOutside, true);
       document.removeEventListener("keydown", dismissOnEscape);
       window.removeEventListener("resize", repositionMenu);
-      window.removeEventListener("scroll", dismissOnScroll, true);
     };
   }, [menuEligibilityValid, menuPosition, repositionMenu, transitionActionSurface]);
 
@@ -350,20 +342,6 @@ export function SessionItem({
       transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     }
   }, [session.id, session.transient, onDeleted, transitionActionSurface]);
-
-  const closeWhenFocusLeaves = useCallback((e: React.FocusEvent) => {
-    if (renderedSurfaceRef.current.kind !== "menu") return;
-    const next = e.relatedTarget as Node | null;
-    // Focus going nowhere is not focus leaving the popup. iOS does not focus a
-    // button on tap: it blurs whatever had focus and reports no relatedTarget,
-    // and the popup opens with focus on its first action -- so every tap on
-    // Stop closed the popup before the click landed, dropping the press on the
-    // row underneath. An outside press is already covered by the pointerdown
-    // listener, Escape by its keydown, and Tab by handleMenuKeyDown.
-    if (!next) return;
-    if (menuRef.current?.contains(next) || menuTriggerRef.current?.contains(next)) return;
-    transitionActionSurface(IDLE_ACTION_SURFACE, "none");
-  }, [transitionActionSurface]);
 
   const handleMenuKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "Tab") return;
@@ -537,7 +515,6 @@ export function SessionItem({
                 aria-disabled={actionPending || undefined}
                 onClick={toggleMenu}
                 onFocus={() => { menuHadFocusRef.current = false; }}
-                onBlur={closeWhenFocusLeaves}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   width: 28, height: 28, padding: 0,
@@ -565,21 +542,28 @@ export function SessionItem({
             )}
           </div>
 
-          {menuPosition && createPortal(
+          {menuPosition && (
             <div
               ref={menuRef}
               id={menuId}
+              popover="auto"
+              onToggle={(e) => {
+                if ((e as unknown as { newState?: string }).newState !== "closed") return;
+                transitionActionSurface(IDLE_ACTION_SURFACE, "trigger-if-owned");
+              }}
               role="group"
               aria-label={actionsLabel}
               style={{
-                position: "fixed", top: menuPosition.top, left: menuPosition.left, zIndex: 1000,
+                // inset/margin reset the UA popover sheet, which centres with
+                // inset: 0 and margin: auto and would ignore top/left.
+                position: "fixed", inset: "auto", margin: 0,
+                top: menuPosition.top, left: menuPosition.left, zIndex: 1000,
                 width: "min(144px, calc(100vw - 16px))", maxHeight: "calc(100vh - 16px)", overflowY: "auto",
                 padding: 4, background: "var(--bg)", border: "1px solid var(--border)",
                 borderRadius: 7, boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
               }}
               onClick={(e) => e.stopPropagation()}
               onFocusCapture={() => { menuHadFocusRef.current = true; }}
-              onBlur={closeWhenFocusLeaves}
               onKeyDown={handleMenuKeyDown}
             >
               {isActive && (
@@ -597,8 +581,7 @@ export function SessionItem({
                   </button>
                 </>
               )}
-            </div>,
-            document.body,
+            </div>
           )}
         </>
       )}
