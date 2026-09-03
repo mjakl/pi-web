@@ -24,6 +24,7 @@ import { userMessageKey } from "@/lib/prompt-recovery";
 import {
   isCurrentTranscriptRefresh,
   mergeTranscriptRefreshMessages,
+  runTranscriptNavigation,
   type TranscriptRefreshVersion,
 } from "@/lib/transcript-refresh";
 import { AgentEventConnection } from "@/lib/agent-event-connection";
@@ -514,6 +515,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } catch (e) {
       console.error("Failed to load context:", e);
     }
+  }, []);
+
+  const invalidateTranscriptRequests = useCallback(() => {
+    sessionLoadRequestIdRef.current += 1;
+    transcriptRevisionRef.current += 1;
   }, []);
 
   const loadTools = useCallback(async (sid: string) => {
@@ -1516,25 +1522,27 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (bashRunningRef.current) return;
     const sid = sessionIdRef.current;
     if (!sid) return;
-    sessionLoadRequestIdRef.current += 1;
-    transcriptRevisionRef.current += 1;
-    sendAgentCommand(sid, { type: "navigate_tree", targetId: entryId }).catch(() => {});
     setActiveLeafId(entryId);
-    await loadContext(sid, entryId);
-  }, [loadContext]);
+    await runTranscriptNavigation(
+      invalidateTranscriptRequests,
+      () => sendAgentCommand(sid, { type: "navigate_tree", targetId: entryId }).catch(() => {}),
+      () => loadContext(sid, entryId),
+    );
+  }, [invalidateTranscriptRequests, loadContext]);
 
   const handleLeafChange = useCallback(async (leafId: string | null) => {
     if (bashRunningRef.current) return;
     setActiveLeafId(leafId);
     const sid = sessionIdRef.current;
     if (!sid) return;
-    sessionLoadRequestIdRef.current += 1;
-    transcriptRevisionRef.current += 1;
-    await loadContext(sid, leafId);
-    if (leafId) {
-      sendAgentCommand(sid, { type: "navigate_tree", targetId: leafId }).catch(() => {});
-    }
-  }, [loadContext]);
+    await runTranscriptNavigation(
+      invalidateTranscriptRequests,
+      () => leafId
+        ? sendAgentCommand(sid, { type: "navigate_tree", targetId: leafId }).catch(() => {})
+        : Promise.resolve(),
+      () => loadContext(sid, leafId),
+    );
+  }, [invalidateTranscriptRequests, loadContext]);
 
   const handleModelChange = useCallback(async (provider: string, modelId: string) => {
     if (isNew) {
