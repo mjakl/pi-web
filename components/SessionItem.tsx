@@ -127,6 +127,7 @@ export function SessionIndicator({ kind }: { kind: keyof typeof SESSION_INDICATO
 
 export function SessionItem({
   session,
+  shortcutLabel,
   isSelected,
   isActive,
   isRunning,
@@ -138,6 +139,7 @@ export function SessionItem({
   onDeleted,
 }: {
   session: SessionInfo;
+  shortcutLabel?: string;
   isSelected: boolean;
   isActive?: boolean;
   isRunning?: boolean;
@@ -556,6 +558,11 @@ export function SessionItem({
               }}
               title={title}
             >
+              {shortcutLabel && (
+                <kbd aria-hidden="true" style={{ flexShrink: 0, color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 10 }}>
+                  {shortcutLabel}
+                </kbd>
+              )}
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
                 {title}
               </span>

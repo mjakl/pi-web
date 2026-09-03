@@ -508,6 +508,57 @@ test("a superseded manual Refresh cannot publish late success", async () => {
   }
 });
 
+test("holding Ctrl reveals session shortcuts and a number selects that recent session", async () => {
+  const originalFetch = globalThis.fetch;
+  const sessions = Array.from({ length: 10 }, (_, index) => ({
+    ...sidebarSession,
+    id: `session-${index + 1}`,
+    name: `Session ${index + 1}`,
+    modified: `2026-09-01T10:${String(59 - index).padStart(2, "0")}:00.000Z`,
+  }));
+  globalThis.fetch = async (url) => {
+    if (String(url).startsWith("/api/sessions")) {
+      return Response.json({ sessions, activeSessionIds: [], runningSessionIds: [] });
+    }
+    if (url === "/api/home") return Response.json({ home: "/tmp" });
+    if (url === "/api/agent/running") return emptyInventoryResponse();
+    return Response.json({});
+  };
+
+  const selected = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => {
+      root.render(React.createElement(SessionSidebar, {
+        piVersion: "test",
+        selectedSessionId: null,
+        onSelectSession: (session) => selected.push(session.id),
+        beginSessionInventoryAttempt: () => 1,
+        actionsAvailable: true,
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Control", ctrlKey: true })));
+    assert.equal(container.querySelectorAll("kbd").length, 10);
+    assert.equal(container.querySelector("kbd").textContent, "Ctrl+1");
+
+    const shortcut = new KeyboardEvent("keydown", { key: "0", ctrlKey: true, cancelable: true });
+    await act(() => window.dispatchEvent(shortcut));
+    assert.equal(shortcut.defaultPrevented, true);
+    assert.deepEqual(selected, ["session-10"]);
+
+    await act(() => window.dispatchEvent(new KeyboardEvent("keyup", { key: "Control" })));
+    assert.equal(container.querySelector("kbd"), null);
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("background inventory completion does not show manual Refresh success", async () => {
   const harness = createRefreshHarness({ selected: false });
   try {

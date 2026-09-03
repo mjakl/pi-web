@@ -311,6 +311,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
   const [activeSessionIds, setActiveSessionIds] = useState<Set<string>>(() => new Set());
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
   const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(() => loadUnreadSessionIds());
+  const [shortcutModifier, setShortcutModifier] = useState<"ctrl" | "meta" | null>(null);
   const previousRunningSessionIdsRef = useRef<Set<string>>(new Set());
   // Once polling has delivered a snapshot it is the source of truth for
   // running state; late /api/sessions responses must not overwrite it.
@@ -1036,6 +1037,32 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
   const filteredSessions = selectedProject
     ? sessionsForProject(allSessions, selectedProject.key)
     : allSessions;
+
+  useEffect(() => {
+    const updateModifier = (event: KeyboardEvent) => {
+      setShortcutModifier(event.metaKey ? "meta" : event.ctrlKey ? "ctrl" : null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      updateModifier(event);
+      if (event.repeat || event.altKey || event.shiftKey || (!event.ctrlKey && !event.metaKey) || !/^[0-9]$/.test(event.key)) return;
+      const index = event.key === "0" ? 9 : Number(event.key) - 1;
+      const session = filteredSessions[index];
+      if (!session) return;
+      event.preventDefault();
+      handleSelectSessionFromList(session);
+    };
+    const handleKeyUp = (event: KeyboardEvent) => updateModifier(event);
+    const clearModifier = () => setShortcutModifier(null);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", clearModifier);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", clearModifier);
+    };
+  }, [filteredSessions, handleSelectSessionFromList]);
+
   const showWorktreeSwitcher = Boolean(
     worktreeState?.isGit
     && worktreeState.isTopLevel
@@ -1777,10 +1804,13 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
             {t("sidebar.noSessions")}
           </div>
         )}
-        {filteredSessions.map((session) => (
+        {filteredSessions.map((session, index) => (
           <SessionItem
             key={session.id}
             session={session}
+            shortcutLabel={shortcutModifier && index < 10
+              ? `${shortcutModifier === "meta" ? "⌘" : "Ctrl+"}${index === 9 ? 0 : index + 1}`
+              : undefined}
             isSelected={session.id === selectedSessionId}
             isActive={activeSessionIds.has(session.id)}
             isRunning={runningSessionIds.has(session.id)}
