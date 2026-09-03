@@ -725,7 +725,7 @@ test("Shift-click bypasses Stop and Delete confirmations", async () => {
 });
 
 test("the fixed right rail keeps metadata and actions from changing left-row geometry", async () => {
-  const session = { ...baseSession, name: "A very long session title that must stay truncated" };
+  const session = { ...baseSession, name: "A very long session title that must stay truncated", messageCount: 1000 };
   const view = await mountItem(session);
   const row = view.container.firstElementChild;
   const trigger = view.container.querySelector("button[aria-controls]");
@@ -740,7 +740,12 @@ test("the fixed right rail keeps metadata and actions from changing left-row geo
   assert.equal(rail.style.flexDirection, "column");
   assert.equal(rail.style.justifyContent, "space-between");
   assert.equal(rail.style.alignItems, "flex-end");
-  assert.match(rail.textContent, /3 msgs/);
+  const count = rail.lastElementChild;
+  assert.equal(count.textContent, "1000 msgs");
+  assert.equal(count.title, "1000 msgs");
+  assert.equal(count.style.maxWidth, "100%");
+  assert.equal(count.style.overflow, "hidden");
+  assert.equal(count.style.textOverflow, "ellipsis");
 
   await view.rerender({ ...session, messageCount: undefined });
   assert.equal(trigger.parentElement, rail);

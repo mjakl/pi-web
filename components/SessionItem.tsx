@@ -624,7 +624,12 @@ export function SessionItem({
             {session.messageCount === undefined ? (
               <span aria-label={t("sidebar.loading")}>…</span>
             ) : (
-              <span style={{ whiteSpace: "nowrap" }}>{t("sidebar.messagesCount", { count: session.messageCount })}</span>
+              <span
+                title={t("sidebar.messagesCount", { count: session.messageCount })}
+                style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              >
+                {t("sidebar.messagesCount", { count: session.messageCount })}
+              </span>
             )}
           </div>
 
