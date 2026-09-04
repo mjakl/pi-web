@@ -10,7 +10,6 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { authorizeDirectory } from "@/lib/file-access";
 import { errorMessage } from "@/lib/error-message";
-import { hasJsonContentType } from "@/lib/request-content-type";
 import { getProjectTrustStatus } from "@/lib/project-trust";
 import type {
   PluginDiagnostic,
@@ -290,10 +289,6 @@ export async function GET(req: Request) {
 
 // POST /api/plugins body: { action, source?, scope?, cwd }
 export async function POST(req: Request) {
-  if (!hasJsonContentType(req)) {
-    return Response.json({ error: "Content-Type must be application/json" }, { status: 415 });
-  }
-
   try {
     const body = await req.json() as {
       action?: PluginAction;

@@ -2,15 +2,10 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { stripAnsi } from "@/lib/ansi";
 import { runNpx } from "@/lib/npx";
 import { authorizeDirectory } from "@/lib/file-access";
-import { hasJsonContentType } from "@/lib/request-content-type";
 import { getProjectTrustStatus } from "@/lib/project-trust";
 
 // POST /api/skills/install  body: { package: string; scope: "global" | "project"; cwd?: string }
 export async function POST(req: Request) {
-  if (!hasJsonContentType(req)) {
-    return Response.json({ error: "Content-Type must be application/json" }, { status: 415 });
-  }
-
   try {
     const { package: pkg, scope, cwd } = await req.json() as { package?: string; scope?: string; cwd?: string };
     if (!pkg?.trim()) return Response.json({ error: "package required" }, { status: 400 });

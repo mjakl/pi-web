@@ -478,8 +478,8 @@
 }
 
 .config-button-danger {
-  border-color: rgba(239, 68, 68, 0.35);
-  background: rgba(239, 68, 68, 0.06);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
   color: var(--danger);
 }
 
@@ -495,8 +495,8 @@
 }
 
 .config-button-danger:not(:disabled):hover {
-  border-color: rgba(239, 68, 68, 0.5);
-  background: rgba(239, 68, 68, 0.12);
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 
 .config-button:focus-visible {
