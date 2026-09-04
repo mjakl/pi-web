@@ -66,7 +66,7 @@ function appShell() {
     React.createElement(
       SearchParamsContext.Provider,
       { value: new URLSearchParams() },
-      React.createElement(AppShell, { piVersion: "test" }),
+      React.createElement(AppShell),
     ),
   );
 }
@@ -102,7 +102,6 @@ function deferred() {
 
 function sidebarForInventoryTest(refreshKey, beginSessionInventoryAttempt, onSessionsChange) {
   return React.createElement(SessionSidebar, {
-    piVersion: "test",
     selectedSessionId: null,
     onSelectSession() {},
     beginSessionInventoryAttempt,
@@ -142,7 +141,6 @@ function createRefreshHarness({ selected = true, provideTranscriptRefresh = true
   const root = createRoot(container);
   const render = () => act(async () => {
     root.render(React.createElement(SessionSidebar, {
-      piVersion: "test",
       selectedSessionId: selected ? sidebarSession.id : null,
       onSelectSession() {},
       beginSessionInventoryAttempt: () => ++nextAttempt,
@@ -227,7 +225,7 @@ test("a closed sidebar is inert and hidden from accessibility navigation until r
   try {
     await act(() => root.render(appShell()));
     const sidebar = container.querySelector("#session-sidebar");
-    const sidebarControl = sidebar.querySelector("button");
+    const sidebarControl = sidebar.querySelector("button:not(:disabled)");
     assert.equal(sidebar.hasAttribute("inert"), false);
     assert.equal(sidebar.getAttribute("aria-hidden"), null);
     sidebarControl.focus();
@@ -532,7 +530,6 @@ test("holding Ctrl reveals session shortcuts and a number selects that recent se
   try {
     await act(async () => {
       root.render(React.createElement(SessionSidebar, {
-        piVersion: "test",
         selectedSessionId: null,
         onSelectSession: (session) => selected.push(session.id),
         beginSessionInventoryAttempt: () => 1,

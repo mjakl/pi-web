@@ -69,7 +69,7 @@ import {
 type SessionCopyField = "file" | "id" | "projectDir" | "gitBranch" | "gitWorktree";
 const TOP_BAR_ICON_BUTTON_SIZE = 36;
 
-export function AppShell({ piVersion }: { piVersion: string }) {
+export function AppShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [initialNavigation] = useState(() => getInitialNavigation(searchParams));
@@ -905,7 +905,6 @@ export function AppShell({ piVersion }: { piVersion: string }) {
   const sidebarContent = (
     <>
       <SessionSidebar
-        piVersion={piVersion}
         selectedSessionId={selectedSession?.id ?? null}
         onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}
@@ -1843,7 +1842,6 @@ export function AppShell({ piVersion }: { piVersion: string }) {
           {showChat ? (
             <ChatWindow
               key={sessionKey}
-              piVersion={piVersion}
               session={selectedSession}
               sessionActive={Boolean(selectedSession && activeSessionIds.has(selectedSession.id))}
               sessionRunning={Boolean(selectedSession && runningSessionIds.has(selectedSession.id))}

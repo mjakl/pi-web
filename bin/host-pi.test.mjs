@@ -77,7 +77,6 @@ test("Linux skips only the checkout candidate, not its independently listed syml
   });
 
   assert.equal(runtime.executable, host.executable);
-  assert.equal(runtime.version, "0.84.3");
   assert.equal(runtime.packages["@earendil-works/pi-ai"].dir.endsWith(path.join("@earendil-works", "pi-ai")), true);
   for (const descriptor of Object.values(runtime.packages)) assert.ok(fs.statSync(descriptor.entry).isFile());
 });
@@ -112,7 +111,6 @@ test("accepts Pi package versions without running the executable", (t) => {
       checkoutDir: path.join(base, "checkout"),
       env: { ...process.env, PATH: `${host.binDir}${path.delimiter}${process.env.PATH}` },
     });
-    assert.equal(runtime.version, version ?? "unknown");
     assert.equal(Object.keys(runtime.packages).length, 4);
     assert.equal(fs.existsSync(marker), false);
   }
@@ -146,7 +144,6 @@ test("resolves Windows command shims when their PATH contains spaces", (t) => {
   });
 
   assert.equal(runtime.executable, host.executable);
-  assert.equal(runtime.version, "0.84.3");
 });
 
 test("macOS resolves the first executable Pi from PATH", (t) => {
@@ -204,7 +201,6 @@ test("runtime hook imports validated host entries instead of checkout-local Pi",
   writePackage(localRoot, "@earendil-works/pi-ai", "0.84.3");
   writePackage(localRoot, "@earendil-works/pi-tui", "0.84.3");
   const runtime = {
-    version: "0.84.4",
     packages: {
       "@earendil-works/pi-ai": {
         dir: hostDir,

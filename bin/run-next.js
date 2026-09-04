@@ -20,7 +20,6 @@ function runNext(mode, args, { pkgDir = path.join(__dirname, ".."), env = proces
     env: {
       ...env,
       PI_WEB_HOST_PI: JSON.stringify(runtime),
-      PI_WEB_PI_VERSION: runtime.version,
     },
     stdio: "inherit",
   });

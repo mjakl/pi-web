@@ -19,15 +19,15 @@ const { renderToStaticMarkup } = await jiti.import("react-dom/server");
 const { ChatWindow } = await jiti.import("./ChatWindow.tsx");
 const { DockedComposer } = await jiti.import("./DockedComposer.tsx");
 
-test("shows the validated runtime Pi version in the empty composer", () => {
+test("shows the product name without version details in the empty composer", () => {
   const html = renderToStaticMarkup(React.createElement(ChatWindow, {
-    piVersion: "0.84.4",
     session: null,
     newSessionCwd: "/tmp/project",
     newSessionDraftKey: "draft",
   }));
 
-  assert.match(html, /pi <span[^>]*>v0\.84\.4<\/span>/);
+  assert.match(html, />Pi Web<\/span>/);
+  assert.doesNotMatch(html, /(?:web|pi) <span[^>]*>v/);
 });
 
 test("does not draw a hard divider above the docked composer", () => {

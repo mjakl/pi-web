@@ -197,7 +197,7 @@ function resolveHostPi({
       };
     }
 
-    return { executable, version: coding.packageJson.version ?? "unknown", packages };
+    return { executable, packages };
   } catch (error) {
     throw validationError(error instanceof Error ? error.message : String(error), executable);
   }

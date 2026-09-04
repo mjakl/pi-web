@@ -10,9 +10,9 @@ const React = await jiti.import("react");
 const { renderToStaticMarkup } = await jiti.import("react-dom/server");
 const { PiWebTitle } = await jiti.import("./PiWebTitle.tsx");
 
-test("renders the product name as a plain button before any scramble runs", () => {
-  const html = renderToStaticMarkup(React.createElement(PiWebTitle, { piVersion: "0.84.4" }));
-  assert.match(html, /^<button style="[^"]*">Pi Web<\/button>$/);
+test("renders the product name as static text", () => {
+  const html = renderToStaticMarkup(React.createElement(PiWebTitle));
+  assert.match(html, /^<span style="[^"]*">Pi Web<\/span>$/);
   assert.match(html, /color:var\(--text\)/);
   assert.match(html, /font-family:var\(--font-mono\)/);
   assert.match(html, /min-width:6ch/);
