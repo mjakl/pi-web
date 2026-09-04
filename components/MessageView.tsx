@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useRef, useEffect, useMemo } from "react";
+import { memo, useState, useRef, useEffect, useMemo, useDeferredValue } from "react";
 import { MarkdownBody } from "./MarkdownBody";
 import { ImagePreview } from "./ImagePreview";
 import { errorMessage } from "@/lib/error-message";
@@ -883,7 +883,11 @@ function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCal
 }
 
 function TextBlock({ block, isStreaming, cwd, onOpenFile, sessionId }: { block: TextContent; isStreaming?: boolean; cwd?: string; onOpenFile?: (filePath: string) => void; sessionId?: string }) {
-  return <SafeMarkdownBody isStreaming={isStreaming} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId}>{block.text}</SafeMarkdownBody>;
+  // While streaming, every token re-runs the whole remark/rehype pipeline over the
+  // message so far. Deferring lets React drop intermediate parses it cannot keep up
+  // with; a settled message renders its exact text.
+  const streamingText = useDeferredValue(block.text);
+  return <SafeMarkdownBody isStreaming={isStreaming} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId}>{isStreaming ? streamingText : block.text}</SafeMarkdownBody>;
 }
 
 function AssistantImageBlock({ block }: { block: ImageContent }) {

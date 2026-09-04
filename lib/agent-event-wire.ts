@@ -1,4 +1,5 @@
 import type { JsonAgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import { getToolExecutionProgress } from "./tool-execution-progress";
 
 export interface AgentEventLike {
   type: string;
@@ -89,7 +90,7 @@ export function toClientAgentEvent(
       type: "tool_execution_update",
       toolCallId: event.toolCallId,
       toolName: event.toolName,
-      partialResult: event.partialResult,
+      progress: getToolExecutionProgress(event.partialResult),
     };
   }
 
