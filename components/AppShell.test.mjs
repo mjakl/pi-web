@@ -71,6 +71,41 @@ function appShell() {
   );
 }
 
+test("follows system theme changes while the app shell is mounted", async () => {
+  const originalMatchMedia = window.matchMedia.bind(window);
+  const listeners = new Set();
+  let prefersDark = false;
+  window.matchMedia = (query) => query === "(prefers-color-scheme: dark)"
+    ? {
+        get matches() { return prefersDark; },
+        media: query,
+        addEventListener(type, listener) { if (type === "change") listeners.add(listener); },
+        removeEventListener(type, listener) { if (type === "change") listeners.delete(listener); },
+      }
+    : originalMatchMedia(query);
+  localStorage.setItem("pi-theme", "auto");
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => {
+      root.render(appShell());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    prefersDark = true;
+    await act(() => listeners.forEach((listener) => listener(new Event("change"))));
+    assert.equal(document.documentElement.classList.contains("dark"), true);
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+    document.documentElement.classList.remove("dark");
+    localStorage.removeItem("pi-theme");
+    window.matchMedia = originalMatchMedia;
+  }
+});
+
 const sidebarSession = {
   id: "sidebar-session",
   path: "/tmp/sessions/sidebar-session.jsonl",
