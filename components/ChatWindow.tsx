@@ -600,6 +600,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                 if (isMessageGroupAnchor(msg)) anchorRefIndexByMessage.set(idx, refIdx++);
               });
 
+              const renderKeyForIndex = (idx: number) => entryIds[idx] ?? `live:${idx}`;
               const attachVisibleRef = (refIndex: number | undefined) => (el: HTMLDivElement | null) => {
                 if (refIndex !== undefined) messageRefs.current[refIndex] = el;
               };
@@ -613,7 +614,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                 const isVisible = isMessageGroupAnchor(msg) || msg.role === "assistant";
                 const currentRefIdx = anchorRefIndexByMessage.get(idx);
                 const keyPrefix = options.keyPrefix ?? "message";
-                const messageKey = entryIds[idx] ?? idx;
+                const messageKey = renderKeyForIndex(idx);
                 let showTimestamp = false;
                 if (msg.role === "assistant") {
                   showTimestamp = true;
@@ -720,7 +721,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                     </ProcessDetailsGroup>
                   );
                   rendered.push(
-                    <Fragment key={`process-group-${userIdx}-${finalAssistantIdx}`}>
+                    <Fragment key={`process-group-${renderKeyForIndex(userIdx)}-${renderKeyForIndex(finalAssistantIdx)}`}>
                       {processGroup}
                     </Fragment>,
                   );
