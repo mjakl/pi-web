@@ -7,7 +7,7 @@ import { asBracketedPaste, toTerminalKeyData } from "@/lib/terminal-input";
 import { countToolCallBlocks, getAssistantErrorMessage, getDisplayableAssistantBlocks, isMessageGroupAnchor, shouldExpandProcessDetails, splitFinalAssistantBlocks } from "@/lib/message-display";
 import { extractTurnWrittenFiles, type WrittenFile } from "@/lib/turn-written-files";
 import { MessageView } from "./MessageView";
-import { ChatInput, type ChatInputHandle } from "./ChatInput";
+import { ChatInput, getUserMessageText, getUserMessageDraftImages, type ChatInputHandle } from "./ChatInput";
 import { ChatJumpToLatest } from "./ChatJumpToLatest";
 import { ChatMinimap } from "./ChatMinimap";
 import { ExtensionStatusBar } from "./ExtensionStatusBar";
@@ -223,6 +223,12 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange,
     onTranscriptRefreshChange, onSessionMetadataChange, onSessionStatsPanelOpen,
   });
+  const handleForkMessage = useCallback((entryId: string, message: UserMessage) => {
+    void handleFork(entryId, {
+      value: getUserMessageText(message),
+      images: getUserMessageDraftImages(message),
+    });
+  }, [handleFork]);
   const sessionBusy = agentRunning || bashRunning;
   const readOnly = session?.cwdAvailable === false;
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -635,7 +641,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                     cwd={messageCwd}
                     onOpenFile={onOpenFile}
                     entryId={entryIds[idx]}
-                    onFork={readOnly || sessionBusy || isNew || (idx === 0 && msg.role === "user") ? undefined : handleFork}
+                    onFork={readOnly || sessionBusy || isNew || (idx === 0 && msg.role === "user") ? undefined : handleForkMessage}
                     forking={forkingEntryId === entryIds[idx]}
                     onNavigate={readOnly || sessionBusy ? undefined : handleNavigate}
                     prevAssistantEntryId={sessionBusy ? undefined : prevAssistantEntryId}

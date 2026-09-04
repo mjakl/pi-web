@@ -18,7 +18,7 @@ import { normalizeToolCalls } from "@/lib/normalize";
 import { createClientId } from "@/lib/client-id";
 import { noticeReducer, type NoticeType } from "@/lib/notice-queue";
 import { isPromptRejectedError, sendAgentCommand } from "@/lib/agent-client";
-import { clearDraft, rekeyDraft, restoreDraftSubmission } from "@/lib/draft-store";
+import { clearDraft, rekeyDraft, restoreDraftSubmission, setDraft, type ChatDraft } from "@/lib/draft-store";
 import { getPreferredToolPreset, setPreferredToolPreset } from "@/lib/tool-preset-preference";
 import { getToolNamesForPreset, type ToolEntry, type ToolPreset } from "@/lib/tool-presets";
 import type { SessionStatsInfo } from "@/lib/pi-types";
@@ -1581,7 +1581,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
   }, []);
 
-  const handleFork = useCallback(async (entryId: string) => {
+  const handleFork = useCallback(async (entryId: string, draft: ChatDraft) => {
     if (bashRunningRef.current) return;
     const sid = sessionIdRef.current;
     if (!sid) return;
@@ -1593,6 +1593,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       });
       const { cancelled, newSessionId } = result ?? {};
       if (!cancelled && newSessionId) {
+        setDraft(newSessionId, draft);
         onSessionForked?.(newSessionId);
       }
     } catch (e) {
