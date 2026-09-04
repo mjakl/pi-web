@@ -1,16 +1,8 @@
-import { NextResponse } from "next/server";
 import { statSync, type Stats } from "fs";
-import { homedir } from "os";
-import { isAbsolute, resolve } from "path";
 import { allowFileRoot } from "@/lib/file-access";
+import { normalizeDirectory } from "@/lib/directory-browser";
 import { pathIdentityKey } from "@/lib/paths";
 import { resolveProject } from "@/lib/worktree";
-
-function normalizeCwd(cwd: string): string {
-  if (cwd === "~") return homedir();
-  if (cwd.startsWith("~/")) return resolve(homedir(), cwd.slice(2));
-  return isAbsolute(cwd) ? cwd : resolve(cwd);
-}
 
 // POST /api/cwd/validate  body: { cwd: string }
 // Validates a candidate workspace before the UI selects it.
@@ -20,30 +12,30 @@ export async function POST(req: Request) {
     const cwd = typeof body.cwd === "string" ? body.cwd.trim() : "";
 
     if (!cwd) {
-      return NextResponse.json({ error: "Path is required" }, { status: 400 });
+      return Response.json({ error: "Path is required" }, { status: 400 });
     }
 
-    const normalizedCwd = normalizeCwd(cwd);
+    const normalizedCwd = normalizeDirectory(cwd);
     let stat: Stats;
     try {
       stat = statSync(normalizedCwd);
     } catch {
-      return NextResponse.json({ error: `Directory does not exist: ${cwd}` }, { status: 400 });
+      return Response.json({ error: `Directory does not exist: ${cwd}` }, { status: 400 });
     }
 
     if (!stat.isDirectory()) {
-      return NextResponse.json({ error: `Path is not a directory: ${cwd}` }, { status: 400 });
+      return Response.json({ error: `Path is not a directory: ${cwd}` }, { status: 400 });
     }
 
     allowFileRoot(normalizedCwd);
     const project = await resolveProject(normalizedCwd);
-    return NextResponse.json({
+    return Response.json({
       success: true,
       cwd: normalizedCwd,
       projectRoot: project.projectRoot,
       projectKey: pathIdentityKey(project.projectRoot),
     });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return Response.json({ error: String(error) }, { status: 500 });
   }
 }

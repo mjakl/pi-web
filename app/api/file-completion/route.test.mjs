@@ -7,9 +7,8 @@ import { createJiti } from "jiti";
 
 const jiti = createJiti(import.meta.url, { tsconfigPaths: true });
 const { GET } = await jiti.import("./route.ts");
-const { NextRequest } = await jiti.import("next/server");
 const { getAdditionalAllowedRoots } = await jiti.import("../../../lib/allowed-roots.ts");
-const request = (q, cwd) => GET(new NextRequest(`http://localhost/api/file-completion?${new URLSearchParams({ q, ...(cwd ? { cwd } : {}) })}`));
+const request = (q, cwd) => GET(new Request(`http://localhost/api/file-completion?${new URLSearchParams({ q, ...(cwd ? { cwd } : {}) })}`));
 
 test("completes outside the project without granting file access", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "pi-web-completion-route-"));

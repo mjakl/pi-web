@@ -1,19 +1,9 @@
-import { NextResponse } from "next/server";
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { existsSync } from "fs";
 import { randomUUID } from "crypto";
 import { allowFileRoot } from "@/lib/file-access";
+import { isThinkingLevel } from "@/lib/model-scope";
 import { startRpcSession } from "@/lib/rpc-manager";
 
-const THINKING_LEVELS = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
-
-function parseThinkingLevel(value: unknown): ThinkingLevel | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value === "string" && THINKING_LEVELS.has(value as ThinkingLevel)) {
-    return value as ThinkingLevel;
-  }
-  throw new Error(`Invalid thinking level: ${String(value)}`);
-}
 // POST /api/agent/new  body: { cwd: string; type: string; message?: string; ... }
 // Spawns a brand-new pi session. Most calls immediately send the first command;
 // type:"ensure_session" only creates the runtime so clients can query commands.
@@ -27,7 +17,7 @@ export async function POST(req: Request) {
     commandType = typeof command.type === "string" ? command.type : undefined;
 
     if (!cwd || typeof cwd !== "string") {
-      return NextResponse.json({
+      return Response.json({
         error: "cwd is required",
         ...(commandType === "prompt"
           ? { code: "prompt_rejected", accepted: false }
@@ -35,7 +25,7 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
     if (!existsSync(cwd)) {
-      return NextResponse.json({
+      return Response.json({
         error: `Directory does not exist: ${cwd}`,
         ...(commandType === "prompt"
           ? { code: "prompt_rejected", accepted: false }
@@ -48,7 +38,10 @@ export async function POST(req: Request) {
     if ((provider && !modelId) || (!provider && modelId)) {
       throw new Error("provider and modelId must be provided together");
     }
-    const explicitThinkingLevel = parseThinkingLevel(thinkingLevel);
+    const explicitThinkingLevel = isThinkingLevel(thinkingLevel) ? thinkingLevel : undefined;
+    if (thinkingLevel !== undefined && explicitThinkingLevel === undefined) {
+      throw new Error(`Invalid thinking level: ${String(thinkingLevel)}`);
+    }
 
     // Must be unique per request: startRpcSession coalesces concurrent callers
     // that share a key onto one session. Date.now() (ms resolution) collides for
@@ -71,7 +64,7 @@ export async function POST(req: Request) {
     };
 
     if (promptCommand.type === "ensure_session") {
-      return NextResponse.json({
+      return Response.json({
         success: true,
         sessionId: realSessionId,
         data: null,
@@ -85,7 +78,7 @@ export async function POST(req: Request) {
     const result = await session.send(promptCommand);
     promptAccepted = promptCommand.type === "prompt";
 
-    return NextResponse.json({
+    return Response.json({
       success: true,
       sessionId: realSessionId,
       data: result,
@@ -95,7 +88,7 @@ export async function POST(req: Request) {
       thinkingLevel: state.thinkingLevel,
     });
   } catch (error) {
-    return NextResponse.json({
+    return Response.json({
       error: error instanceof Error ? error.message : String(error),
       ...(commandType === "prompt" && !promptAccepted
         ? { code: "prompt_rejected", accepted: false }

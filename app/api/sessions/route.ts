@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import {
   attachSessionProjectInfo,
   listAllSessions,
@@ -25,7 +24,7 @@ export async function GET() {
       }
       return inventory;
     });
-    return NextResponse.json(
+    return Response.json(
       {
         sessions,
         activeSessionIds: getActiveRpcSessionIds(),
@@ -34,7 +33,7 @@ export async function GET() {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    return NextResponse.json(
+    return Response.json(
       { error: String(error) },
       { status: 500, headers: { "Cache-Control": "no-store" } },
     );

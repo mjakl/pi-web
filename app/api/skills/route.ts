@@ -1,11 +1,10 @@
-import { NextResponse } from "next/server";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import path from "path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { loadSkillsWithInstallInfo } from "@/lib/skills-service";
 import { setDisableModelInvocation } from "@/lib/skill-frontmatter";
-import { getAllowedFileRoots, isExistingPathAllowed } from "@/lib/file-access";
+import { authorizeDirectory, getAllowedFileRoots } from "@/lib/file-access";
 import { isExistingPathWithinRoots } from "@/lib/path-security";
 
 // GET /api/skills?cwd=<path>
@@ -14,15 +13,16 @@ import { isExistingPathWithinRoots } from "@/lib/path-security";
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const cwd = searchParams.get("cwd");
-  if (!cwd) return NextResponse.json({ error: "cwd required" }, { status: 400 });
+  if (!cwd) return Response.json({ error: "cwd required" }, { status: 400 });
 
   try {
-    if (!(await isExistingPathAllowed(cwd))) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    const authorized = await authorizeDirectory(cwd);
+    if ("error" in authorized) {
+      return Response.json({ error: authorized.error }, { status: authorized.status });
     }
-    return NextResponse.json(await loadSkillsWithInstallInfo(cwd));
+    return Response.json(await loadSkillsWithInstallInfo(cwd));
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    return Response.json({ error: String(e) }, { status: 500 });
   }
 }
 
@@ -31,8 +31,8 @@ export async function PATCH(req: Request) {
   try {
     const body = await req.json() as { filePath: string; disableModelInvocation: boolean };
     const { filePath, disableModelInvocation } = body;
-    if (!filePath) return NextResponse.json({ error: "filePath required" }, { status: 400 });
-    if (!existsSync(filePath)) return NextResponse.json({ error: "file not found" }, { status: 404 });
+    if (!filePath) return Response.json({ error: "filePath required" }, { status: 400 });
+    if (!existsSync(filePath)) return Response.json({ error: "file not found" }, { status: 404 });
     const allowedRoots = new Set(await getAllowedFileRoots());
     allowedRoots.add(getAgentDir());
     // Globally installed skills live in ~/.agents/skills and are symlinked into
@@ -42,14 +42,14 @@ export async function PATCH(req: Request) {
     const globalSkillsDir = path.join(homedir(), ".agents", "skills");
     if (existsSync(globalSkillsDir)) allowedRoots.add(globalSkillsDir);
     if (!isExistingPathWithinRoots(filePath, allowedRoots)) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      return Response.json({ error: "Access denied" }, { status: 403 });
     }
 
     const content = readFileSync(filePath, "utf8");
     const updated = setDisableModelInvocation(content, disableModelInvocation);
     writeFileSync(filePath, updated, "utf8");
-    return NextResponse.json({ success: true });
+    return Response.json({ success: true });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    return Response.json({ error: String(e) }, { status: 500 });
   }
 }

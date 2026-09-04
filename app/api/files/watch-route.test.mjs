@@ -12,7 +12,6 @@ const jiti = createJiti(import.meta.url, {
 });
 const { GET } = await jiti.import("./[...path]/route.ts");
 const { allowFileRoot } = await jiti.import("@/lib/file-access");
-const { NextRequest } = await jiti.import("next/server");
 
 function readServerSentEvents(response) {
   const reader = response.body.getReader();
@@ -69,7 +68,7 @@ test("file watching keeps reporting changes across same-path replacements", asyn
   allowFileRoot(dir);
 
   const response = await GET(
-    new NextRequest(`http://localhost/api/files${filePath}?type=watch`),
+    new Request(`http://localhost/api/files${filePath}?type=watch`),
     { params: Promise.resolve({ path: filePath.split("/").filter(Boolean) }) },
   );
   assert.equal(response.status, 200);

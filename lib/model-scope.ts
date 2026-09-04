@@ -6,7 +6,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
 
-const THINKING_LEVEL_SUFFIXES = new Set<ThinkingLevel>([
+const THINKING_LEVELS = new Set<ThinkingLevel>([
   "off",
   "minimal",
   "low",
@@ -15,6 +15,15 @@ const THINKING_LEVEL_SUFFIXES = new Set<ThinkingLevel>([
   "xhigh",
   "max",
 ]);
+
+/**
+ * Pi's thinking-level vocabulary. Shared by `enabledModels` `:level` suffixes,
+ * new-session request validation, and wrapper recreation after a tool change,
+ * so the three of them cannot drift when the SDK adds a level.
+ */
+export function isThinkingLevel(value: unknown): value is ThinkingLevel {
+  return typeof value === "string" && THINKING_LEVELS.has(value as ThinkingLevel);
+}
 
 /**
  * Model scoping shared by the UI selector and AgentSession startup.
@@ -81,7 +90,7 @@ function assertNoAmbiguousExactPatterns(
     if (matches.length === 0) {
       const colonIndex = pattern.lastIndexOf(":");
       const suffix = colonIndex >= 0 ? pattern.slice(colonIndex + 1) : "";
-      if (THINKING_LEVEL_SUFFIXES.has(suffix as ThinkingLevel)) {
+      if (isThinkingLevel(suffix)) {
         matches = exactReferenceMatches(pattern.slice(0, colonIndex), models);
       }
     }

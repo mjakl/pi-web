@@ -1,61 +1,41 @@
-import { stat } from "fs/promises";
-import { resolve } from "path";
-import { NextResponse } from "next/server";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import { isExistingPathAllowed } from "@/lib/file-access";
+import { authorizeDirectory } from "@/lib/file-access";
 import { invalidateModelsCache } from "@/lib/models-cache";
 import { getProjectTrustStatus, trustProject } from "@/lib/project-trust";
 import { destroyRpcSessionsForCwd, hasBusyRpcSessionForCwd } from "@/lib/rpc-manager";
 
-async function validateCwd(value: unknown): Promise<
-  { cwd: string } | { response: NextResponse }
-> {
-  if (typeof value !== "string" || !value.trim()) {
-    return { response: NextResponse.json({ error: "cwd required" }, { status: 400 }) };
-  }
-
-  const cwd = resolve(value);
-  try {
-    if (!(await stat(cwd)).isDirectory()) {
-      return { response: NextResponse.json({ error: "cwd must be a directory" }, { status: 400 }) };
-    }
-  } catch {
-    return { response: NextResponse.json({ error: "Directory does not exist" }, { status: 400 }) };
-  }
-
-  if (!(await isExistingPathAllowed(cwd))) {
-    return { response: NextResponse.json({ error: "Access denied" }, { status: 403 }) };
-  }
-  return { cwd };
-}
-
 export async function GET(req: Request) {
-  const result = await validateCwd(new URL(req.url).searchParams.get("cwd"));
-  if ("response" in result) return result.response;
-  return NextResponse.json(getProjectTrustStatus(result.cwd, getAgentDir()));
+  const authorized = await authorizeDirectory(new URL(req.url).searchParams.get("cwd")?.trim() ?? "");
+  if ("error" in authorized) {
+    return Response.json({ error: authorized.error }, { status: authorized.status });
+  }
+  return Response.json(getProjectTrustStatus(authorized.directory, getAgentDir()));
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json() as { cwd?: unknown };
-    const result = await validateCwd(body.cwd);
-    if ("response" in result) return result.response;
+    const authorized = await authorizeDirectory(typeof body.cwd === "string" ? body.cwd.trim() : "");
+    if ("error" in authorized) {
+      return Response.json({ error: authorized.error }, { status: authorized.status });
+    }
+    const cwd = authorized.directory;
 
     const agentDir = getAgentDir();
-    const current = getProjectTrustStatus(result.cwd, agentDir);
+    const current = getProjectTrustStatus(cwd, agentDir);
     if (!current.requiresTrust) {
-      return NextResponse.json({ error: "This project has no resources that require trust" }, { status: 409 });
+      return Response.json({ error: "This project has no resources that require trust" }, { status: 409 });
     }
-    if (hasBusyRpcSessionForCwd(result.cwd)) {
-      return NextResponse.json({ error: "Wait for the active session to finish before trusting this project" }, { status: 409 });
+    if (hasBusyRpcSessionForCwd(cwd)) {
+      return Response.json({ error: "Wait for the active session to finish before trusting this project" }, { status: 409 });
     }
 
-    const status = trustProject(result.cwd, agentDir);
+    const status = trustProject(cwd, agentDir);
     invalidateModelsCache();
-    await destroyRpcSessionsForCwd(result.cwd);
-    return NextResponse.json(status);
+    await destroyRpcSessionsForCwd(cwd);
+    return Response.json(status);
   } catch (error) {
-    return NextResponse.json(
+    return Response.json(
       { error: error instanceof Error ? error.message : String(error) },
       { status: 500 },
     );

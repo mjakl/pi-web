@@ -66,7 +66,7 @@ function appShell() {
     React.createElement(
       SearchParamsContext.Provider,
       { value: new URLSearchParams() },
-      React.createElement(AppShell),
+      React.createElement(AppShell, { homeDir: "/tmp" }),
     ),
   );
 }
@@ -164,7 +164,6 @@ function createRefreshHarness({ selected = true, provideTranscriptRefresh = true
       inventoryRequests.push(request);
       return request.promise;
     }
-    if (url === "/api/home") return Response.json({ home: "/tmp" });
     if (url === "/api/agent/running") return emptyInventoryResponse();
     return Response.json({});
   };
@@ -226,7 +225,6 @@ function createInventoryHarness(onSessionsChange) {
       requests.push(request);
       return request.promise;
     }
-    if (url === "/api/home") return Response.json({ home: "/tmp" });
     if (url === "/api/agent/running") return emptyInventoryResponse();
     return Response.json({});
   };
@@ -296,7 +294,6 @@ test("closing the actual sidebar removes its body portal and reopening starts wi
       activeSessionIds: [],
       runningSessionIds: [],
     });
-    if (url === "/api/home") return Response.json({ home: "/tmp" });
     if (url === "/api/agent/running") return Response.json({ activeSessionIds: [], runningSessionIds: [] });
     return Response.json({});
   };
@@ -553,7 +550,6 @@ test("holding Ctrl reveals session shortcuts and a number selects that recent se
     if (String(url).startsWith("/api/sessions")) {
       return Response.json({ sessions, activeSessionIds: [], runningSessionIds: [] });
     }
-    if (url === "/api/home") return Response.json({ home: "/tmp" });
     if (url === "/api/agent/running") return emptyInventoryResponse();
     return Response.json({});
   };
@@ -617,7 +613,6 @@ test("sidebar Activate starts a saved session without a prompt, reports failure,
       return Response.json({ sessions: [sidebarSession], activeSessionIds: [], runningSessionIds: [] });
     }
     if (url === "/api/agent/running") return Response.json({ activeSessionIds: [], runningSessionIds: [] });
-    if (url === "/api/home") return Response.json({ home: "/tmp" });
     return Response.json({});
   };
   const container = document.createElement("div");
@@ -686,7 +681,6 @@ test("sidebar puts running then active sessions first and shortcuts follow live 
   globalThis.fetch = async (url) => {
     if (String(url).startsWith("/api/sessions")) return Response.json({ sessions, ...activity });
     if (url === "/api/agent/running") return Response.json(activity);
-    if (url === "/api/home") return Response.json({ home: "/tmp" });
     return Response.json({});
   };
   const selected = [];

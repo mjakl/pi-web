@@ -1,4 +1,3 @@
-import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
@@ -102,14 +101,15 @@ function listWithWalk(cwd: string): FileListing {
 // repos larger than MAX_FILES still find deep files (cap applied after
 // matching, like the TUI passing the query to fd).
 // Guarded by the same allow-list as /api/files.
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
   try {
-    const cwd = req.nextUrl.searchParams.get("cwd")?.trim() ?? "";
+    const params = new URL(req.url).searchParams;
+    const cwd = params.get("cwd")?.trim() ?? "";
     const authorized = await authorizeDirectory(cwd);
     if ("error" in authorized) {
-      return NextResponse.json({ error: authorized.error }, { status: authorized.status });
+      return Response.json({ error: authorized.error }, { status: authorized.status });
     }
-    const query = req.nextUrl.searchParams.get("q")?.slice(0, MAX_QUERY_LENGTH) ?? "";
+    const query = params.get("q")?.slice(0, MAX_QUERY_LENGTH) ?? "";
 
     const cache = getIndexCache();
     const now = Date.now();
@@ -126,15 +126,15 @@ export async function GET(req: NextRequest) {
 
     if (query) {
       cached.entries ??= buildEntriesFromFiles(cached.listing.files);
-      return NextResponse.json({ matches: filterFileEntries(cached.entries, query) });
+      return Response.json({ matches: filterFileEntries(cached.entries, query) });
     }
 
     const { files, hardTruncated } = cached.listing;
-    return NextResponse.json({
+    return Response.json({
       files: files.slice(0, MAX_FILES),
       truncated: hardTruncated || files.length > MAX_FILES,
     });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return Response.json({ error: String(error) }, { status: 500 });
   }
 }

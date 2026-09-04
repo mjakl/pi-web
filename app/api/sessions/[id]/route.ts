@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { SESSION_TAIL_DEFAULT, SESSION_TAIL_MAX } from "@/lib/chat-lazy-load";
 import { unlinkSync } from "fs";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -16,7 +15,7 @@ import { computeSessionTotalActiveMs } from "@/lib/session-timing";
 import { computeSessionStats } from "@/lib/session-stats";
 import type { SessionEntry } from "@/lib/types";
 import { readSessionToolSelection } from "@/lib/session-tool-selection";
-import { readStableSessionFile } from "@/lib/session-metadata";
+import { extractTextContent, readStableSessionFile, sessionTitleFromFirstMessage } from "@/lib/session-metadata";
 import type { SessionMetadataFingerprint } from "@/lib/session-metadata-types";
 
 export async function GET(
@@ -29,7 +28,7 @@ export async function GET(
     const liveRpc = rpc?.isAlive() ? rpc : undefined;
     const resolvedPath = liveRpc ? null : await resolveSessionPath(id);
     if (!liveRpc && !resolvedPath) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+      return Response.json({ error: "Session not found" }, { status: 404 });
     }
 
     const liveSessionManager = liveRpc?.inner.sessionManager;
@@ -73,12 +72,9 @@ export async function GET(
         modified: fingerprint?.modified ?? header.timestamp,
         fileSize: fingerprint?.fileSize,
         messageCount: stats.totalMessages,
-        firstMessage: firstUserMessage
-          ? (() => {
-              const c = (firstUserMessage as { content: unknown }).content;
-              return typeof c === "string" ? c : (Array.isArray(c) ? (c.find((b: { type: string }) => b.type === "text") as { text: string } | undefined)?.text ?? "" : "") || "(no messages)";
-            })()
-          : "(no messages)",
+        firstMessage: sessionTitleFromFirstMessage(
+          firstUserMessage ? extractTextContent(firstUserMessage) : "",
+        ),
         parentSessionId,
         transient: fingerprint === null,
       }]))[0] : null;
@@ -100,11 +96,11 @@ export async function GET(
       ? await readStableSessionFile(filePath, readSnapshot)
       : await readSnapshot(null);
     if (!snapshot) {
-      return NextResponse.json({ error: "Session changed during read" }, { status: 409 });
+      return Response.json({ error: "Session changed during read" }, { status: 409 });
     }
-    return NextResponse.json(snapshot);
+    return Response.json(snapshot);
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return Response.json({ error: String(error) }, { status: 500 });
   }
 }
 
@@ -117,17 +113,17 @@ export async function PATCH(
   try {
     const { name } = await req.json() as { name?: string };
     if (typeof name !== "string") {
-      return NextResponse.json({ error: "name is required" }, { status: 400 });
+      return Response.json({ error: "name is required" }, { status: 400 });
     }
     const filePath = await resolveSessionPath(id);
     if (!filePath) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+      return Response.json({ error: "Session not found" }, { status: 404 });
     }
     const sm = SessionManager.open(filePath);
     sm.appendSessionInfo(name.trim());
-    return NextResponse.json({ ok: true });
+    return Response.json({ ok: true });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return Response.json({ error: String(error) }, { status: 500 });
   }
 }
 
@@ -140,7 +136,7 @@ export async function DELETE(
   try {
     const filePath = await resolveSessionPath(id);
     if (!filePath) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+      return Response.json({ error: "Session not found" }, { status: 404 });
     }
 
     // Stop first so no live runtime can append while files are reparented and removed.
@@ -148,8 +144,8 @@ export async function DELETE(
     reparentChildSessions(filePath);
     unlinkSync(filePath);
     invalidateSessionPathCache(id);
-    return NextResponse.json({ ok: true });
+    return Response.json({ ok: true });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return Response.json({ error: String(error) }, { status: 500 });
   }
 }

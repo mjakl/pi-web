@@ -89,6 +89,8 @@ function ToolbarIconButton({
 }
 
 interface Props {
+  /** The server's home directory, read once in the page rather than fetched. */
+  homeDir: string;
   selectedSessionId: string | null;
   onSelectSession: (session: SessionInfo, isRestore?: boolean) => void;
   onNewSession?: (sessionId: string, cwd: string) => void;
@@ -268,7 +270,7 @@ function AnchoredMenu({
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, beginSessionInventoryAttempt, onSessionsChange, onRefreshSelectedSession, actionsAvailable, onOpenSettings }: Props) {
+export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, beginSessionInventoryAttempt, onSessionsChange, onRefreshSelectedSession, actionsAvailable, onOpenSettings }: Props) {
   const { t } = useI18n();
   const projectMenuId = useId();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
@@ -276,7 +278,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCwd, setSelectedCwd] = useState<string | null>(null);
-  const [homeDir, setHomeDir] = useState<string>("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [projectFilter, setProjectFilter] = useState("");
   const [customPathOpen, setCustomPathOpen] = useState(false);
@@ -691,12 +692,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   useEffect(() => {
     if (explorerRefreshKey !== undefined) setExplorerKey((k) => k + 1);
   }, [explorerRefreshKey]);
-
-  useEffect(() => {
-    fetch("/api/home").then((r) => r.json()).then((d: { home?: string }) => {
-      if (d.home) setHomeDir(d.home);
-    }).catch(() => {});
-  }, []);
 
   const restoredRef = useRef(false);
 
