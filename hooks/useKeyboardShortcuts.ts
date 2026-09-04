@@ -21,7 +21,7 @@ export function registerAbortHandler(handler: (() => void) | null): void {
 // ---------------------------------------------------------------------------
 
 interface UseGlobalKeyboardShortcutsOptions {
-  /** Called when Ctrl+Alt+N is pressed. Receives current cwd. */
+  /** Called when Cmd/Ctrl+K is pressed. Receives current cwd. */
   onNewSession?: (cwd: string) => void;
   /** The currently selected project directory (sidebar cwd). */
   activeCwd?: string | null;
@@ -46,7 +46,7 @@ export function shouldAbortOnEscape(
  *
  * Shortcuts handled here:
  *   Esc          – stop the running agent (via module-level abort handler)
- *   Ctrl+Alt+N   – create a new session in the active project directory
+ *   Cmd/Ctrl+K   – create a new session in the active project directory
  *
  * Note: Esc inside <textarea> or <input> is deliberately NOT handled here.
  * ChatInput manages its own Esc logic (closing slash / @ file menus, stopping
@@ -73,10 +73,11 @@ export function useGlobalKeyboardShortcuts(
         return;
       }
 
-      // ---- Ctrl+Alt+N: new session ----
-      if (e.key === "n" && e.ctrlKey && e.altKey) {
+      // ---- Cmd/Ctrl+K: new session ----
+      if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && !e.isComposing) {
         if (e.defaultPrevented || !activeCwd || !onNewSession) return;
         e.preventDefault();
+        if (e.repeat) return;
         onNewSession(activeCwd);
       }
     };

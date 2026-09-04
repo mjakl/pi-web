@@ -569,9 +569,13 @@ test("holding Ctrl reveals session shortcuts and a number selects that recent se
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
+    const newSessionButton = container.querySelector('button[aria-label="New session"]');
+    assert.equal(newSessionButton.querySelector("kbd"), null);
+    assert.equal(newSessionButton.getAttribute("aria-keyshortcuts"), "Meta+K Control+K");
     await act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Control", ctrlKey: true })));
-    assert.equal(container.querySelectorAll("kbd").length, 10);
-    assert.equal(container.querySelector("kbd").textContent, "Ctrl+1");
+    assert.equal(container.querySelectorAll("kbd").length, 11);
+    assert.equal(newSessionButton.querySelector("kbd").textContent, "Ctrl+K");
+    assert.equal(container.querySelector("[data-session-inventory-id] kbd").textContent, "Ctrl+1");
 
     const shortcut = new KeyboardEvent("keydown", { key: "0", ctrlKey: true, cancelable: true });
     await act(() => window.dispatchEvent(shortcut));
@@ -579,6 +583,12 @@ test("holding Ctrl reveals session shortcuts and a number selects that recent se
     assert.deepEqual(selected, ["session-10"]);
 
     await act(() => window.dispatchEvent(new KeyboardEvent("keyup", { key: "Control" })));
+    assert.equal(container.querySelector("kbd"), null);
+    assert.ok(newSessionButton.querySelector("svg"));
+
+    await act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Meta", metaKey: true })));
+    assert.equal(newSessionButton.querySelector("kbd").textContent, "⌘K");
+    await act(() => window.dispatchEvent(new Event("blur")));
     assert.equal(container.querySelector("kbd"), null);
   } finally {
     await act(() => root.unmount());
@@ -711,7 +721,7 @@ test("sidebar puts running then active sessions first and shortcuts follow live 
     assert.deepEqual(rowIds(), ["active-old", "running-old", "stopped-new", "active-new", "running-new", "stopped-old"]);
     await act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "1", ctrlKey: true, cancelable: true })));
     assert.equal(selected.at(-1), "active-old");
-    assert.equal(container.querySelector("kbd").textContent, "Ctrl+1");
+    assert.equal(container.querySelector("[data-session-inventory-id] kbd").textContent, "Ctrl+1");
   } finally {
     await act(() => root.unmount());
     container.remove();

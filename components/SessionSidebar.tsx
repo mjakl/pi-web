@@ -1004,13 +1004,20 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
               onClick={handleNewSession}
               disabled={!selectedCwd}
               aria-label={t("i18n.newSession")}
+              aria-keyshortcuts="Meta+K Control+K"
               className="sidebar-icon-button"
               title={selectedCwd ? t("sidebar.newSessionTitle", { path: selectedCwd }) : t("sidebar.selectProject")}
             >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-                <line x1="6" y1="1" x2="6" y2="11" />
-                <line x1="1" y1="6" x2="11" y2="6" />
-              </svg>
+              {shortcutModifier && selectedCwd ? (
+                <kbd aria-hidden="true" style={{ fontFamily: "var(--font-mono)", fontSize: 10 }}>
+                  {t("sidebar.newSessionShortcut", { modifier: shortcutModifier === "meta" ? "⌘" : "Ctrl+" })}
+                </kbd>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                  <line x1="6" y1="1" x2="6" y2="11" />
+                  <line x1="1" y1="6" x2="11" y2="6" />
+                </svg>
+              )}
             </button>
             <button
               onClick={handleSessionRefresh}
