@@ -62,7 +62,7 @@ test("fails before Next startup with actionable host Pi guidance", () => {
     },
   });
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /Host Pi validation failed: no pi executable was found on PATH.*>=0\.84\.3 <0\.85\.0.*Install or update Pi.*first on PATH.*restart Pi Web/s);
+  assert.match(result.stderr, /Host Pi validation failed: no pi executable was found on PATH.*Install or update Pi.*first on PATH.*restart Pi Web/s);
 });
 
 test("preserves port and hostname options", () => {

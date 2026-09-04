@@ -14,15 +14,15 @@ This fork follows my own workflow and is not intended to stay compatible with up
 
 ## Host Pi requirement
 
-Pi Web runs Pi's SDK in-process but does not ship Pi. Install a compatible host Pi and make its executable available on `PATH`:
+Pi Web runs Pi's SDK in-process but does not ship Pi. Install Pi and make its executable available on `PATH`:
 
 ```bash
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@~0.84.3
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 ```
 
-Pi Web requires `@earendil-works/pi-coding-agent` `>=0.84.3 <0.85.0`. It supports Linux, macOS, and Windows; Android and Termux are not supported.
+Pi Web supports Linux, macOS, and Windows; Android and Termux are not supported.
 
-At startup, Pi Web ignores only its checkout-local `node_modules/.bin/pi`, then uses the first `pi` found in `PATH` and `PATHEXT` order. If that executable or its Pi package graph is missing, incompatible, or inconsistent, startup fails with instructions instead of trying a later executable. After you install or upgrade Pi, restart Pi Web so it validates the new runtime.
+At startup, Pi Web ignores only its checkout-local `node_modules/.bin/pi`, then uses the first `pi` found in `PATH` and `PATHEXT` order. It checks that Pi's packages and import entries are available, without checking their versions. If the installation is missing or cannot be loaded, startup fails with instructions instead of trying a later executable. After you install or upgrade Pi, restart Pi Web to load the new runtime.
 
 ## Run from a checkout
 
@@ -51,7 +51,7 @@ Use `npm run dev:lan` only when you intend to accept connections from other mach
 
 ## Run the published package
 
-With Node.js and a compatible host Pi installed, run Pi Web without cloning the repository:
+With Node.js and Pi installed, run Pi Web without cloning the repository:
 
 ```bash
 npx @agegr/pi-web

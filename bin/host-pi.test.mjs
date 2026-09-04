@@ -49,7 +49,7 @@ function makePi(root, codingVersion = "0.84.3", dependencyVersion = "0.84.4", ex
 }
 
 function tempDir(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-host-pi-"));
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-host-pi-")));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
@@ -58,7 +58,6 @@ function assertActionable(run, executable) {
   assert.throws(run, (error) => {
     assert.match(error.message, /^Host Pi validation failed:/);
     if (executable) assert.ok(error.message.includes(`Executable: ${executable}.`));
-    assert.match(error.message, />=0\.84\.3 <0\.85\.0/);
     assert.match(error.message, /Install or update Pi.*first on PATH.*restart Pi Web/s);
     return true;
   });
@@ -97,43 +96,48 @@ test("the first non-checkout pi is authoritative when its graph is invalid", (t)
   }), path.join(firstBin, "pi"));
 });
 
-test("rejects Pi dependencies outside the coding package range and 0.84.x", (t) => {
+test("accepts Pi package versions without running the executable", (t) => {
   const base = tempDir(t);
-  const host = makePi(path.join(base, "host"), "0.84.3", "0.85.0");
-  assertActionable(() => resolveHostPi({
-    platform: "linux",
-    checkoutDir: path.join(base, "checkout"),
-    env: { ...process.env, PATH: `${host.binDir}${path.delimiter}${process.env.PATH}` },
-  }), host.executable);
+  for (const version of ["0.1.0", "0.85.0", "1.0.0-beta.1", undefined]) {
+    const host = makePi(path.join(base, String(version)), version, "2.0.0");
+    const manifest = path.join(host.codingDir, "package.json");
+    const packageJson = JSON.parse(fs.readFileSync(manifest, "utf8"));
+    packageJson.version = version;
+    fs.writeFileSync(manifest, JSON.stringify(packageJson));
+    const marker = path.join(base, "executed");
+    fs.writeFileSync(path.join(host.codingDir, "cli.js"), `#!/usr/bin/env node\nimport fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'executed'); process.exit(1);\n`);
+
+    const runtime = resolveHostPi({
+      platform: "linux",
+      checkoutDir: path.join(base, "checkout"),
+      env: { ...process.env, PATH: `${host.binDir}${path.delimiter}${process.env.PATH}` },
+    });
+    assert.equal(runtime.version, version ?? "unknown");
+    assert.equal(Object.keys(runtime.packages).length, 4);
+    assert.equal(fs.existsSync(marker), false);
+  }
 });
 
-test("honors PATHEXT order and rejects an executable/package version mismatch", (t) => {
+test("honors PATHEXT order", (t) => {
   const base = tempDir(t);
   const cmdRoot = path.join(base, "cmd");
   const cmd = makePi(cmdRoot, "0.84.3", "0.84.3", "pi.CMD");
   const adjacentCmd = path.join(cmdRoot, "pi.CMD");
   fs.renameSync(cmd.executable, adjacentCmd);
   fs.writeFileSync(path.join(cmdRoot, "pi.EXE"), "shim");
-  let selected;
 
-  assertActionable(() => resolveHostPi({
+  const runtime = resolveHostPi({
     platform: "win32",
     checkoutDir: path.join(base, "checkout"),
     env: { PATH: cmdRoot, PATHEXT: ".CMD;.EXE" },
-    getExecutableVersion(executable) {
-      selected = executable;
-      return "0.84.4";
-    },
-  }), adjacentCmd);
-  assert.equal(selected, adjacentCmd);
+  });
+  assert.equal(runtime.executable, adjacentCmd);
 });
 
-test("runs Windows command shims when their PATH contains spaces", (t) => {
+test("resolves Windows command shims when their PATH contains spaces", (t) => {
   const base = tempDir(t);
   const root = path.join(base, "Windows User");
   const host = makePi(root, "0.84.3", "0.84.3", "pi.CMD");
-  fs.writeFileSync(host.executable, "#!/bin/sh\necho 0.84.3\n");
-  fs.chmodSync(host.executable, 0o755);
 
   const runtime = resolveHostPi({
     platform: "win32",
@@ -164,7 +168,7 @@ test("rejects Android and Termux before searching PATH", () => {
   }));
 });
 
-test("missing dependencies and invalid package versions fail with host guidance", (t) => {
+test("missing dependencies fail with host guidance", (t) => {
   const base = tempDir(t);
   const missing = makePi(path.join(base, "missing"));
   fs.rmSync(path.join(base, "missing", "node_modules", "@earendil-works", "pi-agent-core"), { recursive: true });
@@ -173,17 +177,6 @@ test("missing dependencies and invalid package versions fail with host guidance"
     checkoutDir: path.join(base, "checkout"),
     env: { ...process.env, PATH: `${missing.binDir}${path.delimiter}${process.env.PATH}` },
   }), missing.executable);
-
-  const invalid = makePi(path.join(base, "invalid"));
-  const packageJsonPath = path.join(invalid.codingDir, "package.json");
-  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
-  delete packageJson.version;
-  fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson));
-  assertActionable(() => resolveHostPi({
-    platform: "linux",
-    checkoutDir: path.join(base, "checkout"),
-    env: { ...process.env, PATH: `${invalid.binDir}${path.delimiter}${process.env.PATH}` },
-  }), invalid.executable);
 });
 
 test("validates package root entries during startup and rejects symlink escapes", (t) => {
