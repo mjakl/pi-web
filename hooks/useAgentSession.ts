@@ -42,7 +42,6 @@ import {
 import { AgentEventConnection } from "@/lib/agent-event-connection";
 import { useI18n } from "@/hooks/useI18n";
 import type { AgentEventLike } from "@/lib/agent-event-wire";
-import { getToolExecutionProgress } from "@/lib/tool-execution-progress";
 import { getSnapshotTail } from "@/lib/chat-lazy-load";
 import {
   INITIAL_STREAMING_STATE,
@@ -1355,7 +1354,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       case "tool_execution_update": {
         const id = event.toolCallId as string;
         const name = event.toolName as string;
-        const progress = getToolExecutionProgress(event.partialResult);
+        const progress = (event.progress as string | null) ?? null;
         setAgentPhase((prev) => {
           const tools = prev?.kind === "running_tools" ? [...prev.tools] : [];
           const existing = tools.find((tool) => tool.id === id);

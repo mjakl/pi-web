@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo, type CSSProperties } from "react";
-import {
-  Prism as SyntaxHighlighter,
-  createElement as renderSyntaxNode,
-  type SyntaxHighlighterProps,
-} from "react-syntax-highlighter";
-import { vs } from "react-syntax-highlighter/dist/cjs/styles/prism";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import type { SyntaxHighlighterProps } from "react-syntax-highlighter";
+import { SyntaxHighlighter, renderSyntaxNode } from "./SyntaxHighlighter";
+import vs from "react-syntax-highlighter/dist/cjs/styles/prism/vs";
+import vscDarkPlus from "react-syntax-highlighter/dist/cjs/styles/prism/vsc-dark-plus";
 import { useTheme } from "@/hooks/useTheme";
 import {
   DOCX_PREVIEW_MAX_BYTES,
