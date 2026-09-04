@@ -52,8 +52,8 @@ function finalAssistantText(messages: unknown[]): string {
     const message = messages[index];
     if (!isRecord(message) || message.role !== "assistant" || !Array.isArray(message.content)) continue;
     const output = message.content
-      .filter((part) => isRecord(part) && part.type === "text" && typeof part.text === "string")
-      .map((part) => part.text).join("");
+      .filter((part) => isRecord(part) && part.type === "text" && typeof part.text === "string" && part.text.length > 0)
+      .map((part) => part.text).join("\n\n");
     if (output) return output;
   }
   return "";

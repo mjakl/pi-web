@@ -2212,7 +2212,7 @@ span.linenumber {
 .subagent-body { border-top: 1px solid var(--border); padding: 12px; min-width: 0; }
 .subagent-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 12px; overflow-wrap: anywhere; }
 .subagent-result { margin-bottom: 12px; overflow-wrap: anywhere; }
-.subagent-result p { white-space: pre-wrap; }
+.subagent-error { white-space: pre-wrap; }
 .subagent-section-label { font-weight: 600; margin-bottom: 8px; }
 .subagent-disclosure { border-top: 1px solid var(--border); }
 .subagent-disclosure > summary { color: var(--text-muted); padding: 10px 0; }

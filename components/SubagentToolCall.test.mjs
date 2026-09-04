@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { Window } from "happy-dom";
 import { createJiti } from "jiti";
 
@@ -134,4 +135,48 @@ test("large child output uses the existing reveal guard and result images remain
     assert.doesNotMatch(view.container.textContent, /x{100}/);
     assert.ok(view.container.querySelector('img[src="data:image/png;base64,dGVzdA=="]'));
   } finally { await view.close(); }
+});
+
+
+test("separate assistant text blocks retain paragraph and Markdown boundaries", async () => {
+  const content = [
+    { type: "text", text: "First paragraph." },
+    { type: "text", text: "Second paragraph." },
+    { type: "text", text: "## Findings\n\n- Keep the controls" },
+  ];
+  const childResult = child({ messages: [
+    { role: "assistant", content },
+    { role: "assistant", content: [{ type: "text", text: "" }, { type: "text", text: "" }] },
+  ] });
+  const view = await mount({ toolResults: new Map([["sub-1", result([childResult])]]) });
+  try {
+    await expand(view.container.querySelector("details"));
+    const output = view.container.querySelector(".subagent-result .markdown-body");
+    assert.deepEqual([...output.querySelectorAll("p")].map((p) => p.textContent), ["First paragraph.", "Second paragraph."]);
+    assert.equal(output.querySelector("h2").textContent, "Findings");
+    assert.equal(output.querySelector("li").textContent, "Keep the controls");
+  } finally { await view.close(); }
+});
+
+test("Markdown soft breaks use normal whitespace while plain errors preserve line breaks", async () => {
+  const style = document.createElement("style");
+  style.textContent = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  document.head.append(style);
+  const outputText = "Source-wrapped prose\ncontinues on the next line.";
+  const error = "Provider failed.\nPlease retry.";
+  const childResult = child({ exitCode: 1, errorMessage: error,
+    messages: [{ role: "assistant", content: [{ type: "text", text: outputText }] }],
+  });
+  const view = await mount({ toolResults: new Map([["sub-1", result([childResult])]]) });
+  try {
+    await expand(view.container.querySelector("details"));
+    const paragraph = view.container.querySelector(".subagent-result .markdown-body p");
+    assert.equal(paragraph.textContent, outputText);
+    assert.equal(window.getComputedStyle(paragraph).whiteSpace || "normal", "normal");
+    const errorParagraph = view.container.querySelector(".subagent-error");
+    assert.equal(errorParagraph.textContent, error);
+    assert.equal(window.getComputedStyle(errorParagraph).whiteSpace, "pre-wrap");
+    await expand(namedDetails(view.container, "Prompt"));
+    assert.equal(window.getComputedStyle(view.container.querySelector(".subagent-plain")).whiteSpace, "pre-wrap");
+  } finally { await view.close(); style.remove(); }
 });
