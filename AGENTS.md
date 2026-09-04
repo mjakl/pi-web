@@ -116,9 +116,12 @@ Start with these owners instead of a broad file inventory:
 
 ### Security, files, paths, and credentials
 
-- Pi Web has no built-in authentication and does not restrict request Host or
-  Origin headers. Non-loopback access requires a trusted network or an external
-  security layer; do not add an application-level hostname or origin allowlist.
+- Pi Web has no built-in authentication and does not restrict request Host,
+  Origin, or Content-Type headers. Security is owned by the layer in front of
+  the application: non-loopback access requires a trusted network or an
+  external security layer. Do not add an application-level hostname or origin
+  allowlist, and do not add a Content-Type gate as a CSRF defence; the gate
+  was removed by decision, knowing loopback has no layer in front of it.
 - Pi Web's file APIs are not a general filesystem browser. Keep containment and
   symlink-safe authorization centralized in `lib/path-security.ts`; add roots
   through the existing allowed-root flow rather than adding route-local path

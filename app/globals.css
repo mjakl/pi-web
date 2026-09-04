@@ -1163,7 +1163,7 @@ span.linenumber {
 }
 
 .chat-status.is-error {
-  color: oklch(70.4% 0.191 22.216);
+  color: var(--danger);
 }
 
 .chat-body {
@@ -1358,7 +1358,7 @@ span.linenumber {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(37, 99, 235, 0.06);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
   backdrop-filter: blur(1px);
   animation: drop-zone-in 0.15s ease both;
 }
@@ -1376,13 +1376,13 @@ span.linenumber {
   position: absolute;
   width: 720px;
   height: 720px;
-  border: 1.5px solid rgba(37, 99, 235, 0.5);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 50%, transparent);
   border-radius: 50%;
   animation: drop-ripple 2.4s ease-out infinite backwards;
 }
 
 .chat-drop-zone-icon {
-  filter: drop-shadow(0 6px 18px rgba(37, 99, 235, 0.18));
+  filter: drop-shadow(0 6px 18px color-mix(in srgb, var(--accent) 18%, transparent));
 }
 
 @keyframes drop-zone-in {
@@ -1727,7 +1727,7 @@ span.linenumber {
 .app-error-button.is-primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -1964,7 +1964,8 @@ span.linenumber {
 /* Anchored dropdowns. popover="auto" hands light dismiss, close-on-Escape and
    top-layer stacking to the browser; CSS anchor positioning keeps the panel
    pinned to its trigger, which plain top-layer placement cannot do because a
-   popover's containing block is the viewport. Requires Safari 26 / Chrome 125.
+   popover's containing block is the viewport. It sets the browser floor,
+   declared once in package.json browserslist.
    @starting-style with allow-discrete replaces the hand-rolled mount/visible
    state machine that used to animate these. */
 .anchored-menu {

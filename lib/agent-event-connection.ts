@@ -110,12 +110,7 @@ export class AgentEventConnection {
     }
 
     let settled = false;
-    let resolve!: () => void;
-    let reject!: (error: AgentEventConnectionError) => void;
-    const promise = new Promise<void>((resolvePromise, rejectPromise) => {
-      resolve = resolvePromise;
-      reject = rejectPromise;
-    });
+    const { promise, resolve, reject } = Promise.withResolvers<void>();
     const timeout = setTimeout(() => {
       this.fail(connection, new AgentEventConnectionError("ready_timeout"));
     }, this.options.readinessTimeoutMs);

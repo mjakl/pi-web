@@ -1,4 +1,3 @@
-import { hasJsonContentType } from "@/lib/request-content-type";
 import {
   readPowerShellToolEnabled,
   writePowerShellToolEnabled,
@@ -20,9 +19,6 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  if (!hasJsonContentType(req)) {
-    return Response.json({ error: "Content-Type must be application/json" }, { status: 415 });
-  }
   if (process.platform !== "win32") {
     return Response.json({ error: "PowerShell tool settings are only available on Windows" }, { status: 404 });
   }
