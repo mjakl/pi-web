@@ -176,7 +176,7 @@ test("labels the model selector from the English message package", () => {
   assert.match(html, /title="Change model"/);
 });
 
-test("keeps one composer action slot across idle, agent, and non-agent busy states", () => {
+test("keeps a compact icon-only action slot across idle, steer, follow-up, and busy states", () => {
   const render = (props) => renderToStaticMarkup(React.createElement(ChatInput, {
     onSend() {},
     onAbort() {},
@@ -184,20 +184,26 @@ test("keeps one composer action slot across idle, agent, and non-agent busy stat
   }));
   const idle = render({ isStreaming: false });
   const agent = render({ isStreaming: true, onSteer() {}, onFollowUp() {} });
+  const followUp = render({ isStreaming: true, onFollowUp() {} });
   const busy = render({ isStreaming: true });
 
-  for (const html of [idle, agent, busy]) {
-    assert.match(html, /class="composer-action-slot" style="width:128px;min-width:128px/);
+  for (const html of [idle, agent, followUp, busy]) {
+    assert.match(html, /class="composer-action-slot" style="width:72px;min-width:72px/);
   }
-  // Hooks the phone media query targets; deleting one silently restores the 128px slot.
-  assert.match(idle, /class="composer-action-primary"/);
-  assert.match(agent, /class="composer-action-primary"/);
+  for (const html of [idle, agent, followUp]) {
+    const button = html.match(/<button[^>]*class="composer-action-primary"[^>]*>(.*?)<\/button>/s)?.[1];
+    assert.ok(button);
+    assert.match(button, /<svg/);
+    assert.equal(button.replace(/<[^>]*>/g, "").trim(), "");
+  }
   assert.match(agent, /class="composer-action-menu-toggle"/);
-  // The accessible name survives the word being hidden below 640px.
+  // Icon-only buttons retain accessible names and hover explanations.
   assert.match(idle, /aria-label="Send"/);
   assert.match(agent, /aria-label="Steer"/);
-  assert.match(idle, /class="composer-action-label">Send<\/span>/);
-  assert.match(agent, /class="composer-action-label">Steer<\/span>/);
+  assert.match(followUp, /aria-label="Follow-up"/);
+  assert.match(idle, /title="Send"/);
+  assert.match(agent, /title="Interrupt the current run and inject this message now"/);
+  assert.match(followUp, /title="Queue this message after the agent finishes"/);
   // The menu must outgrow the shrunken slot instead of being clipped by it;
   // anchor-size(width) is the trigger's width, so it never narrows below it.
   assert.match(agent, /width:max-content;min-width:anchor-size\(width\)/);

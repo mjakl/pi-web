@@ -1800,10 +1800,9 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             }}
           />
 
-          {/* Phones drop the word and shrink this to 72px in app/globals.css. */}
           <div
             className="composer-action-slot"
-            style={{ width: 128, minWidth: 128, height: 34, flexShrink: 0, alignSelf: "flex-end" }}
+            style={{ width: 72, minWidth: 72, height: 34, flexShrink: 0, alignSelf: "flex-end" }}
           >
             {hasStreamingActions && streamingSubmissionAction ? (
               <div
@@ -1852,9 +1851,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                       <line x1="2" y1="9" x2="8" y2="9" />
                     </svg>
                   )}
-                  <span className="composer-action-label">
-                    {t(streamingSubmissionAction === "steer" ? "chat.steer" : "chat.followUp")}
-                  </span>
                 </button>
                 <button
                   type="button"
@@ -1925,6 +1921,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 type="button"
                 className="composer-action-primary"
                 aria-label={t("chat.send")}
+                title={t("chat.send")}
                 onClick={handleSend}
                 disabled={!value.trim() && !attachedImages.length}
                 style={{
@@ -1947,7 +1944,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   <line x1="2" y1="7" x2="11" y2="7" />
                   <polyline points="7.5 3 12 7 7.5 11" />
                 </svg>
-                <span className="composer-action-label">{t("chat.send")}</span>
               </button>
             ) : null}
           </div>
