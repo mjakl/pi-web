@@ -65,11 +65,15 @@ test("tracks the keyboard height without fighting keyboard-open page movement", 
     await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
     assert.deepEqual(pageScrolls, []);
 
-    viewport.height = 844;
-    innerHeight = 844;
     textarea.blur();
     await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
     assert.equal(document.documentElement.style.getPropertyValue("--app-viewport-height"), "");
+    assert.deepEqual(pageScrolls, []);
+
+    viewport.height = 844;
+    innerHeight = 844;
+    viewport.dispatchEvent(new window.Event("resize"));
+    await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
     assert.deepEqual(pageScrolls, [[0, 0]]);
   } finally {
     await React.act(() => root.unmount());
