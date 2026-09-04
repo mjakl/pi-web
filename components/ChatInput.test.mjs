@@ -40,7 +40,7 @@ test("renders enabledModels scope warnings", () => {
   assert.equal(renderToStaticMarkup(React.createElement(ModelScopeWarningBanner, { warnings: [] })), "");
 });
 
-test("leaves space above the docked input", () => {
+test("renders the composer as one stable input region", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
       onSend() {},
@@ -49,7 +49,8 @@ test("leaves space above the docked input", () => {
     }),
   );
 
-  assert.match(html, /^<div style="flex-shrink:0;background:transparent;padding:12px 16px 8px;/);
+  assert.match(html, /^<div class="chat-input">/);
+  assert.equal(html.match(/<textarea/g)?.length, 1);
 });
 
 test("keeps the model selector visible when a model error leaves no options", () => {

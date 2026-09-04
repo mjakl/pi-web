@@ -11,19 +11,19 @@ import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatJumpToLatest } from "./ChatJumpToLatest";
 import { ChatMinimap } from "./ChatMinimap";
 import { ExtensionStatusBar } from "./ExtensionStatusBar";
-import { DockedComposer } from "./DockedComposer";
 import { AnsiText } from "./AnsiText";
 import { useI18n } from "@/hooks/useI18n";
 import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
 import type { NoticeItem } from "@/lib/notice-queue";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { useMessageRefs } from "@/hooks/useMessageRefs";
-import { useIsMobile } from "@/hooks/useIsMobile";
 import type { SessionStatsInfo } from "@/lib/pi-types";
 import type { ToolEntry, ToolPreset } from "@/lib/tool-presets";
 import {
   captureScrollDistance,
-  getPromptAnchorSpacerHeight,
+  didPrependHistory,
+  getLiveFollowAttached,
+  isScrollAtTail,
   restoreScrollTop,
 } from "@/lib/chat-lazy-load";
 
@@ -80,9 +80,6 @@ function phaseLabel(phase: AgentPhase, t: (key: string, params?: Record<string, 
   if (phase?.kind === "running_command") return t("chat.runningCommand");
   return null;
 }
-
-const CHAT_MINIMAP_WIDTH = 36;
-const CHAT_COLUMN_PADDING = 16;
 
 function hasFinalAssistantAnswer(message: AgentMessage): boolean {
   if (message.role !== "assistant") return false;
@@ -187,7 +184,6 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = fa
 
 export function ChatWindow({ session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onTranscriptRefreshChange, onSessionMetadataChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, compactWarning, onOpenFile, onToolPresetControlChange, soundEnabled = true, playDoneSound = () => {}, unlockAudio }: Props) {
   const { t } = useI18n();
-  const isMobile = useIsMobile();
 
   // Wrap onAgentEnd to play the completion sound.
   const playDoneSoundRef = useRef(playDoneSound);
@@ -215,13 +211,12 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     isAutoModelSelection,
     agentPhase,
     isNew,
-    sessionIdRef, scrollContainerRef,
-    lastUserMsgRef, promptAnchorActive,
+    sessionIdRef,
     handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
     handleCompact, handleSteer, handleFollowUp, handlePromptWithStreamingBehavior, handleAbortCompaction,
     handleRecallQueue,
     handleBuiltinSlashCommand,
-    handleToolPresetChange, handleThinkingLevelChange, loadSlashCommands, scrollUserMsgToTop,
+    handleToolPresetChange, handleThinkingLevelChange, loadSlashCommands,
     loadEarlierMessages, activeLeafId,
   } = useAgentSession({
     session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd: wrappedOnAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked,
@@ -230,6 +225,41 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
   });
   const sessionBusy = agentRunning || bashRunning;
   const readOnly = session?.cwdAvailable === false;
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const initialScrollDoneRef = useRef(false);
+  const liveFollowAttachedRef = useRef(true);
+  const previousScrollTopRef = useRef(0);
+  const previousLeafRef = useRef(activeLeafId);
+  const [atTail, setAtTail] = useState(true);
+
+  const syncScrollPosition = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const { scrollTop, clientHeight, scrollHeight } = container;
+    liveFollowAttachedRef.current = getLiveFollowAttached(
+      liveFollowAttachedRef.current,
+      previousScrollTopRef.current,
+      scrollTop,
+      clientHeight,
+      scrollHeight,
+    );
+    previousScrollTopRef.current = scrollTop;
+    setAtTail(isScrollAtTail(scrollTop, clientHeight, scrollHeight));
+  }, []);
+
+  const scrollToLatest = useCallback((behavior: ScrollBehavior = "auto") => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    liveFollowAttachedRef.current = true;
+    container.scrollTo({ top: container.scrollHeight, behavior });
+    previousScrollTopRef.current = container.scrollTop;
+    setAtTail(isScrollAtTail(container.scrollTop, container.clientHeight, container.scrollHeight));
+  }, []);
+
+  const jumpToLatest = useCallback(() => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scrollToLatest(reducedMotion ? "auto" : "smooth");
+  }, [scrollToLatest]);
 
   useEffect(() => {
     onToolPresetControlChange?.({
@@ -256,7 +286,9 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
   // the user scrolls to the top, fetch the previous page and prepend it while
   // keeping the scroll position stable.
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const prevScrollDistanceRef = useRef<number | null>(null);
+  const nextPrependIdRef = useRef(0);
+  const pendingPrependRef = useRef<{ id: number; distance: number; firstEntryId: string | undefined } | null>(null);
+  const [completedPrependId, setCompletedPrependId] = useState(0);
   const loadingOlderRef = useRef(false);
   // IntersectionObserver on the sentinel div at the top of the message list.
   // When it becomes visible, load the next page of older messages.
@@ -268,35 +300,32 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
       (entries) => {
         if (!entries[0]?.isIntersecting) return;
         // No older history loaded yet: fetch the previous page from the server
-        // and prepend it (loadContext handles prepend + scroll anchoring).
-        // Skip while a page is already loading or nothing older exists.
+        // and prepend it. Skip while a page is already loading or nothing older exists.
         if (loadingOlderRef.current) return;
         if (!hasEarlierMessages) return;
-        const oldestId = historyCursor;
-        if (!oldestId) return;
-        const sid = session?.id ?? sessionIdRef.current;
-        if (!sid) return;
+        if (!historyCursor) return;
         loadingOlderRef.current = true;
-        prevScrollDistanceRef.current = captureScrollDistance(container.scrollHeight, container.scrollTop);
-        void loadEarlierMessages().finally(() => {
-          loadingOlderRef.current = false;
-        });
+        const id = ++nextPrependIdRef.current;
+        pendingPrependRef.current = {
+          id,
+          distance: captureScrollDistance(container.scrollHeight, container.scrollTop),
+          firstEntryId: entryIds[0],
+        };
+        void loadEarlierMessages()
+          .then((loaded) => {
+            if (pendingPrependRef.current?.id !== id) return;
+            if (loaded) setCompletedPrependId(id);
+            else pendingPrependRef.current = null;
+          })
+          .finally(() => {
+            loadingOlderRef.current = false;
+          });
       },
       { root: container, threshold: 0 }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [historyCursor, hasEarlierMessages, session, activeLeafId, loadEarlierMessages, sessionIdRef, scrollContainerRef]);
-
-  // After an older page is prepended, restore the scroll position so the
-  // viewport doesn't jump.
-  useEffect(() => {
-    if (prevScrollDistanceRef.current == null) return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    container.scrollTop = restoreScrollTop(container.scrollHeight, prevScrollDistanceRef.current);
-    prevScrollDistanceRef.current = null;
-  }, [messages.length, scrollContainerRef]);
+  }, [entryIds, historyCursor, hasEarlierMessages, loadEarlierMessages]);
   // Push session stats up to AppShell for the top bar.
   // Compare scalar fields to avoid loops from new object identity each render.
   const statsKey = sessionStats
@@ -372,104 +401,51 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
   const isEmptyNew = isNew && messages.length === 0 && !streamState.isStreaming && !sessionBusy;
   const hasStreamingContent = Boolean(streamState.streamingMessage?.content.length);
   const messageCwd = session?.cwd ?? newSessionCwd ?? undefined;
-  const messageContentRef = useRef<HTMLDivElement | null>(null);
-  const promptAnchorSpacerRef = useRef<HTMLDivElement | null>(null);
-  const promptAnchorSpacerHeightRef = useRef(0);
-  const promptAnchorMeasureFrameRef = useRef<number | null>(null);
-  const promptAnchorAdjustmentDoneRef = useRef(false);
-  const promptAnchorUpdateRef = useRef<(() => void) | null>(null);
 
   useLayoutEffect(() => {
-    const spacer = promptAnchorSpacerRef.current;
-    if (!agentRunning || !promptAnchorActive) {
-      promptAnchorUpdateRef.current = null;
-      promptAnchorSpacerHeightRef.current = 0;
-      promptAnchorAdjustmentDoneRef.current = false;
-      if (spacer) spacer.style.height = "";
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    if (previousLeafRef.current !== activeLeafId) {
+      previousLeafRef.current = activeLeafId;
+      pendingPrependRef.current = null;
+      initialScrollDoneRef.current = true;
+      scrollToLatest();
       return;
     }
 
+    const pendingPrepend = pendingPrependRef.current;
+    if (
+      pendingPrepend?.id === completedPrependId
+      && didPrependHistory(pendingPrepend.firstEntryId, entryIds[0])
+    ) {
+      container.scrollTop = restoreScrollTop(container.scrollHeight, pendingPrepend.distance);
+      pendingPrependRef.current = null;
+      previousScrollTopRef.current = container.scrollTop;
+      syncScrollPosition();
+      return;
+    }
+
+    if (!initialScrollDoneRef.current) {
+      initialScrollDoneRef.current = true;
+      scrollToLatest();
+    } else if (liveFollowAttachedRef.current) {
+      scrollToLatest();
+    } else {
+      syncScrollPosition();
+    }
+  }, [activeLeafId, agentPhase, completedPrependId, entryIds, messages, pendingBash, scrollToLatest, streamState.streamingMessage, syncScrollPosition]);
+
+  useEffect(() => {
     const container = scrollContainerRef.current;
-    const messageContent = messageContentRef.current;
-    const userMessage = lastUserMsgRef.current;
-    if (!container || !messageContent || !userMessage || !spacer) return;
-
-    let disposed = false;
-    const updatePromptAnchorSpacer = () => {
-      if (
-        disposed
-        || scrollContainerRef.current !== container
-        || messageContentRef.current !== messageContent
-        || lastUserMsgRef.current !== userMessage
-        || promptAnchorSpacerRef.current !== spacer
-      ) return;
-
-      const containerTop = container.getBoundingClientRect().top;
-      const userMessageTop = userMessage.getBoundingClientRect().top
-        - containerTop
-        + container.scrollTop;
-      const targetTop = Math.max(0, userMessageTop - 16);
-      const contentEnd = spacer.getBoundingClientRect().top
-        - containerTop
-        + container.scrollTop;
-      const nextPromptAnchorSpacerHeight = getPromptAnchorSpacerHeight(
-        targetTop,
-        contentEnd,
-        container.clientHeight,
-      );
-
-      const isInitialMeasurement = !promptAnchorAdjustmentDoneRef.current;
-      const needsInitialAdjustment = isInitialMeasurement
-        && nextPromptAnchorSpacerHeight > 0;
-      if (isInitialMeasurement) promptAnchorAdjustmentDoneRef.current = true;
-      if (nextPromptAnchorSpacerHeight === promptAnchorSpacerHeightRef.current) return;
-
-      promptAnchorSpacerHeightRef.current = nextPromptAnchorSpacerHeight;
-      spacer.style.height = nextPromptAnchorSpacerHeight > 0
-        ? `${nextPromptAnchorSpacerHeight}px`
-        : "";
-      if (needsInitialAdjustment) scrollUserMsgToTop();
-    };
-
-    promptAnchorUpdateRef.current = updatePromptAnchorSpacer;
-    const schedulePromptAnchorMeasure = () => {
-      if (disposed || promptAnchorMeasureFrameRef.current !== null) return;
-      promptAnchorMeasureFrameRef.current = requestAnimationFrame(() => {
-        promptAnchorMeasureFrameRef.current = null;
-        updatePromptAnchorSpacer();
-      });
-    };
-
-    updatePromptAnchorSpacer();
-    const observer = typeof ResizeObserver === "undefined"
-      ? null
-      : new ResizeObserver(schedulePromptAnchorMeasure);
-    observer?.observe(container);
-    observer?.observe(messageContent);
-    observer?.observe(userMessage);
-    return () => {
-      disposed = true;
-      if (promptAnchorUpdateRef.current === updatePromptAnchorSpacer) {
-        promptAnchorUpdateRef.current = null;
-      }
-      observer?.disconnect();
-      if (promptAnchorMeasureFrameRef.current !== null) {
-        cancelAnimationFrame(promptAnchorMeasureFrameRef.current);
-        promptAnchorMeasureFrameRef.current = null;
-      }
-    };
-  }, [
-    agentRunning,
-    lastUserMsgRef,
-    messages.length,
-    promptAnchorActive,
-    scrollContainerRef,
-    scrollUserMsgToTop,
-  ]);
-
-  useLayoutEffect(() => {
-    promptAnchorUpdateRef.current?.();
-  }, [streamState.streamingMessage]);
+    if (!container || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (liveFollowAttachedRef.current) scrollToLatest();
+      else syncScrollPosition();
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [error, loading, scrollToLatest, syncScrollPosition]);
 
   const availableThinkingLevels = displayModelValue
     ? (modelThinkingLevels[`${displayModelValue.provider}:${displayModelValue.modelId}`] ?? null)
@@ -539,9 +515,9 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
   }
 
   return (
-    <div
-      className="chat-window"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    <section
+      className={`chat-window${isEmptyNew ? " is-empty" : ""}`}
+      aria-label={t("chat.messages")}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -593,63 +569,22 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
         />
       )}
 
-      <div
-        style={{
-          position: "absolute",
-          top: 12,
-          left: 0,
-          right: isMobile ? 0 : CHAT_MINIMAP_WIDTH,
-          zIndex: 40,
-          display: "flex",
-          // Toasts live in the top-right corner
-          justifyContent: "flex-end",
-          padding: `0 ${CHAT_COLUMN_PADDING}px`,
-          pointerEvents: "none",
-        }}
-      >
+      <div className="chat-notices">
         <NoticeShelf notices={notices} floating onPauseChange={setNoticePaused} />
       </div>
 
-      {isEmptyNew ? (
-        <div className="chat-empty">
-          <div style={{ width: "100%", maxWidth: 820 }}>
-            <div
-              style={{
-                marginBottom: "0.75rem",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                marginLeft: 16,
-                marginRight: isMobile ? 16 : 52,
-                fontFamily: "var(--font-mono)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "baseline", gap: isMobile ? 7 : 10, minWidth: 0, flex: 1, lineHeight: 1.4, overflow: "hidden" }}>
-                <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 0, color: "var(--text)", flexShrink: 0, whiteSpace: "nowrap" }}>π</span>
-                <span style={{ fontSize: 22, color: "var(--text)", fontWeight: 700, letterSpacing: 0, flexShrink: 0, whiteSpace: "nowrap" }}>Pi Web</span>
-              </div>
-            </div>
-            {chatInputElement}
-            <ExtensionStatusBar statuses={extensionStatuses} widgets={extensionWidgets} />
-          </div>
-        </div>
-      ) : (
-      <>
       <div className="chat-body">
-        <div ref={scrollContainerRef} className="chat-scroll">
-          <div style={{ minWidth: 0, padding: `0 ${CHAT_COLUMN_PADDING}px` }}>
-            <div ref={messageContentRef} style={{ width: "100%", minWidth: 0, maxWidth: 820, margin: "0 auto" }}>
+        <div ref={scrollContainerRef} className="chat-scroll" onScroll={syncScrollPosition}>
+          <div className="chat-scroll-content">
+            <div className="chat-transcript">
+            {isEmptyNew && (
+              <header className="chat-empty">
+                <h1><span aria-hidden="true">π</span><span>Pi Web</span></h1>
+              </header>
+            )}
             {(() => {
-              let lastUserIdx = -1;
-              for (let i = messages.length - 1; i >= 0; i--) {
-                if (messages[i].role === "user") { lastUserIdx = i; break; }
-              }
-              // Anchor for live-tail detection: the last user message, or a
-              // compaction summary when compaction has replaced it mid-turn.
-              // Computed independently from lastUserIdx (which is kept for the
-              // scroll-to-user ref) because a compaction summary can sit after
-              // the last user message and anchor the still-streaming segment.
+              // A compaction summary can replace the last user message while
+              // its turn is still streaming, so it also counts as a live tail.
               let lastAnchorIdx = -1;
               for (let i = messages.length - 1; i >= 0; i--) {
                 if (isMessageGroupAnchor(messages[i])) { lastAnchorIdx = i; break; }
@@ -662,11 +597,9 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                 if (isMessageGroupAnchor(msg)) anchorRefIndexByMessage.set(idx, refIdx++);
               });
 
-              // refIndex is optional so the prompt anchor never depends on the
-              // minimap's indexing.
-              const attachVisibleRef = (idx: number, refIndex: number | undefined) => (el: HTMLDivElement | null) => {
+              const renderKeyForIndex = (idx: number) => entryIds[idx] ?? `live:${idx}`;
+              const attachVisibleRef = (refIndex: number | undefined) => (el: HTMLDivElement | null) => {
                 if (refIndex !== undefined) messageRefs.current[refIndex] = el;
-                if (idx === lastUserIdx) { (lastUserMsgRef as { current: HTMLDivElement | null }).current = el; }
               };
 
               const renderMessage = (idx: number, options: { attachRef?: boolean; keyPrefix?: string; messageOverride?: AgentMessage; showTimestamp?: boolean; writtenFiles?: WrittenFile[] } = {}): ReactNode => {
@@ -678,6 +611,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                 const isVisible = isMessageGroupAnchor(msg) || msg.role === "assistant";
                 const currentRefIdx = anchorRefIndexByMessage.get(idx);
                 const keyPrefix = options.keyPrefix ?? "message";
+                const messageKey = renderKeyForIndex(idx);
                 let showTimestamp = false;
                 if (msg.role === "assistant") {
                   showTimestamp = true;
@@ -694,7 +628,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                 if (options.showTimestamp !== undefined) showTimestamp = options.showTimestamp;
                 const view = (
                   <MessageView
-                    key={`${keyPrefix}-view-${idx}`}
+                    key={`${keyPrefix}-view-${messageKey}`}
                     message={msg}
                     toolResults={toolResultsMap}
                     modelNames={modelNames}
@@ -714,7 +648,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                 );
                 if (!isVisible || options.attachRef === false) return view;
                 return (
-                  <div key={`${keyPrefix}-${idx}`} ref={attachVisibleRef(idx, currentRefIdx)}>
+                  <div key={`${keyPrefix}-${messageKey}`} ref={attachVisibleRef(currentRefIdx)}>
                     {view}
                   </div>
                 );
@@ -784,7 +718,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                     </ProcessDetailsGroup>
                   );
                   rendered.push(
-                    <Fragment key={`process-group-${userIdx}-${finalAssistantIdx}`}>
+                    <Fragment key={`process-group-${renderKeyForIndex(userIdx)}-${renderKeyForIndex(finalAssistantIdx)}`}>
                       {processGroup}
                     </Fragment>,
                   );
@@ -848,33 +782,26 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                 sessionId={session?.id ?? sessionIdRef.current ?? undefined}
               />
             )}
-
-            <div ref={promptAnchorSpacerRef} aria-hidden="true" />
-
             </div>
           </div>
         </div>
-        <ChatJumpToLatest scrollContainer={scrollContainerRef} />
-        {isMobile ? null : (
-          <ChatMinimap
-            key={`${session?.id ?? "draft"}:${activeLeafId ?? ""}`}
-            messages={messages}
-            entryIds={entryIds}
-            historyAnchorIds={historyAnchorIds}
-            onLoadThrough={loadEarlierMessages}
-            scrollContainer={scrollContainerRef}
-            messageRefs={messageRefs}
-          />
-        )}
+        <ChatJumpToLatest visible={!atTail} onClick={jumpToLatest} />
+        <ChatMinimap
+          key={`${session?.id ?? "draft"}:${activeLeafId ?? ""}`}
+          messages={messages}
+          entryIds={entryIds}
+          historyAnchorIds={historyAnchorIds}
+          onLoadThrough={loadEarlierMessages}
+          scrollContainer={scrollContainerRef}
+          messageRefs={messageRefs}
+        />
       </div>
 
-      <DockedComposer>
+      <footer className="chat-composer">
         {chatInputElement}
         <ExtensionStatusBar statuses={extensionStatuses} widgets={extensionWidgets} />
-      </DockedComposer>
-      </>
-      )}
-    </div>
+      </footer>
+    </section>
   );
 }
 

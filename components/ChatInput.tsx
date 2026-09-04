@@ -612,9 +612,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           ? attachedImagesRef.current.map(imageToDraftImage)
           : (storedDraft?.images ?? []),
       );
-      // The first optimistic message switches ChatWindow out of its empty-state
-      // layout and remounts this component. Persist synchronously so recovery is
-      // not lost if this instance is the one being unmounted.
+      // Session promotion can replace the keyed chat. Persist synchronously so
+      // recovery is not lost if this instance is unmounted.
       if (destinationDraftKey) setDraft(destinationDraftKey, restoredDraft);
       if (!targetsCurrentComposer) return;
       const restoredImages = images?.length
@@ -736,9 +735,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     if (draftKey) clearDraft(draftKey);
     if (draftKeyRef.current && draftKeyRef.current !== draftKey) clearDraft(draftKeyRef.current);
     clearImages();
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
   }, [clearImages, draftKey]);
 
   useEffect(() => {
@@ -774,13 +770,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       return nextImages;
     });
   }, [draftKey]);
-
-  useEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    ta.style.height = "auto";
-    if (value) ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
-  }, [value]);
 
   useEffect(() => {
     return () => {
@@ -1210,13 +1199,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     [historyCycle, isMobile, isStreaming, streamingSubmissionAction, streamingActionMenuOpen, onAbort, slashMenuOpen, slashQuery, displayedSlashCommands, slashActiveIndex, applySlashCommand, sendQueued, handleSend, atMenuOpen, atQuery, atMatches, atActiveIndex, applyAtCompletion, inputHistory, applyHistoryInput, value]
   );
 
-  const handleInput = useCallback(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    ta.style.height = "auto";
-    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
-  }, []);
-
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = Array.from(e.clipboardData?.items ?? []);
     const imageItems = items.filter((item) => item.type.startsWith("image/"));
@@ -1328,14 +1310,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
 
   return (
-    <div
-      style={{
-        flexShrink: 0,
-        background: "transparent",
-        padding: "12px 16px 8px",
-        paddingRight: isMobile ? 16 : 52, // desktop: 16px base + 36px for ChatMinimap alignment
-      }}
-    >
+    <div className="chat-input">
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -1723,6 +1698,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           >
           <textarea
             ref={textareaRef}
+            className="composer-textarea"
             value={value}
             onChange={(e) => {
               valueRef.current = e.target.value;
@@ -1744,7 +1720,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               const el = e.currentTarget;
               updateAtQuery(el.value, el.selectionStart);
             }}
-            onInput={handleInput}
             onPaste={handlePaste}
             placeholder={
               isStreaming && (onSteer || onFollowUp)

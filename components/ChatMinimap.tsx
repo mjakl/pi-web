@@ -205,6 +205,7 @@ export function ChatMinimap({
       measureNodes();
       updateScroll();
     };
+    if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(syncLayout);
     ro.observe(el);
     if (el.firstElementChild) ro.observe(el.firstElementChild);
@@ -314,6 +315,7 @@ export function ChatMinimap({
   return (
     <div
       ref={containerRef}
+      className="chat-minimap"
       onMouseDown={handleMouseDown}
       onMouseMove={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
