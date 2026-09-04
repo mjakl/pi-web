@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useTheme, type ThemePreference } from "@/hooks/useTheme";
 import { errorMessage } from "@/lib/error-message";
@@ -227,6 +227,7 @@ function GeneralSettings({ sessionId, toolPresetControl, soundEnabled, onSoundTo
 
 export function SettingsPanel({ cwd, sessionId, initialSection, toolPresetControl, soundEnabled, onSoundToggle, dumbZoneTokens, onDumbZoneTokensChange, onClose, onSessionReloaded }: Props) {
   const { t } = useI18n();
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [mountedSections, setMountedSections] = useState<ReadonlySet<SettingsSection>>(
     () => new Set([section]),
@@ -239,15 +240,17 @@ export function SettingsPanel({ cwd, sessionId, initialSection, toolPresetContro
 
   useEffect(() => setLastSettingsSection(initialSection), [initialSection]);
 
+  // showModal() supplies the backdrop, the focus trap, the top layer and the
+  // focus restoration the hand-rolled overlay had none of. Escape moves to an
+  // onKeyDown on the dialog itself, below.
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      event.preventDefault();
-      onClose();
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
     };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, []);
 
   useEffect(() => {
     if (cwd || (section !== "skills" && section !== "plugins")) return;
@@ -273,12 +276,19 @@ export function SettingsPanel({ cwd, sessionId, initialSection, toolPresetContro
   ) : null;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
+    <dialog
+      ref={dialogRef}
+      className="settings-dialog"
       aria-label={t("settings.title")}
+      onCancel={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        // Own the key so the global Esc shortcut cannot abort the turn
+        // running behind this dialog.
+        event.preventDefault();
+        onClose();
+      }}
       onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
-      className="settings-dialog-backdrop"
     >
       <div className="settings-dialog-surface">
         <div className="settings-dialog-header">
@@ -320,10 +330,10 @@ export function SettingsPanel({ cwd, sessionId, initialSection, toolPresetContro
 
         <main className="settings-dialog-main">
           {sectionHost("general", <GeneralSettings sessionId={sessionId} toolPresetControl={toolPresetControl} soundEnabled={soundEnabled} onSoundToggle={onSoundToggle} dumbZoneTokens={dumbZoneTokens} onDumbZoneTokensChange={onDumbZoneTokensChange} onSessionReloaded={onSessionReloaded} />)}
-          {cwd && sectionHost("skills", <SkillsConfig embedded key={cwd} cwd={cwd} onClose={onClose} />)}
-          {cwd && sectionHost("plugins", <PluginsConfig embedded key={cwd} cwd={cwd} sessionId={sessionId} onClose={onClose} onReloaded={onSessionReloaded} />)}
+          {cwd && sectionHost("skills", <SkillsConfig key={cwd} cwd={cwd} />)}
+          {cwd && sectionHost("plugins", <PluginsConfig key={cwd} cwd={cwd} sessionId={sessionId} onReloaded={onSessionReloaded} />)}
         </main>
       </div>
-    </div>
+    </dialog>
   );
 }

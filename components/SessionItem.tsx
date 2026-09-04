@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { SessionInfo } from "@/lib/types";
 import { formatRelativeTime } from "@/lib/i18n/format";
 import { useI18n } from "@/hooks/useI18n";
@@ -118,7 +118,7 @@ export function SessionIndicator({ kind, unread = false }: { kind: keyof typeof 
   );
 }
 
-export function SessionItem({
+export const SessionItem = memo(function SessionItem({
   session,
   shortcutLabel,
   isSelected,
@@ -126,7 +126,7 @@ export function SessionItem({
   isRunning,
   isUnread,
   actionsAvailable,
-  onClick,
+  onSelect,
   onRenamed,
   onStopped,
   onActivated,
@@ -140,7 +140,7 @@ export function SessionItem({
   isRunning?: boolean;
   isUnread?: boolean;
   actionsAvailable: boolean;
-  onClick: () => void;
+  onSelect: (session: SessionInfo) => void;
   onRenamed?: () => void;
   onStopped?: (id: string) => void;
   onActivated?: (id: string) => void;
@@ -403,7 +403,7 @@ export function SessionItem({
     <div
       className="session-row"
       data-session-inventory-id={session.id}
-      onClick={renderedSurface.kind === "idle" || renderedSurface.kind === "menu" ? onClick : undefined}
+      onClick={renderedSurface.kind === "idle" || renderedSurface.kind === "menu" ? () => onSelect(session) : undefined}
       style={{
         height: SESSION_ITEM_HEIGHT,
         display: "flex",
@@ -608,4 +608,4 @@ export function SessionItem({
       )}
     </div>
   );
-}
+});

@@ -508,15 +508,7 @@ function AddSkillPanel({
   );
 }
 
-export function SkillsConfig({
-  cwd,
-  onClose,
-  embedded = false,
-}: {
-  cwd: string;
-  onClose: () => void;
-  embedded?: boolean;
-}) {
+export function SkillsConfig({ cwd }: { cwd: string }) {
   const { t } = useI18n();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
@@ -692,7 +684,7 @@ export function SkillsConfig({
   const selectedSkill = skills.find((s) => s.filePath === selected) ?? null;
 
   return (
-    <ConfigPanelShell embedded={embedded} title={t("common.skills")} subtitle={shortenPath(cwd)} closeLabel={t("i18n.close")} onClose={onClose}>
+    <ConfigPanelShell>
 
         {!projectResourcesLoaded && (
           <div role="status" className="config-trust-notice">
@@ -890,7 +882,6 @@ export function SkillsConfig({
               </span>
             )}
         >
-          {!embedded && <ConfigButton onClick={onClose}>{t("i18n.close")}</ConfigButton>}
           {skills.some((skill) => Boolean(skill.install)) && (
             <ConfigButton variant="secondary" onClick={() => void checkForUpdates()} disabled={checkingAll || updatingSkill !== null}>
               {checkingAll ? t("i18n.checking") : t("i18n.checkUpdates")}

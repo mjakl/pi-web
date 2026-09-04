@@ -24,7 +24,6 @@ interface ModelSelectorProps {
   variant?: "toolbar" | "field" | "composer";
   detail?: string;
   children?: ReactNode;
-  placement?: "up" | "auto";
 }
 
 const MODEL_FILTER_THRESHOLD = 8;
@@ -59,13 +58,11 @@ export function ModelSelector({
   isAutoSelection = false,
   ariaLabel,
   variant = "toolbar",
-  placement = "up",
   detail,
   children,
 }: ModelSelectorProps) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
-  const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
   // A press on the trigger while the panel is open reaches onClick after the
@@ -75,9 +72,7 @@ export function ModelSelector({
   // caused by this press always lands after the press began.
   const pressStartedAtRef = useRef(0);
   const dismissedAtRef = useRef(0);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [anchorRect, setAnchorRect] = useState<{ top: number; right: number; bottom: number; left: number; width: number } | null>(null);
   const [filter, setFilter] = useState("");
   const locked = disabled || busy;
   const sortedOptions = useMemo(() => [...options].sort(compareModelOptions), [options]);
@@ -95,48 +90,15 @@ export function ModelSelector({
     ? sortedOptions.find((option) => option.modelId === value.modelId && option.provider === value.provider)?.name ?? value.modelId
     : emptyLabel ?? t(sortedOptions.length > 0 ? "chat.selectModel" : "chat.noModels"));
 
-  // anchorRect is snapshotted on click, so anything that moves the trigger
-  // afterwards strands the panel. On mobile the filter input opens the
-  // keyboard, which shrinks the shell and slides the trigger out from under
-  // it. Re-measure rather than dismiss: the keyboard opening is expected.
-  useEffect(() => {
-    if (!open) return;
-    const trigger = triggerRef.current;
-    if (!trigger) return;
-
-    let frame: number | null = null;
-    const remeasure = () => {
-      frame = null;
-      const rect = trigger.getBoundingClientRect();
-      setAnchorRect({ top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left, width: rect.width });
-    };
-    const schedule = () => {
-      if (frame === null) frame = requestAnimationFrame(remeasure);
-    };
-
-    const viewport = window.visualViewport;
-    window.addEventListener("resize", schedule);
-    window.addEventListener("scroll", schedule, true);
-    viewport?.addEventListener("resize", schedule);
-    viewport?.addEventListener("scroll", schedule);
-    return () => {
-      if (frame !== null) cancelAnimationFrame(frame);
-      window.removeEventListener("resize", schedule);
-      window.removeEventListener("scroll", schedule, true);
-      viewport?.removeEventListener("resize", schedule);
-      viewport?.removeEventListener("scroll", schedule);
-    };
-  }, [open]);
-
-  // Shown as a native popover: the browser owns light dismiss and top layer.
-  // Focus the filter by hand because autoFocus would run while the popover is
-  // still display:none, so the attribute alone never lands.
-  const panelShown = open && Boolean(anchorRect);
+  // Shown as a native popover: the browser owns light dismiss and top layer,
+  // and CSS anchor positioning keeps the panel pinned to the trigger, so
+  // nothing here measures. Focus the filter by hand because autoFocus would
+  // run while the popover is still display:none, so the attribute never lands.
   useLayoutEffect(() => {
-    if (!panelShown) return;
+    if (!open) return;
     panelRef.current?.showPopover?.();
     filterInputRef.current?.focus();
-  }, [panelShown]);
+  }, [open]);
 
   useEffect(() => {
     if (!locked) return;
@@ -156,8 +118,8 @@ export function ModelSelector({
         overflow: "hidden",
         border: "1px solid var(--border)",
         borderRadius: 5,
-        background: locked ? "var(--bg-panel)" : "var(--bg)",
-        color: locked ? "var(--text-dim)" : "var(--text)",
+        background: locked ? "var(--bg-panel)" : undefined,
+        color: locked ? "var(--text-dim)" : undefined,
         cursor: locked ? "default" : "pointer",
         fontSize: 12,
         textAlign: "left",
@@ -174,8 +136,6 @@ export function ModelSelector({
         overflow: "hidden",
         border: "none",
         borderRadius: 9,
-        background: open ? "var(--bg-hover)" : "none",
-        color: "var(--text-muted)",
         cursor: locked ? "not-allowed" : "pointer",
         fontSize: 12,
         opacity: locked ? 0.5 : 1,
@@ -191,7 +151,6 @@ export function ModelSelector({
 
   return (
     <div
-      ref={rootRef}
       className={`model-selector is-${variant}${locked ? " is-disabled" : ""}`}
       style={{ position: "relative", width: variant === "field" || (variant === "toolbar" && isMobile) ? "100%" : undefined, minWidth: 0, flex: variant === "toolbar" && isMobile ? "1 1 auto" : undefined }}
       onKeyDown={(event) => {
@@ -203,8 +162,8 @@ export function ModelSelector({
       }}
     >
       <button
-        ref={triggerRef}
         type="button"
+        className="anchor-model-selector"
         aria-label={ariaLabel}
         aria-haspopup={children ? "dialog" : "listbox"}
         aria-expanded={open}
@@ -213,32 +172,16 @@ export function ModelSelector({
         title={busy ? t("chat.switchingModel") : locked ? currentName : sortedOptions.length > 0 || onClear ? t("chat.changeModel") : t("chat.noAvailableModels")}
         style={buttonStyle}
         onPointerDown={() => { pressStartedAtRef.current = Date.now(); }}
-        onClick={(event) => {
+        onClick={() => {
           if (dismissedAtRef.current > 0 && dismissedAtRef.current >= pressStartedAtRef.current) {
             // This press is what closed the panel. Leave it closed.
             dismissedAtRef.current = 0;
             return;
           }
-          const rect = event.currentTarget.getBoundingClientRect();
-          setAnchorRect({ top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left, width: rect.width });
           setOpen((current) => {
             if (current) setFilter("");
             return !current;
           });
-        }}
-        onMouseEnter={(event) => {
-          if (locked) return;
-          event.currentTarget.style.background = "var(--bg-hover)";
-          event.currentTarget.style.color = "var(--text)";
-        }}
-        onMouseLeave={(event) => {
-          if (locked) {
-            event.currentTarget.style.background = variant === "field" ? "var(--bg-panel)" : "none";
-            event.currentTarget.style.color = variant === "field" ? "var(--text-dim)" : "var(--text-muted)";
-            return;
-          }
-          event.currentTarget.style.background = open ? "var(--bg-hover)" : variant === "field" ? "var(--bg)" : "none";
-          event.currentTarget.style.color = variant === "field" ? "var(--text)" : "var(--text-muted)";
         }}
       >
         {busy ? (
@@ -264,46 +207,21 @@ export function ModelSelector({
         )}
       </button>
 
-      {open && anchorRect && (() => {
-        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-        const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
-        const spaceAbove = anchorRect.top - 8;
-        const spaceBelow = viewportHeight - anchorRect.bottom - 8;
-        const openAbove = placement === "up" || spaceAbove > spaceBelow;
-        const maxHeight = Math.max(120, Math.min(openAbove ? spaceAbove : spaceBelow, viewportHeight * 0.6));
-        const verticalPosition = openAbove
-          ? { bottom: viewportHeight - anchorRect.top + 6 }
-          : { top: anchorRect.bottom + 6 };
-        const horizontalPosition: CSSProperties = isMobile
-          ? { left: 8, right: 8, maxWidth: "calc(100vw - 16px)" }
-          : { left: anchorRect.left, width: "max-content", minWidth: anchorRect.width, maxWidth: Math.max(anchorRect.width, viewportWidth - anchorRect.left - 8) };
-
-        return (
-          <div
-            ref={panelRef}
-            className="menu-surface"
-            popover="auto"
-            onToggle={(e) => {
-              if ((e as unknown as { newState?: string }).newState !== "closed") return;
-              dismissedAtRef.current = Date.now();
-              setOpen(false);
-              setFilter("");
-            }}
-            role={children ? "dialog" : "listbox"}
-            aria-label={ariaLabel}
-            style={{
-              // Undo the UA popover sheet, which centres with inset:0/margin:auto.
-              position: "fixed", inset: "auto", margin: 0,
-              ...verticalPosition,
-              ...horizontalPosition,
-              zIndex: 500,
-              display: "flex",
-              flexDirection: "column",
-              maxHeight,
-              overflow: "hidden",
-            }}
-          >
-            {children}
+      {open && (
+        <div
+          ref={panelRef}
+          className="anchored-menu menu-surface opens-up menu-model-selector"
+          popover="auto"
+          onToggle={(e) => {
+            if ((e as unknown as { newState?: string }).newState !== "closed") return;
+            dismissedAtRef.current = Date.now();
+            setOpen(false);
+            setFilter("");
+          }}
+          role={children ? "dialog" : "listbox"}
+          aria-label={ariaLabel}
+        >
+          {children}
             {showFilter && (
               <div style={{ flexShrink: 0, padding: "6px 8px", borderBottom: "1px solid var(--border)" }}>
                 <input
@@ -349,9 +267,8 @@ export function ModelSelector({
                 </div>
               ))}
             </div>
-          </div>
-        );
-      })()}
+        </div>
+      )}
     </div>
   );
 }
