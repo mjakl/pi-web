@@ -4,19 +4,19 @@ import { useEffect } from "react";
 
 interface ViewportHeightState {
   hasFocusedEditable: boolean;
-  innerHeight: number;
+  layoutHeight: number;
   viewportHeight: number;
   viewportScale: number;
 }
 
 export function shouldUseVisualViewportHeight({
   hasFocusedEditable,
-  innerHeight,
+  layoutHeight,
   viewportHeight,
   viewportScale,
 }: ViewportHeightState): boolean {
   const isUnscaled = Math.abs(viewportScale - 1) < 0.01;
-  return hasFocusedEditable && isUnscaled && innerHeight - viewportHeight > 1;
+  return hasFocusedEditable && isUnscaled && layoutHeight - viewportHeight > 1;
 }
 
 function hasFocusedEditableElement(): boolean {
@@ -41,12 +41,14 @@ export function useViewportHeight(): void {
 
     const root = document.documentElement;
     let frameId: number | null = null;
+    let openingNormalizationPending = hasFocusedEditableElement();
 
     const update = () => {
       frameId = null;
+      const layoutHeight = root.clientHeight;
       const keyboardOpen = shouldUseVisualViewportHeight({
         hasFocusedEditable: hasFocusedEditableElement(),
-        innerHeight: window.innerHeight,
+        layoutHeight,
         viewportHeight: viewport.height,
         viewportScale: viewport.scale,
       });
@@ -58,7 +60,10 @@ export function useViewportHeight(): void {
 
       const pageWasShifted = window.scrollX !== 0 || window.scrollY !== 0;
       const isUnscaled = Math.abs(viewport.scale - 1) < 0.01;
-      if (pageWasShifted && isUnscaled) {
+      const viewportRestored = layoutHeight - viewport.height <= 1;
+      const shouldNormalizeOpening = openingNormalizationPending && keyboardOpen;
+      if ((shouldNormalizeOpening || viewportRestored) && pageWasShifted && isUnscaled) {
+        if (shouldNormalizeOpening) openingNormalizationPending = false;
         window.scrollTo(0, 0);
       }
     };
@@ -71,21 +76,29 @@ export function useViewportHeight(): void {
       if (frameId !== null) window.cancelAnimationFrame(frameId);
       frameId = window.requestAnimationFrame(update);
     };
+    const handleFocusIn = () => {
+      openingNormalizationPending = true;
+      scheduleUpdate();
+    };
+    const handleFocusOut = () => {
+      openingNormalizationPending = false;
+      scheduleUpdate();
+    };
 
     scheduleUpdate();
     viewport.addEventListener("resize", scheduleUpdate);
     viewport.addEventListener("scroll", scheduleUpdate);
     window.addEventListener("resize", scheduleUpdate);
-    window.addEventListener("focusin", scheduleUpdate);
-    window.addEventListener("focusout", scheduleUpdate);
+    window.addEventListener("focusin", handleFocusIn);
+    window.addEventListener("focusout", handleFocusOut);
     window.addEventListener("pageshow", scheduleUpdate);
 
     return () => {
       viewport.removeEventListener("resize", scheduleUpdate);
       viewport.removeEventListener("scroll", scheduleUpdate);
       window.removeEventListener("resize", scheduleUpdate);
-      window.removeEventListener("focusin", scheduleUpdate);
-      window.removeEventListener("focusout", scheduleUpdate);
+      window.removeEventListener("focusin", handleFocusIn);
+      window.removeEventListener("focusout", handleFocusOut);
       window.removeEventListener("pageshow", scheduleUpdate);
       if (frameId !== null) window.cancelAnimationFrame(frameId);
       root.style.removeProperty("--app-viewport-height");
