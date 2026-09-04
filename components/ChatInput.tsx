@@ -4,7 +4,7 @@ import React, { useRef, useState, useCallback, useEffect, useId, useLayoutEffect
 import type { BuiltinSlashCommandResult, CompactResultInfo, QueuedMessages, SlashCommandInfo } from "@/hooks/useAgentSession";
 import { formatCompactCount } from "@/lib/i18n/format";
 import type { SkillsResponse } from "@/lib/api-types";
-import type { TextContent, UserMessage } from "@/lib/types";
+import type { ExtensionStatusItem, TextContent, UserMessage } from "@/lib/types";
 import {
   clearDraft,
   getDraft,
@@ -27,6 +27,7 @@ import { FolderIcon, getFileIcon } from "./FileIcons";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useI18n } from "@/hooks/useI18n";
 import { ModelSelector, type ModelSelectorOption } from "./ModelSelector";
+import { ExtensionStatusBar } from "./ExtensionStatusBar";
 
 export { filterModelOptions } from "./ModelSelector";
 
@@ -62,6 +63,7 @@ interface Props {
   onThinkingLevelChange?: (level: "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max") => void;
   availableThinkingLevels?: string[] | null;
   thinkingLevelMap?: Record<string, string | null> | null;
+  extensionStatuses?: ExtensionStatusItem[];
   retryInfo?: { attempt: number; maxAttempts: number; errorMessage?: string } | null;
   queuedMessages?: QueuedMessages | null;
   inputHistory?: string[];
@@ -448,7 +450,7 @@ export function ModelScopeWarningBanner({ warnings }: { warnings?: string[] }) {
 export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   onSend, onAbort, onSteer, onFollowUp, isStreaming, model, isAutoModelSelection, modelNames, modelList, modelError, modelScopeWarnings, onModelChange, modelSwitching,
   onCompact, onAbortCompaction, isCompacting, compactError, compactResult, compactWarning,
-  thinkingLevel, onThinkingLevelChange, availableThinkingLevels, thinkingLevelMap,
+  thinkingLevel, onThinkingLevelChange, availableThinkingLevels, thinkingLevelMap, extensionStatuses = [],
   retryInfo, queuedMessages, inputHistory = [], onRecallQueue,
   slashCommands, slashCommandsLoading, onLoadSlashCommands,
   onBuiltinCommand,
@@ -1725,7 +1727,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               isStreaming && (onSteer || onFollowUp)
                 ? t("chat.steerPlaceholder")
                 : isStreaming ? t("chat.agentPlaceholder")
-                : t("chat.messagePlaceholder")
+                : t(isMobile ? "chat.mobileMessagePlaceholder" : "chat.messagePlaceholder")
             }
             rows={1}
             style={{
@@ -1895,7 +1897,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         )}
 
         {/* Bottom bar: settings on the left, immediate actions on the right */}
-        <div style={{
+        <div className="composer-toolbar" style={{
           marginTop: 8,
           display: "flex",
           alignItems: "center",
@@ -1942,14 +1944,15 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 isAutoSelection={isAutoModelSelection}
               />
             )}
-            {!isStreaming && onThinkingLevelChange && (
+            {(isMobile || (!isStreaming && onThinkingLevelChange)) && (
               <div style={{ position: "relative" }}>
                 <button
                   className="anchor-composer-reasoning"
                   popoverTarget={thinkingMenuId}
-                  disabled={isStreaming}
-                   title={t("chat.changeReasoning", { level: thinkingDisplayLabel })}
-                   aria-label={t("chat.changeReasoningLabel")}
+                  disabled={!isMobile && isStreaming}
+                   title={isMobile ? t("chat.composerSettings") : t("chat.changeReasoning", { level: thinkingDisplayLabel })}
+                   aria-label={t(isMobile ? "chat.composerSettings" : "chat.changeReasoningLabel")}
+                  aria-expanded={thinkingDropdownOpen}
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
                     padding: isMobile ? "0 6px" : "8px 12px",
@@ -1959,13 +1962,13 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     border: "none",
                     borderRadius: 9,
                     color: "var(--text-muted)",
-                    cursor: isStreaming ? "not-allowed" : "pointer",
+                    cursor: !isMobile && isStreaming ? "not-allowed" : "pointer",
                     fontSize: 12,
-                    opacity: isStreaming ? 0.5 : 1,
+                    opacity: !isMobile && isStreaming ? 0.5 : 1,
                     transition: "background 0.12s, color 0.12s",
                   }}
                   onMouseEnter={(e) => {
-                    if (isStreaming) return;
+                    if (!isMobile && isStreaming) return;
                     e.currentTarget.style.background = "var(--bg-hover)";
                     e.currentTarget.style.color = "var(--text)";
                   }}
@@ -1974,24 +1977,65 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     e.currentTarget.style.color = "var(--text-muted)";
                   }}
                 >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {isMobile ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
+                    </svg>
+                  ) : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9.5 2A5.5 5.5 0 0 0 4 7.5c0 1.7.78 3.21 2 4.21V14a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-2.29c1.22-1 2-2.51 2-4.21A5.5 5.5 0 0 0 9.5 2z" />
                     <line x1="7" y1="18" x2="12" y2="18" />
                     <line x1="8" y1="21" x2="11" y2="21" />
-                  </svg>
+                  </svg>}
                   {!isMobile && <span style={{ whiteSpace: "nowrap" }}>{thinkingDisplayLabel}</span>}
                 </button>
                 <div
                   ref={thinkingMenuRef}
                   id={thinkingMenuId}
                   popover="auto"
-                  className="anchored-menu menu-surface opens-up menu-composer-reasoning"
+                  className={`anchored-menu menu-surface opens-up menu-composer-reasoning${isMobile ? " composer-mobile-settings" : ""}`}
                   onToggle={(e) => setThinkingDropdownOpen((e as unknown as { newState?: string }).newState === "open")}
                   style={{
                     zIndex: 100,
-                    overflow: "hidden", minWidth: 180,
+                    overflow: isMobile ? "auto" : "hidden", minWidth: 180,
                   }}>
-                    {THINKING_LEVELS.filter((lvl) => {
+                    {isMobile ? (
+                      <>
+                        {onThinkingLevelChange && (
+                          <label className="composer-thinking-field">
+                            <span>{t("chat.changeReasoningLabel")}</span>
+                            <select
+                              value={thinkingLevel ?? "auto"}
+                              disabled={isStreaming}
+                              onChange={(event) => onThinkingLevelChange(event.target.value as NonNullable<Props["thinkingLevel"]>)}
+                            >
+                              {THINKING_LEVELS.filter((level) => !availableThinkingLevels || level === "auto" || availableThinkingLevels.includes(level)).map((level) => (
+                                <option key={level} value={level}>{thinkingLevelMap?.[level] ?? level}</option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        {onCompact && (
+                          <button
+                            type="button"
+                            className="menu-item"
+                            disabled={isStreaming && !isCompacting}
+                            onClick={() => {
+                              setThinkingDropdownOpen(false);
+                              if (isCompacting) onAbortCompaction?.();
+                              else onCompact();
+                            }}
+                          >
+                            {t(isCompacting ? "chat.stopCompaction" : "chat.compactContext")}
+                          </button>
+                        )}
+                        {extensionStatuses.length > 0 && (
+                          <section aria-label={t("chat.extensionStatus")}>
+                            <div className="menu-section-label">{t("chat.extensionStatus")}</div>
+                            <ExtensionStatusBar statuses={extensionStatuses} />
+                          </section>
+                        )}
+                      </>
+                    ) : THINKING_LEVELS.filter((lvl) => {
                       if (!availableThinkingLevels) return true;
                       if (lvl === "auto") return true;
                       return availableThinkingLevels.includes(lvl);
@@ -2004,7 +2048,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                       return (
                         <button
                           key={lvl}
-                          onClick={() => { setThinkingDropdownOpen(false); if (!isActive) onThinkingLevelChange(lvl); }}
+                          onClick={() => { setThinkingDropdownOpen(false); if (!isActive) onThinkingLevelChange?.(lvl); }}
                           className="menu-item"
                           aria-pressed={isActive}
                           style={{ whiteSpace: "nowrap" }}
@@ -2034,7 +2078,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             justifyContent: "flex-end",
             marginLeft: "auto",
           }}>
-            {!isStreaming && onCompact && (
+            {!isStreaming && onCompact && (!isMobile || isCompacting || compactNeedsAttention) && (
               <div>
                 <button
                   onClick={isCompacting ? onAbortCompaction : onCompact}

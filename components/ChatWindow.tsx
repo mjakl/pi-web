@@ -484,6 +484,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
       onThinkingLevelChange={session || isNew ? handleThinkingLevelChange : undefined}
       availableThinkingLevels={availableThinkingLevels}
       thinkingLevelMap={currentThinkingLevelMap}
+      extensionStatuses={extensionStatuses}
       retryInfo={retryInfo}
       queuedMessages={queuedMessages}
       inputHistory={inputHistory}

@@ -1814,7 +1814,48 @@ span.linenumber {
     margin-right: 0;
   }
   .chat-input {
-    padding-right: 16px;
+    padding: 8px 12px 0;
+  }
+  .composer-toolbar {
+    margin-top: 0 !important;
+    gap: 0 !important;
+  }
+  .composer-settings-group > button,
+  .composer-settings-group > .model-selector > button,
+  .anchor-composer-reasoning,
+  .composer-immediate-actions button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .composer-settings-group > .model-selector > button {
+    justify-content: center !important;
+  }
+  .chat-composer > .extension-status-shelf:not(.has-widgets),
+  .chat-composer > .extension-status-shelf > .extension-status-line {
+    display: none;
+  }
+  .composer-mobile-settings {
+    width: min(320px, calc(100vw - 24px));
+    max-height: calc(var(--app-viewport-height, 100dvh) - 64px);
+  }
+  .composer-mobile-settings .menu-item {
+    min-height: 44px;
+  }
+  .composer-thinking-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  .composer-thinking-field select {
+    min-height: 44px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    background: var(--bg);
   }
   .chat-jump-to-latest {
     right: 14px;
