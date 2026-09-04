@@ -69,7 +69,7 @@ import {
 type SessionCopyField = "file" | "id" | "projectDir" | "gitBranch" | "gitWorktree";
 const TOP_BAR_ICON_BUTTON_SIZE = 36;
 
-export function AppShell() {
+export function AppShell({ homeDir }: { homeDir: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [initialNavigation] = useState(() => getInitialNavigation(searchParams));
@@ -897,6 +897,7 @@ export function AppShell() {
   const sidebarContent = (
     <>
       <SessionSidebar
+        homeDir={homeDir}
         selectedSessionId={selectedSession?.id ?? null}
         onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}

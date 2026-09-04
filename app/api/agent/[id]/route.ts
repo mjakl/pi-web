@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { resolveSessionPath } from "@/lib/session-reader";
 import {
   beginRpcSessionOperation,
@@ -35,17 +34,17 @@ export async function POST(
 
     if (body.type === "set_tools") {
       if (!isRpcSessionActive(existing) && !filePath) {
-        return NextResponse.json({ error: "Session not found" }, { status: 404 });
+        return Response.json({ error: "Session not found" }, { status: 404 });
       }
       const changed = await setRpcSessionTools(operation, filePath, toolNames);
-      return NextResponse.json({
+      return Response.json({
         success: true,
         data: { sessionId: changed.sessionId, recreated: changed.recreated },
       });
     }
 
     if (!isRpcSessionActive(existing) && !filePath) {
-      return NextResponse.json({
+      return Response.json({
         error: "Session not found",
         ...(body.type === "prompt"
           ? { code: "prompt_rejected", accepted: false }
@@ -57,9 +56,9 @@ export async function POST(
       ...(toolNames !== undefined ? { toolNames } : {}),
     });
     promptAccepted = body.type === "prompt";
-    return NextResponse.json({ success: true, data: result });
+    return Response.json({ success: true, data: result });
   } catch (error) {
-    return NextResponse.json({
+    return Response.json({
       error: error instanceof Error ? error.message : String(error),
       ...(commandType === "prompt" && !promptAccepted
         ? { code: "prompt_rejected", accepted: false }
@@ -78,13 +77,13 @@ export async function GET(
   try {
     const session = getRpcSession(id);
     if (!session || !isRpcSessionActive(session)) {
-      return NextResponse.json({ active: false, running: false });
+      return Response.json({ active: false, running: false });
     }
 
     const state = await session.send({ type: "get_state" });
-    return NextResponse.json({ active: true, running: session.isRunning(), state });
+    return Response.json({ active: true, running: session.isRunning(), state });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return Response.json({ error: String(error) }, { status: 500 });
   }
 }
 
@@ -100,10 +99,10 @@ export async function DELETE(
       resolveSessionPath(id),
     ]);
     if (!stopped && !filePath) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+      return Response.json({ error: "Session not found" }, { status: 404 });
     }
-    return NextResponse.json({ stopped });
+    return Response.json({ stopped });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return Response.json({ error: String(error) }, { status: 500 });
   }
 }

@@ -7,7 +7,7 @@ import { resolve } from "path";
 import { ExtensionUiBridge } from "./extension-ui-bridge";
 import { validateAgentImages } from "./image-attachments";
 import { invalidateModelsCache } from "./models-cache";
-import { resolveVisibleModels, selectInitialModelScope } from "./model-scope";
+import { isThinkingLevel, resolveVisibleModels, selectInitialModelScope } from "./model-scope";
 import {
   createProjectCommandBashExtension,
   createProjectCommandBashOperations,
@@ -75,7 +75,6 @@ interface RpcSessionStartOptions {
 }
 
 const CODING_TOOL_NAMES = ["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"];
-const THINKING_LEVEL_NAMES = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
 function withExtensionTools(session: AgentSessionLike, toolNames: string[]): string[] {
   if (toolNames.length === 0) return [];
@@ -1162,9 +1161,7 @@ export async function setRpcSessionTools(
       toolNames,
       ...(model ? { initialModel: { provider: model.provider, modelId: model.id } } : {}),
       allowInitialModelFallback: true,
-      ...(currentThinkingLevel && THINKING_LEVEL_NAMES.has(currentThinkingLevel as ThinkingLevel)
-        ? { thinkingLevel: currentThinkingLevel as ThinkingLevel }
-        : {}),
+      ...(isThinkingLevel(currentThinkingLevel) ? { thinkingLevel: currentThinkingLevel } : {}),
     }, operation);
     await assertRpcSessionOperationCurrent(operation);
     return { session: started.session, sessionId: started.realSessionId, recreated: true };

@@ -1,4 +1,3 @@
-import { NextRequest, NextResponse } from "next/server";
 import { stat } from "fs/promises";
 import {
   getBrowseStartDirectory,
@@ -10,12 +9,12 @@ import {
 } from "@/lib/directory-browser";
 
 // GET /api/cwd/browse?path=... lists the readable subdirectories of a filesystem path.
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
-    const requested = request.nextUrl.searchParams.get("path")?.trim();
+    const requested = new URL(request.url).searchParams.get("path")?.trim();
 
     if (shouldShowWindowsDrivePicker(requested)) {
-      return NextResponse.json({
+      return Response.json({
         path: "",
         parentPath: null,
         drives: await listWindowsDrives(),
@@ -29,22 +28,22 @@ export async function GET(request: NextRequest) {
     try {
       resolved = await resolveDirectory(candidate);
     } catch {
-      return NextResponse.json({ error: "Directory does not exist" }, { status: 404 });
+      return Response.json({ error: "Directory does not exist" }, { status: 404 });
     }
 
     const directoryStat = await stat(resolved);
     if (!directoryStat.isDirectory()) {
-      return NextResponse.json({ error: "Path is not a directory" }, { status: 400 });
+      return Response.json({ error: "Path is not a directory" }, { status: 400 });
     }
 
     const directories = await listDirectories(resolved);
 
-    return NextResponse.json({
+    return Response.json({
       path: resolved,
       parentPath: getParentDirectory(resolved),
       directories,
     });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return Response.json({ error: String(error) }, { status: 500 });
   }
 }

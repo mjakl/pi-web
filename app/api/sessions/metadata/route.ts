@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { readSessionRowMetadata } from "@/lib/session-metadata";
 import {
   SESSION_METADATA_BATCH_SIZE,
@@ -37,11 +36,11 @@ export async function POST(req: Request) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
   const entries = parseEntries((body as { sessions?: unknown } | null)?.sessions);
   if (!entries) {
-    return NextResponse.json(
+    return Response.json(
       { error: `sessions must contain 1-${SESSION_METADATA_BATCH_SIZE} valid inventory entries` },
       { status: 400 },
     );
@@ -64,7 +63,7 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json(
+  return Response.json(
     { metadata, staleSessionIds },
     { headers: { "Cache-Control": "no-store" } },
   );

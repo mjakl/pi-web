@@ -1,6 +1,4 @@
-import { readdirSync, statSync } from "fs";
-import { homedir } from "os";
-import path from "path";
+import { statSync } from "fs";
 import { getAdditionalAllowedRoots } from "./allowed-roots";
 import { isExistingPathWithinRoots, isPathWithinRoots } from "./path-security";
 import { isAbsolutePath, toSlashPath } from "./paths";
@@ -17,25 +15,9 @@ export async function getAllowedFileRoots(): Promise<Set<string>> {
     roots.add(toSlashPath(projects[index].projectRoot));
   });
 
-  // Also allow ~/pi-cwd-* directories created by the default-cwd endpoint.
-  try {
-    for (const name of readdirSync(homedir())) {
-      if (/^pi-cwd-\d{8}$/.test(name)) {
-        roots.add(toSlashPath(path.join(homedir(), name)));
-      }
-    }
-  } catch {
-    // ignore if home is unreadable
-  }
-
   for (const root of getAdditionalAllowedRoots()) roots.add(root);
 
   return roots;
-}
-
-/** Authorize an existing path against the allowed roots after resolving symbolic links. */
-export async function isExistingPathAllowed(target: string): Promise<boolean> {
-  return isExistingPathWithinRoots(target, await getAllowedFileRoots());
 }
 
 export type DirectoryAuthorization =

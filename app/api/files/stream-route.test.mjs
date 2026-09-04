@@ -12,7 +12,6 @@ const jiti = createJiti(import.meta.url, {
 });
 const { GET } = await jiti.import("./[...path]/route.ts");
 const { allowFileRoot } = await jiti.import("@/lib/file-access");
-const { NextRequest } = await jiti.import("next/server");
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
 
@@ -36,7 +35,7 @@ async function readAllowedFile(t, name, content, headers = {}) {
   allowFileRoot(dir);
 
   const response = await GET(
-    new NextRequest(`http://localhost/api/files${filePath}?type=read`, { headers }),
+    new Request(`http://localhost/api/files${filePath}?type=read`, { headers }),
     { params: Promise.resolve({ path: filePath.split("/").filter(Boolean) }) },
   );
   return { response, body: Buffer.from(await response.arrayBuffer()) };
@@ -103,7 +102,7 @@ test("rejects a path-like sessionId reference for a file outside the allowed roo
 
   const sessionId = encodeURIComponent("../../sessions/foo");
   const response = await GET(
-    new NextRequest(`http://localhost/api/files${filePath}?type=read&sessionId=${sessionId}`),
+    new Request(`http://localhost/api/files${filePath}?type=read&sessionId=${sessionId}`),
     { params: Promise.resolve({ path: filePath.split("/").filter(Boolean) }) },
   );
 

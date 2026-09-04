@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { findCurrentWorktreePath, isWorkingDirectoryAvailable, listWorktrees, resolveProject } from "@/lib/worktree";
 import { allowFileRoot, getAllowedFileRoots } from "@/lib/file-access";
 import { isExistingPathWithinRoots, isPathWithinRoots } from "@/lib/path-security";
@@ -6,10 +5,10 @@ import { pathIdentityKey } from "@/lib/paths";
 
 /** Same gate as /api/files: only session cwds / project roots / explicitly
  *  allowed dirs may be inspected through this endpoint. */
-async function checkCwdAllowed(cwd: string): Promise<NextResponse | null> {
+async function checkCwdAllowed(cwd: string): Promise<Response | null> {
   const allowedRoots = await getAllowedFileRoots();
   if (!isPathWithinRoots(cwd, allowedRoots) || !isExistingPathWithinRoots(cwd, allowedRoots)) {
-    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    return Response.json({ error: "Access denied" }, { status: 403 });
   }
   return null;
 }
@@ -19,7 +18,7 @@ export async function GET(req: Request) {
   try {
     const cwd = new URL(req.url).searchParams.get("cwd");
     if (!cwd) {
-      return NextResponse.json({ error: "cwd is required" }, { status: 400 });
+      return Response.json({ error: "cwd is required" }, { status: 400 });
     }
     const denied = await checkCwdAllowed(cwd);
     if (denied) return denied;
@@ -40,7 +39,7 @@ export async function GET(req: Request) {
     // file explorer to browse them even before they have any session.
     // Listing also restores access after server restarts.
     for (const w of worktrees) allowFileRoot(w.path);
-    return NextResponse.json({
+    return Response.json({
       cwdAvailable: isWorkingDirectoryAvailable(cwd),
       projectRoot: project.projectRoot,
       projectKey: pathIdentityKey(project.projectRoot),
@@ -50,6 +49,6 @@ export async function GET(req: Request) {
       worktrees,
     });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return Response.json({ error: String(error) }, { status: 500 });
   }
 }

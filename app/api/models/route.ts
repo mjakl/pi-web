@@ -1,4 +1,3 @@
-import { stat } from "fs/promises";
 import { resolve } from "path";
 import { createAgentSessionServices, getAgentDir, type SettingsManager } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
@@ -10,7 +9,7 @@ import {
   type ModelsData,
 } from "@/lib/models-cache";
 import { resolveVisibleModels, selectInitialModelScope } from "@/lib/model-scope";
-import { isExistingPathAllowed } from "@/lib/file-access";
+import { authorizeDirectory } from "@/lib/file-access";
 import { projectTrustReloadOptions } from "@/lib/project-trust";
 
 const modelNameCollator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
@@ -100,17 +99,9 @@ export async function GET(req: Request) {
   const requestedCwd = new URL(req.url).searchParams.get("cwd") || process.cwd();
   const cwd = resolve(requestedCwd);
 
-  let cwdStat;
-  try {
-    cwdStat = await stat(cwd);
-  } catch {
-    return Response.json({ error: `Directory does not exist: ${cwd}` }, { status: 400 });
-  }
-  if (!cwdStat.isDirectory()) {
-    return Response.json({ error: `Not a directory: ${cwd}` }, { status: 400 });
-  }
-  if (!(await isExistingPathAllowed(cwd))) {
-    return Response.json({ error: "Access denied" }, { status: 403 });
+  const authorized = await authorizeDirectory(cwd);
+  if ("error" in authorized) {
+    return Response.json({ error: authorized.error }, { status: authorized.status });
   }
 
   try {

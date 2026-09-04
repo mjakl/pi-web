@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { getSessionEntries, resolveSessionPath } from "@/lib/session-reader";
 import { MAX_TOOL_RESULT_IMAGE_BYTES, TOOL_RESULT_IMAGE_MIMES } from "@/lib/tool-result-images";
 
@@ -49,26 +48,26 @@ export async function GET(
   const blockIndexParam = new URL(req.url).searchParams.get("blockIndex");
   const blockIndex = blockIndexParam === null ? Number.NaN : Number(blockIndexParam);
   if (!Number.isSafeInteger(blockIndex) || blockIndex < 0) {
-    return NextResponse.json({ error: "Valid blockIndex is required" }, { status: 400 });
+    return Response.json({ error: "Valid blockIndex is required" }, { status: 400 });
   }
 
   try {
     const filePath = await resolveSessionPath(id);
-    if (!filePath) return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    if (!filePath) return Response.json({ error: "Session not found" }, { status: 404 });
 
     const entry = getSessionEntries(filePath).find((candidate) => candidate.id === entryId);
     if (!entry || entry.type !== "message" || entry.message.role !== "toolResult") {
-      return NextResponse.json({ error: "Tool result not found" }, { status: 404 });
+      return Response.json({ error: "Tool result not found" }, { status: 404 });
     }
 
     const image = readBase64Image(entry.message.content[blockIndex]);
-    if (!image) return NextResponse.json({ error: "Tool result image not found" }, { status: 404 });
+    if (!image) return Response.json({ error: "Tool result image not found" }, { status: 404 });
     if (!TOOL_RESULT_IMAGE_MIMES.has(image.mime)) {
-      return NextResponse.json({ error: "Unsupported image type" }, { status: 415 });
+      return Response.json({ error: "Unsupported image type" }, { status: 415 });
     }
 
     const bytes = decodeBoundedBase64(image.data);
-    if (!bytes) return NextResponse.json({ error: "Invalid or oversized image data" }, { status: 413 });
+    if (!bytes) return Response.json({ error: "Invalid or oversized image data" }, { status: 413 });
 
     const body = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(body).set(bytes);
@@ -81,6 +80,6 @@ export async function GET(
       },
     });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return Response.json({ error: String(error) }, { status: 500 });
   }
 }

@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { resolveSessionPath, buildSessionContext } from "@/lib/session-reader";
 import { getRpcSession } from "@/lib/rpc-manager";
+import { SESSION_TAIL_DEFAULT, SESSION_TAIL_MAX } from "@/lib/chat-lazy-load";
 
 export async function GET(
   req: Request,
@@ -16,11 +16,11 @@ export async function GET(
   // walk start to an older entry so the client can page upward without
   // re-fetching the whole active branch.
   const rawTail = Number(url.searchParams.get("tail"));
-  const tail = Number.isFinite(rawTail) && rawTail > 0 ? Math.min(rawTail, 1000) : 50;
+  const tail = Number.isFinite(rawTail) && rawTail > 0 ? Math.min(rawTail, SESSION_TAIL_MAX) : SESSION_TAIL_DEFAULT;
   const before = url.searchParams.get("before") ?? undefined;
   const throughEntryId = url.searchParams.get("through") ?? undefined;
   if (throughEntryId && !before) {
-    return NextResponse.json({ error: "A history cursor is required" }, { status: 400 });
+    return Response.json({ error: "A history cursor is required" }, { status: 400 });
   }
 
   try {
@@ -28,7 +28,7 @@ export async function GET(
     const liveRpc = rpc?.isAlive() ? rpc : undefined;
     const filePath = liveRpc ? null : await resolveSessionPath(id);
     if (!liveRpc && !filePath) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+      return Response.json({ error: "Session not found" }, { status: 404 });
     }
 
     const sm = liveRpc?.inner.sessionManager ?? SessionManager.open(filePath!);
@@ -43,8 +43,8 @@ export async function GET(
       sessionId: id,
     });
 
-    return NextResponse.json({ context, tail, before: before ?? null });
+    return Response.json({ context, tail, before: before ?? null });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: error instanceof RangeError ? 400 : 500 });
+    return Response.json({ error: String(error) }, { status: error instanceof RangeError ? 400 : 500 });
   }
 }
