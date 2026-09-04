@@ -28,6 +28,7 @@ export function ProjectFolderGroup({ project, selectedCwd, selected, homeDir, ac
 }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(selected);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [data, setData] = useState<ProjectFolders | null>(null);
   const [error, setError] = useState<string | null>(null);
   const display = (path: string) => homeDir && path.startsWith(`${homeDir}/`) ? `~${path.slice(homeDir.length)}` : path;
@@ -35,7 +36,6 @@ export function ProjectFolderGroup({ project, selectedCwd, selected, homeDir, ac
 
   const queryCwd = selected ? selectedCwd ?? project.cwd : project.cwd;
   useEffect(() => {
-    if (!expanded) return;
     const controller = new AbortController();
     fetch(`/api/worktrees?cwd=${encodeURIComponent(queryCwd)}`, { signal: controller.signal, cache: "no-store" })
       .then(async response => {
@@ -45,21 +45,29 @@ export function ProjectFolderGroup({ project, selectedCwd, selected, homeDir, ac
       })
       .catch(error => { if (!controller.signal.aborted) setError(String(error)); });
     return () => controller.abort();
-  }, [expanded, queryCwd]);
+  }, [refreshKey, queryCwd]);
 
   const folders = data ? data.isGit && data.isTopLevel
     ? data.worktrees.map(folder => folder.path)
     : data.cwdAvailable ? [project.cwd] : [] : [];
   const selectedPath = selected ? data?.currentWorktreePath ?? selectedCwd : selectedCwd;
   const select = (path: string) => onSelect(path, data?.projectRoot ?? project.root, data?.projectKey ?? project.key);
-  const direct = data && folders.length === 1 && folders[0] === project.root;
+  const direct = folders.length === 1;
+  const displayPath = direct ? folders[0] : project.root;
 
   return (
     <div className="project-folder-group">
-      <button className="project-folder-row" aria-expanded={direct ? undefined : expanded}
-        onClick={() => direct ? select(folders[0]) : setExpanded(value => !value)}>
-        {direct ? <FolderIcon /> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" style={{ flexShrink: 0, transform: expanded ? "rotate(90deg)" : undefined }}><path d="m9 5 7 7-7 7" /></svg>}
-        <span className="project-folder-label"><span>{name(project.root)}</span><span className="project-folder-path">{display(project.root)}</span></span>
+      <button className="project-folder-row" aria-expanded={!data || direct ? undefined : expanded}
+        disabled={!data && !error} aria-busy={!data && !error}
+        onClick={() => {
+          if (direct) select(folders[0]);
+          else {
+            if (!expanded) setRefreshKey(value => value + 1);
+            setExpanded(value => !value);
+          }
+        }}>
+        {!data || direct ? <FolderIcon /> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" style={{ flexShrink: 0, transform: expanded ? "rotate(90deg)" : undefined }}><path d="m9 5 7 7-7 7" /></svg>}
+        <span className="project-folder-label"><span>{name(project.root)}</span><span className="project-folder-path">{display(displayPath)}</span></span>
         {activity}
         {direct && selectedPath === folders[0] && <span aria-hidden="true">✓</span>}
       </button>

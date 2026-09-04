@@ -7,8 +7,9 @@ not create, delete, prune, or change branches in a worktree.
 ## Choose a working folder
 
 Open the folder picker in the sidebar. Expand a repository to see its working
-folders, then select one. Folder names and paths identify the choices; there is
-no separate branch or worktree dropdown.
+folders, then select one. If only one working folder exists, select the
+repository directly; no expansion is needed. Folder names and paths identify
+the choices; there is no separate branch or worktree dropdown.
 
 The original checkout and linked worktrees are equal choices. Repositories
 backed by a bare Git directory are supported: the bare directory identifies the

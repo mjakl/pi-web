@@ -109,7 +109,6 @@ export const enMessages: Record<string, string> = {
     "sidebar.selectProject": "Select project…",
     "sidebar.filterProjects": "Filter projects…",
     "sidebar.noMatchingProjects": "No matching projects",
-    "sidebar.useDefaultDirectory": "Use default directory",
     "sidebar.customPath": "Custom path…",
     "directoryPicker.selectDirectory": "Select directory",
     "directoryPicker.goToParent": "Go to parent directory",

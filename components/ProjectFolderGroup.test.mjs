@@ -44,3 +44,29 @@ test("groups discover external folders on expansion, select paths, and refresh o
   assert.equal(container.textContent.includes("/elsewhere/two"), false);
   assert.equal(container.textContent.includes("/new/three"), true);
 });
+
+for (const folder of ["/repo/project.git", "/elsewhere/only-checkout"]) {
+  test(`a single working folder is directly selectable on opening: ${folder}`, async (t) => {
+    const originalFetch = globalThis.fetch;
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    t.after(async () => { await act(() => root.unmount()); container.remove(); globalThis.fetch = originalFetch; });
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      projectRoot: "/repo/project.git", projectKey: "repo", isGit: true, isTopLevel: true, cwdAvailable: true,
+      worktrees: [{ path: folder, branch: null }],
+    }) });
+    let selection;
+    await act(() => root.render(React.createElement(ProjectFolderGroup, {
+      project: { root: "/repo/project.git", key: "repo", cwd: folder },
+      selectedCwd: "/different/project", selected: false, homeDir: "/home/user", activity: null,
+      onSelect: (...args) => { selection = args; },
+    })));
+    const button = container.querySelector("button");
+    assert.equal(button.hasAttribute("aria-expanded"), false);
+    assert.equal(container.querySelectorAll("button").length, 1);
+    assert.ok(container.textContent.includes(folder));
+    await act(() => button.click());
+    assert.deepEqual(selection, [folder, "/repo/project.git", "repo"]);
+  });
+}
