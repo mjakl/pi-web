@@ -106,7 +106,7 @@ test("each session indicator keeps its own label, colour, and glyph", () => {
 
   const stopped = renderIndicator("stopped");
   assert.match(stopped, /title="Session stopped" aria-label="Session stopped" style="[^"]*color:var\(--text-dim\)"/);
-  assert.match(stopped, /<rect x="4" y="4" width="6" height="6" rx="1"/);
+  assert.match(stopped, /<circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.25" opacity="0.6"/);
 
   const unread = renderIndicator("unread");
   assert.match(unread, /title="New activity" aria-label="New session activity" style="[^"]*color:var\(--info\)"/);
@@ -772,7 +772,7 @@ test("menu actions run without selecting the row", async () => {
   }
 });
 
-test("the fixed right rail keeps metadata and actions from changing left-row geometry", async () => {
+test("the right column reserves room for message counts without truncating them", async () => {
   const session = { ...baseSession, name: "A very long session title that must stay truncated", messageCount: 1000 };
   const view = await mountItem(session);
   const row = view.container.firstElementChild;
@@ -783,7 +783,7 @@ test("the fixed right rail keeps metadata and actions from changing left-row geo
   const leftStyle = left.getAttribute("style");
 
   assert.equal(row.style.height, "54px");
-  assert.equal(rail.style.width, "44px");
+  assert.equal(rail.style.minWidth, "64px");
   assert.equal(rail.style.height, "54px");
   assert.equal(rail.style.flexDirection, "column");
   assert.equal(rail.style.justifyContent, "space-between");
@@ -791,9 +791,9 @@ test("the fixed right rail keeps metadata and actions from changing left-row geo
   const count = rail.lastElementChild;
   assert.equal(count.textContent, "1000 msgs");
   assert.equal(count.title, "1000 msgs");
-  assert.equal(count.style.maxWidth, "100%");
-  assert.equal(count.style.overflow, "hidden");
-  assert.equal(count.style.textOverflow, "ellipsis");
+  assert.equal(count.style.maxWidth, "");
+  assert.equal(count.style.overflow, "");
+  assert.equal(count.style.textOverflow, "");
 
   await view.rerender({ ...session, messageCount: undefined });
   assert.equal(trigger.parentElement, rail);

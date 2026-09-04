@@ -101,7 +101,7 @@ const SESSION_INDICATORS = {
     color: "var(--text-dim)",
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-        <rect x="4" y="4" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
+        <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.25" opacity="0.6" />
       </svg>
     ),
   },
@@ -494,7 +494,7 @@ export function SessionItem({
 
           <div
             style={{
-              width: 44,
+              minWidth: 64,
               height: SESSION_ITEM_HEIGHT,
               padding: "4px 0 5px",
               boxSizing: "border-box",
@@ -549,7 +549,7 @@ export function SessionItem({
             ) : (
               <span
                 title={t("sidebar.messagesCount", { count: session.messageCount })}
-                style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                style={{ whiteSpace: "nowrap" }}
               >
                 {t("sidebar.messagesCount", { count: session.messageCount })}
               </span>
