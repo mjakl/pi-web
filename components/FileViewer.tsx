@@ -1212,27 +1212,6 @@ function TextFileViewer({
   }, [cwd, filePath, onMentionLines]);
 
   useEffect(() => {
-    if (!onMentionLines || displayMode !== "source") return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || event.key.toLowerCase() !== "i" || (!event.metaKey && !event.ctrlKey) || event.altKey || event.shiftKey) return;
-
-      const target = event.target;
-      if (target instanceof Element && target.closest("input, textarea, [contenteditable='true']")) return;
-
-      const root = contentRef.current;
-      const lineRange = root ? getSelectedSourceLineRange(root, window.getSelection()) : null;
-      if (!lineRange) return;
-
-      event.preventDefault();
-      mentionLineRange(lineRange);
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [displayMode, mentionLineRange, onMentionLines]);
-
-  useEffect(() => {
     if (!scrollRestorePendingRef.current || loading) return;
     if (error && !isDeletedDiff) return;
     if (requestedInitialDisplayMode === "diff" && !gitDiffResolved) return;
