@@ -190,7 +190,7 @@ interface Props {
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
   entryId?: string;
-  onFork?: (entryId: string) => void;
+  onFork?: (entryId: string, message: UserMessage) => void;
   forking?: boolean;
   onNavigate?: (entryId: string) => void;
   prevAssistantEntryId?: string;
@@ -288,7 +288,7 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
   entryId?: string;
-  onFork?: (entryId: string) => void;
+  onFork?: (entryId: string, message: UserMessage) => void;
   forking?: boolean;
   onNavigate?: (entryId: string) => void;
   prevAssistantEntryId?: string;
@@ -529,7 +529,7 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
               )}
               {canFork && (
                 <button
-                  onClick={() => { onFork!(entryId!); }}
+                  onClick={() => { onFork!(entryId!, editTarget); }}
                   disabled={forking}
                    title={forking ? t("i18n.creatingSession") : t("i18n.newSessionTitle")}
                   style={{
