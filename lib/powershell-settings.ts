@@ -2,13 +2,10 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import lockfile from "proper-lockfile";
+import { isRecord } from "./types";
 
 const DEFAULT_TOOLS = ["read", "bash", "edit", "write"];
 const SHELL_TOOLS = new Set(["bash", "powershell"]);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 export function isPowerShellToolEnabled(
   defaultTools: readonly string[] | undefined,
@@ -24,12 +21,7 @@ function replaceShellTool(
   usePowerShell: boolean,
 ): string[] {
   const shell = usePowerShell ? "powershell" : "bash";
-  const result: string[] = [];
-  for (const name of toolNames) {
-    const next = SHELL_TOOLS.has(name) ? shell : name;
-    if (!result.includes(next)) result.push(next);
-  }
-  return result;
+  return [...new Set(toolNames.map((name) => (SHELL_TOOLS.has(name) ? shell : name)))];
 }
 
 export function resolveShellTools(

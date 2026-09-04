@@ -6,6 +6,7 @@ import {
 import { closeSync, type Dirent, existsSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from "fs";
 import { readdir } from "fs/promises";
 import { dirname, isAbsolute, join, normalize as normalizePath, relative, resolve as resolvePath, sep } from "path";
+import { isRecord } from "./types";
 import type { AgentMessage, ImageContent, SessionEntry, SessionHeader, SessionInfo, SessionContext } from "./types";
 import type { SessionEntry as PiSessionEntry } from "@earendil-works/pi-coding-agent";
 import { normalizeToolCalls } from "./normalize";
@@ -551,10 +552,6 @@ export function sliceActiveBranch(
 function parseEntryTimestamp(timestamp: string): number | undefined {
   const parsed = Date.parse(timestamp);
   return Number.isNaN(parsed) ? undefined : parsed;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function base64ImageInfo(block: unknown): { bytes: number; mime?: string } | null {

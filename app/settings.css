@@ -483,19 +483,12 @@
   color: var(--danger);
 }
 
-.config-button-ghost {
-  border-color: transparent;
-  background: transparent;
-  color: var(--text-muted);
-}
-
 .config-button-primary:not(:disabled):hover {
   border-color: color-mix(in srgb, var(--accent) 88%, #000);
   background: color-mix(in srgb, var(--accent) 88%, #000);
 }
 
-.config-button-secondary:not(:disabled):hover,
-.config-button-ghost:not(:disabled):hover {
+.config-button-secondary:not(:disabled):hover {
   border-color: var(--border);
   background: var(--bg-hover);
   color: var(--text);
@@ -514,18 +507,6 @@
 .config-button:disabled {
   cursor: default;
   opacity: 0.5;
-}
-
-.config-button-primary.is-success {
-  border-color: var(--success);
-  background: var(--success);
-  animation: saved-pop 0.45s ease;
-}
-
-.config-button-success-icon {
-  flex-shrink: 0;
-  stroke-dasharray: 18;
-  animation: saved-check-draw 0.35s ease forwards;
 }
 
 .config-button.is-pushed-right {
@@ -970,17 +951,6 @@
     color: var(--text);
     font-size: 16px;
   }
-}
-
-@keyframes saved-pop {
-  0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55); }
-  40%  { transform: scale(1.08); box-shadow: 0 0 0 6px rgba(74, 222, 128, 0.25); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
-}
-
-@keyframes saved-check-draw {
-  from { stroke-dashoffset: 18; opacity: 0; }
-  to   { stroke-dashoffset: 0;  opacity: 1; }
 }
 
 /* iOS standalone: env() can report 0, so keep a device-sized fallback on the

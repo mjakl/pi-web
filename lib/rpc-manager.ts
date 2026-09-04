@@ -17,6 +17,7 @@ import { extractTextContent, sessionTitleFromFirstMessage } from "./session-meta
 import { cacheSessionPath } from "./session-reader";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
 import { persistExplicitStartupPreferences } from "./startup-preferences";
+import { errorMessage } from "./error-message";
 import { notifySessionComplete } from "./web-push";
 import type { ExtensionCommandContextActions, SlashCommandInfo } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionLike, ToolInfo } from "./pi-types";
@@ -95,7 +96,7 @@ function withExtensionTools(session: AgentSessionLike, toolNames: string[]): str
 // ============================================================================
 
 export class AgentSessionWrapper {
-  private listeners: EventListener[] = [];
+  private listeners = new Set<EventListener>();
   private readonly extensionUi = new ExtensionUiBridge((event) => this.emit(event));
   private pendingPromptCount = 0;
   private activeMutatingCommands = 0;
@@ -304,10 +305,8 @@ export class AgentSessionWrapper {
 
   private async acquirePromptAdmission(): Promise<() => void> {
     const previous = this.promptAdmissionTail;
-    let release!: () => void;
-    this.promptAdmissionTail = new Promise<void>((resolve) => {
-      release = resolve;
-    });
+    const { promise, resolve: release } = Promise.withResolvers<void>();
+    this.promptAdmissionTail = promise;
     await previous;
     return release;
   }
@@ -356,11 +355,10 @@ export class AgentSessionWrapper {
   }
 
   onEvent(listener: EventListener): () => void {
-    this.listeners.push(listener);
+    this.listeners.add(listener);
     for (const event of this.extensionUi.pendingRequests()) listener(event);
     return () => {
-      const i = this.listeners.indexOf(listener);
-      if (i !== -1) this.listeners.splice(i, 1);
+      this.listeners.delete(listener);
     };
   }
 
@@ -504,7 +502,7 @@ export class AgentSessionWrapper {
             if (preflightAccepted) {
               this.emit({
                 type: "prompt_error",
-                errorMessage: error instanceof Error ? error.message : String(error),
+                errorMessage: errorMessage(error),
               });
               if (!streamingBehavior) this.emit({ type: "prompt_done" });
             }
@@ -1031,8 +1029,7 @@ async function acquireRpcSessionToolChange(operation: RpcSessionOperation): Prom
   await assertRpcSessionOperationCurrent(operation);
   const lifecycle = getLifecycle(operation.sessionId);
   const previous = lifecycle.toolChangeTail;
-  let release!: () => void;
-  const current = new Promise<void>((resolve) => { release = resolve; });
+  const { promise: current, resolve: release } = Promise.withResolvers<void>();
   lifecycle.toolChangeTail = previous.then(() => current);
   await previous;
   try {

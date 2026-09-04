@@ -1,18 +1,8 @@
 // Pure entry scanning, kept apart from lib/session-file-references.ts so it is
 // testable without the session reader and the Pi SDK.
+import { safeDecode } from "./file-paths";
+import { toSlashPath } from "./paths";
 import type { SessionEntry } from "./types";
-
-function safeDecode(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-function normalizeSlashes(value: string): string {
-  return value.replace(/\\/g, "/");
-}
 
 function isPathChar(ch: string): boolean {
   return /[A-Za-z0-9._~+%@/\\:-]/.test(ch);
@@ -26,9 +16,9 @@ function hasReferenceBoundaryAfter(text: string, index: number): boolean {
 }
 
 function containsExactPathReference(text: string, filePath: string): boolean {
-  const target = normalizeSlashes(filePath);
+  const target = toSlashPath(filePath);
   const targets = target.startsWith("/") ? [target, `file://${target}`] : [target];
-  const haystacks = new Set([normalizeSlashes(text), normalizeSlashes(safeDecode(text))]);
+  const haystacks = new Set([toSlashPath(text), toSlashPath(safeDecode(text))]);
 
   for (const haystack of haystacks) {
     for (const t of targets) {

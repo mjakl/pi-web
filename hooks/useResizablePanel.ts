@@ -10,6 +10,7 @@ import {
   type PointerEvent,
 } from "react";
 import { clampPanelWidth } from "@/lib/panel-layout";
+import { getBrowserStorage } from "@/lib/browser-storage";
 
 interface DragState {
   pointerId: number;
@@ -40,7 +41,7 @@ interface CommitOptions {
 
 function readStoredWidth(storageKey: string): number | null {
   try {
-    const stored = window.localStorage.getItem(storageKey);
+    const stored = getBrowserStorage()?.getItem(storageKey) ?? null;
     if (stored === null) return null;
     const parsed = Number.parseInt(stored, 10);
     return Number.isFinite(parsed) ? parsed : null;
@@ -51,7 +52,7 @@ function readStoredWidth(storageKey: string): number | null {
 
 function writeStoredWidth(storageKey: string, width: number): void {
   try {
-    window.localStorage.setItem(storageKey, String(width));
+    getBrowserStorage()?.setItem(storageKey, String(width));
   } catch {
     // Resizing remains available when storage is unavailable.
   }

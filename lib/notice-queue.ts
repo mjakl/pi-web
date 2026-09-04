@@ -28,13 +28,10 @@ function markOldestNoticeExiting(notices: NoticeItem[]): NoticeItem[] {
 }
 
 function fillPendingNotices(visible: NoticeItem[], pending: NoticeItem[]): NoticeState {
-  let nextVisible = visible;
-  let nextPending = pending;
-  while (nextPending.length > 0 && nextVisible.length < MAX_NOTICES) {
-    const [next, ...rest] = nextPending;
-    nextVisible = [...nextVisible, next];
-    nextPending = rest;
-  }
+  // slice() reads a negative count from the end, so clamp before slicing.
+  const take = Math.max(0, MAX_NOTICES - visible.length);
+  let nextVisible = visible.concat(pending.slice(0, take));
+  const nextPending = pending.slice(take);
   if (nextPending.length > 0 && !nextVisible.some((notice) => notice.exiting)) {
     nextVisible = markOldestNoticeExiting(nextVisible);
   }

@@ -1,4 +1,5 @@
 import type { SkillSearchResult } from "@/lib/api-types";
+import { errorMessage } from "@/lib/error-message";
 
 const DEFAULT_LIMIT = 50;
 const MIN_LIMIT = 1;
@@ -66,6 +67,6 @@ export async function POST(req: Request) {
   } catch (e: unknown) {
     // skills.sh is the only source of truth for search. SkillsConfig renders
     // this error; a bad gateway is the honest status for an upstream failure.
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 502 });
+    return Response.json({ error: errorMessage(e) }, { status: 502 });
   }
 }

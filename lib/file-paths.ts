@@ -18,7 +18,7 @@ export function encodeFilePathForApi(filePath: string): string {
 /** URL for the file API. The only place this shape is built. */
 export function getFileApiUrl(
   filePath: string,
-  type: "read" | "download" | "meta" | "preview" | "watch",
+  type: "list" | "read" | "download" | "meta" | "preview" | "watch" | "upload" | "upload-check",
   sourceSessionId?: string | null,
   params: Record<string, string | number | undefined> = {},
 ): string {
@@ -59,4 +59,13 @@ export function getRelativeFilePath(filePath: string, cwd?: string): string {
 
 export function joinFilePath(parent: string, child: string): string {
   return `${normalizeFilePathSlashes(parent).replace(/\/$/, "")}/${child}`;
+}
+
+/** decodeURIComponent that returns the input unchanged when it is not valid percent-encoding. */
+export function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }

@@ -10,7 +10,6 @@ import type {
   SessionContext,
   SessionInfo,
   SessionTreeNode,
-  UserMessage,
 } from "@/lib/types";
 import { errorMessage } from "@/lib/error-message";
 import { isBlockingExtensionUiRequest } from "@/lib/browser-notifications";
@@ -42,6 +41,8 @@ import {
 import { AgentEventConnection } from "@/lib/agent-event-connection";
 import { useI18n } from "@/hooks/useI18n";
 import type { AgentEventLike } from "@/lib/agent-event-wire";
+import type { AttachedImage, ChatInputHandle } from "@/components/ChatInput";
+import { copyText } from "@/lib/clipboard";
 import { getSnapshotTail } from "@/lib/chat-lazy-load";
 import {
   INITIAL_STREAMING_STATE,
@@ -139,7 +140,6 @@ export interface UseAgentSessionOptions {
   chatInputRef?: React.RefObject<ChatInputHandle | null>;
   onSessionMetadataChange?: (session: SessionInfo) => void;
   onSessionStatsPanelOpen?: () => void;
-  setToolPreset?: (preset: ToolPreset) => void;
 }
 
 export type ThinkingLevelOption = "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -167,22 +167,6 @@ function readCompactResult(result: unknown, reason: string): CompactResultInfo |
   const r = result as CompactCommandResult;
   if (typeof r.tokensBefore !== "number" || typeof r.estimatedTokensAfter !== "number") return null;
   return { reason, tokensBefore: r.tokensBefore, estimatedTokensAfter: r.estimatedTokensAfter };
-}
-
-export interface ChatInputHandle {
-  insertText: (text: string) => void;
-  insertIfEmpty: (content: string) => void;
-  replaceMessage: (message: UserMessage) => void;
-  prependText: (text: string) => void;
-  addImages: (files: File[]) => void;
-  rekeyDraft: (previousKey: string, nextKey: string) => void;
-  restoreSubmission: (text: string, images?: Array<{ data: string; mimeType: string }>, targetDraftKey?: string) => void;
-}
-
-export interface AttachedImage {
-  data: string;
-  mimeType: string;
-  previewUrl: string;
 }
 
 type SelectedModel = { provider: string; modelId: string };
@@ -232,7 +216,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [modelThinkingLevelMaps, setModelThinkingLevelMaps] = useState<Record<string, Record<string, string | null>>>({});
   const [newSessionModel, setNewSessionModel] = useState<SelectedModel | null>(null);
   const [newSessionDefaultModel, setNewSessionDefaultModel] = useState<SelectedModel | null>(null);
-  const [toolPreset, setToolPreset] = useState<ToolPreset>("default");
+  const [toolPreset, setToolPresetState] = useState<ToolPreset>("default");
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevelOption>("auto");
   const [retryInfo, setRetryInfo] = useState<{ attempt: number; maxAttempts: number; errorMessage?: string } | null>(null);
   const [contextUsage, setContextUsage] = useState<{ percent: number | null; contextWindow: number; tokens: number | null } | null>(null);
@@ -318,7 +302,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     });
   }
 
-  const setToolPresetState = opts.setToolPreset ?? setToolPreset;
   const existingSessionId = session?.id;
 
   useLayoutEffect(() => {
@@ -1794,7 +1777,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           const data = await sendAgentCommand<LastAssistantTextResponse>(sid, { type: "get_last_assistant_text" });
           const textToCopy = data?.text ?? "";
           if (!textToCopy) return complete({ handled: true, error: t("chat.noAssistantMessageToCopy") });
-          await navigator.clipboard.writeText(textToCopy);
+          await copyText(textToCopy);
           return complete({ handled: true, message: t("chat.copiedLastAssistantMessage") });
         }
 

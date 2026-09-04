@@ -9,10 +9,7 @@
   --text-muted: #444952;
   --text-dim: #5f6672;
   --accent: #225bd8;
-  --accent-hover: #1b4bb8;
   --user-bg: #eff6ff;
-  --assistant-bg: #ffffff;
-  --tool-bg: #f9fafb;
   --bg-subtle: rgba(0,0,0,0.03);
   /* Status colours. Values are chosen against --bg-selected, the lowest
      contrast surface any of them lands on, so every one clears WCAG AA. */
@@ -21,7 +18,6 @@
   --warning: #8a5a06;
   --info: #0b6c85;
   --on-accent: #ffffff;
-  --on-danger: #ffffff;
 }
 
 html.dark {
@@ -35,17 +31,13 @@ html.dark {
   --text-muted: #c0c4cc;
   --text-dim: #9ca3af;
   --accent: #60a5fa;
-  --accent-hover: #93c5fd;
   --user-bg: #1e293b;
-  --assistant-bg: #1a1a1a;
-  --tool-bg: #1f2937;
   --bg-subtle: rgba(255,255,255,0.04);
   --danger: #fb8a8a;
   --success: #4ade80;
   --warning: #e5b163;
   --info: #22d3ee;
   --on-accent: #1a1a1a;
-  --on-danger: #1a1a1a;
 }
 
 /* WebKit reports dvh/innerHeight without the status-bar strip for installed
@@ -59,28 +51,16 @@ html.dark {
   }
 }
 
+/* Use the SVG alpha channel as a mask so file icons follow the app's
+   restrained text palette instead of Catppuccin's language-specific colors. */
 .catppuccin-file-icon {
   display: block;
   flex-shrink: 0;
-  background: center / contain no-repeat var(--catppuccin-icon-light);
+  background: var(--text-dim);
+  mask: center / contain no-repeat var(--catppuccin-icon-light);
 }
 html.dark .catppuccin-file-icon {
-  background-image: var(--catppuccin-icon-dark);
-}
-
-/* Use the SVG alpha channel as a mask so file icons follow the app's
-   restrained text palette instead of Catppuccin's language-specific colors. */
-@supports (mask-image: url("mask.svg")) or (-webkit-mask-image: url("mask.svg")) {
-  .catppuccin-file-icon {
-    background: var(--text-dim);
-    mask: center / contain no-repeat var(--catppuccin-icon-light);
-    -webkit-mask: center / contain no-repeat var(--catppuccin-icon-light);
-  }
-  html.dark .catppuccin-file-icon {
-    background: var(--text-dim);
-    mask-image: var(--catppuccin-icon-dark);
-    -webkit-mask-image: var(--catppuccin-icon-dark);
-  }
+  mask-image: var(--catppuccin-icon-dark);
 }
 
 /* Theme toggle: circular wipe via View Transitions API.
@@ -98,10 +78,6 @@ html.dark .catppuccin-file-icon {
   z-index: 2;
 }
 
-* {
-  box-sizing: border-box;
-}
-
 html {
   width: 100%;
   height: var(--app-viewport-height, 100dvh);
@@ -114,8 +90,6 @@ body {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  margin: 0;
-  padding: 0;
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
@@ -298,17 +272,6 @@ button.extension-widget-trigger:focus-visible {
   white-space: nowrap;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .extension-widget-update-pulse {
-    transition: none;
-  }
-
-  .extension-widget-trigger.is-updating .extension-widget-update-pulse::before {
-    animation: none;
-    opacity: 0.12;
-  }
-}
-
 .extension-widget-content {
   margin: 0;
   padding: 3px 12px 8px;
@@ -429,9 +392,6 @@ pre, code {
 }
 .markdown-body a:hover { text-decoration-color: var(--accent); }
 .markdown-body img {
-  display: block;
-  max-width: 100%;
-  height: auto;
   margin: 8px 0;
   border-radius: 6px;
 }
@@ -692,10 +652,6 @@ pre, code {
   overflow-x: auto;
   background: color-mix(in srgb, var(--bg) 92%, var(--bg-panel));
 }
-.mermaid-block svg {
-  display: block;
-  max-width: none;
-}
 .mermaid-block-loading {
   min-height: 120px;
 }
@@ -904,7 +860,6 @@ pre, code {
   overflow: auto;
   padding: 24px;
   background: var(--bg);
-  -webkit-overflow-scrolling: touch;
 }
 .mermaid-zoom-canvas {
   padding: 12px;
@@ -993,6 +948,8 @@ pre, code {
   padding: 0 8px;
   border: 0;
   border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
   font: inherit;
   font-size: 11px;
   font-weight: 500;
@@ -1007,6 +964,13 @@ pre, code {
 
 .file-viewer-mode-button:hover {
   filter: brightness(1.08);
+}
+
+/* Pressed state. Replaces the inline style objects FileViewer.tsx used to
+   derive from aria-pressed. */
+.file-viewer-mode-button[aria-pressed="true"] {
+  background: var(--bg-selected);
+  color: var(--text);
 }
 
 .file-viewer-icon-button {
@@ -1026,8 +990,15 @@ pre, code {
   text-decoration: none;
 }
 
+.file-viewer-icon-button[aria-pressed="true"] {
+  background: var(--bg-selected);
+  color: var(--text);
+}
+
+/* Same specificity as the pressed rule above; source order keeps hover
+   winning on a pressed button, which the old !important preserved. */
 .file-viewer-icon-button:hover {
-  background: var(--bg-hover) !important;
+  background: var(--bg-hover);
   color: var(--text);
 }
 
@@ -1038,7 +1009,7 @@ pre, code {
 }
 
 .file-viewer-icon-button:disabled:hover {
-  background: transparent !important;
+  background: transparent;
   color: var(--text-dim);
 }
 
@@ -1388,7 +1359,6 @@ span.linenumber {
   align-items: center;
   justify-content: center;
   background: rgba(37, 99, 235, 0.06);
-  -webkit-backdrop-filter: blur(1px);
   backdrop-filter: blur(1px);
   animation: drop-zone-in 0.15s ease both;
 }
@@ -1471,12 +1441,6 @@ span.linenumber {
     min-height: 0;
     margin-bottom: 0;
     transform: translateY(-5px) scale(0.995);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .notice-shelf-item {
-    animation-duration: 0.001ms !important;
   }
 }
 
@@ -1808,12 +1772,6 @@ span.linenumber {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .session-indicator-unread::before {
-    animation: none;
-  }
-}
-
 /* Session row hover. Was React state re-rendering the row on every pointer
    enter and leave, when the background was the only thing that changed. A
    selected row keeps --bg-selected because it sets that inline. */
@@ -1931,9 +1889,6 @@ span.linenumber {
   .composer-surface { padding: 14px 8px 6px; }
   .composer-textarea { font-size: 16px; }
   .composer-toolbar { gap: 0; }
-  .composer-toolbar > button, .model-selector.is-composer > button { min-height: 44px; }
-  .composer-toolbar > button { min-width: 44px; }
-  .model-selector.is-composer { max-width: calc(100% - 132px); }
   .composer-thinking-field select { min-height: 44px; }
   .chat-composer > .extension-status-shelf:not(.has-widgets) {
     border-top: 0;
@@ -1960,10 +1915,14 @@ span.linenumber {
   }
 }
 
-@media (pointer: coarse) {
+/* 44px composer targets on touch devices and on narrow viewports. The
+   compact button stays coarse-only so a narrow mouse window keeps 28px. */
+@media (pointer: coarse), (max-width: 640px) {
   .composer-toolbar > button, .model-selector.is-composer > button { min-height: 44px; }
   .composer-toolbar > button { min-width: 44px; }
   .model-selector.is-composer { max-width: calc(100% - 132px); }
+}
+@media (pointer: coarse) {
   .context-compact-button { min-width: 44px; min-height: 44px; }
 }
 
@@ -2034,10 +1993,6 @@ span.linenumber {
     transform: translateY(-8px) scale(0.96);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .anchored-menu { transition-duration: 0s, 0s, 0s, 0s; }
-}
-
 /* Opens upward, right edges aligned. */
 .anchored-menu.opens-up {
   bottom: anchor(top);

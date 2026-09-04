@@ -3,6 +3,7 @@ import {
   readPowerShellToolEnabled,
   writePowerShellToolEnabled,
 } from "@/lib/powershell-settings";
+import { errorMessage } from "@/lib/error-message";
 
 export async function GET() {
   try {
@@ -12,7 +13,7 @@ export async function GET() {
     });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: errorMessage(error) },
       { status: 500 },
     );
   }
@@ -37,7 +38,7 @@ export async function PUT(req: Request) {
     });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: errorMessage(error) },
       { status: 500 },
     );
   }

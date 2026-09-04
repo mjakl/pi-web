@@ -1,5 +1,6 @@
 import { existsSync } from "fs";
 import { randomUUID } from "crypto";
+import { errorMessage } from "@/lib/error-message";
 import { allowFileRoot } from "@/lib/file-access";
 import { isThinkingLevel } from "@/lib/model-scope";
 import { startRpcSession } from "@/lib/rpc-manager";
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     return Response.json({
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
       ...(commandType === "prompt" && !promptAccepted
         ? { code: "prompt_rejected", accepted: false }
         : {}),

@@ -5,6 +5,7 @@ import type { SessionInfo } from "@/lib/types";
 import { formatRelativeTime } from "@/lib/i18n/format";
 import { useI18n } from "@/hooks/useI18n";
 import { sendAgentCommand } from "@/lib/agent-client";
+import { errorMessage } from "@/lib/error-message";
 
 export const SESSION_ITEM_HEIGHT = 54;
 
@@ -312,7 +313,7 @@ export const SessionItem = memo(function SessionItem({
       onActivated?.(session.id);
     } catch (error) {
       onActivationFailed?.(t("sidebar.activationFailed", {
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       }));
     } finally {
       setActivating(false);
