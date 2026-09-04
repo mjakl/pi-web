@@ -24,9 +24,11 @@ export function formatExtensionStatusLine(statuses: ExtensionStatusItem[]): stri
 export function ExtensionStatusBar({
   statuses,
   widgets = [],
+  announce = true,
 }: {
   statuses: ExtensionStatusItem[];
   widgets?: ExtensionWidgetItem[];
+  announce?: boolean;
 }) {
   if (statuses.length === 0 && widgets.length === 0) return null;
 
@@ -40,9 +42,9 @@ export function ExtensionStatusBar({
       {widgets.length > 0 && <ExtensionWidgets widgets={widgets} />}
       {statuses.length > 0 && (
         <div
-          role="status"
+          role={announce ? "status" : undefined}
           className="extension-status-line"
-          aria-label={plainStatusLine}
+          aria-label={announce ? plainStatusLine : undefined}
           title={plainStatusLine}
         >
           <span className="extension-status-text">
