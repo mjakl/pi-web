@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react
 import { useRouter, useSearchParams } from "next/navigation";
 import { useGlobalKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { SessionSidebar } from "./SessionSidebar";
-import { ChatWindow, type ToolPresetControl } from "./ChatWindow";
+import { ChatWindow, EMPTY_CHAT_DISPLAY, type ChatActions, type ChatDisplayState } from "./ChatWindow";
 import { FileViewer } from "./FileViewer";
 import { TabBar } from "./TabBar";
 import { formatCompactCount } from "@/lib/i18n/format";
@@ -49,7 +49,7 @@ import {
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
 } from "@/lib/panel-layout";
-import type { BlockingExtensionUiRequest, SessionInfo, SessionTreeNode } from "@/lib/types";
+import type { BlockingExtensionUiRequest, SessionInfo } from "@/lib/types";
 import {
   acceptSelectedSessionMetadata,
   reconcileSelectedSessionInventory,
@@ -57,10 +57,8 @@ import {
 } from "@/lib/transcript-refresh";
 import type { ProjectTrustStatus } from "@/lib/api-types";
 import type { ChatInputHandle } from "./ChatInput";
-import { CompactButton, type CompactionControl } from "./CompactButton";
-import type { SessionStatsInfo } from "@/lib/pi-types";
+import { CompactButton } from "./CompactButton";
 import type { FileViewerState } from "@/lib/file-viewer-state";
-import type { ToolEntry } from "@/lib/tool-presets";
 import { getLastSettingsSection, type SettingsSection } from "@/lib/settings-navigation";
 import {
   getContextWarningLevel,
@@ -150,7 +148,6 @@ export function AppShell() {
   const [sessionKey, setSessionKey] = useState(0);
   const [explorerRefreshKey, setExplorerRefreshKey] = useState(0);
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
-  const [toolPresetControl, setToolPresetControl] = useState<ToolPresetControl | null>(null);
   const [modelsRefreshKey, setModelsRefreshKey] = useState(0);
   const [projectTrust, setProjectTrust] = useState<ProjectTrustStatus | null>(null);
   const [projectTrustDialogOpen, setProjectTrustDialogOpen] = useState(false);
@@ -230,58 +227,53 @@ export function AppShell() {
   const topBarRef = useRef<HTMLDivElement>(null);
   const mobileToolbarRef = useRef<HTMLDivElement>(null);
 
-  // Branch navigator state — populated by ChatWindow via onBranchDataChange
-  const [branchTree, setBranchTree] = useState<SessionTreeNode[]>([]);
-  const [branchActiveLeafId, setBranchActiveLeafId] = useState<string | null>(null);
-  const branchLeafChangeFnRef = useRef<((leafId: string | null) => void) | null>(null);
+  // Everything ChatWindow computes and the shell only displays arrives as one
+  // value push; everything the shell invokes arrives on a separate ref-backed
+  // channel, so a change of function identity cannot re-render the shell.
+  const [chatDisplay, setChatDisplay] = useState<ChatDisplayState>(EMPTY_CHAT_DISPLAY);
+  const chatActionsRef = useRef<ChatActions | null>(null);
+  const {
+    branchTree, branchActiveLeafId, systemPrompt, systemTools,
+    sessionStats, contextUsage, compactionControl, toolPresetControl,
+  } = chatDisplay;
   const sessionHasBranches = hasSessionBranches(branchTree);
 
-  const handleBranchDataChange = useCallback((tree: SessionTreeNode[], activeLeafId: string | null, onLeafChange: (leafId: string | null) => void) => {
-    setBranchTree(tree);
-    setBranchActiveLeafId(activeLeafId);
-    branchLeafChangeFnRef.current = onLeafChange;
-  }, []);
-
   const handleBranchLeafChange = useCallback((leafId: string | null) => {
-    branchLeafChangeFnRef.current?.(leafId);
+    chatActionsRef.current?.changeBranchLeaf(leafId);
   }, []);
 
-  const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
-  const [systemTools, setSystemTools] = useState<ToolEntry[] | null>(null);
   const [systemInfoLoading, setSystemInfoLoading] = useState(false);
-  const systemInfoLoaderRef = useRef<(() => Promise<void>) | null>(null);
-  const transcriptRefreshRef = useRef<(() => Promise<boolean>) | null>(null);
+  const lastSystemPromptRef = useRef<string | null | undefined>(undefined);
   const systemInfoLoadIdRef = useRef(0);
   const systemBtnRef = useRef<HTMLButtonElement>(null);
 
-  const handleSystemPromptChange = useCallback((prompt: string | null) => {
-    setSystemPrompt(prompt);
-    setSystemInfoLoading(false);
+  const handleChatDisplayChange = useCallback((display: ChatDisplayState) => {
+    // Matches the old per-value effect: the spinner clears when the prompt
+    // value itself changes, and on nothing else. The sentinel starts undefined
+    // so the mount push of null still fires, as the old [systemPrompt] effect
+    // did. Checked outside the updater so StrictMode's double render is safe.
+    if (lastSystemPromptRef.current !== display.systemPrompt) {
+      lastSystemPromptRef.current = display.systemPrompt;
+      setSystemInfoLoading(false);
+    }
+    setChatDisplay(display);
   }, []);
 
-  const handleSystemToolsChange = useCallback((tools: ToolEntry[] | null) => {
-    setSystemTools(tools);
-  }, []);
-
-  const handleSystemInfoLoaderChange = useCallback((loader: (() => Promise<void>) | null) => {
-    systemInfoLoadIdRef.current += 1;
-    systemInfoLoaderRef.current = loader;
-    setSystemInfoLoading(false);
-  }, []);
-
-  const handleTranscriptRefreshChange = useCallback((refresh: (() => Promise<boolean>) | null) => {
-    transcriptRefreshRef.current = refresh;
+  const handleChatActionsChange = useCallback((actions: ChatActions | null) => {
+    // Only a genuinely new loader invalidates an in-flight System panel load.
+    // Display churn cannot reach this channel, so a stats tick can never
+    // cancel one.
+    if (chatActionsRef.current?.loadSystemInfo !== actions?.loadSystemInfo) {
+      systemInfoLoadIdRef.current += 1;
+      setSystemInfoLoading(false);
+    }
+    chatActionsRef.current = actions;
   }, []);
 
   const handleRefreshSelectedSession = useCallback(() => (
-    transcriptRefreshRef.current?.() ?? Promise.resolve(false)
+    chatActionsRef.current?.refreshTranscript?.() ?? Promise.resolve(false)
   ), []);
 
-  // Session stats — populated by ChatWindow, displayed in the top bar and info panel
-  const [sessionStats, setSessionStats] = useState<SessionStatsInfo | null>(null);
-  const handleSessionStatsChange = useCallback((stats: SessionStatsInfo | null) => {
-    setSessionStats(stats);
-  }, []);
   const [copiedSessionField, setCopiedSessionField] = useState<SessionCopyField | null>(null);
   const sessionCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleCopySessionField = useCallback((field: SessionCopyField, value: string) => {
@@ -298,13 +290,7 @@ export function AppShell() {
     };
   }, []);
 
-  const [compactionControl, setCompactionControl] = useState<CompactionControl | null>(null);
 
-  // Context usage — populated by ChatWindow, displayed in top bar
-  const [contextUsage, setContextUsage] = useState<{ percent: number | null; contextWindow: number; tokens: number | null } | null>(null);
-  const handleContextUsageChange = useCallback((usage: { percent: number | null; contextWindow: number; tokens: number | null } | null) => {
-    setContextUsage(usage);
-  }, []);
   const [dumbZoneTokens, setDumbZoneTokens] = useState(getDumbZoneTokens);
   const handleDumbZoneTokensChange = useCallback((tokens: number) => {
     setDumbZoneTokens(tokens);
@@ -339,7 +325,7 @@ export function AppShell() {
     toggleTopPanel(panel, keepMobileToolbarOpen);
     if (!opening || systemInfoLoading) return;
 
-    const load = systemInfoLoaderRef.current;
+    const load = chatActionsRef.current?.loadSystemInfo;
     if (!load) return;
     const loadId = ++systemInfoLoadIdRef.current;
     setSystemInfoLoading(true);
@@ -558,11 +544,12 @@ export function AppShell() {
   // one place is what stops a fourth copy from drifting again.
   const resetSessionView = useCallback(() => {
     setSessionKey((k) => k + 1);
-    setBranchTree([]);
-    setBranchActiveLeafId(null);
-    branchLeafChangeFnRef.current = null;
-    setSystemPrompt(null);
-    setSystemTools(null);
+    // Wider than the old per-field clear, which left stats, usage and the two
+    // controls standing. Safe because sessionKey is bumped only here, so
+    // ChatWindow remounts and its unmount clear covers them in the same commit.
+    setChatDisplay(EMPTY_CHAT_DISPLAY);
+    lastSystemPromptRef.current = null;
+    chatActionsRef.current = null;
     setSystemInfoLoading(false);
     setActiveTopPanel(null);
   }, []);
@@ -1857,18 +1844,11 @@ export function AppShell() {
               onSessionForked={handleSessionForked}
               modelsRefreshKey={modelsRefreshKey}
               chatInputRef={chatInputRef}
-              onBranchDataChange={handleBranchDataChange}
-              onSystemPromptChange={handleSystemPromptChange}
-              onSystemToolsChange={handleSystemToolsChange}
-              onSystemInfoLoaderChange={handleSystemInfoLoaderChange}
-              onTranscriptRefreshChange={handleTranscriptRefreshChange}
               onSessionMetadataChange={handleSessionMetadataChange}
-              onSessionStatsChange={handleSessionStatsChange}
               onSessionStatsPanelOpen={openSessionStatsPanel}
-              onContextUsageChange={handleContextUsageChange}
-              onCompactionControlChange={setCompactionControl}
               onOpenFile={handleOpenLinkedFile}
-              onToolPresetControlChange={setToolPresetControl}
+              onChatDisplayChange={handleChatDisplayChange}
+              onChatActionsChange={handleChatActionsChange}
               soundEnabled={soundEnabled}
               playDoneSound={playDoneSound}
               unlockAudio={unlockAudio}

@@ -18,7 +18,7 @@ import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
 import type { NoticeItem } from "@/lib/notice-queue";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { useMessageRefs } from "@/hooks/useMessageRefs";
-import type { SessionStatsInfo } from "@/lib/pi-types";
+import type { ContextUsage, SessionStatsInfo } from "@/lib/pi-types";
 import type { ToolEntry, ToolPreset } from "@/lib/tool-presets";
 import {
   captureScrollDistance,
@@ -34,6 +34,39 @@ export interface ToolPresetControl {
   onChange: (preset: ToolPreset) => void;
 }
 
+/** What the shell displays on ChatWindow's behalf. Values only: this is held in
+ *  AppShell state and compared, so everything here must be cheap to compare. */
+export interface ChatDisplayState {
+  branchTree: SessionTreeNode[];
+  branchActiveLeafId: string | null;
+  systemPrompt: string | null;
+  systemTools: ToolEntry[] | null;
+  sessionStats: SessionStatsInfo | null;
+  contextUsage: ContextUsage | null;
+  compactionControl: CompactionControl | null;
+  toolPresetControl: ToolPresetControl | null;
+}
+
+/** What the shell invokes on ChatWindow's behalf. Callables only: this is held
+ *  in a ref and never compared, so a change of function identity cannot
+ *  re-render the shell. Keep the two channels apart for that reason. */
+export interface ChatActions {
+  loadSystemInfo: () => Promise<void>;
+  refreshTranscript: (() => Promise<boolean>) | null;
+  changeBranchLeaf: (leafId: string | null) => void;
+}
+
+export const EMPTY_CHAT_DISPLAY: ChatDisplayState = {
+  branchTree: [],
+  branchActiveLeafId: null,
+  systemPrompt: null,
+  systemTools: null,
+  sessionStats: null,
+  contextUsage: null,
+  compactionControl: null,
+  toolPresetControl: null,
+};
+
 interface Props {
   session: SessionInfo | null;
   sessionActive?: boolean;
@@ -46,18 +79,11 @@ interface Props {
   onSessionForked?: (newSessionId: string) => void;
   modelsRefreshKey?: number;
   chatInputRef?: React.RefObject<ChatInputHandle | null>;
-  onBranchDataChange?: (tree: SessionTreeNode[], activeLeafId: string | null, onLeafChange: (leafId: string | null) => void) => void;
-  onSystemPromptChange?: (prompt: string | null) => void;
-  onSystemToolsChange?: (tools: ToolEntry[] | null) => void;
-  onSystemInfoLoaderChange?: (loader: (() => Promise<void>) | null) => void;
-  onTranscriptRefreshChange?: (refresh: (() => Promise<boolean>) | null) => void;
   onSessionMetadataChange?: (session: SessionInfo) => void;
-  onSessionStatsChange?: (stats: SessionStatsInfo | null) => void;
   onSessionStatsPanelOpen?: () => void;
-  onContextUsageChange?: (usage: { percent: number | null; contextWindow: number; tokens: number | null } | null) => void;
-  onCompactionControlChange?: (control: CompactionControl | null) => void;
   onOpenFile?: (filePath: string) => void;
-  onToolPresetControlChange?: (control: ToolPresetControl | null) => void;
+  onChatDisplayChange?: (display: ChatDisplayState) => void;
+  onChatActionsChange?: (actions: ChatActions | null) => void;
   /** Completion sound state is owned by AppShell so tasks finishing in a
    *  non-active workspace can still ring. */
   soundEnabled?: boolean;
@@ -182,7 +208,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = fa
   );
 }
 
-export function ChatWindow({ session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onTranscriptRefreshChange, onSessionMetadataChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onCompactionControlChange, onOpenFile, onToolPresetControlChange, soundEnabled = true, playDoneSound = () => {}, unlockAudio }: Props) {
+export function ChatWindow({ session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onSessionMetadataChange, onSessionStatsPanelOpen, onOpenFile, onChatDisplayChange, onChatActionsChange, soundEnabled = true, playDoneSound = () => {}, unlockAudio }: Props) {
   const { t } = useI18n();
 
   // Wrap onAgentEnd to play the completion sound.
@@ -218,10 +244,10 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     handleBuiltinSlashCommand,
     handleToolPresetChange, handleThinkingLevelChange, loadSlashCommands,
     loadEarlierMessages, activeLeafId,
+    tree, systemPrompt, systemTools, loadSystemInfo, refreshTranscript, handleLeafChange,
   } = useAgentSession({
     session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd: wrappedOnAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked,
-    modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange,
-    onTranscriptRefreshChange, onSessionMetadataChange, onSessionStatsPanelOpen,
+    modelsRefreshKey, chatInputRef, onSessionMetadataChange, onSessionStatsPanelOpen,
   });
   const handleForkMessage = useCallback((entryId: string, message: UserMessage) => {
     void handleFork(entryId, {
@@ -267,23 +293,17 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     scrollToLatest(reducedMotion ? "auto" : "smooth");
   }, [scrollToLatest]);
 
-  useEffect(() => {
-    onToolPresetControlChange?.({
-      preset: toolPreset,
-      disabled: loading || Boolean(error) || sessionBusy || readOnly,
-      onChange: handleToolPresetChange,
-    });
-    return () => onToolPresetControlChange?.(null);
-  }, [error, handleToolPresetChange, loading, onToolPresetControlChange, sessionBusy, toolPreset, readOnly]);
+  const toolPresetControl = useMemo(() => ({
+    preset: toolPreset,
+    disabled: loading || Boolean(error) || sessionBusy || readOnly,
+    onChange: handleToolPresetChange,
+  }), [error, handleToolPresetChange, loading, sessionBusy, toolPreset, readOnly]);
 
-  useEffect(() => {
-    onCompactionControlChange?.(session ? {
-      disabled: loading || Boolean(error) || readOnly || (sessionBusy && !isCompacting),
-      compacting: isCompacting,
-      onClick: isCompacting ? handleAbortCompaction : handleCompact,
-    } : null);
-    return () => onCompactionControlChange?.(null);
-  }, [session, loading, error, readOnly, sessionBusy, isCompacting, handleAbortCompaction, handleCompact, onCompactionControlChange]);
+  const compactionControl = useMemo(() => (session ? {
+    disabled: loading || Boolean(error) || readOnly || (sessionBusy && !isCompacting),
+    compacting: isCompacting,
+    onClick: isCompacting ? handleAbortCompaction : handleCompact,
+  } : null), [session, loading, error, readOnly, sessionBusy, isCompacting, handleAbortCompaction, handleCompact]);
 
   useEffect(() => {
     if (!extensionDialog || soundedExtensionDialogIdRef.current === extensionDialog.id) return;
@@ -362,23 +382,42 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
       sessionStats.totalActiveMs ?? 0,
     ].join("|")
     : null;
-  const sessionStatsRef = useRef(sessionStats);
-  sessionStatsRef.current = sessionStats;
-  useEffect(() => {
-    onSessionStatsChange?.(sessionStatsRef.current);
-  }, [statsKey, onSessionStatsChange]);
-  useEffect(() => () => { onSessionStatsChange?.(null); }, [onSessionStatsChange]);
-
-  // Push context usage up to AppShell as well.
   const ctxKey = contextUsage
     ? `${contextUsage.percent ?? "null"}|${contextUsage.contextWindow}|${contextUsage.tokens ?? "null"}`
     : null;
-  const contextUsageRef = useRef(contextUsage);
-  contextUsageRef.current = contextUsage;
+
+  // One publish for everything the shell only displays. The effect is keyed on
+  // the same scalar keys the pushes used to be, and reads the latest values
+  // from a ref, so a re-render that moves no key publishes nothing.
+  const chatDisplayRef = useRef<ChatDisplayState>(EMPTY_CHAT_DISPLAY);
+  chatDisplayRef.current = {
+    branchTree: tree,
+    branchActiveLeafId: activeLeafId,
+    systemPrompt,
+    systemTools,
+    sessionStats,
+    contextUsage,
+    compactionControl,
+    toolPresetControl,
+  };
   useEffect(() => {
-    onContextUsageChange?.(contextUsageRef.current);
-  }, [ctxKey, onContextUsageChange]);
-  useEffect(() => () => { onContextUsageChange?.(null); }, [onContextUsageChange]);
+    onChatDisplayChange?.(chatDisplayRef.current);
+  }, [onChatDisplayChange, statsKey, ctxKey, systemPrompt, systemTools, tree, activeLeafId, compactionControl, toolPresetControl]);
+  useEffect(() => () => onChatDisplayChange?.(EMPTY_CHAT_DISPLAY), [onChatDisplayChange]);
+
+  // The callables the shell invokes. Registered without a cleanup on purpose:
+  // a cleanup here would run clear-then-register on any identity change,
+  // driving loadSystemInfo real -> null -> real, which bumps AppShell's load id
+  // and cancels a System panel load that is still in flight. The clear belongs
+  // to unmount alone, below.
+  useEffect(() => {
+    onChatActionsChange?.({
+      loadSystemInfo,
+      refreshTranscript: session ? refreshTranscript : null,
+      changeBranchLeaf: handleLeafChange,
+    });
+  }, [onChatActionsChange, loadSystemInfo, refreshTranscript, session, handleLeafChange]);
+  useEffect(() => () => onChatActionsChange?.(null), [onChatActionsChange]);
 
   const onDrop = useCallback((files: File[]) => {
     chatInputRef?.current?.addImages(files);
