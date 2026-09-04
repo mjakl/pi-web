@@ -226,7 +226,6 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
   const sessionBusy = agentRunning || bashRunning;
   const readOnly = session?.cwdAvailable === false;
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const messageContentRef = useRef<HTMLDivElement | null>(null);
   const initialScrollDoneRef = useRef(false);
   const liveFollowAttachedRef = useRef(true);
   const previousScrollTopRef = useRef(0);
@@ -439,14 +438,12 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
 
   useEffect(() => {
     const container = scrollContainerRef.current;
-    const content = messageContentRef.current;
-    if (!container || !content || typeof ResizeObserver === "undefined") return;
+    if (!container || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
       if (liveFollowAttachedRef.current) scrollToLatest();
       else syncScrollPosition();
     });
     observer.observe(container);
-    observer.observe(content);
     return () => observer.disconnect();
   }, [error, loading, scrollToLatest, syncScrollPosition]);
 
@@ -579,7 +576,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
       <div className="chat-body">
         <div ref={scrollContainerRef} className="chat-scroll" onScroll={syncScrollPosition}>
           <div className="chat-scroll-content">
-            <div ref={messageContentRef} className="chat-transcript">
+            <div className="chat-transcript">
             {isEmptyNew && (
               <header className="chat-empty">
                 <h1><span aria-hidden="true">π</span><span>Pi Web</span></h1>

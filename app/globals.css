@@ -1174,6 +1174,7 @@ span.linenumber {
 
 .chat-window.is-empty {
   grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+  overflow-y: auto;
 }
 
 .chat-window.is-empty::after {
@@ -1213,6 +1214,11 @@ span.linenumber {
 .chat-scroll-content {
   min-width: 0;
   padding-inline: 16px;
+}
+
+.chat-window.is-empty .chat-scroll-content,
+.chat-window.is-empty .chat-transcript {
+  height: 100%;
 }
 
 .chat-transcript {
@@ -1535,6 +1541,7 @@ span.linenumber {
     bottom: 0;
     width: 280px;
     max-width: 85vw;
+    height: var(--app-viewport-height, 100dvh);
     transition: transform 0.25s ease, box-shadow 0.25s ease;
   }
   .sidebar-container.sidebar-open {
@@ -1549,6 +1556,7 @@ span.linenumber {
   .right-panel-container {
     position: fixed;
     inset: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
+    height: var(--app-viewport-height, 100dvh);
     z-index: 250;
     overflow: hidden;
     transition: transform 0.2s ease;

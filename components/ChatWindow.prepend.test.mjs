@@ -14,6 +14,7 @@ registerHooks({
 process.env.NODE_ENV = "test";
 const window = new Window({ url: "http://localhost" });
 let observeIntersection;
+const resizeObservers = [];
 class IntersectionObserver {
   constructor(callback) {
     observeIntersection = callback;
@@ -22,8 +23,18 @@ class IntersectionObserver {
   disconnect() {}
 }
 class ResizeObserver {
-  observe() {}
-  disconnect() {}
+  constructor(callback) {
+    this.callback = callback;
+    this.targets = new Set();
+    resizeObservers.push(this);
+  }
+  observe(target) { this.targets.add(target); }
+  disconnect() { this.targets.clear(); }
+}
+function notifyResize(target) {
+  for (const observer of resizeObservers) {
+    if (observer.targets.has(target)) observer.callback([{ target }]);
+  }
 }
 window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
 window.HTMLElement.prototype.scrollTo = function scrollTo(options) {
@@ -98,7 +109,7 @@ function sessionSnapshot() {
   };
 }
 
-test("history prepend preserves expanded process details and scroll position", async () => {
+test("transcript expansion and history prepend preserve the reader's position", async () => {
   const contextRequest = deferred();
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
@@ -124,15 +135,20 @@ test("history prepend preserves expanded process details and scroll position", a
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
 
-    const processToggle = container.querySelector('button[title="Expand process details"]');
-    assert.ok(processToggle);
-    await act(() => processToggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    assert.equal(processToggle.getAttribute("aria-expanded"), "true");
-
     const transcript = container.querySelector(".chat-scroll");
     let scrollHeight = 1000;
     Object.defineProperty(transcript, "clientHeight", { configurable: true, value: 500 });
     Object.defineProperty(transcript, "scrollHeight", { configurable: true, get: () => scrollHeight });
+    transcript.scrollTop = 500;
+
+    const processToggle = container.querySelector('button[title="Expand process details"]');
+    assert.ok(processToggle);
+    await act(() => processToggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    scrollHeight = 1200;
+    notifyResize(container.querySelector(".chat-transcript"));
+    assert.equal(processToggle.getAttribute("aria-expanded"), "true");
+    assert.equal(transcript.scrollTop, 500);
+
     transcript.scrollTop = 400;
 
     await act(async () => {
@@ -140,7 +156,7 @@ test("history prepend preserves expanded process details and scroll position", a
       await Promise.resolve();
     });
 
-    scrollHeight = 1400;
+    scrollHeight = 1600;
     await act(async () => {
       contextRequest.resolve(Response.json({
         context: {
