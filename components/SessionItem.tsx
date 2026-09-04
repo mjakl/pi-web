@@ -173,6 +173,14 @@ export function SessionItem({
   const menuRef = useRef<HTMLDivElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const menuHadFocusRef = useRef(false);
+  // A press on the trigger while the popup is open reaches onClick after the
+  // browser's light dismiss has already closed it, so reopening from a
+  // "currently closed" reading would leave the trigger unable to close its own
+  // menu. These two stamps scope the guard to one gesture instead of a
+  // timeout: the popover's toggle event is queued as a task, so a close caused
+  // by this very press always lands after the press began.
+  const pressStartedAtRef = useRef(0);
+  const dismissedAtRef = useRef(0);
   const pendingFocusRef = useRef<FocusPolicy>("none");
   const renderedSurfaceRef = useRef(actionSurface);
   const actionsAvailableRef = useRef(actionsAvailable);
@@ -364,6 +372,11 @@ export function SessionItem({
   const toggleMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     if (actionPending) return;
+    if (dismissedAtRef.current > 0 && dismissedAtRef.current >= pressStartedAtRef.current) {
+      // This press is what closed the popup. Leave it closed.
+      dismissedAtRef.current = 0;
+      return;
+    }
     if (menuPosition) {
       transitionActionSurface(IDLE_ACTION_SURFACE, "none");
       return;
@@ -509,6 +522,7 @@ export function SessionItem({
               <button
                 ref={menuTriggerRef}
                 type="button"
+                onPointerDown={() => { pressStartedAtRef.current = Date.now(); }}
                 aria-label={actionsLabel}
                 aria-controls={menuId}
                 aria-expanded={Boolean(menuPosition)}
@@ -549,6 +563,7 @@ export function SessionItem({
               popover="auto"
               onToggle={(e) => {
                 if ((e as unknown as { newState?: string }).newState !== "closed") return;
+                dismissedAtRef.current = Date.now();
                 transitionActionSurface(IDLE_ACTION_SURFACE, "trigger-if-owned");
               }}
               role="group"

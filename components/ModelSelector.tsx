@@ -64,6 +64,13 @@ export function ModelSelector({
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
+  // A press on the trigger while the panel is open reaches onClick after the
+  // browser's light dismiss has closed it, so reopening from a "currently
+  // closed" reading would leave the trigger unable to close its own panel.
+  // Scoped to one gesture: the toggle event is queued as a task, so a close
+  // caused by this press always lands after the press began.
+  const pressStartedAtRef = useRef(0);
+  const dismissedAtRef = useRef(0);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [anchorRect, setAnchorRect] = useState<{ top: number; right: number; bottom: number; left: number; width: number } | null>(null);
@@ -201,7 +208,13 @@ export function ModelSelector({
         disabled={locked}
         title={busy ? t("chat.switchingModel") : locked ? currentName : sortedOptions.length > 0 || onClear ? t("chat.changeModel") : t("chat.noAvailableModels")}
         style={buttonStyle}
+        onPointerDown={() => { pressStartedAtRef.current = Date.now(); }}
         onClick={(event) => {
+          if (dismissedAtRef.current > 0 && dismissedAtRef.current >= pressStartedAtRef.current) {
+            // This press is what closed the panel. Leave it closed.
+            dismissedAtRef.current = 0;
+            return;
+          }
           const rect = event.currentTarget.getBoundingClientRect();
           setAnchorRect({ top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left, width: rect.width });
           setOpen((current) => {
@@ -266,6 +279,7 @@ export function ModelSelector({
             popover="auto"
             onToggle={(e) => {
               if ((e as unknown as { newState?: string }).newState !== "closed") return;
+              dismissedAtRef.current = Date.now();
               setOpen(false);
               setFilter("");
             }}

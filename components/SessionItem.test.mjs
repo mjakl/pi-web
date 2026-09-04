@@ -586,6 +586,34 @@ test("no scroll dismisses the popup now that light dismiss is the UA's", async (
   }
 });
 
+test("the trigger closes its own popup when light dismiss got there first", async () => {
+  // iOS delivers the popover's toggle event before the trigger's click, so the
+  // click handler saw a closed popup and reopened it -- the trigger could not
+  // close its own menu. Chromium delivers them the other way round, which is
+  // why this only reproduced on the phone.
+  const view = await mountItem(baseSession);
+  try {
+    const trigger = view.container.querySelector("button[aria-controls]");
+    await click(trigger);
+    const group = document.querySelector('[role="group"]');
+    assert.ok(group);
+
+    // The press, then the browser's light dismiss, then the click it produced.
+    await act(() => trigger.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true })));
+    await act(() => {
+      const toggle = new window.Event("toggle");
+      toggle.newState = "closed";
+      group.dispatchEvent(toggle);
+    });
+    assert.equal(document.querySelector('[role="group"]'), null);
+
+    await click(trigger);
+    assert.equal(document.querySelector('[role="group"]'), null);
+  } finally {
+    await view.unmount();
+  }
+});
+
 test("a blur that focuses nothing keeps the popup mounted", async () => {
   // iOS does not focus a button on tap: it blurs whatever had focus and
   // reports no relatedTarget. The popup opens with focus on its first action,
