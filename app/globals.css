@@ -1799,6 +1799,10 @@ span.linenumber {
   top: anchor(bottom);
   left: anchor(left);
   right: anchor(right);
+  /* The UA gives [popover] width: fit-content, which ignores the right inset
+     and lets long paths size the panel. auto lets both insets stretch it to
+     the trigger's width. */
+  width: auto;
   margin-top: 4px;
   transform-origin: top center;
 }
