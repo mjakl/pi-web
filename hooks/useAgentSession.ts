@@ -137,13 +137,6 @@ export interface UseAgentSessionOptions {
   onSessionForked?: (newSessionId: string) => void;
   modelsRefreshKey?: number;
   chatInputRef?: React.RefObject<ChatInputHandle | null>;
-  onBranchDataChange?: (tree: SessionTreeNode[], activeLeafId: string | null, onLeafChange: (leafId: string | null) => void) => void;
-  onSystemPromptChange?: (prompt: string | null) => void;
-  onSystemToolsChange?: (tools: ToolEntry[] | null) => void;
-  /** Registers an action that lazily starts the session and loads its prompt and tools. */
-  onSystemInfoLoaderChange?: (loader: (() => Promise<void>) | null) => void;
-  /** Registers an in-place persisted transcript refresh for the selected session. */
-  onTranscriptRefreshChange?: (refresh: (() => Promise<boolean>) | null) => void;
   onSessionMetadataChange?: (session: SessionInfo) => void;
   onSessionStatsPanelOpen?: () => void;
   setToolPreset?: (preset: ToolPreset) => void;
@@ -160,6 +153,9 @@ const BASH_STATE_RECONCILE_MS = 1_000;
 const EVENT_STREAM_READY_TIMEOUT_MS = 60_000;
 const EVENT_STREAM_RECONNECT_DELAY_MS = 1_000;
 const NOTICE_VISIBLE_MS = 5000;
+/** Shared empty tree. A fresh [] per render would republish the branch data on
+ *  every render, so every streamed token would re-render the shell. */
+const NO_BRANCHES: SessionTreeNode[] = [];
 const NOTICE_EXIT_ANIMATION_MS = 180;
 
 function delay(ms: number): Promise<void> {
@@ -210,8 +206,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const { t } = useI18n();
   const {
     session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked,
-    modelsRefreshKey, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange,
-    onTranscriptRefreshChange, onSessionMetadataChange, onSessionStatsPanelOpen,
+    modelsRefreshKey, onSessionMetadataChange, onSessionStatsPanelOpen,
   } = opts;
 
   const isNew = session === null && newSessionCwd !== null;
@@ -242,6 +237,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [retryInfo, setRetryInfo] = useState<{ attempt: number; maxAttempts: number; errorMessage?: string } | null>(null);
   const [contextUsage, setContextUsage] = useState<{ percent: number | null; contextWindow: number; tokens: number | null } | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
+  const [systemTools, setSystemTools] = useState<ToolEntry[] | null>(null);
   const [forkingEntryId, setForkingEntryId] = useState<string | null>(null);
   const [currentModelOverride, setCurrentModelOverride] = useState<{ provider: string; modelId: string } | null>(null);
   const [pendingModel, setPendingModel] = useState<{ provider: string; modelId: string } | null>(null);
@@ -624,13 +620,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       if (!tools || !sessionHookMountedRef.current || sessionIdRef.current !== sid) return null;
       const { getPresetFromTools } = await import("@/lib/tool-presets");
       setToolPresetState(getPresetFromTools(tools));
-      onSystemToolsChange?.(tools);
+      setSystemTools(tools);
       return tools;
     } catch (e) {
       console.error("Failed to load tools:", e);
       return null;
     }
-  }, [onSystemToolsChange, setToolPresetState]);
+  }, [setToolPresetState]);
 
   const promoteNewSession = useCallback((messageCount = 0, firstMessage = "(no messages)") => {
     const sid = sessionIdRef.current;
@@ -2015,25 +2011,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    onSystemPromptChange?.(systemPrompt);
-  }, [systemPrompt, onSystemPromptChange]);
-
-  useEffect(() => {
-    onSystemInfoLoaderChange?.(loadSystemInfo);
-    return () => onSystemInfoLoaderChange?.(null);
-  }, [loadSystemInfo, onSystemInfoLoaderChange]);
-
-  useEffect(() => {
-    onTranscriptRefreshChange?.(session ? refreshTranscript : null);
-    return () => onTranscriptRefreshChange?.(null);
-  }, [onTranscriptRefreshChange, refreshTranscript, session]);
-
-  useEffect(() => {
-    if (!onBranchDataChange) return;
-    onBranchDataChange(data?.tree ?? [], activeLeafId, handleLeafChange);
-  }, [data?.tree, activeLeafId, handleLeafChange, onBranchDataChange]);
-
   // Load model list
   useEffect(() => {
     const controller = new AbortController();
@@ -2103,6 +2080,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     loading, error, activeLeafId, messages, entryIds, historyCursor, hasEarlierMessages, streamState,
     agentRunning, modelNames, modelList, modelError, modelScopeWarnings, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
     retryInfo, contextUsage, forkingEntryId,
+    tree: data?.tree ?? NO_BRANCHES, systemPrompt, systemTools,
     isCompacting, compactError, compactResult, displayModel, modelSwitching, sessionStats,
     slashCommands, slashCommandsLoading, queuedMessages,
     notices: noticeState.visible, extensionDialog, extensionCustomUi, extensionStatuses, extensionWidgets, respondToExtensionUi, sendExtensionCustomInput,
@@ -2118,6 +2096,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     handleBuiltinSlashCommand,
     setNoticePaused: setPausedNoticeId,
     handleToolPresetChange, handleThinkingLevelChange, loadSlashCommands, loadContext, loadEarlierMessages,
+    loadSystemInfo, refreshTranscript, handleLeafChange,
     bashRunning, pendingBash,
   };
 }
