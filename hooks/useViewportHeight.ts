@@ -4,19 +4,19 @@ import { useEffect } from "react";
 
 interface ViewportHeightState {
   hasFocusedEditable: boolean;
-  innerHeight: number;
+  layoutHeight: number;
   viewportHeight: number;
   viewportScale: number;
 }
 
 export function shouldUseVisualViewportHeight({
   hasFocusedEditable,
-  innerHeight,
+  layoutHeight,
   viewportHeight,
   viewportScale,
 }: ViewportHeightState): boolean {
   const isUnscaled = Math.abs(viewportScale - 1) < 0.01;
-  return hasFocusedEditable && isUnscaled && innerHeight - viewportHeight > 1;
+  return hasFocusedEditable && isUnscaled && layoutHeight - viewportHeight > 1;
 }
 
 function hasFocusedEditableElement(): boolean {
@@ -46,7 +46,7 @@ export function useViewportHeight(): void {
       frameId = null;
       const keyboardOpen = shouldUseVisualViewportHeight({
         hasFocusedEditable: hasFocusedEditableElement(),
-        innerHeight: window.innerHeight,
+        layoutHeight: root.clientHeight,
         viewportHeight: viewport.height,
         viewportScale: viewport.scale,
       });
