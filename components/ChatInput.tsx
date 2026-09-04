@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useCallback, useEffect, useLayoutEffect, useImperativeHandle, forwardRef, KeyboardEvent } from "react";
+import React, { useRef, useState, useCallback, useEffect, useId, useLayoutEffect, useImperativeHandle, forwardRef, KeyboardEvent } from "react";
 import type { BuiltinSlashCommandResult, CompactResultInfo, QueuedMessages, SlashCommandInfo } from "@/hooks/useAgentSession";
 import { formatCompactCount } from "@/lib/i18n/format";
 import type { SkillsResponse } from "@/lib/api-types";
@@ -494,6 +494,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const thinkingDropdownRef = useRef<HTMLDivElement>(null);
   const streamingActionRef = useRef<HTMLDivElement>(null);
   const runActionMenuRef = useRef<HTMLDivElement>(null);
+  const runActionMenuId = useId();
+  const thinkingMenuId = useId();
   const thinkingMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
@@ -1862,8 +1864,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   className="composer-action-menu-toggle"
                   aria-label={t("chat.selectRunAction")}
                   aria-expanded={streamingActionMenuOpen}
+                  popoverTarget={runActionMenuId}
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => setStreamingActionMenuOpen((open) => !open)}
                   style={{
                     width: 30, flexShrink: 0,
                     display: "flex", alignItems: "center", justifyContent: "center",
@@ -1881,12 +1883,10 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 </button>
                 <div
                   ref={runActionMenuRef}
+                  id={runActionMenuId}
                   popover="auto"
                   className="anchored-menu opens-up menu-composer-run-action"
-                  onToggle={(e) => {
-                    if ((e as unknown as { newState?: string }).newState !== "closed") return;
-                    setStreamingActionMenuOpen(false);
-                  }}
+                  onToggle={(e) => setStreamingActionMenuOpen((e as unknown as { newState?: string }).newState === "open")}
                   role="group"
                   aria-label={t("chat.selectRunAction")}
                   style={{
@@ -2016,7 +2016,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               <div ref={thinkingDropdownRef} style={{ position: "relative" }}>
                 <button
                   className="anchor-composer-reasoning"
-                  onClick={() => !isStreaming && setThinkingDropdownOpen((v) => !v)}
+                  popoverTarget={thinkingMenuId}
                   disabled={isStreaming}
                    title={t("chat.changeReasoning", { level: thinkingDisplayLabel })}
                    aria-label={t("chat.changeReasoningLabel")}
@@ -2053,12 +2053,10 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 </button>
                 <div
                   ref={thinkingMenuRef}
+                  id={thinkingMenuId}
                   popover="auto"
                   className="anchored-menu opens-up menu-composer-reasoning"
-                  onToggle={(e) => {
-                    if ((e as unknown as { newState?: string }).newState !== "closed") return;
-                    setThinkingDropdownOpen(false);
-                  }}
+                  onToggle={(e) => setThinkingDropdownOpen((e as unknown as { newState?: string }).newState === "open")}
                   style={{
                     zIndex: 100, background: "var(--bg)", border: "1px solid var(--border)",
                     borderRadius: 8, boxShadow: "0 -4px 16px rgba(0,0,0,0.10)",

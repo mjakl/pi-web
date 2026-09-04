@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useState, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import { errorMessage } from "@/lib/error-message";
 import { createClientId } from "@/lib/client-id";
 import { SettingsSectionIcon } from "./SettingsPanel";
@@ -234,10 +234,11 @@ function PathLabel({ text, style }: { text: string; style?: CSSProperties }) {
 
 /** A dropdown panel shown as a native popover, anchored by CSS to its trigger. */
 function AnchoredMenu({
-  open, onClose, anchorClass, children, style,
+  id, open, onOpenChange, anchorClass, children, style,
 }: {
+  id: string;
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   anchorClass: string;
   children: ReactNode;
   style: CSSProperties;
@@ -254,12 +255,14 @@ function AnchoredMenu({
   return (
     <div
       ref={ref}
+      id={id}
       popover="auto"
       className={`anchored-menu opens-down ${anchorClass}`}
-      onToggle={(e) => {
-        if ((e as unknown as { newState?: string }).newState !== "closed") return;
-        onClose();
-      }}
+      // The trigger opens this through popovertarget, so the browser toggles
+      // it and state follows. Tracking both directions matters: a UA-driven
+      // open that React never learned about would be closed again by the
+      // effect above on the next render.
+      onToggle={(e) => onOpenChange((e as unknown as { newState?: string }).newState === "open")}
       style={style}
     >
       {children}
@@ -269,6 +272,8 @@ function AnchoredMenu({
 
 export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, beginSessionInventoryAttempt, onSessionsChange, onRefreshSelectedSession, actionsAvailable, onOpenSettings }: Props) {
   const { t } = useI18n();
+  const projectMenuId = useId();
+  const worktreeMenuId = useId();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [inventoryRevision, setInventoryRevision] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -1213,7 +1218,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
         <div style={{ position: "relative" }}>
           <button
             className="anchor-sidebar-project"
-            onClick={() => setDropdownOpen((v) => !v)}
+            popoverTarget={projectMenuId}
             title={selectedProject?.root ?? selectedCwd ?? ""}
             style={{
               width: "100%",
@@ -1272,9 +1277,10 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
           </button>
 
           <AnchoredMenu
+            id={projectMenuId}
             open={dropdownOpen}
             anchorClass="menu-sidebar-project"
-            onClose={() => { setDropdownOpen(false); setProjectFilter(""); }}
+            onOpenChange={(next) => { setDropdownOpen(next); if (!next) setProjectFilter(""); }}
             style={{
               zIndex: 100,
               background: "var(--bg)",
@@ -1431,7 +1437,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
             <div style={{ position: "relative", marginTop: 6 }}>
               <button
                 className="anchor-sidebar-worktree"
-                onClick={() => setWtDropdownOpen((v) => !v)}
+                popoverTarget={worktreeMenuId}
                  title={currentWorktree ? t("sidebar.switchWorktreeTitle", { path: currentWorktree.path }) : t("sidebar.switchWorktree")}
                 style={{
                   width: "100%",
@@ -1475,10 +1481,12 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
               </button>
 
               <AnchoredMenu
+                id={worktreeMenuId}
                 open={wtDropdownOpen}
                 anchorClass="menu-sidebar-worktree"
-                onClose={() => {
-                  setWtDropdownOpen(false);
+                onOpenChange={(next) => {
+                  setWtDropdownOpen(next);
+                  if (next) return;
                   setWtNewOpen(false);
                   setWtNewBranch("");
                   setWtError(null);
