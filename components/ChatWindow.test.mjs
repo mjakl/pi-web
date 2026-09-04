@@ -17,7 +17,6 @@ const jiti = createJiti(import.meta.url, {
 const React = await jiti.import("react");
 const { renderToStaticMarkup } = await jiti.import("react-dom/server");
 const { ChatWindow } = await jiti.import("./ChatWindow.tsx");
-const { DockedComposer } = await jiti.import("./DockedComposer.tsx");
 
 test("shows the product name without version details in the empty composer", () => {
   const html = renderToStaticMarkup(React.createElement(ChatWindow, {
@@ -30,16 +29,15 @@ test("shows the product name without version details in the empty composer", () 
   assert.doesNotMatch(html, /(?:web|pi) <span[^>]*>v/);
 });
 
-test("does not draw a hard divider above the docked composer", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(
-      DockedComposer,
-      null,
-      React.createElement("span", null, "composer"),
-      React.createElement("span", null, "status"),
-    ),
-  );
+test("keeps the empty transcript and composer in one semantic layout", () => {
+  const html = renderToStaticMarkup(React.createElement(ChatWindow, {
+    session: null,
+    newSessionCwd: "/tmp/project",
+    newSessionDraftKey: "draft",
+  }));
 
-  assert.match(html, /^<div style="position:relative">/);
-  assert.match(html, />composer<\/span><span>status<\/span><\/div>$/);
+  assert.match(html, /^<section class="chat-window is-empty" aria-label="messages"/);
+  assert.ok(html.indexOf('class="chat-body"') < html.indexOf('class="chat-composer"'));
+  assert.equal(html.match(/<textarea/g)?.length, 1);
+  assert.match(html, /<footer class="chat-composer">/);
 });
