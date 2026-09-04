@@ -2031,7 +2031,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                         {extensionStatuses.length > 0 && (
                           <section aria-label={t("chat.extensionStatus")}>
                             <div className="menu-section-label">{t("chat.extensionStatus")}</div>
-                            <ExtensionStatusBar statuses={extensionStatuses} />
+                            <ExtensionStatusBar statuses={extensionStatuses} announce={false} />
                           </section>
                         )}
                       </>

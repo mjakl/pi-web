@@ -194,10 +194,12 @@ body {
   display: none;
 }
 
-.extension-status-shelf.has-widgets.has-status .extension-widget-triggers {
-  flex: 0 1 auto;
-  max-width: 70%;
-  border-right: 1px solid var(--border);
+@media (min-width: 641px) {
+  .extension-status-shelf.has-widgets.has-status .extension-widget-triggers {
+    flex: 0 1 auto;
+    max-width: 70%;
+    border-right: 1px solid var(--border);
+  }
 }
 
 .extension-widget-trigger {
@@ -1830,11 +1832,24 @@ span.linenumber {
   .composer-settings-group > .model-selector > button {
     justify-content: center !important;
   }
-  .chat-composer > .extension-status-shelf:not(.has-widgets),
-  .chat-composer > .extension-status-shelf > .extension-status-line {
-    display: none;
+  .chat-composer > .extension-status-shelf:not(.has-widgets) {
+    border-top: 0;
   }
-  .composer-mobile-settings {
+  /* Preserve the live region without reserving a visible status row. */
+  .chat-composer > .extension-status-shelf > .extension-status-line {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    min-height: 0;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .anchored-menu.opens-up.composer-mobile-settings {
+    /* Stop and warning actions can move the trigger away from the edge. */
+    right: 12px;
     width: min(320px, calc(100vw - 24px));
     max-height: calc(var(--app-viewport-height, 100dvh) - 64px);
   }
