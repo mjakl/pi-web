@@ -426,6 +426,10 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
   const { isDragOver, handleDragEnter, handleDragOver, handleDragLeave, handleDrop } = useDragDrop(onDrop);
 
   const anchorCount = messages.reduce((count, m) => count + (isMessageGroupAnchor(m) ? 1 : 0), 0);
+  const activeTools = useMemo(() => agentPhase?.kind === "running_tools"
+    ? new Map(agentPhase.tools.map((tool) => [tool.id, tool]))
+    : undefined, [agentPhase]);
+
   // Stable Map identity: `messages` doesn't change during streaming updates
   // (the streaming message lives in streamState), so memoized MessageViews
   // skip re-rendering on every message_update event. An inline `new Map()`
@@ -753,6 +757,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                     key={`${keyPrefix}-view-${messageKey}`}
                     message={msg}
                     toolResults={toolResultsMap}
+                    activeTools={activeTools}
                     modelNames={modelNames}
                     cwd={messageCwd}
                     onOpenFile={onOpenFile}
@@ -838,7 +843,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
               );
             })()}
             {streamState.isStreaming && hasStreamingContent && streamState.streamingMessage && (
-              <MessageView message={streamState.streamingMessage as AgentMessage} isStreaming modelNames={modelNames} cwd={messageCwd} onOpenFile={onOpenFile} />
+              <MessageView message={streamState.streamingMessage as AgentMessage} activeTools={activeTools} isStreaming modelNames={modelNames} cwd={messageCwd} onOpenFile={onOpenFile} />
             )}
 
             {agentRunning && !hasStreamingContent && agentPhase && agentPhase.kind !== "waiting_model" && (

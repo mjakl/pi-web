@@ -2,6 +2,9 @@
 
 import { memo, useState, useRef, useEffect, useMemo, useDeferredValue } from "react";
 import { MarkdownBody } from "./MarkdownBody";
+import { SafeMarkdownBody } from "./SafeMarkdownBody";
+import { SubagentToolCall } from "./SubagentToolCall";
+import { getSubagentCalls } from "@/lib/subagent-display";
 import { ImagePreview } from "./ImagePreview";
 import { errorMessage } from "@/lib/error-message";
 import { copyText } from "@/lib/clipboard";
@@ -82,68 +85,6 @@ function estimateUpdatedTokens(previous: TokenEstimateCacheEntry | undefined, te
 const MAX_THINKING_CACHE_ENTRIES = 100;
 const thinkingContentCache = new Map<string, Promise<string>>();
 
-// Messages larger than this skip markdown rendering entirely. react-markdown +
-// KaTeX + syntax highlighting on multi-hundred-KB payloads (e.g. pasted HAR or
-// log dumps) freezes the browser main thread.
-const MAX_MARKDOWN_CHARS = 100_000;
-
-function formatMessageBytes(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} MB`;
-  if (n >= 1_000) return `${Math.round(n / 1_000)} KB`;
-  return `${n} B`;
-}
-
-/**
- * MarkdownBody with an oversized-content guard: huge messages render as a
- * click-to-reveal plain-text <pre> instead of running the markdown pipeline.
- */
-function SafeMarkdownBody({ children, className, ...props }: React.ComponentProps<typeof MarkdownBody>) {
-  const { t } = useI18n();
-  const [showRaw, setShowRaw] = useState(false);
-
-  if (children.length <= MAX_MARKDOWN_CHARS) {
-    return <MarkdownBody className={className} {...props}>{children}</MarkdownBody>;
-  }
-  if (!showRaw) {
-    return (
-      <button
-        onClick={() => setShowRaw(true)}
-        style={{
-          display: "block",
-          width: "100%",
-          margin: "4px 0",
-          padding: "7px 10px",
-          border: "1px solid var(--border)",
-          borderRadius: 6,
-          background: "var(--bg-panel)",
-          color: "var(--text-muted)",
-          cursor: "pointer",
-          fontSize: 12,
-          textAlign: "left",
-        }}
-      >
-        ⚠ {t("i18n.largeMessageReveal", { size: formatMessageBytes(children.length) })}
-      </button>
-    );
-  }
-  return (
-    <div className={className} style={{ maxHeight: 420, overflow: "auto", fontSize: 12, lineHeight: 1.5 }}>
-      <pre
-        style={{
-          margin: 0,
-          padding: "8px 10px",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          fontFamily: "var(--font-mono)",
-          color: "var(--text-muted)",
-        }}
-      >
-        {children}
-      </pre>
-    </div>
-  );
-}
-
 // Cap the user "sent" bubble's height so an abnormally long message does not
 // push the conversation off screen; overflow scrolls inside the bubble.
 const USER_BUBBLE_MAX_HEIGHT = 300;
@@ -182,10 +123,13 @@ function loadThinkingContent(
   return request;
 }
 
+type ToolActivities = Map<string, { progress?: string }>;
+
 interface Props {
   message: AgentMessage;
   isStreaming?: boolean;
   toolResults?: Map<string, ToolResultMessage>;
+  activeTools?: ToolActivities;
   modelNames?: Record<string, string>;
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
@@ -230,10 +174,10 @@ export function replaceUserMessageText(message: UserMessage, text: string): User
   return { ...message, content };
 }
 
-function haveSameRelevantToolResults(
+function haveSameRelevantToolValues<T>(
   message: AgentMessage,
-  previous: Map<string, ToolResultMessage> | undefined,
-  next: Map<string, ToolResultMessage> | undefined,
+  previous: Map<string, T> | undefined,
+  next: Map<string, T> | undefined,
 ): boolean {
   if (previous === next || message.role !== "assistant") return true;
   for (const block of (message as AssistantMessage).content ?? []) {
@@ -244,12 +188,12 @@ function haveSameRelevantToolResults(
   return true;
 }
 
-export const MessageView = memo(function MessageView({ message, isStreaming, toolResults, modelNames, cwd, onOpenFile, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, prevTimestamp, sessionId, writtenFiles }: Props) {
+export const MessageView = memo(function MessageView({ message, isStreaming, toolResults, activeTools, modelNames, cwd, onOpenFile, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, prevTimestamp, sessionId, writtenFiles }: Props) {
   if (message.role === "user") {
     return <UserMessageView message={message as UserMessage} cwd={cwd} onOpenFile={onOpenFile} entryId={entryId} onFork={onFork} forking={forking} onNavigate={onNavigate} prevAssistantEntryId={prevAssistantEntryId} onEditContent={onEditContent} />;
   }
   if (message.role === "assistant") {
-    return <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} cwd={cwd} onOpenFile={onOpenFile} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} sessionId={sessionId} entryId={entryId} writtenFiles={writtenFiles} />;
+    return <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} activeTools={activeTools} modelNames={modelNames} cwd={cwd} onOpenFile={onOpenFile} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} sessionId={sessionId} entryId={entryId} writtenFiles={writtenFiles} />;
   }
   if (message.role === "toolResult") {
     // Rendered inline under its toolCall — skip standalone rendering if paired
@@ -268,7 +212,8 @@ export const MessageView = memo(function MessageView({ message, isStreaming, too
 }, (prev, next) => {
   return prev.message === next.message
     && prev.isStreaming === next.isStreaming
-    && haveSameRelevantToolResults(prev.message, prev.toolResults, next.toolResults)
+    && haveSameRelevantToolValues(prev.message, prev.toolResults, next.toolResults)
+    && haveSameRelevantToolValues(prev.message, prev.activeTools, next.activeTools)
     && prev.modelNames === next.modelNames
     && prev.cwd === next.cwd
     && prev.onOpenFile === next.onOpenFile
@@ -556,6 +501,7 @@ function AssistantMessageView({
   message,
   isStreaming,
   toolResults,
+  activeTools,
   modelNames,
   cwd,
   onOpenFile,
@@ -568,6 +514,7 @@ function AssistantMessageView({
   message: AssistantMessage;
   isStreaming?: boolean;
   toolResults?: Map<string, ToolResultMessage>;
+  activeTools?: ToolActivities;
   modelNames?: Record<string, string>;
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
@@ -772,7 +719,7 @@ function AssistantMessageView({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {blockItems.map(({ block, originalIndex }) => (
-          <BlockView key={`${entryId ?? "stream"}-${originalIndex}`} block={block} toolResults={toolResults} isStreaming={isStreaming} streamingDuration={streamingDurations.get(originalIndex) ?? (block.type === "thinking" ? thinkingDurationFromFile : undefined)} toolCallDurations={toolCallDurations} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId} entryId={entryId} blockIndex={originalIndex} />
+          <BlockView key={`${entryId ?? "stream"}-${originalIndex}`} block={block} toolResults={toolResults} activeTools={activeTools} isStreaming={isStreaming} streamingDuration={streamingDurations.get(originalIndex) ?? (block.type === "thinking" ? thinkingDurationFromFile : undefined)} toolCallDurations={toolCallDurations} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId} entryId={entryId} blockIndex={originalIndex} />
         ))}
       </div>
 
@@ -849,7 +796,7 @@ function AssistantMessageView({
   );
 }
 
-function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCallDurations, cwd, onOpenFile, sessionId, entryId, blockIndex }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; streamingDuration?: number; toolCallDurations?: Map<string, number>; cwd?: string; onOpenFile?: (filePath: string) => void; sessionId?: string; entryId?: string; blockIndex: number }) {
+function BlockView({ block, toolResults, activeTools, isStreaming, streamingDuration, toolCallDurations, cwd, onOpenFile, sessionId, entryId, blockIndex }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; activeTools?: ToolActivities; isStreaming?: boolean; streamingDuration?: number; toolCallDurations?: Map<string, number>; cwd?: string; onOpenFile?: (filePath: string) => void; sessionId?: string; entryId?: string; blockIndex: number }) {
   if (block.type === "text") {
     return <TextBlock block={block as TextContent} isStreaming={isStreaming} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId} />;
   }
@@ -863,6 +810,10 @@ function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCal
     const tc = block as ToolCallContent;
     const result = toolResults?.get(tc.toolCallId);
     const duration = toolCallDurations?.get(tc.toolCallId);
+    const calls = getSubagentCalls(tc);
+    if (calls) return <SubagentToolCall block={tc} calls={calls} result={result} duration={duration}
+      activity={activeTools?.get(tc.toolCallId)} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId}
+      images={getMessageImages(result?.content ?? []).map((image, index) => <AssistantImageBlock key={index} block={image} />)} />;
     return <ToolCallBlock block={tc} result={result} duration={duration} />;
   }
   return null;
@@ -1682,15 +1633,17 @@ function getToolPreview(block: ToolCallContent): string {
   const keys = Object.keys(input);
   if (keys.length === 0) return "";
 
+  const preview = (value: unknown) => (typeof value === "object" ? safeJson(value).replace(/\s+/g, " ") : String(value)).slice(0, 120);
+
   // Common tool input patterns
-  if ("command" in input) return String(input.command).slice(0, 120);
-  if ("path" in input) return String(input.path).slice(0, 120);
-  if ("file_path" in input) return String(input.file_path).slice(0, 120);
-  if ("pattern" in input) return String(input.pattern).slice(0, 120);
-  if ("query" in input) return String(input.query).slice(0, 120);
+  if ("command" in input) return preview(input.command);
+  if ("path" in input) return preview(input.path);
+  if ("file_path" in input) return preview(input.file_path);
+  if ("pattern" in input) return preview(input.pattern);
+  if ("query" in input) return preview(input.query);
 
   const first = input[keys[0]];
-  return String(first).slice(0, 120);
+  return preview(first);
 }
 
 function formatUsage(usage: {

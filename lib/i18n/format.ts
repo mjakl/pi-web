@@ -66,3 +66,14 @@ export function formatRelativeTime(date: Date | string, now = new Date()): strin
   const value = Math.round(diffMs / divisor);
   return new Intl.RelativeTimeFormat("en", { numeric: "always" }).format(value, unit as Intl.RelativeTimeFormatUnit);
 }
+
+/** Compact elapsed time for tool calls, expressed in whole seconds. */
+export function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remainder = total % 60;
+  if (hours) return `${hours.toLocaleString("en")}h ${minutes}m ${remainder}s`;
+  if (minutes) return `${minutes}m ${remainder}s`;
+  return `${remainder}s`;
+}
