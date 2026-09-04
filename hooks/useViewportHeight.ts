@@ -54,8 +54,10 @@ export function useViewportHeight(): void {
       });
       if (keyboardOpen) {
         root.style.setProperty("--app-viewport-height", `${viewport.height}px`);
+        root.style.setProperty("--app-safe-area-bottom", "0px");
       } else {
         root.style.removeProperty("--app-viewport-height");
+        root.style.removeProperty("--app-safe-area-bottom");
       }
 
       const pageWasShifted = window.scrollX !== 0 || window.scrollY !== 0;
@@ -102,6 +104,7 @@ export function useViewportHeight(): void {
       window.removeEventListener("pageshow", scheduleUpdate);
       if (frameId !== null) window.cancelAnimationFrame(frameId);
       root.style.removeProperty("--app-viewport-height");
+      root.style.removeProperty("--app-safe-area-bottom");
     };
   }, []);
 }

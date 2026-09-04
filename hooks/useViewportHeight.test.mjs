@@ -63,6 +63,7 @@ test("normalizes the keyboard opening shift without fighting later viewport move
     await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
 
     assert.equal(document.documentElement.style.getPropertyValue("--app-viewport-height"), "510px");
+    assert.equal(document.documentElement.style.getPropertyValue("--app-safe-area-bottom"), "0px");
     assert.deepEqual(pageScrolls, [[0, 0]]);
 
     scrollY = 40;
@@ -73,6 +74,7 @@ test("normalizes the keyboard opening shift without fighting later viewport move
     textarea.blur();
     await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
     assert.equal(document.documentElement.style.getPropertyValue("--app-viewport-height"), "");
+    assert.equal(document.documentElement.style.getPropertyValue("--app-safe-area-bottom"), "");
     assert.deepEqual(pageScrolls, [[0, 0]]);
 
     viewport.height = 844;
@@ -80,6 +82,18 @@ test("normalizes the keyboard opening shift without fighting later viewport move
     viewport.dispatchEvent(new window.Event("resize"));
     await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
     assert.deepEqual(pageScrolls, [[0, 0], [0, 0]]);
+
+    textarea.focus();
+    viewport.height = 510;
+    viewport.dispatchEvent(new window.Event("resize"));
+    await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
+    assert.equal(document.documentElement.style.getPropertyValue("--app-safe-area-bottom"), "0px");
+
+    // Dismissing the keyboard can leave the editor focused.
+    viewport.height = 844;
+    viewport.dispatchEvent(new window.Event("resize"));
+    await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
+    assert.equal(document.documentElement.style.getPropertyValue("--app-safe-area-bottom"), "");
   } finally {
     await React.act(() => root.unmount());
     textarea.remove();
