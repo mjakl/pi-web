@@ -1760,6 +1760,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 aria-label={actionLabel}
                 title={actionTitle}
                 disabled={!isStreaming && !canQueueStreamingMessage}
+                onMouseDown={(event) => event.preventDefault()}
                 onPointerDown={(event) => {
                   touchSubmissionRef.current = event.pointerType === "touch";
                   if (touchSubmissionRef.current) setQueueModifier(false);

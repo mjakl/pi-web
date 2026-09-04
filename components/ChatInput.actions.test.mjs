@@ -109,6 +109,18 @@ test("touch steers, composition and Shift+Enter do not submit, and non-steerable
   });
 });
 
+test("pointer submission keeps keyboard focus in the editor", async () => {
+  await withComposer({ isStreaming: true, onSend() {}, onSteer() {}, onAbort() {} }, async ({ action, type, input }) => {
+    await type("Steer this run");
+    input.focus();
+    const pointerFocus = new window.MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    await React.act(() => action().dispatchEvent(pointerFocus));
+    assert.equal(pointerFocus.defaultPrevented, true);
+    await React.act(() => action().click());
+    assert.equal(document.activeElement, input);
+  });
+});
+
 test("the top bar invokes the current compaction or cancellation callback", async () => {
   const container = document.createElement("div");
   const root = createRoot(container);
