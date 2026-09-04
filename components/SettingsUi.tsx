@@ -3,7 +3,7 @@
 import type { ButtonHTMLAttributes, CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { useI18n } from "@/hooks/useI18n";
 
-type ConfigButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+type ConfigButtonVariant = "primary" | "secondary" | "danger";
 type ConfigButtonSize = "small" | "default";
 
 /** Replace a /Users/<name> or /home/<name> prefix with ~ for display. */

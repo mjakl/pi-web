@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/error-message";
 import { resolveSessionPath } from "@/lib/session-reader";
 import {
   beginRpcSessionOperation,
@@ -59,7 +60,7 @@ export async function POST(
     return Response.json({ success: true, data: result });
   } catch (error) {
     return Response.json({
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
       ...(commandType === "prompt" && !promptAccepted
         ? { code: "prompt_rejected", accepted: false }
         : {}),

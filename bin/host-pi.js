@@ -233,4 +233,4 @@ function resolveHostPi({
   }
 }
 
-module.exports = { PI_PACKAGES, resolveHostPi };
+module.exports = { PI_PACKAGES, pickTarget, resolveHostPi };

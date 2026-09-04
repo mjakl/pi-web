@@ -3,7 +3,7 @@
 import { forwardRef, useState, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import { getFileIcon, FolderIcon, MentionIcon } from "./FileIcons";
 import {
-  encodeFilePathForApi,
+  getFileApiUrl,
   getFileDirectory,
   getFileName,
   getRelativeFilePath,
@@ -80,8 +80,7 @@ interface PendingConflict {
 }
 
 async function fetchEntries(dirPath: string, t: Translate): Promise<FileNode[]> {
-  const encoded = encodeFilePathForApi(dirPath);
-  const res = await fetch(`/api/files/${encoded}?type=list`);
+  const res = await fetch(getFileApiUrl(dirPath, "list"));
   if (!res.ok) {
     let message = t("files.loadFailed", { status: res.status });
     try {
@@ -165,7 +164,7 @@ function uploadFiles(
     const xhr = new XMLHttpRequest();
     xhr.open(
       "POST",
-      `/api/files/${encodeFilePathForApi(targetDirectory)}?type=upload&conflict=${strategy}`,
+      getFileApiUrl(targetDirectory, "upload", null, { conflict: strategy }),
     );
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && event.total > 0) {
@@ -389,7 +388,7 @@ function TreeNode({
         )}
         {hovered && !node.isDir && (
           <a
-            href={`/api/files/${encodeFilePathForApi(node.fullPath)}?type=download`}
+            href={getFileApiUrl(node.fullPath, "download")}
             download
             onClick={(e) => e.stopPropagation()}
             title={t("files.download")}
@@ -695,7 +694,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
 
     try {
       const res = await fetch(
-        `/api/files/${encodeFilePathForApi(cwd)}?type=upload-check`,
+        getFileApiUrl(cwd, "upload-check"),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

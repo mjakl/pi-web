@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/error-message";
 import { authorizeDirectory } from "@/lib/file-access";
 import { getGitStatus } from "@/lib/git-changes";
 
@@ -11,6 +12,6 @@ export async function GET(request: Request) {
 
     return Response.json(await getGitStatus(cwd));
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
+    return Response.json({ error: errorMessage(error) }, { status: 500 });
   }
 }

@@ -9,6 +9,7 @@ import {
   type ResolvedResource,
 } from "@earendil-works/pi-coding-agent";
 import { authorizeDirectory } from "@/lib/file-access";
+import { errorMessage } from "@/lib/error-message";
 import { hasJsonContentType } from "@/lib/request-content-type";
 import { getProjectTrustStatus } from "@/lib/project-trust";
 import type {
@@ -229,7 +230,7 @@ async function readPlugins(cwd: string): Promise<PluginsResponse> {
   } catch (error) {
     diagnostics.push({
       type: "error",
-      message: error instanceof Error ? error.message : String(error),
+      message: errorMessage(error),
     });
   }
 
@@ -349,6 +350,6 @@ export async function POST(req: Request) {
 
     return Response.json(await readPlugins(body.cwd));
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
+    return Response.json({ error: errorMessage(error) }, { status: 500 });
   }
 }

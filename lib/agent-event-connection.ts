@@ -1,3 +1,4 @@
+import { errorMessage } from "./error-message";
 import { translateMessage } from "./i18n/format";
 
 import type { AgentEventLike } from "./agent-event-wire";
@@ -104,7 +105,7 @@ export class AgentEventConnection {
     } catch (error) {
       throw new AgentEventConnectionError(
         "closed",
-        error instanceof Error ? error.message : String(error),
+        errorMessage(error),
       );
     }
 

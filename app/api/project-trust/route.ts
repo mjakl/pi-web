@@ -1,5 +1,6 @@
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { authorizeDirectory } from "@/lib/file-access";
+import { errorMessage } from "@/lib/error-message";
 import { invalidateModelsCache } from "@/lib/models-cache";
 import { getProjectTrustStatus, trustProject } from "@/lib/project-trust";
 import { destroyRpcSessionsForCwd, hasBusyRpcSessionForCwd } from "@/lib/rpc-manager";
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
     return Response.json(status);
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: errorMessage(error) },
       { status: 500 },
     );
   }

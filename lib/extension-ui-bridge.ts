@@ -2,6 +2,7 @@ import { Theme } from "@earendil-works/pi-coding-agent";
 import { KeybindingsManager as TuiKeybindingsManager, TUI_KEYBINDINGS } from "@earendil-works/pi-tui";
 import { randomUUID } from "crypto";
 import { createHeadlessCustomUiTui, DEFAULT_CUSTOM_UI_COLUMNS, type HeadlessCustomUiTui } from "./custom-ui-terminal";
+import { errorMessage } from "./error-message";
 import type { ExtensionUiContextLike } from "./pi-types";
 import type {
   AgentEvent,
@@ -200,7 +201,7 @@ export class ExtensionUiBridge {
       type: "extension_error",
       extensionPath: `extension-widget:${key}`,
       event: "setWidget",
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
   }
 
@@ -345,7 +346,7 @@ export class ExtensionUiBridge {
     try {
       lines = custom.component.render(custom.width);
     } catch (error) {
-      lines = [`Extension custom UI render failed: ${error instanceof Error ? error.message : String(error)}`];
+      lines = [`Extension custom UI render failed: ${errorMessage(error)}`];
     }
     const event = {
       type: "extension_ui_request",
@@ -390,7 +391,7 @@ export class ExtensionUiBridge {
         type: "extension_error",
         extensionPath: `custom-ui:${id}`,
         event: "custom_ui_input",
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       });
     }
   }
@@ -456,7 +457,7 @@ export class ExtensionUiBridge {
             type: "extension_error",
             extensionPath: `custom-ui:${id}`,
             event: "custom_ui",
-            error: error instanceof Error ? error.message : String(error),
+            error: errorMessage(error),
           });
           finish(undefined as T);
         });

@@ -3,6 +3,7 @@ import {
   toClientAgentEvent,
   type AgentEventLike,
 } from "./agent-event-wire";
+import { errorMessage } from "./error-message";
 
 export interface AgentEventStreamSession {
   readonly isStreaming: boolean;
@@ -11,10 +12,6 @@ export interface AgentEventStreamSession {
 }
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * Open the SSE transport immediately, then publish the session snapshot only

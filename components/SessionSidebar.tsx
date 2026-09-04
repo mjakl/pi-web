@@ -12,6 +12,7 @@ import {
   sessionInfoFingerprint as sessionFingerprint,
 } from "@/lib/transcript-refresh";
 import { loadExplorerOpen, saveExplorerOpen } from "@/lib/file-explorer-state";
+import { getBrowserStorage } from "@/lib/browser-storage";
 import { getProjectActivity, getRecentProjects, sessionsForProject } from "@/lib/project-groups";
 import { workspaceKeyOf } from "@/lib/workspace-memory";
 import { useI18n } from "@/hooks/useI18n";
@@ -148,27 +149,24 @@ export function sameSessionIds(a: Set<string>, b: Set<string>): boolean {
 }
 
 function loadLastCustomCwd(): string {
-  if (typeof window === "undefined") return "";
   try {
-    return window.localStorage.getItem(LAST_CUSTOM_CWD_STORAGE_KEY) ?? "";
+    return getBrowserStorage()?.getItem(LAST_CUSTOM_CWD_STORAGE_KEY) ?? "";
   } catch {
     return "";
   }
 }
 
 function saveLastCustomCwd(cwd: string): void {
-  if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(LAST_CUSTOM_CWD_STORAGE_KEY, cwd);
+    getBrowserStorage()?.setItem(LAST_CUSTOM_CWD_STORAGE_KEY, cwd);
   } catch {
     // Persistence is best-effort.
   }
 }
 
 function loadUnreadSessionIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
   try {
-    const raw = window.localStorage.getItem(UNREAD_SESSIONS_STORAGE_KEY);
+    const raw = getBrowserStorage()?.getItem(UNREAD_SESSIONS_STORAGE_KEY);
     if (!raw) return new Set();
     const parsed = JSON.parse(raw) as unknown;
     if (Array.isArray(parsed)) return new Set(parsed.filter((id): id is string => typeof id === "string"));
@@ -179,10 +177,10 @@ function loadUnreadSessionIds(): Set<string> {
 }
 
 function saveUnreadSessionIds(ids: Set<string>): void {
-  if (typeof window === "undefined") return;
   try {
-    if (ids.size === 0) window.localStorage.removeItem(UNREAD_SESSIONS_STORAGE_KEY);
-    else window.localStorage.setItem(UNREAD_SESSIONS_STORAGE_KEY, JSON.stringify([...ids]));
+    const storage = getBrowserStorage();
+    if (ids.size === 0) storage?.removeItem(UNREAD_SESSIONS_STORAGE_KEY);
+    else storage?.setItem(UNREAD_SESSIONS_STORAGE_KEY, JSON.stringify([...ids]));
   } catch {
     // ignore storage quota / privacy-mode errors
   }

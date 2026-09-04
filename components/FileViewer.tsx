@@ -493,7 +493,7 @@ function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
   const resetNaturalSize = useCallback(() => setNaturalSize(null), []);
   const { watching, bust, size, error, setError } = useWatchedFile(filePath, sourceSessionId, watchEnabled, resetNaturalSize);
 
-  const ext = getFileName(filePath).toLowerCase().split(".").pop() ?? "";
+  const ext = getFileExt(filePath);
 
   const src = getFileApiUrl(filePath, "read", sourceSessionId, bust ? { v: bust } : undefined);
 
@@ -591,7 +591,7 @@ function AudioViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
   const resetDuration = useCallback(() => setDuration(null), []);
   const { watching, bust, size, error, setError } = useWatchedFile(filePath, sourceSessionId, watchEnabled, resetDuration);
 
-  const ext = getFileName(filePath).toLowerCase().split(".").pop() ?? "";
+  const ext = getFileExt(filePath);
 
   const src = getFileApiUrl(filePath, "read", sourceSessionId, bust ? { v: bust } : undefined);
 
@@ -1316,10 +1316,6 @@ function TextFileViewer({
                     title={mode === "diff" ? t("i18n.compareHead") : undefined}
                     aria-pressed={active}
                     className="file-viewer-mode-button"
-                    style={{
-                      background: active ? "var(--bg-selected)" : "transparent",
-                      color: active ? "var(--text)" : "var(--text-muted)",
-                    }}
                   >
                     {t(DISPLAY_MODE_LABEL_KEYS[mode])}
                   </button>
@@ -1364,10 +1360,6 @@ function TextFileViewer({
                   aria-label={wrapLines ? t("i18n.disableWrap") : t("i18n.enableWrap")}
                   aria-pressed={wrapLines}
                   className="file-viewer-icon-button"
-                  style={{
-                    background: wrapLines ? "var(--bg-selected)" : "transparent",
-                    color: wrapLines ? "var(--text)" : "var(--text-muted)",
-                  }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M3 6h18" />
@@ -1405,7 +1397,7 @@ function TextFileViewer({
           />
         ) : isMarkdown && effectiveDisplayMode === "preview" ? (
           <div className="markdown-file-preview-shell" style={{ padding: "24px 32px" }}>
-            {frontmatter?.data && <FrontmatterCard data={frontmatter.data} />}
+            {frontmatter && <FrontmatterCard data={frontmatter} />}
             <MarkdownBody
               className="markdown-file-preview"
               baseDir={markdownDirectory}

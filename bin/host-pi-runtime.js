@@ -5,16 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { registerHooks } = require("node:module");
 const { pathToFileURL } = require("node:url");
-
-function pickTarget(value) {
-  if (typeof value === "string") return value;
-  if (!value || typeof value !== "object") return undefined;
-  for (const condition of ["import", "node", "default"]) {
-    const target = pickTarget(value[condition]);
-    if (target) return target;
-  }
-  return undefined;
-}
+const { pickTarget } = require("./host-pi");
 
 function exportedTarget(descriptor, subpath) {
   const key = `./${subpath}`;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { getBrowserStorage } from "@/lib/browser-storage";
 
 export type ThemePreference = "light" | "dark" | "auto";
 export type ResolvedTheme = "light" | "dark";
@@ -31,7 +32,7 @@ function getSystemTheme(): ResolvedTheme {
 
 function readStoredPreference(): ThemePreference {
   try {
-    const value = localStorage.getItem(STORAGE_KEY);
+    const value = getBrowserStorage()?.getItem(STORAGE_KEY);
     if (value === "light" || value === "dark" || value === "auto") return value;
   } catch {
     // ignore storage errors (private mode, quota, etc.)
@@ -63,7 +64,7 @@ function setThemeState(preference: ThemePreference, theme: ResolvedTheme, persis
   applyDomTheme(theme);
   if (persist) {
     try {
-      localStorage.setItem(STORAGE_KEY, preference);
+      getBrowserStorage()?.setItem(STORAGE_KEY, preference);
     } catch {
       // ignore storage errors (private mode, quota, etc.)
     }
@@ -81,7 +82,7 @@ function syncAutoThemeFromSystem(): void {
 }
 
 function ensureSystemListener(): void {
-  if (systemListening || typeof window === "undefined" || !window.matchMedia) return;
+  if (systemListening || typeof window === "undefined") return;
 
   const mql = window.matchMedia("(prefers-color-scheme: dark)");
   mql.addEventListener("change", syncAutoThemeFromSystem);
@@ -128,7 +129,7 @@ export function useTheme() {
       setThemeState(nextPreference, nextTheme, true);
     };
 
-    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const supportsVT = typeof document.startViewTransition === "function";
 
     if (!supportsVT || reduceMotion) {

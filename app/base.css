@@ -3,7 +3,8 @@
   app stylesheets wins over them. Copied from Tailwind CSS v4.2.2 preflight
   (MIT) when Tailwind was removed, minus rules for elements Pi Web never
   renders (visible file inputs, date/time/search inputs, multi-select
-  optgroups, progress, datalist pickers).
+  optgroups, progress, datalist pickers, abbr, small, menu, video, embed,
+  object).
 */
 
 @layer base {
@@ -28,11 +29,6 @@
     height: 0;
     color: inherit;
     border-top-width: 1px;
-  }
-
-  abbr:where([title]) {
-    -webkit-text-decoration: underline dotted;
-    text-decoration: underline dotted;
   }
 
   h1,
@@ -62,10 +58,6 @@
   pre {
     font-family: var(--font-mono);
     font-size: 1em;
-  }
-
-  small {
-    font-size: 80%;
   }
 
   sub,
@@ -99,25 +91,20 @@
   }
 
   ol,
-  ul,
-  menu {
+  ul {
     list-style: none;
   }
 
   img,
   svg,
-  video,
   canvas,
   audio,
-  iframe,
-  embed,
-  object {
+  iframe {
     display: block;
     vertical-align: middle;
   }
 
-  img,
-  video {
+  img {
     max-width: 100%;
     height: auto;
   }
@@ -125,7 +112,6 @@
   button,
   input,
   select,
-  optgroup,
   textarea {
     font: inherit;
     font-feature-settings: inherit;

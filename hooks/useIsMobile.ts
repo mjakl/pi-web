@@ -8,14 +8,14 @@ const MOBILE_QUERY = "(max-width: 640px)";
 const NARROW_MOBILE_QUERY = "(max-width: 480px)";
 
 function subscribeToQuery(query: string, cb: () => void): () => void {
-  if (typeof window === "undefined" || !window.matchMedia) return () => {};
+  if (typeof window === "undefined") return () => {};
   const mql = window.matchMedia(query);
   mql.addEventListener("change", cb);
   return () => mql.removeEventListener("change", cb);
 }
 
 function queryMatches(query: string): boolean {
-  if (typeof window === "undefined" || !window.matchMedia) return false;
+  if (typeof window === "undefined") return false;
   return window.matchMedia(query).matches;
 }
 

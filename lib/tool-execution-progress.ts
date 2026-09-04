@@ -1,25 +1,18 @@
+import { isRecord } from "./types";
+
 const MAX_PROGRESS_LENGTH = 500;
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 export function getToolExecutionProgress(partialResult: unknown): string | null {
-  if (!isObject(partialResult)) return null;
+  if (!isRecord(partialResult)) return null;
 
   const content = partialResult.content;
   if (!Array.isArray(content)) return null;
 
   const text = content
-    .filter((block) => isObject(block) && block.type === "text" && typeof block.text === "string")
+    .filter((block) => isRecord(block) && block.type === "text" && typeof block.text === "string")
     .map((block) => block.text as string)
     .join("\n");
-  const lines = text.split(/\r?\n/);
-  let latest = "";
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    latest = lines[index].trim();
-    if (latest) break;
-  }
+  const latest = text.split(/\r?\n/).findLast((line) => line.trim())?.trim();
   if (!latest) return null;
 
   const normalized = latest.replace(/\s+/g, " ");
