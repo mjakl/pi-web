@@ -491,8 +491,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     : {};
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const thinkingDropdownRef = useRef<HTMLDivElement>(null);
-  const streamingActionRef = useRef<HTMLDivElement>(null);
   const runActionMenuRef = useRef<HTMLDivElement>(null);
   const runActionMenuId = useId();
   const thinkingMenuId = useId();
@@ -1809,7 +1807,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           >
             {hasStreamingActions && streamingSubmissionAction ? (
               <div
-                ref={streamingActionRef}
                 onKeyDown={(e) => {
                   if (e.key !== "Escape" || !streamingActionMenuOpen) return;
                   e.preventDefault();
@@ -2013,7 +2010,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               />
             )}
             {!isStreaming && onThinkingLevelChange && (
-              <div ref={thinkingDropdownRef} style={{ position: "relative" }}>
+              <div style={{ position: "relative" }}>
                 <button
                   className="anchor-composer-reasoning"
                   popoverTarget={thinkingMenuId}
