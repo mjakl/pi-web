@@ -42,7 +42,7 @@ function ViewportHeightHarness() {
   return null;
 }
 
-test("tracks the keyboard height without fighting keyboard-open page movement", async () => {
+test("normalizes the keyboard opening shift without fighting later viewport movement", async () => {
   const textarea = document.createElement("textarea");
   const container = document.createElement("div");
   document.body.append(textarea, container);
@@ -52,29 +52,34 @@ test("tracks the keyboard height without fighting keyboard-open page movement", 
     await React.act(() => root.render(React.createElement(ViewportHeightHarness)));
     await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
 
+    textarea.focus();
+    await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
+    assert.deepEqual(pageScrolls, []);
+
     viewport.height = 510;
     innerHeight = 510;
-    textarea.focus();
-    viewport.dispatchEvent(new window.Event("resize"));
+    scrollY = 40;
+    viewport.dispatchEvent(new window.Event("scroll"));
     await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
 
     assert.equal(document.documentElement.style.getPropertyValue("--app-viewport-height"), "510px");
+    assert.deepEqual(pageScrolls, [[0, 0]]);
 
     scrollY = 40;
     viewport.dispatchEvent(new window.Event("scroll"));
     await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
-    assert.deepEqual(pageScrolls, []);
+    assert.deepEqual(pageScrolls, [[0, 0]]);
 
     textarea.blur();
     await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
     assert.equal(document.documentElement.style.getPropertyValue("--app-viewport-height"), "");
-    assert.deepEqual(pageScrolls, []);
+    assert.deepEqual(pageScrolls, [[0, 0]]);
 
     viewport.height = 844;
     innerHeight = 844;
     viewport.dispatchEvent(new window.Event("resize"));
     await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
-    assert.deepEqual(pageScrolls, [[0, 0]]);
+    assert.deepEqual(pageScrolls, [[0, 0], [0, 0]]);
   } finally {
     await React.act(() => root.unmount());
     textarea.remove();
