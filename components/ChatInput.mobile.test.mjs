@@ -21,6 +21,24 @@ const { ChatInput } = await jiti.import("./ChatInput.tsx");
 const { ExtensionStatusBar } = await jiti.import("./ExtensionStatusBar.tsx");
 after(() => window.happyDOM.close());
 
+test("More scrolls long status lists within its available space", async () => {
+  const style = document.createElement("style");
+  style.textContent = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  document.head.append(style);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await React.act(() => root.render(React.createElement(ChatInput, { onSend() {}, onAbort() {}, isStreaming: true })));
+    const menu = container.querySelector(".menu-composer-controls");
+    assert.equal(getComputedStyle(menu).overflow, "auto");
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+    style.remove();
+  }
+});
+
 test("the combined model picker retains reasoning while More keeps Stop and extension status", async () => {
   const container = document.createElement("div");
   document.body.append(container);

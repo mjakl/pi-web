@@ -390,6 +390,7 @@ test("rekey keeps a synchronously restored draft when React state is still empty
 test("the top-bar compaction control exposes warning, disabled, and cancel states", () => {
   const render = (props) => renderToStaticMarkup(React.createElement(CompactButton, props));
   assert.equal(render({ control: null }), "");
+  assert.equal(render({ hidden: true, control: { disabled: false, compacting: false, onClick() {} } }), "");
   const warning = render({ warning: true, control: { disabled: false, compacting: false, onClick() {} } });
   assert.match(warning, /data-warning="true"/);
   assert.match(warning, /aria-label="Compact context"/);

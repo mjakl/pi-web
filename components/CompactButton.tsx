@@ -8,9 +8,9 @@ export interface CompactionControl {
   onClick: () => void;
 }
 
-export function CompactButton({ control, warning = false }: { control: CompactionControl | null; warning?: boolean }) {
+export function CompactButton({ control, warning = false, hidden = false }: { control: CompactionControl | null; warning?: boolean; hidden?: boolean }) {
   const { t } = useI18n();
-  if (!control) return null;
+  if (!control || hidden) return null;
   const label = t(control.compacting ? "chat.stopCompaction" : "chat.compactContext");
   return (
     <button

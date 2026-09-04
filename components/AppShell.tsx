@@ -1556,7 +1556,7 @@ export function AppShell() {
               )}
               {!isNarrowMobile && renderChatToolbarActions(true)}
               {renderSessionStatsButton(true)}
-              <CompactButton control={showChat ? compactionControl : null} warning={contextWarningLevel !== "none"} />
+              <CompactButton control={showChat ? compactionControl : null} warning={contextWarningLevel !== "none"} hidden={isNarrowMobile && mobileToolbarMoreOpen} />
               {renderMainFileToggle(true)}
               {isNarrowMobile && mobileToolbarMoreOpen && (
                 <div
