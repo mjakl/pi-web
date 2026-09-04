@@ -901,9 +901,13 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     [projectActivity, selectedProject],
   );
 
-  const filteredSessions = selectedProject
+  const filteredSessions = (selectedProject
     ? sessionsForProject(allSessions, selectedProject.key)
-    : allSessions;
+    : allSessions).toSorted((a, b) =>
+      Number(runningSessionIds.has(b.id)) - Number(runningSessionIds.has(a.id))
+      || Number(activeSessionIds.has(b.id)) - Number(activeSessionIds.has(a.id))
+      || b.modified.localeCompare(a.modified),
+    );
 
   useEffect(() => {
     const updateModifier = (event: KeyboardEvent) => {

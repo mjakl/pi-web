@@ -858,6 +858,26 @@ test("inactive session titles are muted", async () => {
   }
 });
 
+test("the unread halo can overflow the metadata line while long text stays clipped", async () => {
+  const view = await mountItem(
+    { ...baseSession, isWorktree: true, branch: "feature/a-long-branch-name" },
+    { isActive: true, isUnread: true },
+  );
+  try {
+    const indicator = view.container.querySelector(".session-indicator-unread");
+    const row = view.container.querySelector(".session-row");
+    for (let parent = indicator.parentElement; parent !== row; parent = parent.parentElement) {
+      assert.ok(!["hidden", "clip", "auto", "scroll"].includes(window.getComputedStyle(parent).overflow));
+    }
+    const timestamp = view.container.querySelector(`[title="${baseSession.modified}"]`);
+    assert.equal(window.getComputedStyle(timestamp.parentElement).overflow, "hidden");
+    assert.equal(timestamp.parentElement.contains(indicator), false);
+    assert.equal(row.style.height, "54px");
+  } finally {
+    await view.unmount();
+  }
+});
+
 test("a selected running worktree session shows running, unread, and branch state", () => {
   const html = renderItem(
     { ...baseSession, name: "Feature work", isWorktree: true, branch: "feature/seams", messageCount: undefined },

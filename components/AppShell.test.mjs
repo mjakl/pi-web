@@ -568,3 +568,58 @@ test("background inventory completion does not show manual Refresh success", asy
     await harness.cleanup();
   }
 });
+
+test("sidebar puts running then active sessions first and shortcuts follow live ordering", async () => {
+  const originalFetch = globalThis.fetch;
+  const sessions = ["stopped-new", "active-new", "running-new", "stopped-old", "active-old", "running-old"]
+    .map((id, index) => ({
+      ...sidebarSession,
+      id,
+      name: id,
+      modified: `2026-09-01T10:0${5 - index}:00.000Z`,
+    }));
+  let activity = {
+    activeSessionIds: ["active-new", "active-old", "running-new", "running-old"],
+    runningSessionIds: ["running-new", "running-old"],
+  };
+  globalThis.fetch = async (url) => {
+    if (String(url).startsWith("/api/sessions")) return Response.json({ sessions, ...activity });
+    if (url === "/api/agent/running") return Response.json(activity);
+    if (url === "/api/home") return Response.json({ home: "/tmp" });
+    return Response.json({});
+  };
+  const selected = [];
+  const inventories = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const rowIds = () => [...container.querySelectorAll(".session-row")].map((row) => row.dataset.sessionInventoryId);
+  try {
+    await act(async () => {
+      root.render(React.createElement(SessionSidebar, {
+        selectedSessionId: "running-new",
+        onSelectSession: (session) => selected.push(session.id),
+        beginSessionInventoryAttempt: () => 1,
+        onSessionsChange: (items) => inventories.push(items.map((item) => item.id)),
+        actionsAvailable: true,
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.deepEqual(rowIds(), ["running-new", "running-old", "active-new", "active-old", "stopped-new", "stopped-old"]);
+    assert.deepEqual(inventories.at(-1), sessions.map((session) => session.id));
+
+    activity = { activeSessionIds: ["active-old", "running-old"], runningSessionIds: ["active-old"] };
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.deepEqual(rowIds(), ["active-old", "running-old", "stopped-new", "active-new", "running-new", "stopped-old"]);
+    await act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "1", ctrlKey: true, cancelable: true })));
+    assert.equal(selected.at(-1), "active-old");
+    assert.equal(container.querySelector("kbd").textContent, "Ctrl+1");
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+    globalThis.fetch = originalFetch;
+  }
+});
