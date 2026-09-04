@@ -56,6 +56,7 @@ import {
 } from "@/lib/transcript-refresh";
 import type { ProjectTrustStatus } from "@/lib/api-types";
 import type { ChatInputHandle } from "./ChatInput";
+import { CompactButton, type CompactionControl } from "./CompactButton";
 import type { SessionStatsInfo } from "@/lib/pi-types";
 import type { FileViewerState } from "@/lib/file-viewer-state";
 import type { ToolEntry } from "@/lib/tool-presets";
@@ -294,6 +295,8 @@ export function AppShell() {
       if (sessionCopyTimerRef.current) clearTimeout(sessionCopyTimerRef.current);
     };
   }, []);
+
+  const [compactionControl, setCompactionControl] = useState<CompactionControl | null>(null);
 
   // Context usage — populated by ChatWindow, displayed in top bar
   const [contextUsage, setContextUsage] = useState<{ percent: number | null; contextWindow: number; tokens: number | null } | null>(null);
@@ -1553,6 +1556,7 @@ export function AppShell() {
               )}
               {!isNarrowMobile && renderChatToolbarActions(true)}
               {renderSessionStatsButton(true)}
+              <CompactButton control={showChat ? compactionControl : null} warning={contextWarningLevel !== "none"} hidden={isNarrowMobile && mobileToolbarMoreOpen} />
               {renderMainFileToggle(true)}
               {isNarrowMobile && mobileToolbarMoreOpen && (
                 <div
@@ -1584,6 +1588,7 @@ export function AppShell() {
               {renderProjectTrustWarning(false)}
               {renderChatToolbarActions(false)}
               {renderSessionStatsButton(false)}
+              <CompactButton control={showChat ? compactionControl : null} warning={contextWarningLevel !== "none"} />
             </>
           )}
           {!isMobile && renderMainFileToggle(false)}
@@ -1859,7 +1864,7 @@ export function AppShell() {
               onSessionStatsChange={handleSessionStatsChange}
               onSessionStatsPanelOpen={openSessionStatsPanel}
               onContextUsageChange={handleContextUsageChange}
-              compactWarning={contextWarningLevel !== "none"}
+              onCompactionControlChange={setCompactionControl}
               onOpenFile={handleOpenLinkedFile}
               onToolPresetControlChange={setToolPresetControl}
               soundEnabled={soundEnabled}

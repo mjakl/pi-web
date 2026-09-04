@@ -8,6 +8,7 @@ import { countToolCallBlocks, getAssistantErrorMessage, getDisplayableAssistantB
 import { extractTurnWrittenFiles, type WrittenFile } from "@/lib/turn-written-files";
 import { MessageView } from "./MessageView";
 import { ChatInput, getUserMessageText, getUserMessageDraftImages, type ChatInputHandle } from "./ChatInput";
+import type { CompactionControl } from "./CompactButton";
 import { ChatJumpToLatest } from "./ChatJumpToLatest";
 import { ChatMinimap } from "./ChatMinimap";
 import { ExtensionStatusBar } from "./ExtensionStatusBar";
@@ -54,7 +55,7 @@ interface Props {
   onSessionStatsChange?: (stats: SessionStatsInfo | null) => void;
   onSessionStatsPanelOpen?: () => void;
   onContextUsageChange?: (usage: { percent: number | null; contextWindow: number; tokens: number | null } | null) => void;
-  compactWarning?: boolean;
+  onCompactionControlChange?: (control: CompactionControl | null) => void;
   onOpenFile?: (filePath: string) => void;
   onToolPresetControlChange?: (control: ToolPresetControl | null) => void;
   /** Completion sound state is owned by AppShell so tasks finishing in a
@@ -76,7 +77,6 @@ function phaseLabel(phase: AgentPhase, t: (key: string, params?: Record<string, 
     if (names.length <= 3) return t("chat.runningTools", { names: names.join(", ") });
     return t("chat.runningToolsMore", { names: names.slice(0, 2).join(", "), count: names.length - 2 });
   }
-  if (phase?.kind === "waiting_model") return t("chat.waitingModel");
   if (phase?.kind === "running_command") return t("chat.runningCommand");
   return null;
 }
@@ -182,7 +182,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = fa
   );
 }
 
-export function ChatWindow({ session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onTranscriptRefreshChange, onSessionMetadataChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, compactWarning, onOpenFile, onToolPresetControlChange, soundEnabled = true, playDoneSound = () => {}, unlockAudio }: Props) {
+export function ChatWindow({ session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onTranscriptRefreshChange, onSessionMetadataChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onCompactionControlChange, onOpenFile, onToolPresetControlChange, soundEnabled = true, playDoneSound = () => {}, unlockAudio }: Props) {
   const { t } = useI18n();
 
   // Wrap onAgentEnd to play the completion sound.
@@ -275,6 +275,15 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     });
     return () => onToolPresetControlChange?.(null);
   }, [error, handleToolPresetChange, loading, onToolPresetControlChange, sessionBusy, toolPreset, readOnly]);
+
+  useEffect(() => {
+    onCompactionControlChange?.(session ? {
+      disabled: loading || Boolean(error) || readOnly || (sessionBusy && !isCompacting),
+      compacting: isCompacting,
+      onClick: isCompacting ? handleAbortCompaction : handleCompact,
+    } : null);
+    return () => onCompactionControlChange?.(null);
+  }, [session, loading, error, readOnly, sessionBusy, isCompacting, handleAbortCompaction, handleCompact, onCompactionControlChange]);
 
   useEffect(() => {
     if (!extensionDialog || soundedExtensionDialogIdRef.current === extensionDialog.id) return;
@@ -480,12 +489,9 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
       modelScopeWarnings={modelScopeWarnings}
       onModelChange={handleModelChange}
       modelSwitching={modelSwitching}
-      onCompact={session || isNew ? handleCompact : undefined}
-      onAbortCompaction={handleAbortCompaction}
       isCompacting={isCompacting}
       compactError={compactError}
       compactResult={compactResult}
-      compactWarning={compactWarning}
       thinkingLevel={thinkingLevel}
       onThinkingLevelChange={session || isNew ? handleThinkingLevelChange : undefined}
       availableThinkingLevels={availableThinkingLevels}
@@ -766,7 +772,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
               <MessageView message={streamState.streamingMessage as AgentMessage} isStreaming modelNames={modelNames} cwd={messageCwd} onOpenFile={onOpenFile} />
             )}
 
-            {agentRunning && !hasStreamingContent && agentPhase && (
+            {agentRunning && !hasStreamingContent && agentPhase && agentPhase.kind !== "waiting_model" && (
               <div className="chat-activity">
                 <span className="chat-activity-label">{phaseLabel(agentPhase, t)}</span>
               </div>

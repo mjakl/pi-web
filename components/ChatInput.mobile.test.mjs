@@ -21,64 +21,58 @@ const { ChatInput } = await jiti.import("./ChatInput.tsx");
 const { ExtensionStatusBar } = await jiti.import("./ExtensionStatusBar.tsx");
 after(() => window.happyDOM.close());
 
-test("mobile session controls retain reasoning, status, and compaction while keeping Stop available", async () => {
+test("More scrolls long status lists within its available space", async () => {
+  const style = document.createElement("style");
+  style.textContent = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  document.head.append(style);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await React.act(() => root.render(React.createElement(ChatInput, { onSend() {}, onAbort() {}, isStreaming: true })));
+    const menu = container.querySelector(".menu-composer-controls");
+    assert.equal(getComputedStyle(menu).overflow, "auto");
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+    style.remove();
+  }
+});
+
+test("the combined model picker retains reasoning while More keeps Stop and extension status", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   const changes = [];
-  let compactions = 0;
   let aborts = 0;
   const props = {
-    onSend() { assert.fail("must not send"); },
-    onAbort() { aborts++; },
-    onCompact() { compactions++; },
-    onThinkingLevelChange(level) { changes.push(level); },
-    thinkingLevel: "high",
-    availableThinkingLevels: ["low", "high"],
-    thinkingLevelMap: { high: "max" },
+    onSend() { assert.fail("must not send"); }, onAbort() { aborts++; },
+    onThinkingLevelChange(level) { changes.push(level); }, thinkingLevel: "high",
+    availableThinkingLevels: ["low", "high"], thinkingLevelMap: { high: "max" },
     extensionStatuses: [{ key: "mode", text: "ponytail: FULL" }],
     model: { provider: "openai", modelId: "gpt-5.4" },
     modelList: [{ provider: "openai", id: "gpt-5.4", name: "GPT-5.4" }],
-    onModelChange() {},
-    isStreaming: false,
+    onModelChange() {}, isStreaming: false,
   };
   try {
     await React.act(() => root.render(React.createElement(ChatInput, props)));
     const textarea = container.querySelector("textarea");
     assert.equal(textarea.placeholder, "Message…");
-    const trigger = container.querySelector('button[aria-label="Session controls"]');
-    assert.ok(trigger);
-    const menu = document.getElementById(trigger.getAttribute("popovertarget"));
-    assert.equal(menu.getAttribute("popover"), "auto");
-    assert.match(menu.textContent, /ponytail: FULL/);
-    const select = menu.querySelector("select");
-    assert.deepEqual([...select.options].map((option) => [option.value, option.textContent]), [
-      ["auto", "auto"], ["low", "low"], ["high", "max"],
-    ]);
-    await React.act(() => {
-      select.value = "low";
-      select.dispatchEvent(new window.Event("change", { bubbles: true }));
-    });
+    await React.act(() => container.querySelector('button[aria-label="Model and reasoning"]').click());
+    const select = container.querySelector('select');
+    assert.deepEqual([...select.options].map(option => [option.value, option.textContent]), [["auto", "auto"], ["low", "low"], ["high", "max"]]);
+    await React.act(() => { select.value = "low"; select.dispatchEvent(new window.Event("change", { bubbles: true })); });
     assert.deepEqual(changes, ["low"]);
-    const compact = [...menu.querySelectorAll("button")].find((button) => button.textContent === "Compact context");
-    await React.act(() => compact.click());
-    assert.equal(compactions, 1);
-
+    assert.doesNotMatch(container.textContent, /Compact context/);
     await React.act(() => root.render(React.createElement(ChatInput, { ...props, isStreaming: true })));
+    assert.equal(container.querySelector('button[aria-label="Model and reasoning"]').disabled, true);
     assert.equal(container.querySelector('button[aria-label="Session controls"]').disabled, false);
-    assert.equal(menu.querySelector("select").disabled, true);
-    assert.equal(compact.disabled, true);
+    const menu = container.querySelector('.menu-composer-controls');
     assert.match(menu.textContent, /ponytail: FULL/);
-    await React.act(() => container.querySelector('button[title="Stop agent"]').click());
+    await React.act(() => menu.querySelector('button').click());
     assert.equal(aborts, 1);
-
-    await React.act(() => root.render(React.createElement(ChatInput, { ...props, compactWarning: true })));
-    assert.ok(container.querySelector('.composer-immediate-actions button[aria-label="Compact context"]'));
     assert.equal(container.querySelector("textarea"), textarea);
-  } finally {
-    await React.act(() => root.unmount());
-    container.remove();
-  }
+  } finally { await React.act(() => root.unmount()); container.remove(); }
 });
 
 test("the mobile footer keeps status updates exposed while the menu provides a non-live copy", async () => {
@@ -104,8 +98,8 @@ test("the mobile footer keeps status updates exposed while the menu provides a n
         assert.notEqual(getComputedStyle(element).display, "none");
         assert.notEqual(getComputedStyle(element).visibility, "hidden");
       }
-      assert.equal(container.querySelectorAll('[role="status"]').length, 1);
-      assert.match(container.querySelector(".composer-mobile-settings").textContent, /Working/);
+      assert.equal(container.querySelectorAll('.extension-status-shelf [role="status"]').length, 1);
+      assert.match(container.querySelector(".menu-composer-controls").textContent, /Working/);
       await React.act(() => root.render(render("Ready", widgets)));
       assert.equal(status.textContent, "Ready");
     }
