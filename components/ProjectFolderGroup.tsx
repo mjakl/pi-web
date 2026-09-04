@@ -57,7 +57,8 @@ export function ProjectFolderGroup({ project, selectedCwd, selected, homeDir, ac
 
   return (
     <div className="project-folder-group">
-      <button className="project-folder-row" aria-expanded={!data || direct ? undefined : expanded}
+      <button className="menu-item project-folder-row" aria-expanded={!data || direct ? undefined : expanded}
+        aria-current={direct && selectedPath === folders[0] ? "true" : undefined}
         disabled={!data && !error} aria-busy={!data && !error}
         onClick={() => {
           if (direct) select(folders[0]);
@@ -75,7 +76,7 @@ export function ProjectFolderGroup({ project, selectedCwd, selected, homeDir, ac
         {!data && !error && <div className="project-folder-message" role="status">{t("sidebar.loading")}</div>}
         {error && <div className="project-folder-message" role="alert">{error}</div>}
         {data && !folders.length && <div className="project-folder-message">{t("sidebar.noWorkingFolders")}</div>}
-        {folders.map(path => <button key={path} className="project-folder-row project-folder-child"
+        {folders.map(path => <button key={path} className="menu-item project-folder-row project-folder-child"
           aria-current={selectedPath === path ? "true" : undefined} onClick={() => select(path)} title={path}>
           <FolderIcon />
           <span className="project-folder-label"><span>{name(path)}</span><span className="project-folder-path">{display(path)}</span></span>

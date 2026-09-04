@@ -210,7 +210,7 @@ test("keeps a compact icon-only action slot across idle, steer, follow-up, and b
   assert.match(agent, /aria-label="Select run action"/);
   // The run-action menu is a native popover now: it stays mounted and the
   // browser hides it until showPopover(), so there is no hidden attribute.
-  assert.match(agent, /popover="auto"[^>]*class="anchored-menu opens-up menu-composer-run-action"|class="anchored-menu opens-up menu-composer-run-action"/);
+  assert.match(agent, /popover="auto"[^>]*role="group"[^>]*aria-label="Select run action"/);
   assert.doesNotMatch(busy, /aria-label="Select run action"/);
 });
 

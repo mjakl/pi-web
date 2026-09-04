@@ -113,7 +113,7 @@ export function ToolDefinitionsPanel({ loading, tools, translate }: Props) {
   const fields = selectedTool ? getToolParameterFields(selectedTool.parameters) : [];
 
   return (
-    <div className="tool-definitions-panel">
+    <div className="tool-definitions-panel menu-surface menu-panel">
       <nav className="tool-definitions-sidebar" aria-label={translate("tools.title")}>
         <div className="tool-definitions-list">
           {activeTools && activeTools.length > 0 ? activeTools.map((tool) => {
@@ -213,8 +213,6 @@ export function ToolDefinitionsPanel({ loading, tools, translate }: Props) {
           height: min(600px, 75dvh);
           min-height: 240px;
           overflow: hidden;
-          background: var(--bg-panel);
-          border-bottom: 1px solid var(--border);
         }
         .tool-definitions-sidebar,
         .tool-definition-detail {

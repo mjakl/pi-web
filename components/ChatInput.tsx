@@ -1503,16 +1503,13 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           {slashMenuOpen && slashQuery !== null && (
             <div
               ref={anchoredMenuRef}
+              className="menu-surface menu-panel"
               style={{
                 position: "absolute",
                 left: 0,
                 right: 0,
                 bottom: "calc(100% + 8px)",
                 zIndex: 120,
-                background: "var(--bg)",
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                boxShadow: "0 -6px 20px rgba(0,0,0,0.12)",
                 overflow: "hidden",
                 boxSizing: "border-box",
                 display: "flex",
@@ -1545,6 +1542,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   groupedSlashCommands.map((group) => (
                     <section key={group.source} style={{ marginBottom: 8 }}>
                       <div
+                        className="menu-section-label"
                         style={{
                           position: "sticky",
                           top: -10,
@@ -1553,12 +1551,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                           alignItems: "center",
                           justifyContent: "space-between",
                           gap: 8,
-                          padding: "4px 0 6px",
                           background: "var(--bg)",
-                          color: "var(--text-dim)",
-                          fontSize: 10,
-                          fontWeight: 600,
-                          textTransform: "uppercase",
                         }}
                       >
                            <span>{t(SLASH_SOURCE_GROUP_LABEL_KEYS[group.source])}</span>
@@ -1580,20 +1573,9 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                                 applySlashCommand(command);
                               }}
                               onMouseEnter={() => setSlashActiveIndex(index)}
-                              style={{
-                                width: "100%",
-                                minWidth: 0,
-                                display: "flex",
-                                alignItems: "baseline",
-                                gap: 8,
-                                padding: "6px 8px",
-                                border: "none",
-                                borderRadius: 6,
-                                background: active ? "var(--bg-selected)" : "none",
-                                color: "var(--text)",
-                                cursor: "pointer",
-                                textAlign: "left",
-                              }}
+                              className="menu-item"
+                              data-active={active}
+                              style={{ alignItems: "baseline" }}
                             >
                               <span style={{
                                 flexShrink: 0,
@@ -1650,16 +1632,13 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             return (
               <div
                 ref={anchoredMenuRef}
+                className="menu-surface menu-panel"
                 style={{
                   position: "absolute",
                   left: 0,
                   right: 0,
                   bottom: "calc(100% + 8px)",
                   zIndex: 120,
-                  background: "var(--bg)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 8,
-                  boxShadow: "0 -6px 20px rgba(0,0,0,0.12)",
                   overflow: "hidden",
                   maxHeight: anchoredMenuMaxHeight === null ? "min(48vh, 400px)" : `min(48vh, 400px, ${anchoredMenuMaxHeight}px)`,
                 }}
@@ -1706,21 +1685,9 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                             applyAtCompletion(entry);
                           }}
                           onMouseEnter={() => setAtActiveIndex(index)}
-                          style={{
-                            width: "100%",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            padding: "6px 8px",
-                            border: "none",
-                            borderRadius: 6,
-                            background: active ? "var(--bg-selected)" : "none",
-                            color: "var(--text)",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            fontSize: 12.5,
-                            fontFamily: "var(--font-mono)",
-                          }}
+                          className="menu-item"
+                          data-active={active}
+                          style={{ fontFamily: "var(--font-mono)" }}
                         >
                           <span style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
                             {entry.isDir ? <FolderIcon size={14} /> : getFileIcon(name, 14)}
@@ -1882,15 +1849,13 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   ref={runActionMenuRef}
                   id={runActionMenuId}
                   popover="auto"
-                  className="anchored-menu opens-up menu-composer-run-action"
+                  className="anchored-menu menu-surface opens-up menu-composer-run-action"
                   onToggle={(e) => setStreamingActionMenuOpen((e as unknown as { newState?: string }).newState === "open")}
                   role="group"
                   aria-label={t("chat.selectRunAction")}
                   style={{
                     zIndex: 130,
-                    width: "max-content", minWidth: "anchor-size(width)", padding: 4,
-                    background: "var(--bg)", border: "1px solid var(--border)",
-                    borderRadius: 8, boxShadow: "0 -4px 16px rgba(0,0,0,0.10)",
+                    width: "max-content", minWidth: "anchor-size(width)",
                   }}
                 >
                   {(["steer", "followup"] as const)
@@ -1902,15 +1867,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                       aria-pressed={streamingSubmissionAction === action}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => selectStreamingAction(action)}
-                      style={{
-                        width: "100%", padding: "7px 8px",
-                        display: "flex", alignItems: "center", gap: 7,
-                        background: streamingSubmissionAction === action ? "var(--bg-selected)" : "none",
-                        border: "none", borderRadius: 6,
-                        color: "var(--text)", cursor: "pointer",
-                        fontSize: 12, fontWeight: streamingSubmissionAction === action ? 600 : 400,
-                        textAlign: "left", whiteSpace: "nowrap",
-                      }}
+                      className="menu-item"
+                      style={{ whiteSpace: "nowrap" }}
                     >
                       <span aria-hidden="true" style={{ width: 10 }}>
                         {streamingSubmissionAction === action ? "✓" : ""}
@@ -2052,11 +2010,10 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   ref={thinkingMenuRef}
                   id={thinkingMenuId}
                   popover="auto"
-                  className="anchored-menu opens-up menu-composer-reasoning"
+                  className="anchored-menu menu-surface opens-up menu-composer-reasoning"
                   onToggle={(e) => setThinkingDropdownOpen((e as unknown as { newState?: string }).newState === "open")}
                   style={{
-                    zIndex: 100, background: "var(--bg)", border: "1px solid var(--border)",
-                    borderRadius: 8, boxShadow: "0 -4px 16px rgba(0,0,0,0.10)",
+                    zIndex: 100,
                     overflow: "hidden", minWidth: 180,
                   }}>
                     {THINKING_LEVELS.filter((lvl) => {
@@ -2073,18 +2030,9 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                         <button
                           key={lvl}
                           onClick={() => { setThinkingDropdownOpen(false); if (!isActive) onThinkingLevelChange(lvl); }}
-                          style={{
-                            display: "flex", alignItems: "center", gap: 8,
-                            width: "100%", padding: "7px 12px",
-                            background: isActive ? "var(--bg-selected)" : "none",
-                            border: "none",
-                            color: isActive ? "var(--text)" : "var(--text-muted)",
-                            cursor: "pointer", fontSize: 12, textAlign: "left",
-                            fontWeight: isActive ? 600 : 400,
-                            whiteSpace: "nowrap",
-                          }}
-                          onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
-                          onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "none"; }}
+                          className="menu-item"
+                          aria-pressed={isActive}
+                          style={{ whiteSpace: "nowrap" }}
                         >
                           {isActive
                             ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="1.5 5 4 7.5 8.5 2.5" /></svg>

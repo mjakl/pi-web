@@ -255,7 +255,7 @@ function AnchoredMenu({
       ref={ref}
       id={id}
       popover="auto"
-      className={`anchored-menu opens-down ${anchorClass}`}
+      className={`anchored-menu menu-surface opens-down ${anchorClass}`}
       // The trigger opens this through popovertarget, so the browser toggles
       // it and state follows. Tracking both directions matters: a UA-driven
       // open that React never learned about would be closed again by the
@@ -1152,10 +1152,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
             }}
             style={{
               zIndex: 100,
-              background: "var(--bg)",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              boxShadow: "0 6px 20px rgba(0,0,0,0.10)",
               overflow: "hidden",
             }}
           >
@@ -1172,18 +1168,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                     }}
                      placeholder={t("sidebar.filterProjects")}
                     autoFocus
-                    style={{
-                      width: "100%",
-                      fontSize: 11,
-                      fontFamily: "var(--font-mono)",
-                      padding: "5px 8px",
-                      border: "1px solid var(--border)",
-                      borderRadius: 5,
-                      outline: "none",
-                      background: "var(--bg)",
-                      color: "var(--text)",
-                      boxSizing: "border-box",
-                    }}
+                    className="menu-filter"
                   />
                 </div>
               )}
@@ -1212,19 +1197,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                   e.stopPropagation();
                   handleCustomPathClick();
                 }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  width: "100%",
-                  padding: "8px 10px",
-                  background: "none",
-                  border: "none",
-                  color: "var(--text-muted)",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  fontSize: 11,
-                }}
+                className="menu-item"
               >
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" style={{ flexShrink: 0 }}>
                   <line x1="5" y1="1" x2="5" y2="9" />

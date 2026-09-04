@@ -276,6 +276,7 @@ export function ModelSelector({
         return (
           <div
             ref={panelRef}
+            className="menu-surface"
             popover="auto"
             onToggle={(e) => {
               if ((e as unknown as { newState?: string }).newState !== "closed") return;
@@ -295,10 +296,6 @@ export function ModelSelector({
               flexDirection: "column",
               maxHeight,
               overflow: "hidden",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              background: "var(--bg)",
-              boxShadow: openAbove ? "0 -4px 16px rgba(0,0,0,0.10)" : "0 4px 16px rgba(0,0,0,0.10)",
             }}
           >
             {showFilter && (
@@ -311,19 +308,8 @@ export function ModelSelector({
                   aria-label={t("chat.filterModels")}
                   autoComplete="off"
                   spellCheck={false}
-                  style={{
-                    boxSizing: "border-box",
-                    width: "100%",
-                    minWidth: isMobile ? 0 : 220,
-                    padding: "5px 8px",
-                    border: "1px solid var(--border)",
-                    borderRadius: 5,
-                    outline: "none",
-                    background: "var(--bg)",
-                    color: "var(--text)",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: 11,
-                  }}
+                  className="menu-filter"
+                  style={{ minWidth: isMobile ? 0 : 220 }}
                 />
               </div>
             )}
@@ -342,7 +328,7 @@ export function ModelSelector({
               ) : modelsByProvider.map((group, index) => (
                 <div key={group.provider}>
                   {modelsByProvider.length > 1 && (
-                    <div style={{ padding: "6px 12px 4px", borderTop: index > 0 || onClear ? "1px solid var(--border)" : "none", color: "var(--text-dim)", fontSize: 10, fontWeight: 600, letterSpacing: 0, textTransform: "uppercase" }}>
+                    <div className="menu-section-label" style={{ borderTop: index > 0 || onClear ? "1px solid var(--border)" : "none" }}>
                       {group.provider}
                     </div>
                   )}
@@ -371,9 +357,8 @@ function ModelOptionButton({ active, label, onClick }: { active: boolean; label:
       role="option"
       aria-selected={active}
       onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 12px", border: "none", background: active ? "var(--bg-selected)" : "none", color: active ? "var(--text)" : "var(--text-muted)", cursor: "pointer", fontSize: 12, fontWeight: active ? 600 : 400, textAlign: "left", whiteSpace: "nowrap" }}
-      onMouseEnter={(event) => { if (!active) event.currentTarget.style.background = "var(--bg-hover)"; }}
-      onMouseLeave={(event) => { if (!active) event.currentTarget.style.background = "none"; }}
+      className="menu-item"
+      style={{ whiteSpace: "nowrap" }}
     >
       {active
         ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true"><polyline points="1.5 5 4 7.5 8.5 2.5" /></svg>

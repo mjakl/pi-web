@@ -8,7 +8,7 @@ interface Props {
 
 export function SystemPromptPanel({ loading, prompt, translate }: Props) {
   return (
-    <section className="system-prompt-panel" aria-label={translate("system.prompt")}>
+    <section className="system-prompt-panel menu-surface menu-panel" aria-label={translate("system.prompt")}>
       <div className="system-prompt-scroll">
         {prompt ? (
           <div className="system-prompt-text">{prompt}</div>
@@ -29,8 +29,6 @@ export function SystemPromptPanel({ loading, prompt, translate }: Props) {
           height: min(600px, 75dvh);
           min-height: 220px;
           flex-direction: column;
-          background: var(--bg-panel);
-          border-bottom: 1px solid var(--border);
         }
         .system-prompt-scroll {
           min-height: 0;

@@ -1364,8 +1364,8 @@ export function AppShell() {
           opacity: 1;
           transform: translateY(0);
           filter: blur(0);
-          background: var(--bg-panel);
-          box-shadow: 0 10px 28px rgba(0,0,0,0.10);
+          background: var(--bg);
+          box-shadow: var(--menu-shadow);
         }
       }
       @keyframes session-info-light-wash {
@@ -1627,10 +1627,7 @@ export function AppShell() {
                 />
               )}
               {activeTopPanel === "session" && (
-                <div className="session-info-popover" style={{
-                  background: "var(--bg-panel)",
-                  borderBottom: "1px solid var(--border)",
-                  boxShadow: "0 10px 28px rgba(0,0,0,0.10)",
+                <div className="session-info-popover menu-surface" style={{
                   padding: "12px 16px",
                 }}>
                   {sessionStats ? (() => {

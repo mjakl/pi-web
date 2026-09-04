@@ -1006,12 +1006,12 @@
     width: 100%;
     max-width: 210px;
     min-width: 0;
-    height: 32px;
+    height: 44px;
     margin-left: 14px;
     padding: 0 9px;
     border: 1px solid var(--border);
-    border-radius: 5px;
-    background: var(--bg-panel);
+    border-radius: 8px;
+    background: var(--bg);
     color: var(--text);
     font-size: 16px;
   }

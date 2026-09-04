@@ -707,6 +707,26 @@ test("the popup follows a moved anchor before paint and holds still for an uncha
   }
 });
 
+test("the action popup fits above its trigger with larger touch targets", async () => {
+  const originalMatchMedia = window.matchMedia;
+  window.matchMedia = (query) => query === "(pointer: coarse)"
+    ? { matches: true } : originalMatchMedia.call(window, query);
+  const view = await mountItem(baseSession, { isActive: true });
+  try {
+    const trigger = view.container.querySelector("button[aria-controls]");
+    const top = window.innerHeight - 50;
+    trigger.getBoundingClientRect = () => ({ top, bottom: top + 28, left: 172, right: 200 });
+    await click(trigger);
+    const popup = document.querySelector('[role="group"]');
+    // Three 44px touch targets, the surface border/padding, and the trigger gap.
+    assert.equal(popup.style.top, `${top - 146}px`);
+    assert.deepEqual([...popup.querySelectorAll("button")].map(button => button.textContent), ["Stop", "Rename", "Delete"]);
+  } finally {
+    await view.unmount();
+    window.matchMedia = originalMatchMedia;
+  }
+});
+
 test("session action controls include the session title in their accessible name", async () => {
   const first = await mountItem({ ...baseSession, name: "Release notes" });
   const second = await mountItem({ ...baseSession, id: "other", name: "Bug triage" });

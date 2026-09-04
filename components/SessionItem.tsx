@@ -34,7 +34,8 @@ function menuPositionFor(
   transient: boolean,
 ): MenuPosition {
   const width = 144;
-  const height = (Number(isActive) + (transient ? 0 : 2)) * 34 + 8;
+  const rowHeight = window.matchMedia("(pointer: coarse)").matches ? 44 : 34;
+  const height = (Number(isActive) + (transient ? 0 : 2)) * rowHeight + 10;
   return {
     left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
     top: rect.bottom + 4 + height <= window.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4),
@@ -44,20 +45,6 @@ function menuPositionFor(
     transient,
   };
 }
-
-const menuItemStyle: React.CSSProperties = {
-  display: "block",
-  width: "100%",
-  height: 34,
-  padding: "0 10px",
-  border: 0,
-  borderRadius: 5,
-  background: "transparent",
-  color: "var(--text)",
-  cursor: "pointer",
-  textAlign: "left",
-  fontSize: 12,
-};
 
 const SESSION_INDICATORS = {
   running: {
@@ -550,6 +537,7 @@ export function SessionItem({
             <div
               ref={menuRef}
               id={menuId}
+              className="menu-surface"
               popover="auto"
               onToggle={(e) => {
                 if ((e as unknown as { newState?: string }).newState !== "closed") return;
@@ -564,24 +552,22 @@ export function SessionItem({
                 position: "fixed", inset: "auto", margin: 0,
                 top: menuPosition.top, left: menuPosition.left, zIndex: 1000,
                 width: "min(144px, calc(100vw - 16px))", maxHeight: "calc(100vh - 16px)", overflowY: "auto",
-                padding: 4, background: "var(--bg)", border: "1px solid var(--border)",
-                borderRadius: 7, boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
               }}
               onClick={(e) => e.stopPropagation()}
               onFocusCapture={() => { menuHadFocusRef.current = true; }}
               onKeyDown={handleMenuKeyDown}
             >
               {isActive && (
-                <button type="button" onClick={(e) => chooseMenuAction(e, "stop")} style={menuItemStyle}>
+                <button type="button" onClick={(e) => chooseMenuAction(e, "stop")} className="menu-item">
                   {t("sidebar.stop")}
                 </button>
               )}
               {!session.transient && (
                 <>
-                  <button type="button" onClick={(e) => chooseMenuAction(e, "rename")} style={menuItemStyle}>
+                  <button type="button" onClick={(e) => chooseMenuAction(e, "rename")} className="menu-item">
                     {t("sidebar.rename")}
                   </button>
-                  <button type="button" onClick={(e) => chooseMenuAction(e, "delete")} style={{ ...menuItemStyle, color: "var(--danger)" }}>
+                  <button type="button" onClick={(e) => chooseMenuAction(e, "delete")} className="menu-item menu-item-danger">
                     {t("sidebar.delete")}
                   </button>
                 </>

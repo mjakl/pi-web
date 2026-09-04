@@ -1,4 +1,5 @@
 :root {
+  --menu-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
   --bg: #ffffff;
   --bg-panel: #f5f5f5;
   --bg-hover: #eeeeee;
@@ -24,6 +25,7 @@
 }
 
 html.dark {
+  --menu-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   --bg: #1a1a1a;
   --bg-panel: #242424;
   --bg-hover: #2e2e2e;
@@ -1833,13 +1835,71 @@ span.linenumber {
 .anchor-sidebar-project { anchor-name: --sidebar-project; }
 .menu-sidebar-project { position-anchor: --sidebar-project; }
 
+/* Shared dropdown appearance; each component owns positioning and interaction. */
+.menu-surface {
+  box-sizing: border-box;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--menu-shadow);
+}
+.menu-panel { padding: 0; }
+.menu-item {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item:where([aria-selected="true"], [aria-pressed="true"], [aria-current="true"], [data-active="true"]) {
+  background: var(--bg-selected);
+}
+.menu-item:enabled:hover { background: var(--bg-hover); }
+.menu-item-danger { color: var(--danger); }
+.menu-item-danger:enabled:hover { background: color-mix(in srgb, var(--danger) 10%, var(--bg)); }
+.menu-item:disabled { opacity: 0.5; cursor: default; }
+.menu-filter {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.menu-item:focus-visible, .menu-filter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.menu-section-label {
+  padding: 6px 10px 4px;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+@media (pointer: coarse) { .menu-item { min-height: 44px; } }
+
 /* One folder picker groups checkouts by repository without branch controls. */
 .project-folder-group + .project-folder-group { border-top: 1px solid var(--border); }
-.project-folder-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; background: var(--bg); color: var(--text); text-align: left; cursor: pointer; font-size: 12px; }
-.project-folder-row:hover { background: var(--bg-hover); }
-.project-folder-row[aria-current="true"] { background: var(--bg-selected); }
 .project-folder-child { padding-left: 28px; }
 .project-folder-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .project-folder-path { display: block; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 .project-folder-message { padding: 8px 12px 8px 28px; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
-@media (pointer: coarse) { .project-folder-row { min-height: 44px; } }
