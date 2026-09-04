@@ -42,11 +42,11 @@ Pi Web requires Node.js 22.19.0 or newer, npm, and a separate Pi installation. I
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 ```
 
-If Pi does not have a model provider yet, configure one in the Pi terminal. Pi Web uses the first host `pi` found on `PATH` (or `PATHEXT` on Windows) and loads Pi's packages in-process.
+If Pi does not have a model provider yet, configure one in the Pi terminal. Pi Web ignores the checkout-local `node_modules/.bin/pi`, then uses the first matching `pi` executable on `PATH` (with executable extensions from `PATHEXT` on Windows) and loads Pi's packages in-process.
 
 Pi Web supports Linux, macOS, and Windows. Android and Termux are not supported.
 
-Clone and run this fork:
+Clone this fork and start the development server:
 
 ```bash
 git clone https://github.com/mjakl/pi-web.git
@@ -55,15 +55,21 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:30141](http://127.0.0.1:30141) when the server is ready. To update a checkout, stop the server and run:
+Open [http://127.0.0.1:30141](http://127.0.0.1:30141) when the server is ready. For the production server and installable PWA, stop the development server, then run:
+
+```bash
+npm run build
+npm start
+```
+
+To update a checkout, stop the server and refresh the code and dependencies:
 
 ```bash
 git pull --ff-only
 npm install
-npm run dev
 ```
 
-The Pi packages installed with the checkout are build-time dependencies. `npm run dev` and `npm start` still use the host Pi selected from `PATH`.
+Then restart the development server, or rebuild before starting the production server. The Pi packages installed with the checkout are build-time dependencies; both modes still use the host Pi selected from `PATH`.
 
 ## Data, files, and network access
 
