@@ -21,6 +21,49 @@ const { ChatInput } = await jiti.import("./ChatInput.tsx");
 const { ExtensionStatusBar } = await jiti.import("./ExtensionStatusBar.tsx");
 after(() => window.happyDOM.close());
 
+test("extension info stays in the mobile menu while desktop retains other controls", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const props = {
+    onSend() {}, onAbort() {}, onModelChange() {}, isStreaming: false,
+    onThinkingLevelChange() {}, thinkingLevel: "high",
+    extensionStatuses: [{ key: "mode", text: "ponytail: FULL" }],
+  };
+  try {
+    window.happyDOM.setWindowSize({ width: 1024, height: 844 });
+    await React.act(() => root.render(React.createElement(ChatInput, props)));
+    const menu = container.querySelector(".menu-composer-controls");
+    const more = container.querySelector('button[aria-label="Session controls"]');
+    assert.doesNotMatch(menu.textContent, /ponytail: FULL/);
+    assert.equal(more.disabled, true);
+
+    await React.act(() => window.happyDOM.setWindowSize({ width: 390, height: 844 }));
+    assert.match(menu.textContent, /ponytail: FULL/);
+    assert.equal(more.disabled, false);
+
+    await React.act(() => window.happyDOM.setWindowSize({ width: 1024, height: 844 }));
+    assert.doesNotMatch(menu.textContent, /ponytail: FULL/);
+    assert.equal(more.disabled, true);
+
+    await React.act(() => root.render(React.createElement(ChatInput, { ...props, isStreaming: true })));
+    assert.equal(more.disabled, false);
+    assert.match(menu.textContent, /Stop agent/);
+
+    await React.act(() => root.render(React.createElement(ChatInput, { ...props, onModelChange: undefined })));
+    assert.equal(more.disabled, false);
+    assert.ok(menu.querySelector("select"));
+    assert.doesNotMatch(menu.textContent, /ponytail: FULL/);
+
+    await React.act(() => window.happyDOM.setWindowSize({ width: 390, height: 844 }));
+    assert.match(menu.textContent, /ponytail: FULL/);
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+    window.happyDOM.setWindowSize({ width: 390, height: 844 });
+  }
+});
+
 test("More scrolls long status lists within its available space", async () => {
   const style = document.createElement("style");
   style.textContent = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");

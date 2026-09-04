@@ -1715,7 +1715,7 @@ export function ChatInput({
                 type="button"
                 className="anchor-composer-controls composer-more"
                 popoverTarget={controlsMenuId}
-                disabled={!isStreaming && extensionStatuses.length === 0 && Boolean(onModelChange)}
+                disabled={!isStreaming && (!isMobile || extensionStatuses.length === 0) && Boolean(onModelChange)}
                 title={t("chat.composerSettings")}
                 aria-label={t("chat.composerSettings")}
                 aria-expanded={controlsOpen}
@@ -1738,7 +1738,7 @@ export function ChatInput({
               >
                 {isStreaming && <button type="button" className="menu-item" onClick={() => { setControlsOpen(false); onAbort(); }}>{t("chat.stopAgent")}</button>}
                 {!onModelChange && reasoningControl}
-                {extensionStatuses.length > 0 && <section aria-label={t("chat.extensionStatus")}><div className="menu-section-label">{t("chat.extensionStatus")}</div><ExtensionStatusBar statuses={extensionStatuses} announce={false} /></section>}
+                {isMobile && extensionStatuses.length > 0 && <section aria-label={t("chat.extensionStatus")}><div className="menu-section-label">{t("chat.extensionStatus")}</div><ExtensionStatusBar statuses={extensionStatuses} announce={false} /></section>}
               </div>
               {onModelChange && (
                 <ModelSelector
