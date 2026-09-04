@@ -2187,3 +2187,40 @@ span.linenumber {
   opacity: 1;
   pointer-events: auto;
 }
+
+/* Subagent tools keep results primary and mount long content only on disclosure. */
+.subagent-card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 12px;
+}
+.subagent-card summary { cursor: pointer; padding: 8px 10px; overflow-wrap: anywhere; }
+.subagent-card summary:hover { background: var(--bg-hover); }
+.subagent-header { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; width: calc(100% - 20px); vertical-align: middle; }
+.subagent-name { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.subagent-status { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); white-space: nowrap; }
+.subagent-status-completed { color: var(--success); }
+.subagent-status-failed, .subagent-error { color: var(--danger); }
+.subagent-status-cancelled, .subagent-notice { color: var(--warning); }
+.subagent-status-running { color: var(--accent); }
+.subagent-counts, .subagent-duration, .subagent-meta { color: var(--text-muted); }
+.subagent-duration { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.subagent-progress { flex-basis: 100%; color: var(--text-muted); overflow-wrap: anywhere; }
+.subagent-body { border-top: 1px solid var(--border); padding: 12px; min-width: 0; }
+.subagent-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 12px; overflow-wrap: anywhere; }
+.subagent-result { margin-bottom: 12px; overflow-wrap: anywhere; }
+.subagent-error { white-space: pre-wrap; }
+.subagent-section-label { font-weight: 600; margin-bottom: 8px; }
+.subagent-disclosure { border-top: 1px solid var(--border); }
+.subagent-disclosure > summary { color: var(--text-muted); padding: 10px 0; }
+.subagent-plain { margin: 0 0 12px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.6; }
+.subagent-raw { padding: 0 12px; }
+.subagent-raw .subagent-plain { font-family: var(--font-mono); }
+.subagent-settings { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; margin: 0 0 12px; }
+.subagent-settings dt { color: var(--text-muted); }
+.subagent-settings dd { margin: 0; overflow-wrap: anywhere; }
+.subagent-agent { border-top: 1px solid var(--border); }
+@media (pointer: coarse) { .subagent-card summary { min-height: 44px; box-sizing: border-box; } }

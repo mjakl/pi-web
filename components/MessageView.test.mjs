@@ -261,3 +261,16 @@ test("hands the hover reveal of message actions to CSS", () => {
   assert.match(user, /<div class="message-row"/);
   assert.match(user, /<div class="message-actions" data-forking="true"/);
 });
+
+test("summarizes subagent calls without coercing structured input to a string", () => {
+  const html = renderMessage({
+    role: "assistant", provider: "openai", model: "test",
+    content: [{ type: "toolCall", toolCallId: "sub-1", toolName: "subagent",
+      input: { calls: [{ agent: "coder", prompt: "Investigate the notification API" }] } }],
+  });
+  assert.match(html, /Subagent/);
+  assert.match(html, /coder/);
+  assert.doesNotMatch(html, /\[object Object\]/);
+  assert.match(html, /No result/);
+  assert.doesNotMatch(html, /Running/);
+});
