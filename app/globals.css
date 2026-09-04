@@ -1266,9 +1266,66 @@ span.linenumber {
   background: transparent;
 }
 
-.composer-textarea {
-  field-sizing: content;
+.composer-surface {
+  padding: 16px 12px 8px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--bg-panel);
 }
+.composer-surface:focus-within { border-color: var(--text-dim); }
+.composer-textarea {
+  display: block;
+  field-sizing: content;
+  width: 100%;
+  min-height: 72px;
+  max-height: 200px;
+  padding: 0 4px 10px;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow: auto;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.composer-toolbar { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+.composer-toolbar > button, .model-selector.is-composer > button {
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; height: 36px; min-width: 32px; padding: 6px;
+  border: 0; border-radius: 8px; background: none;
+  color: var(--text-muted); cursor: pointer;
+}
+.composer-toolbar > button:hover:not(:disabled), .model-selector.is-composer > button:hover:not(:disabled) { background: var(--bg-hover); }
+.composer-toolbar > button:disabled { opacity: 0.4; cursor: default; }
+.model-selector.is-composer { margin-left: auto; max-width: calc(100% - 112px); }
+.model-selector.is-composer > button { width: 100%; min-width: 0; gap: 4px; font-size: 12px; color: var(--text); }
+.model-selector.is-composer > button:disabled { color: var(--text-muted); cursor: default; }
+.composer-model-detail { color: var(--text-muted); white-space: nowrap; }
+.composer-toolbar > .composer-action-primary {
+  position: relative; width: 36px; padding: 0; margin-left: auto;
+  color: var(--bg); background: none;
+}
+.model-selector.is-composer + .composer-action-primary { margin-left: 0; }
+.composer-action-primary::before {
+  content: ""; position: absolute; width: 28px; height: 28px;
+  border-radius: 50%; background: var(--text);
+}
+.composer-toolbar > .composer-action-primary:hover:not(:disabled) { background: none; }
+.composer-action-primary:hover:not(:disabled)::before { background: var(--text-muted); }
+.composer-action-primary svg { position: relative; }
+.composer-action-primary[data-action="stop"] svg { width: 14px; height: 14px; }
+.composer-thinking-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; color: var(--text-muted); font-size: 12px; flex-shrink: 0; }
+.composer-thinking-field select { min-height: 32px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--bg); }
+.composer-shell-mode { padding: 4px 8px; font-size: 12px; color: var(--text-muted); }
+.menu-composer-controls { min-width: 190px; max-width: min(320px, calc(100vw - 24px)); max-height: min(400px, 60vh); overflow: auto; }
+.context-compact-button { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 28px; height: 28px; align-self: center; margin-right: 4px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; }
+.context-compact-button:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.context-compact-button:disabled { opacity: 0.4; cursor: default; }
+.context-compact-button[data-warning] { color: var(--success); }
+.context-compact-button[data-compacting] { color: var(--danger); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .chat-notices {
   position: absolute;
@@ -1818,20 +1875,13 @@ span.linenumber {
   .chat-input {
     padding: 8px 12px 0;
   }
-  .composer-toolbar {
-    margin-top: 0 !important;
-    gap: 0 !important;
-  }
-  .composer-settings-group > button,
-  .composer-settings-group > .model-selector > button,
-  .anchor-composer-reasoning,
-  .composer-immediate-actions button {
-    min-height: 44px;
-    min-width: 44px;
-  }
-  .composer-settings-group > .model-selector > button {
-    justify-content: center !important;
-  }
+  .composer-surface { padding: 14px 8px 6px; }
+  .composer-textarea { font-size: 16px; }
+  .composer-toolbar { gap: 0; }
+  .composer-toolbar > button, .model-selector.is-composer > button { min-height: 44px; }
+  .composer-toolbar > button { min-width: 44px; }
+  .model-selector.is-composer { max-width: calc(100% - 132px); }
+  .composer-thinking-field select { min-height: 44px; }
   .chat-composer > .extension-status-shelf:not(.has-widgets) {
     border-top: 0;
   }
@@ -1847,52 +1897,19 @@ span.linenumber {
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .anchored-menu.opens-up.composer-mobile-settings {
-    /* Stop and warning actions can move the trigger away from the edge. */
-    right: 12px;
-    width: min(320px, calc(100vw - 24px));
-    max-height: calc(var(--app-viewport-height, 100dvh) - 64px);
-  }
-  .composer-mobile-settings .menu-item {
-    min-height: 44px;
-  }
-  .composer-thinking-field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 8px 12px;
-    color: var(--text-muted);
-    font-size: 12px;
-  }
-  .composer-thinking-field select {
-    min-height: 44px;
-    padding: 0 8px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    background: var(--bg);
-  }
+  .anchored-menu.opens-up.menu-composer-controls { left: 12px; right: auto; }
+  .menu-composer-controls .menu-item { min-height: 44px; }
   .chat-jump-to-latest {
     right: 14px;
     bottom: 14px;
   }
 }
 
-/* Grow the touch target into the input row's own 10px vertical padding instead
-   of making the composer taller. Vertical only: widening either half would
-   change which button a boundary tap hits. */
 @media (pointer: coarse) {
-  .composer-action-primary,
-  .composer-action-menu-toggle {
-    position: relative;
-  }
-
-  .composer-action-primary::after,
-  .composer-action-menu-toggle::after {
-    content: "";
-    position: absolute;
-    inset: -5px 0;
-  }
+  .composer-toolbar > button, .model-selector.is-composer > button { min-height: 44px; }
+  .composer-toolbar > button { min-width: 44px; }
+  .model-selector.is-composer { max-width: calc(100% - 132px); }
+  .context-compact-button { min-width: 44px; min-height: 44px; }
 }
 
 /* Directory picker uses <dialog>, matching the other modals: showModal()
@@ -1972,10 +1989,8 @@ span.linenumber {
   transform-origin: top center;
 }
 
-.anchor-composer-reasoning { anchor-name: --composer-reasoning; }
-.menu-composer-reasoning { position-anchor: --composer-reasoning; }
-.composer-action-menu-toggle { anchor-name: --composer-run-action; }
-.menu-composer-run-action { position-anchor: --composer-run-action; }
+.anchor-composer-controls { anchor-name: --composer-controls; }
+.menu-composer-controls { position-anchor: --composer-controls; }
 .anchor-sidebar-project { anchor-name: --sidebar-project; }
 .menu-sidebar-project { position-anchor: --sidebar-project; }
 
