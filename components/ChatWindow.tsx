@@ -921,7 +921,7 @@ function NoticeShelf({ notices, floating = false, onPauseChange }: { notices: No
 
 type ExtensionDialogRequest = Extract<ExtensionUiRequest, { method: "select" | "confirm" | "input" | "editor" }>;
 
-function ExtensionDialog({
+export function ExtensionDialog({
   request,
   onRespond,
 }: {
@@ -929,11 +929,24 @@ function ExtensionDialog({
   onRespond: (request: ExtensionDialogRequest, response: { value: string } | { confirmed: boolean } | { cancelled: true }) => void;
 }) {
   const { t } = useI18n();
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const [value, setValue] = useState(request.method === "editor" ? request.prefill ?? "" : "");
 
   useEffect(() => {
     setValue(request.method === "editor" ? request.prefill ?? "" : "");
   }, [request]);
+
+  // showModal() supplies the backdrop, focus trap, top layer and focus
+  // restoration this overlay had none of. It also puts focus inside the
+  // dialog for the confirm and select methods, which render no field.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
 
   const submitValue = () => {
     if (request.method === "confirm") {
@@ -944,21 +957,20 @@ function ExtensionDialog({
   };
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 90,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        background: "rgba(0,0,0,0.18)",
+    <dialog
+      ref={dialogRef}
+      className="extension-dialog"
+      aria-label={request.title}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        // Own the key so the global Esc shortcut cannot abort the turn that is
+        // waiting on this request.
+        event.preventDefault();
+        onRespond(request, { cancelled: true });
       }}
+      onCancel={(event) => event.preventDefault()}
     >
       <div
-        role="dialog"
-        aria-modal="true"
         style={{
           width: "min(560px, 100%)",
           maxHeight: "min(760px, 100%)",
@@ -1019,7 +1031,6 @@ function ExtensionDialog({
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") submitValue();
-                if (e.key === "Escape") onRespond(request, { cancelled: true });
               }}
               style={{
                 width: "100%",
@@ -1039,7 +1050,6 @@ function ExtensionDialog({
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Escape") onRespond(request, { cancelled: true });
                 if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submitValue();
               }}
               style={{
@@ -1105,7 +1115,7 @@ function ExtensionDialog({
           ) : null}
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 
@@ -1119,6 +1129,7 @@ function ExtensionCustomPanel({
   onInput: (request: ExtensionCustomRequest, data: string) => void;
 }) {
   const { t } = useI18n();
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const composingRef = useRef(false);
   const displayLines = normalizeCustomPanelLines(request.lines);
@@ -1127,22 +1138,27 @@ function ExtensionCustomPanel({
     inputRef.current?.focus();
   }, [request.id]);
 
+  // showModal() supplies the backdrop, focus trap, top layer and focus
+  // restoration this overlay had none of.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+
   return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 95,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        background: "rgba(0,0,0,0.18)",
-      }}
+    <dialog
+      ref={dialogRef}
+      className="extension-dialog"
+      aria-label={t("chat.extensionInput")}
+      // The textarea forwards Escape to the TUI as \x1b, so the dialog must
+      // never treat it as a request to close.
+      onCancel={(event) => event.preventDefault()}
     >
       <div
-        role="dialog"
-        aria-modal="true"
         onClick={(event) => {
           if (!(event.target as HTMLElement).closest("button")) inputRef.current?.focus();
         }}
@@ -1240,6 +1256,6 @@ function ExtensionCustomPanel({
           <AnsiText text={displayLines.join("\n")} />
         </pre>
       </div>
-    </div>
+    </dialog>
   );
 }
