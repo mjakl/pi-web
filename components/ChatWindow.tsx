@@ -21,6 +21,7 @@ import type { SessionStatsInfo } from "@/lib/pi-types";
 import type { ToolEntry, ToolPreset } from "@/lib/tool-presets";
 import {
   captureScrollDistance,
+  didPrependHistory,
   getLiveFollowAttached,
   isScrollAtTail,
   restoreScrollTop,
@@ -286,7 +287,9 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
   // the user scrolls to the top, fetch the previous page and prepend it while
   // keeping the scroll position stable.
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const prevScrollDistanceRef = useRef<number | null>(null);
+  const nextPrependIdRef = useRef(0);
+  const pendingPrependRef = useRef<{ id: number; distance: number; firstEntryId: string | undefined } | null>(null);
+  const [completedPrependId, setCompletedPrependId] = useState(0);
   const loadingOlderRef = useRef(false);
   // IntersectionObserver on the sentinel div at the top of the message list.
   // When it becomes visible, load the next page of older messages.
@@ -298,16 +301,22 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
       (entries) => {
         if (!entries[0]?.isIntersecting) return;
         // No older history loaded yet: fetch the previous page from the server
-        // and prepend it (loadContext handles prepend + scroll anchoring).
-        // Skip while a page is already loading or nothing older exists.
+        // and prepend it. Skip while a page is already loading or nothing older exists.
         if (loadingOlderRef.current) return;
         if (!hasEarlierMessages) return;
         if (!historyCursor) return;
         loadingOlderRef.current = true;
-        prevScrollDistanceRef.current = captureScrollDistance(container.scrollHeight, container.scrollTop);
+        const id = ++nextPrependIdRef.current;
+        pendingPrependRef.current = {
+          id,
+          distance: captureScrollDistance(container.scrollHeight, container.scrollTop),
+          firstEntryId: entryIds[0],
+        };
         void loadEarlierMessages()
           .then((loaded) => {
-            if (!loaded) prevScrollDistanceRef.current = null;
+            if (pendingPrependRef.current?.id !== id) return;
+            if (loaded) setCompletedPrependId(id);
+            else pendingPrependRef.current = null;
           })
           .finally(() => {
             loadingOlderRef.current = false;
@@ -317,7 +326,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [historyCursor, hasEarlierMessages, loadEarlierMessages]);
+  }, [entryIds, historyCursor, hasEarlierMessages, loadEarlierMessages]);
   // Push session stats up to AppShell for the top bar.
   // Compare scalar fields to avoid loops from new object identity each render.
   const statsKey = sessionStats
@@ -400,15 +409,19 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
 
     if (previousLeafRef.current !== activeLeafId) {
       previousLeafRef.current = activeLeafId;
-      prevScrollDistanceRef.current = null;
+      pendingPrependRef.current = null;
       initialScrollDoneRef.current = true;
       scrollToLatest();
       return;
     }
 
-    if (prevScrollDistanceRef.current !== null) {
-      container.scrollTop = restoreScrollTop(container.scrollHeight, prevScrollDistanceRef.current);
-      prevScrollDistanceRef.current = null;
+    const pendingPrepend = pendingPrependRef.current;
+    if (
+      pendingPrepend?.id === completedPrependId
+      && didPrependHistory(pendingPrepend.firstEntryId, entryIds[0])
+    ) {
+      container.scrollTop = restoreScrollTop(container.scrollHeight, pendingPrepend.distance);
+      pendingPrependRef.current = null;
       previousScrollTopRef.current = container.scrollTop;
       syncScrollPosition();
       return;
@@ -422,7 +435,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     } else {
       syncScrollPosition();
     }
-  }, [activeLeafId, agentPhase, messages, pendingBash, scrollToLatest, streamState.streamingMessage, syncScrollPosition]);
+  }, [activeLeafId, agentPhase, completedPrependId, entryIds, messages, pendingBash, scrollToLatest, streamState.streamingMessage, syncScrollPosition]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -600,6 +613,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                 const isVisible = isMessageGroupAnchor(msg) || msg.role === "assistant";
                 const currentRefIdx = anchorRefIndexByMessage.get(idx);
                 const keyPrefix = options.keyPrefix ?? "message";
+                const messageKey = entryIds[idx] ?? idx;
                 let showTimestamp = false;
                 if (msg.role === "assistant") {
                   showTimestamp = true;
@@ -616,7 +630,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                 if (options.showTimestamp !== undefined) showTimestamp = options.showTimestamp;
                 const view = (
                   <MessageView
-                    key={`${keyPrefix}-view-${idx}`}
+                    key={`${keyPrefix}-view-${messageKey}`}
                     message={msg}
                     toolResults={toolResultsMap}
                     modelNames={modelNames}
@@ -636,7 +650,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                 );
                 if (!isVisible || options.attachRef === false) return view;
                 return (
-                  <div key={`${keyPrefix}-${idx}`} ref={attachVisibleRef(currentRefIdx)}>
+                  <div key={`${keyPrefix}-${messageKey}`} ref={attachVisibleRef(currentRefIdx)}>
                     {view}
                   </div>
                 );

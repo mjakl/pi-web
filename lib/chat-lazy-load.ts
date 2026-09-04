@@ -25,6 +25,10 @@ export function restoreScrollTop(scrollHeight: number, savedDistance: number): n
   return Math.max(0, scrollHeight - savedDistance);
 }
 
+export function didPrependHistory(previousFirstEntryId: string | undefined, firstEntryId: string | undefined): boolean {
+  return previousFirstEntryId !== firstEntryId;
+}
+
 export function isScrollAtTail(
   scrollTop: number,
   clientHeight: number,
