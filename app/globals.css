@@ -1745,3 +1745,69 @@ span.linenumber {
 .directory-picker-dialog::backdrop {
   background: rgba(0, 0, 0, 0.35);
 }
+
+/* Anchored dropdowns. popover="auto" hands light dismiss, close-on-Escape and
+   top-layer stacking to the browser; CSS anchor positioning keeps the panel
+   pinned to its trigger, which plain top-layer placement cannot do because a
+   popover's containing block is the viewport. Requires Safari 26 / Chrome 125.
+   @starting-style with allow-discrete replaces the hand-rolled mount/visible
+   state machine that used to animate these. */
+.anchored-menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: visible;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    display 140ms allow-discrete,
+    overlay 140ms allow-discrete;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.anchored-menu:not(:popover-open) {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.96);
+}
+@starting-style {
+  .anchored-menu:popover-open {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .anchored-menu { transition-duration: 0s, 0s, 0s, 0s; }
+}
+
+/* Opens upward, right edges aligned. */
+.anchored-menu.opens-up {
+  bottom: anchor(top);
+  right: anchor(right);
+  margin-bottom: 6px;
+  transform-origin: bottom center;
+}
+.anchored-menu.opens-up:not(:popover-open) { transform: translateY(8px) scale(0.96); }
+@starting-style {
+  .anchored-menu.opens-up:popover-open { transform: translateY(8px) scale(0.96); }
+}
+
+/* Opens downward, matching the trigger's width. */
+.anchored-menu.opens-down {
+  top: anchor(bottom);
+  left: anchor(left);
+  right: anchor(right);
+  margin-top: 4px;
+  transform-origin: top center;
+}
+
+.anchor-composer-reasoning { anchor-name: --composer-reasoning; }
+.menu-composer-reasoning { position-anchor: --composer-reasoning; }
+.composer-action-menu-toggle { anchor-name: --composer-run-action; }
+.menu-composer-run-action { position-anchor: --composer-run-action; }
+.anchor-sidebar-project { anchor-name: --sidebar-project; }
+.menu-sidebar-project { position-anchor: --sidebar-project; }
+.anchor-sidebar-worktree { anchor-name: --sidebar-worktree; }
+.menu-sidebar-worktree { position-anchor: --sidebar-worktree; }

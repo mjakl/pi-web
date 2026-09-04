@@ -198,10 +198,13 @@ test("keeps one composer action slot across idle, agent, and non-agent busy stat
   assert.match(agent, /aria-label="Steer"/);
   assert.match(idle, /class="composer-action-label">Send<\/span>/);
   assert.match(agent, /class="composer-action-label">Steer<\/span>/);
-  // The menu must outgrow the shrunken slot instead of being clipped by it.
-  assert.match(agent, /width:max-content;min-width:100%/);
+  // The menu must outgrow the shrunken slot instead of being clipped by it;
+  // anchor-size(width) is the trigger's width, so it never narrows below it.
+  assert.match(agent, /width:max-content;min-width:anchor-size\(width\)/);
   assert.match(agent, /aria-label="Select run action"/);
-  assert.match(agent, /hidden=""/);
+  // The run-action menu is a native popover now: it stays mounted and the
+  // browser hides it until showPopover(), so there is no hidden attribute.
+  assert.match(agent, /popover="auto"[^>]*class="anchored-menu opens-up menu-composer-run-action"|class="anchored-menu opens-up menu-composer-run-action"/);
   assert.doesNotMatch(busy, /aria-label="Select run action"/);
 });
 

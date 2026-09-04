@@ -493,6 +493,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const thinkingDropdownRef = useRef<HTMLDivElement>(null);
   const streamingActionRef = useRef<HTMLDivElement>(null);
+  const runActionMenuRef = useRef<HTMLDivElement>(null);
+  const thinkingMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const lastCompositionEndAtRef = useRef(0);
@@ -1304,24 +1306,22 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     if (lvl === "auto" || !thinkingLevelMap) return lvl;
     return thinkingLevelMap[lvl] ?? lvl;
   })();
-  // Close dropdowns on an outside press. pointerdown, not mousedown: iOS
-  // synthesises mouse events only for elements Safari treats as clickable, so
-  // a tap on inert background can leave the menu open. These menus stay
-  // absolutely positioned against their trigger, so they are not popovers --
-  // a popover sits in the top layer, where absolute positioning resolves
-  // against the viewport instead of the wrapper.
+  // Both composer menus are native popovers: the browser owns light dismiss,
+  // Escape and the top layer, and CSS anchor positioning keeps them pinned to
+  // their triggers. Toggling is imperative because the elements stay mounted.
   useEffect(() => {
-    const handler = (e: PointerEvent) => {
-      if (thinkingDropdownRef.current && !thinkingDropdownRef.current.contains(e.target as Node)) {
-        setThinkingDropdownOpen(false);
-      }
-      if (streamingActionRef.current && !streamingActionRef.current.contains(e.target as Node)) {
-        setStreamingActionMenuOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", handler);
-    return () => document.removeEventListener("pointerdown", handler);
-  }, []);
+    const el = thinkingMenuRef.current;
+    if (!el || typeof el.showPopover !== "function") return;
+    if (thinkingDropdownOpen) { if (!el.matches(":popover-open")) el.showPopover(); }
+    else if (el.matches(":popover-open")) el.hidePopover();
+  }, [thinkingDropdownOpen]);
+
+  useEffect(() => {
+    const el = runActionMenuRef.current;
+    if (!el || typeof el.showPopover !== "function") return;
+    if (streamingActionMenuOpen) { if (!el.matches(":popover-open")) el.showPopover(); }
+    else if (el.matches(":popover-open")) el.hidePopover();
+  }, [streamingActionMenuOpen]);
 
 
   return (
@@ -1880,12 +1880,18 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   </svg>
                 </button>
                 <div
-                  hidden={!streamingActionMenuOpen}
+                  ref={runActionMenuRef}
+                  popover="auto"
+                  className="anchored-menu opens-up menu-composer-run-action"
+                  onToggle={(e) => {
+                    if ((e as unknown as { newState?: string }).newState !== "closed") return;
+                    setStreamingActionMenuOpen(false);
+                  }}
                   role="group"
                   aria-label={t("chat.selectRunAction")}
                   style={{
-                    position: "absolute", right: 0, bottom: "calc(100% + 6px)", zIndex: 130,
-                    width: "max-content", minWidth: "100%", padding: 4,
+                    zIndex: 130,
+                    width: "max-content", minWidth: "anchor-size(width)", padding: 4,
                     background: "var(--bg)", border: "1px solid var(--border)",
                     borderRadius: 8, boxShadow: "0 -4px 16px rgba(0,0,0,0.10)",
                   }}
@@ -2009,6 +2015,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             {!isStreaming && onThinkingLevelChange && (
               <div ref={thinkingDropdownRef} style={{ position: "relative" }}>
                 <button
+                  className="anchor-composer-reasoning"
                   onClick={() => !isStreaming && setThinkingDropdownOpen((v) => !v)}
                   disabled={isStreaming}
                    title={t("chat.changeReasoning", { level: thinkingDisplayLabel })}
@@ -2044,10 +2051,15 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   </svg>
                   {!isMobile && <span style={{ whiteSpace: "nowrap" }}>{thinkingDisplayLabel}</span>}
                 </button>
-                {thinkingDropdownOpen && (
-                  <div style={{
-                    position: "absolute", bottom: "calc(100% + 6px)",
-                    right: 0,
+                <div
+                  ref={thinkingMenuRef}
+                  popover="auto"
+                  className="anchored-menu opens-up menu-composer-reasoning"
+                  onToggle={(e) => {
+                    if ((e as unknown as { newState?: string }).newState !== "closed") return;
+                    setThinkingDropdownOpen(false);
+                  }}
+                  style={{
                     zIndex: 100, background: "var(--bg)", border: "1px solid var(--border)",
                     borderRadius: 8, boxShadow: "0 -4px 16px rgba(0,0,0,0.10)",
                     overflow: "hidden", minWidth: 180,
@@ -2090,8 +2102,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                         </button>
                       );
                     })}
-                  </div>
-                )}
+                </div>
               </div>
             )}
           </div>

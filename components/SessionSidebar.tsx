@@ -232,45 +232,35 @@ function PathLabel({ text, style }: { text: string; style?: CSSProperties }) {
   );
 }
 
-const DROPDOWN_ANIMATION_MS = 140;
-
-function AnimatedDropdown({ open, children, style }: { open: boolean; children: ReactNode; style: CSSProperties }) {
-  const [mounted, setMounted] = useState(open);
-  const [visible, setVisible] = useState(open);
+/** A dropdown panel shown as a native popover, anchored by CSS to its trigger. */
+function AnchoredMenu({
+  open, onClose, anchorClass, children, style,
+}: {
+  open: boolean;
+  onClose: () => void;
+  anchorClass: string;
+  children: ReactNode;
+  style: CSSProperties;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let frame: number | undefined;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-
-    if (open) {
-      setMounted(true);
-      setVisible(false);
-      frame = window.requestAnimationFrame(() => {
-        frame = window.requestAnimationFrame(() => setVisible(true));
-      });
-    } else {
-      setVisible(false);
-      timeout = setTimeout(() => setMounted(false), DROPDOWN_ANIMATION_MS);
-    }
-
-    return () => {
-      if (frame !== undefined) window.cancelAnimationFrame(frame);
-      if (timeout) clearTimeout(timeout);
-    };
+    const el = ref.current;
+    if (!el || typeof el.showPopover !== "function") return;
+    if (open) { if (!el.matches(":popover-open")) el.showPopover(); }
+    else if (el.matches(":popover-open")) el.hidePopover();
   }, [open]);
-
-  if (!mounted) return null;
 
   return (
     <div
-      style={{
-        ...style,
-        opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0) scale(1)" : "translateY(-8px) scale(0.96)",
-        transformOrigin: "top center",
-        transition: `opacity ${DROPDOWN_ANIMATION_MS}ms ease, transform ${DROPDOWN_ANIMATION_MS}ms ease`,
-        pointerEvents: open ? "auto" : "none",
+      ref={ref}
+      popover="auto"
+      className={`anchored-menu opens-down ${anchorClass}`}
+      onToggle={(e) => {
+        if ((e as unknown as { newState?: string }).newState !== "closed") return;
+        onClose();
       }}
+      style={style}
     >
       {children}
     </div>
@@ -293,7 +283,6 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
   const [customPathError, setCustomPathError] = useState<string | null>(null);
   const [customPathValidating, setCustomPathValidating] = useState(false);
   const [validatedProject, setValidatedProject] = useState<ValidatedProject | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   // Worktree switcher state
   const [worktreeState, setWorktreeState] = useState<WorktreeState | null>(null);
   const [wtDropdownOpen, setWtDropdownOpen] = useState(false);
@@ -303,7 +292,6 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
   const [wtBusy, setWtBusy] = useState(false);
   const [wtConfirmRemove, setWtConfirmRemove] = useState<string | null>(null);
   const [worktreeLoadingCwd, setWorktreeLoadingCwd] = useState<string | null>(null);
-  const wtDropdownRef = useRef<HTMLDivElement>(null);
   const wtNewInputRef = useRef<HTMLInputElement>(null);
   const [explorerOpen, setExplorerOpen] = useState(true);
   const [explorerKey, setExplorerKey] = useState(0);
@@ -974,29 +962,6 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
     }
   }, [worktreeState, wtBusy, currentWorktreePath]);
 
-  // Close dropdowns on outside click
-  useEffect(() => {
-    const handler = (e: PointerEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-        setProjectFilter("");
-      }
-      if (wtDropdownRef.current && !wtDropdownRef.current.contains(e.target as Node)) {
-        setWtDropdownOpen(false);
-        setWtNewOpen(false);
-        setWtNewBranch("");
-        setWtError(null);
-        setWtConfirmRemove(null);
-        setWtFilter("");
-      }
-    };
-    // pointerdown, not mousedown: iOS synthesises mouse events only for
-    // elements Safari treats as clickable, so a tap on inert background can
-    // leave the dropdown open.
-    document.addEventListener("pointerdown", handler);
-    return () => document.removeEventListener("pointerdown", handler);
-  }, []);
-
   // Clicking a session moves the effective cwd to that session's worktree.
   // Done on the click path (not via the selectedCwd prop sync) so it also
   // works when the prop value won't change — e.g. re-clicking the already
@@ -1245,8 +1210,9 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
         </div>
 
         {/* CWD picker */}
-        <div ref={dropdownRef} style={{ position: "relative" }}>
+        <div style={{ position: "relative" }}>
           <button
+            className="anchor-sidebar-project"
             onClick={() => setDropdownOpen((v) => !v)}
             title={selectedProject?.root ?? selectedCwd ?? ""}
             style={{
@@ -1305,13 +1271,11 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
             )}
           </button>
 
-          <AnimatedDropdown
+          <AnchoredMenu
             open={dropdownOpen}
+            anchorClass="menu-sidebar-project"
+            onClose={() => { setDropdownOpen(false); setProjectFilter(""); }}
             style={{
-              position: "absolute",
-              top: "calc(100% + 4px)",
-              left: 0,
-              right: 0,
               zIndex: 100,
               background: "var(--bg)",
               border: "1px solid var(--border)",
@@ -1446,7 +1410,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
                 </svg>
                 <span>{t("sidebar.customPath")}</span>
               </button>
-          </AnimatedDropdown>
+          </AnchoredMenu>
         </div>
 
         {/* Worktree switcher — shown only for git projects at a checkout top
@@ -1464,8 +1428,9 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
                 (w.branch ?? displayCwd(w.path, homeDir)).toLowerCase().includes(wtFilter.trim().toLowerCase()))
             : worktreeState.worktrees;
           return (
-            <div ref={wtDropdownRef} style={{ position: "relative", marginTop: 6 }}>
+            <div style={{ position: "relative", marginTop: 6 }}>
               <button
+                className="anchor-sidebar-worktree"
                 onClick={() => setWtDropdownOpen((v) => !v)}
                  title={currentWorktree ? t("sidebar.switchWorktreeTitle", { path: currentWorktree.path }) : t("sidebar.switchWorktree")}
                 style={{
@@ -1509,13 +1474,18 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
                 </svg>
               </button>
 
-              <AnimatedDropdown
+              <AnchoredMenu
                 open={wtDropdownOpen}
+                anchorClass="menu-sidebar-worktree"
+                onClose={() => {
+                  setWtDropdownOpen(false);
+                  setWtNewOpen(false);
+                  setWtNewBranch("");
+                  setWtError(null);
+                  setWtConfirmRemove(null);
+                  setWtFilter("");
+                }}
                 style={{
-                  position: "absolute",
-                  top: "calc(100% + 4px)",
-                  left: 0,
-                  right: 0,
                   zIndex: 100,
                   background: "var(--bg)",
                   border: "1px solid var(--border)",
@@ -1760,7 +1730,7 @@ export function SessionSidebar({ piVersion, selectedSessionId, onSelectSession, 
                       {wtError}
                     </div>
                   )}
-              </AnimatedDropdown>
+              </AnchoredMenu>
             </div>
           );
         })()}
