@@ -245,3 +245,19 @@ test("renders custom-message images as buttons that open a larger preview", () =
   assert.match(html, /<button[^>]+aria-label="Preview image"[^>]*>/);
   assert.match(html, /<img[^>]+src="data:image\/png;base64,YWJj"/);
 });
+
+test("hands the hover reveal of message actions to CSS", () => {
+  const assistant = renderMessage({
+    role: "assistant",
+    content: [{ type: "text", text: "answer" }],
+  });
+  assert.match(assistant, /^<div class="message-row"/);
+  assert.match(assistant, /<button class="message-actions"/);
+
+  const user = renderMessage(
+    { role: "user", content: "hello" },
+    { entryId: "e1", forking: true, onFork: () => {}, onNavigate: () => {}, prevAssistantEntryId: "p1" },
+  );
+  assert.match(user, /<div class="message-row"/);
+  assert.match(user, /<div class="message-actions" data-forking="true"/);
+});

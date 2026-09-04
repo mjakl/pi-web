@@ -6,71 +6,19 @@ import { useI18n } from "@/hooks/useI18n";
 type ConfigButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 type ConfigButtonSize = "small" | "default";
 
-interface ConfigPanelShellProps {
-  embedded: boolean;
-  title: string;
-  subtitle?: string;
-  closeLabel?: string;
-  onClose: () => void;
-  children: ReactNode;
-  width?: number;
-  height?: string;
-}
-
 /** Replace a /Users/<name> or /home/<name> prefix with ~ for display. */
 export function shortenPath(path: string): string {
   return path.replace(/^\/(?:Users|home)\/[^/]+/, "~");
 }
 
-export function ConfigPanelShell({
-  embedded,
-  title,
-  subtitle,
-  closeLabel = "Close",
-  onClose,
-  children,
-  width = 900,
-  height = "78vh",
-}: ConfigPanelShellProps) {
-  const panelStyle = embedded
-    ? undefined
-    : ({
-        "--config-panel-width": `${width}px`,
-        "--config-panel-height": height,
-      } as CSSProperties);
-
+/**
+ * Settings surface for one SettingsPanel section. SettingsPanel owns the
+ * dialog, its header and its close button, so this shell only fills its host.
+ */
+export function ConfigPanelShell({ children }: { children: ReactNode }) {
   return (
-    <div
-      role={embedded ? undefined : "dialog"}
-      aria-modal={embedded ? undefined : "true"}
-      aria-label={title}
-      className={`config-panel-root ${embedded ? "is-embedded" : "is-modal"}`}
-      onClick={(event) => {
-        if (!embedded && event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div className="config-panel-surface" style={panelStyle}>
-        {!embedded && (
-          <div className="config-panel-header">
-            <strong className="config-panel-title">{title}</strong>
-            {subtitle && (
-              <code className="config-panel-subtitle" title={subtitle}>
-                {subtitle}
-              </code>
-            )}
-            <button
-              type="button"
-              className="config-close-button"
-              onClick={onClose}
-              title={closeLabel}
-              aria-label={closeLabel}
-            >
-              ×
-            </button>
-          </div>
-        )}
-        {children}
-      </div>
+    <div className="config-panel-root">
+      <div className="config-panel-surface">{children}</div>
     </div>
   );
 }

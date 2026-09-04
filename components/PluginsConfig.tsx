@@ -515,15 +515,11 @@ function PackageDetail({
 export function PluginsConfig({
   cwd,
   sessionId,
-  onClose,
   onReloaded,
-  embedded = false,
 }: {
   cwd: string;
   sessionId: string | null;
-  onClose: () => void;
   onReloaded?: () => void;
-  embedded?: boolean;
 }) {
   const { t } = useI18n();
   const [data, setData] = useState<PluginsResponse | null>(null);
@@ -658,7 +654,7 @@ export function PluginsConfig({
   const addBusy = busyKey?.startsWith("install:") ?? false;
 
   return (
-    <ConfigPanelShell embedded={embedded} title={t("common.plugins")} subtitle={shortenPath(cwd)} closeLabel={t("i18n.close")} onClose={onClose}>
+    <ConfigPanelShell>
 
         {!projectResourcesLoaded && (
           <div role="status" className="config-trust-notice">
@@ -771,7 +767,6 @@ export function PluginsConfig({
               </span>
             )}
         >
-          {!embedded && <ConfigButton onClick={onClose}>{t("i18n.close")}</ConfigButton>}
           <ConfigButton variant="secondary" onClick={() => void loadPlugins()} disabled={loading || busyKey !== null}>
              {t("i18n.refresh")}
           </ConfigButton>

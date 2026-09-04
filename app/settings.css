@@ -1,75 +1,27 @@
-/* Shared settings and configuration surfaces. */
+/* Shared settings and configuration surfaces. ConfigPanelShell only ever
+   fills its SettingsPanel section, so the modal variant and the is-embedded
+   modifier that distinguished it are gone; the border/radius/shadow resets
+   went with the modal box they were undoing. */
 .config-panel-root {
-  min-width: 0;
-  min-height: 0;
-}
-
-.config-panel-root.is-embedded {
   display: flex;
   width: 100%;
   height: 100%;
-}
-
-.config-panel-root.is-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.35);
+  min-width: 0;
+  min-height: 0;
 }
 
 .config-panel-surface {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   background: var(--bg);
 }
 
-.config-panel-root.is-embedded > .config-panel-surface {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.config-panel-root.is-modal > .config-panel-surface {
-  width: min(var(--config-panel-width), calc(100vw - 16px));
-  height: min(var(--config-panel-height), calc(100dvh - 16px));
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-}
-
-.config-panel-header {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 10px;
-  height: 50px;
-  padding: 0 14px 0 18px;
-  border-bottom: 1px solid var(--border);
-}
-
-.config-panel-title {
-  color: var(--text);
-  font-size: 15px;
-}
-
-.config-panel-subtitle {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+/* Close button in the settings dialog header (SettingsPanel). */
 .config-close-button {
   display: grid;
   place-items: center;
@@ -691,13 +643,21 @@
   opacity: 0.7;
 }
 
-.settings-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Settings dialog — native <dialog>. showModal() supplies the backdrop, the
+   focus trap, the top layer and focus restoration, replacing the fixed
+   overlay div and its document-level Esc listener. Reset the UA dialog box so
+   .settings-dialog-surface keeps owning its own size. */
+.settings-dialog {
+  margin: auto;
+  padding: 0;
+  border: 0;
+  max-width: 100%;
+  max-height: 100%;
+  background: transparent;
+  color: var(--text);
+}
+
+.settings-dialog::backdrop {
   background: rgba(0, 0, 0, 0.38);
 }
 
@@ -972,11 +932,6 @@
 }
 
 @media (max-width: 640px) {
-  .config-panel-root.is-modal > .config-panel-surface {
-    width: calc(100vw - 16px);
-    height: calc(100dvh - 16px);
-  }
-
   .config-split-view {
     flex-direction: column;
   }
@@ -1032,24 +987,21 @@
    status-bar edge and cap dialog surfaces to the resulting safe box. */
 @supports (-webkit-touch-callout: none) {
   @media (display-mode: standalone) {
-    .settings-dialog-backdrop,
-    .config-panel-root.is-modal {
+    .settings-dialog {
       padding-top: max(59px, env(safe-area-inset-top));
       padding-right: max(8px, env(safe-area-inset-right));
       padding-bottom: max(24px, env(safe-area-inset-bottom));
       padding-left: max(8px, env(safe-area-inset-left));
     }
 
-    .settings-dialog-surface,
-    .config-panel-root.is-modal > .config-panel-surface {
+    .settings-dialog-surface {
       max-width: 100%;
       max-height: 100%;
     }
   }
 
   @media (display-mode: standalone) and (orientation: landscape) {
-    .settings-dialog-backdrop,
-    .config-panel-root.is-modal {
+    .settings-dialog {
       padding-top: max(8px, env(safe-area-inset-top));
       padding-right: max(59px, env(safe-area-inset-right));
       padding-bottom: max(8px, env(safe-area-inset-bottom));

@@ -295,7 +295,6 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
   onEditContent?: (message: UserMessage) => void;
 }) {
   const { t } = useI18n();
-  const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -363,9 +362,8 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
 
   return (
     <div
+      className="message-row"
       style={{ marginBottom: 16, display: "flex", flexDirection: "column", alignItems: "flex-end" }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       <div style={{ display: "flex", alignItems: "flex-end", gap: 6, maxWidth: "85%" }}>
         <div
@@ -459,12 +457,7 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
           display: "flex", alignItems: "center", justifyContent: "flex-end",
           gap: 6, marginTop: 3,
         }}>
-          <div style={{
-            display: "flex", gap: 3,
-            opacity: hovered ? 1 : 0,
-            pointerEvents: hovered ? "auto" : "none",
-            transition: "opacity 0.12s",
-          }}>
+          <div className="message-actions" style={{ display: "flex", gap: 3 }}>
             <button
               onClick={copyContent}
                title={t("i18n.copyMessage")}
@@ -496,12 +489,7 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
             </button>
           </div>
           {(canFork || canNavigate) && (
-            <div style={{
-              display: "flex", gap: 3,
-              opacity: (hovered || forking) ? 1 : 0,
-              pointerEvents: (hovered || forking) ? "auto" : "none",
-              transition: "opacity 0.12s",
-            }}>
+            <div className="message-actions" data-forking={forking || undefined} style={{ display: "flex", gap: 3 }}>
               {canNavigate && (
                 <button
                   onClick={() => { onNavigate!(prevAssistantEntryId!); onEditContent?.(editTarget); }}
@@ -596,7 +584,6 @@ function AssistantMessageView({
     .filter(({ block }) => !isEmptyAssistantBlock(block, { isStreaming })), [message.content, isStreaming]);
   const blocks = useMemo(() => blockItems.map(({ block }) => block), [blockItems]);
   const providerError = getAssistantErrorMessage(message, { isStreaming });
-  const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
   const streamStartRef = useRef<number | null>(null);
   const [tps, setTps] = useState<number | null>(null);
@@ -640,23 +627,24 @@ function AssistantMessageView({
   // toolResult timestamp = when tool execution finished
   const toolCallDurations = useMemo<Map<string, number>>(() => {
     const map = new Map<string, number>();
-    if (!toolResults || !message.timestamp) return map;
-    for (const [callId, result] of toolResults) {
-      if (result.timestamp && message.timestamp) {
-        const secs = Math.round((result.timestamp - message.timestamp) / 1000);
-        if (secs > 0) map.set(callId, secs);
-      }
+    const started = message.timestamp;
+    if (!toolResults || !started) return map;
+    for (const block of message.content ?? []) {
+      if (block.type !== "toolCall") continue;
+      const finished = toolResults.get(block.toolCallId)?.timestamp;
+      if (!finished) continue;
+      const secs = Math.round((finished - started) / 1000);
+      if (secs > 0) map.set(block.toolCallId, secs);
     }
     return map;
-  }, [toolResults, message.timestamp]);
-
-  const textContent = blocks
-    .filter((b): b is TextContent => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
+  }, [toolResults, message.content, message.timestamp]);
 
   const copyContent = () => {
-    copyText(textContent).then(() => {
+    const text = blocks
+      .filter((b): b is TextContent => b.type === "text")
+      .map((b) => b.text)
+      .join("\n");
+    copyText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });
@@ -722,9 +710,8 @@ function AssistantMessageView({
 
   return (
     <div
+      className="message-row"
       style={{ marginBottom: 16 }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       {/* Model/status row */}
       <div
@@ -822,8 +809,9 @@ function AssistantMessageView({
             {formatUsage(message.usage)}
           </div>
         )}
-        {textContent && !isStreaming && (
+        {!isStreaming && blocks.some((b) => b.type === "text") && (
           <button
+            className="message-actions"
             onClick={copyContent}
              title={t("i18n.copyMessage")}
             style={{
@@ -835,8 +823,6 @@ function AssistantMessageView({
               cursor: "pointer",
               fontSize: 11, fontWeight: 400,
               whiteSpace: "nowrap",
-              opacity: hovered ? 1 : 0,
-              pointerEvents: hovered ? "auto" : "none",
               transition: "opacity 0.12s, color 0.12s",
             }}
             onMouseEnter={(e) => { if (!copied) e.currentTarget.style.color = "var(--accent)"; }}

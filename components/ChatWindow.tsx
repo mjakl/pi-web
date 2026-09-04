@@ -456,6 +456,76 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
   const hasStreamingContent = Boolean(streamState.streamingMessage?.content.length);
   const messageCwd = session?.cwd ?? newSessionCwd ?? undefined;
 
+  // Per-turn derived data, computed once per transcript instead of per render.
+  // The split final messages and the written-file list are fresh objects, so
+  // rebuilding them on every streamed token defeated MessageView's memo() for
+  // each completed turn's final answer. `messages` is stable while streaming
+  // (the live message lives in streamState), so this memo holds across tokens.
+  const turnGroups = useMemo(() => {
+    const groups = new Map<number, {
+      endIdx: number;
+      finalAssistantIdx: number;
+      visibleProcessIndices: number[];
+      finalProcessMessage: AssistantMessage | null;
+      finalAnswerMessage: AssistantMessage | null;
+      processCount: number;
+      toolCallCount: number;
+      defaultExpanded: boolean;
+      writtenFiles: WrittenFile[];
+    }>();
+    for (let userIdx = 0; userIdx < messages.length; userIdx++) {
+      if (!isMessageGroupAnchor(messages[userIdx])) continue;
+      let endIdx = userIdx + 1;
+      while (endIdx < messages.length && !isMessageGroupAnchor(messages[endIdx])) endIdx += 1;
+      const finalAssistantIdx = findFinalAssistantIndex(messages, userIdx, endIdx);
+      if (finalAssistantIdx === -1) {
+        groups.set(userIdx, {
+          endIdx, finalAssistantIdx,
+          visibleProcessIndices: [], finalProcessMessage: null, finalAnswerMessage: null,
+          processCount: 0, toolCallCount: 0, defaultExpanded: false, writtenFiles: [],
+        });
+        continue;
+      }
+      const visibleProcessIndices: number[] = [];
+      for (let processIdx = userIdx + 1; processIdx < finalAssistantIdx; processIdx++) {
+        if (hasDisplayableProcessMessage(messages[processIdx])) visibleProcessIndices.push(processIdx);
+      }
+      const finalAssistant = messages[finalAssistantIdx] as AssistantMessage;
+      const finalSplit = splitFinalAssistantBlocks(finalAssistant);
+      const finalProcessMessage = finalSplit.processBlocks.length > 0
+        ? withAssistantBlocks(finalAssistant, finalSplit.processBlocks, { omitUsage: true })
+        : null;
+      const finalAnswerMessage = finalSplit.answerBlocks.length > 0 || getAssistantErrorMessage(finalAssistant)
+        ? withAssistantBlocks(finalAssistant, finalSplit.answerBlocks)
+        : null;
+      const processMessages = visibleProcessIndices.map((processIdx) => messages[processIdx]);
+      if (finalProcessMessage) processMessages.push(finalProcessMessage);
+      // Each tool call is stored as its own assistant entry, so the final
+      // answer alone carries no record of what the turn wrote. Gather the
+      // turn's assistant blocks and derive the file list from the write/edit
+      // calls among them.
+      const turnContent: AssistantContentBlock[] = [];
+      for (let i = userIdx + 1; i <= finalAssistantIdx; i++) {
+        const m = messages[i];
+        if (m?.role === "assistant") {
+          for (const b of (m as AssistantMessage).content ?? []) turnContent.push(b);
+        }
+      }
+      groups.set(userIdx, {
+        endIdx,
+        finalAssistantIdx,
+        visibleProcessIndices,
+        finalProcessMessage,
+        finalAnswerMessage,
+        processCount: visibleProcessIndices.length + (finalProcessMessage ? 1 : 0),
+        toolCallCount: countToolCalls(messages, visibleProcessIndices) + countToolCallBlocks(finalSplit.processBlocks),
+        defaultExpanded: shouldExpandProcessDetails(processMessages, { hasFinalAnswer: Boolean(finalAnswerMessage) }),
+        writtenFiles: extractTurnWrittenFiles(turnContent, toolResultsMap, messageCwd),
+      });
+    }
+    return groups;
+  }, [messages, toolResultsMap, messageCwd]);
+
   useLayoutEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -709,28 +779,17 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
               const rendered: ReactNode[] = [];
               for (let idx = 0; idx < messages.length;) {
                 const msg = messages[idx];
-                if (!isMessageGroupAnchor(msg)) {
+                const turn = isMessageGroupAnchor(msg) ? turnGroups.get(idx) : undefined;
+                if (!turn) {
                   rendered.push(renderMessage(idx));
                   idx += 1;
                   continue;
                 }
 
                 const userIdx = idx;
-                let endIdx = userIdx + 1;
-                while (endIdx < messages.length && !isMessageGroupAnchor(messages[endIdx])) endIdx += 1;
-
-                const finalAssistantIdx = findFinalAssistantIndex(messages, userIdx, endIdx);
-
-                if (finalAssistantIdx === -1) {
-                  for (let renderIdx = userIdx; renderIdx < endIdx; renderIdx++) {
-                    rendered.push(renderMessage(renderIdx));
-                  }
-                  idx = endIdx;
-                  continue;
-                }
-
+                const { endIdx, finalAssistantIdx, visibleProcessIndices, finalProcessMessage, finalAnswerMessage, processCount } = turn;
                 const isLiveTail = (sessionBusy || streamState.isStreaming) && endIdx === messages.length && userIdx === lastAnchorIdx;
-                if (isLiveTail) {
+                if (finalAssistantIdx === -1 || isLiveTail) {
                   for (let renderIdx = userIdx; renderIdx < endIdx; renderIdx++) {
                     rendered.push(renderMessage(renderIdx));
                   }
@@ -740,30 +799,13 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
 
                 rendered.push(renderMessage(userIdx));
 
-                const processIndices: number[] = [];
-                for (let processIdx = userIdx + 1; processIdx < finalAssistantIdx; processIdx++) {
-                  processIndices.push(processIdx);
-                }
-                const visibleProcessIndices = processIndices.filter((processIdx) => hasDisplayableProcessMessage(messages[processIdx]));
-                const finalAssistant = messages[finalAssistantIdx] as AssistantMessage;
-                const finalSplit = splitFinalAssistantBlocks(finalAssistant);
-                const finalProcessMessage = finalSplit.processBlocks.length > 0
-                  ? withAssistantBlocks(finalAssistant, finalSplit.processBlocks, { omitUsage: true })
-                  : null;
-                const finalAnswerMessage = finalSplit.answerBlocks.length > 0 || getAssistantErrorMessage(finalAssistant)
-                  ? withAssistantBlocks(finalAssistant, finalSplit.answerBlocks)
-                  : null;
-                const processMessages = visibleProcessIndices.map((processIdx) => messages[processIdx]);
-                if (finalProcessMessage) processMessages.push(finalProcessMessage);
-
-                const processCount = visibleProcessIndices.length + (finalProcessMessage ? 1 : 0);
                 if (processCount > 0) {
                   const processGroup = (
                     <ProcessDetailsGroup
                       messageCount={processCount}
-                      defaultExpanded={shouldExpandProcessDetails(processMessages, { hasFinalAnswer: Boolean(finalAnswerMessage) })}
+                      defaultExpanded={turn.defaultExpanded}
                       t={t}
-                      toolCallCount={countToolCalls(messages, visibleProcessIndices) + countToolCallBlocks(finalSplit.processBlocks)}
+                      toolCallCount={turn.toolCallCount}
                     >
                       {visibleProcessIndices.map((processIdx) => renderMessage(processIdx, { attachRef: false, keyPrefix: "process" }))}
                       {finalProcessMessage && renderMessage(finalAssistantIdx, { attachRef: false, keyPrefix: "process-final", messageOverride: finalProcessMessage, showTimestamp: false })}
@@ -777,19 +819,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                 }
 
                 if (finalAnswerMessage) {
-                  // Each tool call is stored as its own assistant entry, so the
-                  // final answer alone carries no record of what the turn wrote.
-                  // Gather the turn's assistant blocks and derive the file list
-                  // from the write/edit calls among them.
-                  const turnContent: AssistantContentBlock[] = [];
-                  for (let i = userIdx + 1; i <= finalAssistantIdx; i++) {
-                    const m = messages[i];
-                    if (m?.role === "assistant") {
-                      for (const b of (m as AssistantMessage).content ?? []) turnContent.push(b);
-                    }
-                  }
-                  const writtenFiles = extractTurnWrittenFiles(turnContent, toolResultsMap, messageCwd);
-                  rendered.push(renderMessage(finalAssistantIdx, { messageOverride: finalAnswerMessage, writtenFiles }));
+                  rendered.push(renderMessage(finalAssistantIdx, { messageOverride: finalAnswerMessage, writtenFiles: turn.writtenFiles }));
                 }
                 for (let renderIdx = finalAssistantIdx + 1; renderIdx < endIdx; renderIdx++) {
                   rendered.push(renderMessage(renderIdx));

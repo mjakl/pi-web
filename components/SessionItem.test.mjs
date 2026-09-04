@@ -48,7 +48,7 @@ function sessionItemProps(session, props = {}) {
     session,
     isSelected: false,
     actionsAvailable: true,
-    onClick() {},
+    onSelect() {},
     ...props,
   };
 }
@@ -133,7 +133,7 @@ test("session action eligibility matches persisted and transient state", () => {
 
 test("the always-visible trigger uses native button keyboard semantics and does not select the row", async () => {
   let selections = 0;
-  const view = await mountItem(baseSession, { onClick: () => { selections += 1; } });
+  const view = await mountItem(baseSession, { onSelect: () => { selections += 1; } });
   const trigger = view.container.querySelector("button[aria-controls]");
   assert.ok(trigger instanceof HTMLButtonElement);
   assert.equal(trigger.getAttribute("aria-haspopup"), null);
@@ -769,7 +769,7 @@ test("menu actions run without selecting the row", async () => {
   try {
     for (const action of ["Rename", "Stop", "Delete"]) {
       let selections = 0;
-      const view = await mountItem(baseSession, { isActive: true, onClick: () => { selections += 1; } });
+      const view = await mountItem(baseSession, { isActive: true, onSelect: () => { selections += 1; } });
       await click(view.container.querySelector("button[aria-controls]"));
       const item = [...document.querySelectorAll('[role="group"] button')].find((button) => button.textContent === action);
       await click(item);

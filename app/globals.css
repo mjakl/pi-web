@@ -1302,6 +1302,13 @@ span.linenumber {
 .model-selector.is-composer { margin-left: auto; max-width: calc(100% - 112px); }
 .model-selector.is-composer > button { width: 100%; min-width: 0; gap: 4px; font-size: 12px; color: var(--text); }
 .model-selector.is-composer > button:disabled { color: var(--text-muted); cursor: default; }
+/* Replaces ModelSelector's onMouseEnter/onMouseLeave, which wrote background
+   and color inline and then outlived the hover: the composer variant's
+   restored color: var(--text-muted) permanently beat the rule above. */
+.model-selector.is-toolbar > button { background: none; color: var(--text-muted); }
+.model-selector.is-toolbar > button[aria-expanded="true"] { background: var(--bg-hover); }
+.model-selector.is-field > button { background: var(--bg); color: var(--text); }
+.model-selector > button:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
 .composer-model-detail { color: var(--text-muted); white-space: nowrap; }
 .composer-toolbar > .composer-action-primary {
   position: relative; width: 36px; padding: 0; margin-left: auto;
@@ -1320,6 +1327,20 @@ span.linenumber {
 .composer-thinking-field select { min-height: 32px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--bg); }
 .composer-shell-mode { padding: 4px 8px; font-size: 12px; color: var(--text-muted); }
 .anchored-menu.opens-up.menu-composer-controls { left: anchor(left); right: auto; min-width: 190px; max-width: min(320px, calc(100vw - 24px)); max-height: min(400px, 60vh); overflow: auto; }
+/* Left edges aligned with the model trigger, growing right into whatever the
+   trigger leaves: the UA's width: fit-content already stops at the viewport
+   edge, so this replaces the snapshotted trigger rect and the rAF resize and
+   scroll re-measure that used to keep the panel in place. */
+.anchored-menu.opens-up.menu-model-selector {
+  left: anchor(left);
+  right: auto;
+  min-width: anchor-size(width);
+  margin-right: 8px;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 .context-compact-button { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 28px; height: 28px; align-self: center; margin-right: 4px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; }
 .context-compact-button:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
 .context-compact-button:disabled { opacity: 0.4; cursor: default; }
@@ -1816,7 +1837,9 @@ span.linenumber {
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.sidebar-icon-button:hover {
+/* :enabled because the new-session button is disabled with no project chosen —
+   that was the `if (!selectedCwd) return` in its old onMouseEnter handler. */
+.sidebar-icon-button:enabled:hover {
   background: var(--bg-selected);
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
@@ -1824,6 +1847,36 @@ span.linenumber {
 .sidebar-icon-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+/* Icon buttons in the file-explorer toolbar row. The hover feedback was a pair
+   of onMouseEnter/onMouseLeave handlers writing e.currentTarget.style, so the
+   resting colours arrive as custom properties and this rule can own :hover.
+   .is-hover-locked is the old skipHover guard: the refresh button keeps its
+   confirmation colours while the check mark is showing. */
+.sidebar-toolbar-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: var(--toolbar-button-background);
+  color: var(--toolbar-button-color);
+  cursor: pointer;
+  transition: color 0.3s, background 0.3s;
+}
+.sidebar-toolbar-button:enabled:not(.is-hover-locked):hover {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+.sidebar-toolbar-button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* Jump back to the newest message. Floats over the bottom-right of the
@@ -1898,6 +1951,8 @@ span.linenumber {
     white-space: nowrap;
   }
   .anchored-menu.opens-up.menu-composer-controls { left: 12px; right: auto; }
+  /* Replaces the isMobile branch's { left: 8, right: 8, maxWidth: calc(100vw - 16px) }. */
+  .anchored-menu.opens-up.menu-model-selector { left: 8px; right: 8px; width: auto; margin-right: 0; }
   .menu-composer-controls .menu-item { min-height: 44px; }
   .chat-jump-to-latest {
     right: 14px;
@@ -2012,6 +2067,8 @@ span.linenumber {
 .menu-composer-controls { position-anchor: --composer-controls; }
 .anchor-sidebar-project { anchor-name: --sidebar-project; }
 .menu-sidebar-project { position-anchor: --sidebar-project; }
+.anchor-model-selector { anchor-name: --model-selector; }
+.menu-model-selector { position-anchor: --model-selector; }
 
 /* Shared dropdown appearance; each component owns positioning and interaction. */
 .menu-surface {
@@ -2081,3 +2138,52 @@ span.linenumber {
 .project-folder-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .project-folder-path { display: block; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 .project-folder-message { padding: 8px 12px 8px 28px; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+
+/* File tab close button. Was a `hoveredClose` tab id in TabBar state, which
+   re-rendered the whole tab strip on every pointer enter and leave. */
+.tab-close {
+  background: transparent;
+  color: var(--text-dim);
+}
+.tab-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* File explorer hover surfaces. Was a `hovered` flag in ChangeRow state and
+   direct currentTarget.style writes in the dismiss and search-clear buttons,
+   which also left the hover colour stuck after a tap on touch. */
+.file-explorer-change-row:hover {
+  background: var(--bg-hover);
+}
+.file-explorer-dismiss-button {
+  background: none;
+  color: var(--text-dim);
+}
+.file-explorer-dismiss-button:hover {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+.file-explorer-search-clear {
+  background: none;
+  color: var(--text-dim);
+}
+.file-explorer-search-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* Message hover actions. Was two `hovered` React state hooks in MessageView
+   re-rendering a whole message subtree on every pointer enter and leave, when
+   opacity and pointer-events were the only things that changed. data-forking
+   keeps the edit and fork row up while a new session is being created. */
+.message-actions {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.message-row:hover .message-actions,
+.message-actions[data-forking] {
+  opacity: 1;
+  pointer-events: auto;
+}

@@ -50,16 +50,6 @@ function ToolbarIconButton({
   ariaPressed?: boolean;
   children: ReactNode;
 }) {
-  const enter = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (disabled || skipHover) return;
-    e.currentTarget.style.color = "var(--text-muted)";
-    e.currentTarget.style.background = "var(--bg-hover)";
-  };
-  const leave = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (disabled || skipHover) return;
-    e.currentTarget.style.color = color;
-    e.currentTarget.style.background = background;
-  };
   return (
     <button
       onClick={onClick}
@@ -67,21 +57,12 @@ function ToolbarIconButton({
       title={title}
       aria-label={title}
       aria-pressed={ariaPressed}
+      className={`sidebar-toolbar-button${skipHover ? " is-hover-locked" : ""}`}
       style={{
-        position: "relative",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        width: 26, height: 26, padding: 0, marginRight,
-        background,
-        border: "none",
-        color,
-        cursor: disabled ? "default" : "pointer",
-        borderRadius: 5,
-        flexShrink: 0,
-        opacity: disabled ? 0.6 : 1,
-        transition: "color 0.3s, background 0.3s",
-      }}
-      onMouseEnter={enter}
-      onMouseLeave={leave}
+        marginRight,
+        "--toolbar-button-color": color,
+        "--toolbar-button-background": background,
+      } as CSSProperties}
     >
       {children}
     </button>
@@ -158,6 +139,13 @@ const LAST_CUSTOM_CWD_STORAGE_KEY = "pi-web:last-custom-cwd";
 const RUNNING_SESSIONS_POLL_MS = 2500;
 const SESSION_METADATA_RETRY_DELAY_MS = 1000;
 const SESSION_METADATA_OVERSCAN_PX = SESSION_ITEM_HEIGHT * 2;
+
+/** True when both id sets hold the same members. Lets a poll result that
+ *  changed nothing keep the previous Set, so an idle sidebar does not
+ *  re-render every RUNNING_SESSIONS_POLL_MS. */
+export function sameSessionIds(a: Set<string>, b: Set<string>): boolean {
+  return a.size === b.size && [...b].every((id) => a.has(id));
+}
 
 function loadLastCustomCwd(): string {
   if (typeof window === "undefined") return "";
@@ -607,8 +595,10 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
         };
         if (stopped || controller !== current) return;
         runningPollAuthoritativeRef.current = true;
-        setActiveSessionIds(new Set(data.activeSessionIds ?? []));
-        setRunningSessionIds(new Set(data.runningSessionIds ?? []));
+        const nextActive = new Set(data.activeSessionIds ?? []);
+        const nextRunning = new Set(data.runningSessionIds ?? []);
+        setActiveSessionIds((previous) => sameSessionIds(previous, nextActive) ? previous : nextActive);
+        setRunningSessionIds((previous) => sameSessionIds(previous, nextRunning) ? previous : nextRunning);
       } catch {
         // Keep the last known state; the next visible-tab poll retries.
       } finally {
@@ -858,6 +848,29 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
     if (session.id === selectedSessionId) void onRefreshSelectedSession?.();
   }, [onSelectSession, selectedSessionId, onRefreshSelectedSession]);
 
+  const handleSessionActivated = useCallback((id: string) => {
+    setError(null);
+    setActiveSessionIds((current) => new Set(current).add(id));
+  }, []);
+
+  const handleSessionStopped = useCallback((id: string) => {
+    setActiveSessionIds((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+    setRunningSessionIds((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const handleSessionDeleted = useCallback((id: string) => {
+    onSessionDeleted?.(id);
+    loadSessions();
+  }, [loadSessions, onSessionDeleted]);
+
   const handleNewSession = useCallback(() => {
     if (!selectedCwd) return;
     // Generate a temporary UUID client-side — no backend call needed.
@@ -878,6 +891,7 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
 
   // Sessions of every worktree in the selected project are shown together
   const selectedProject = projectFor(selectedCwd);
+  const selectedProjectKey = selectedProject?.key ?? null;
 
   // Per-project activity counts (running / unread) for the workspace selector.
   // Uses the same stable server key as the project list and filtering.
@@ -891,18 +905,18 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
   // the dropdown.
   const hasOtherWorkspaceActivity = useMemo(
     () => [...projectActivity.entries()].some(
-      ([key, { running, unread }]) => key !== selectedProject?.key && (running > 0 || unread > 0),
+      ([key, { running, unread }]) => key !== selectedProjectKey && (running > 0 || unread > 0),
     ),
-    [projectActivity, selectedProject],
+    [projectActivity, selectedProjectKey],
   );
 
-  const filteredSessions = (selectedProject
-    ? sessionsForProject(allSessions, selectedProject.key)
+  const filteredSessions = useMemo(() => (selectedProjectKey
+    ? sessionsForProject(allSessions, selectedProjectKey)
     : allSessions).toSorted((a, b) =>
       Number(runningSessionIds.has(b.id)) - Number(runningSessionIds.has(a.id))
       || Number(activeSessionIds.has(b.id)) - Number(activeSessionIds.has(a.id))
       || b.modified.localeCompare(a.modified),
-    );
+    ), [activeSessionIds, allSessions, runningSessionIds, selectedProjectKey]);
 
   useEffect(() => {
     const updateModifier = (event: KeyboardEvent) => {
@@ -990,30 +1004,8 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
               onClick={handleNewSession}
               disabled={!selectedCwd}
               aria-label={t("i18n.newSession")}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                background: "var(--bg-hover)",
-                border: "1px solid var(--border)",
-                color: selectedCwd ? "var(--text-muted)" : "var(--text-dim)",
-                cursor: selectedCwd ? "pointer" : "not-allowed",
-                width: 32, height: 32,
-                padding: 0,
-                borderRadius: 7,
-                flexShrink: 0,
-                transition: "background 0.12s, color 0.12s, border-color 0.12s",
-              }}
-             title={selectedCwd ? t("sidebar.newSessionTitle", { path: selectedCwd }) : t("sidebar.selectProject")}
-              onMouseEnter={(e) => {
-                if (!selectedCwd) return;
-                e.currentTarget.style.background = "var(--bg-selected)";
-                e.currentTarget.style.color = "var(--accent)";
-                e.currentTarget.style.borderColor = "rgba(37,99,235,0.35)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "var(--bg-hover)";
-                e.currentTarget.style.color = selectedCwd ? "var(--text-muted)" : "var(--text-dim)";
-                e.currentTarget.style.borderColor = "var(--border)";
-              }}
+              className="sidebar-icon-button"
+              title={selectedCwd ? t("sidebar.newSessionTitle", { path: selectedCwd }) : t("sidebar.selectProject")}
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
                 <line x1="6" y1="1" x2="6" y2="11" />
@@ -1234,29 +1226,12 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
             isRunning={runningSessionIds.has(session.id)}
             isUnread={unreadSessionIds.has(session.id)}
             actionsAvailable={actionsAvailable}
-            onClick={() => handleSelectSessionFromList(session)}
+            onSelect={handleSelectSessionFromList}
             onRenamed={loadSessions}
-            onActivated={(id) => {
-              setError(null);
-              setActiveSessionIds((current) => new Set(current).add(id));
-            }}
+            onActivated={handleSessionActivated}
             onActivationFailed={setError}
-            onStopped={(id) => {
-              setActiveSessionIds((current) => {
-                const next = new Set(current);
-                next.delete(id);
-                return next;
-              });
-              setRunningSessionIds((current) => {
-                const next = new Set(current);
-                next.delete(id);
-                return next;
-              });
-            }}
-            onDeleted={(id) => {
-              onSessionDeleted?.(id);
-              loadSessions();
-            }}
+            onStopped={handleSessionStopped}
+            onDeleted={handleSessionDeleted}
           />
         ))}
       </div>
