@@ -655,7 +655,7 @@ export function AppShell({ homeDir }: { homeDir: string }) {
     router.replace("/", { scroll: false });
   }, [resetSessionView, invalidateWorkspaceRestore, router, isMobile]);
 
-  // Global keyboard shortcuts (handles Esc, Ctrl+Alt+N etc.)
+  // Global keyboard shortcuts (handles Esc, Cmd/Ctrl+K etc.)
   useGlobalKeyboardShortcuts({
     onNewSession: (cwd: string) => handleNewSession(`kb-${Date.now()}`, cwd),
     activeCwd,

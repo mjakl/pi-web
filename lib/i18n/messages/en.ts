@@ -102,6 +102,7 @@ export const enMessages: Record<string, string> = {
     "layout.resizeFilePanel": "Resize file panel",
     "layout.resizeHint": "Drag to resize. Double-click or press Enter to reset.",
     "sidebar.newSessionTitle": "New session in {path}",
+    "sidebar.newSessionShortcut": "{modifier}K",
     "sidebar.refresh": "Refresh",
     "sidebar.noWorkingFolders": "No working folders available",
     "chat.missingWorkingFolder": "Working folder is unavailable. This session is read-only.",
