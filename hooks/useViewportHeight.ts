@@ -58,7 +58,9 @@ export function useViewportHeight(): void {
 
       const pageWasShifted = window.scrollX !== 0 || window.scrollY !== 0;
       const isUnscaled = Math.abs(viewport.scale - 1) < 0.01;
-      if (pageWasShifted && isUnscaled) {
+      // Do not fight WebKit's visual viewport while the keyboard is open.
+      // Normalize the page once the keyboard closes instead.
+      if (!keyboardOpen && pageWasShifted && isUnscaled) {
         window.scrollTo(0, 0);
       }
     };

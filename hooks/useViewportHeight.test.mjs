@@ -17,6 +17,14 @@ let innerHeight = 844;
 Object.defineProperty(window, "visualViewport", { configurable: true, value: viewport });
 Object.defineProperty(window, "innerHeight", { configurable: true, get: () => innerHeight });
 Object.defineProperty(window.document.documentElement, "clientHeight", { configurable: true, value: 844 });
+const pageScrolls = [];
+let scrollY = 0;
+Object.defineProperty(window, "scrollX", { configurable: true, value: 0 });
+Object.defineProperty(window, "scrollY", { configurable: true, get: () => scrollY });
+window.scrollTo = (x, y) => {
+  pageScrolls.push([x, y]);
+  scrollY = y;
+};
 Object.assign(globalThis, {
   window,
   document: window.document,
@@ -34,7 +42,7 @@ function ViewportHeightHarness() {
   return null;
 }
 
-test("uses the stable layout viewport when iOS shrinks innerHeight with the keyboard", async () => {
+test("tracks the keyboard height without fighting keyboard-open page movement", async () => {
   const textarea = document.createElement("textarea");
   const container = document.createElement("div");
   document.body.append(textarea, container);
@@ -51,6 +59,18 @@ test("uses the stable layout viewport when iOS shrinks innerHeight with the keyb
     await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
 
     assert.equal(document.documentElement.style.getPropertyValue("--app-viewport-height"), "510px");
+
+    scrollY = 40;
+    viewport.dispatchEvent(new window.Event("scroll"));
+    await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
+    assert.deepEqual(pageScrolls, []);
+
+    viewport.height = 844;
+    innerHeight = 844;
+    textarea.blur();
+    await React.act(() => frames.splice(0).forEach((callback) => callback(0)));
+    assert.equal(document.documentElement.style.getPropertyValue("--app-viewport-height"), "");
+    assert.deepEqual(pageScrolls, [[0, 0]]);
   } finally {
     await React.act(() => root.unmount());
     textarea.remove();
