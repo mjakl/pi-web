@@ -1,87 +1,59 @@
 # Worktrees in Pi Web
 
-Pi Web can show all Git worktrees for one project in the sidebar. Use this when you want to keep separate checkouts for different branches, while keeping the project's sessions grouped together.
+Pi Web discovers existing Git worktrees and lets you switch between their
+folders. Create and remove worktrees with Git or your other tools. Pi Web does
+not create, delete, prune, or change branches in a worktree.
 
-## When the Worktree Control Appears
+## Choose a working folder
 
-The worktree switcher appears below the project picker when the selected directory is a Git repository root.
+Open the folder picker in the sidebar. Expand a repository to see its working
+folders, then select one. Folder names and paths identify the choices; there is
+no separate branch or worktree dropdown.
 
-It is hidden when:
+The original checkout and linked worktrees are equal choices. Repositories
+backed by a bare Git directory are supported: the bare directory identifies the
+group, but only its working folders appear as selectable checkouts. A repository
+subdirectory keeps its own project identity. Ordinary folders remain selectable
+through the same picker and **Custom path…**.
 
-- The selected directory is not a Git repository.
-- The selected directory is inside a repository, but not the repository root.
-- Git cannot read the repository's worktree list.
+The closed picker shows the actual selected folder. Selecting a folder changes
+where new sessions start and what the Explorer browses. Existing sessions keep
+their original working folders. Opening a session selects that session's folder.
+Sessions from the same repository stay together in the sidebar.
 
-If you are inside a repo subdirectory, open the repository root from the project picker to manage worktrees.
+## Changes made by other tools
 
-## Switching Worktrees
+Pi Web refreshes the folder list when you open the picker or expand a repository.
+Close and reopen it to see worktrees created or deleted by another agent. There
+is no background worktree polling, including while the picker is open.
 
-Use the worktree switcher to choose which checkout Pi Web should use for new work in that project.
+Discovery reads Git's worktree metadata; it does not scan the files in each
+checkout. Missing and prunable worktrees are excluded from the folder choices.
 
-Switching worktrees affects:
+## Sessions whose folders are missing
 
-- New sessions started from the sidebar.
-- The file Explorer.
-- File mentions inserted from the Explorer.
+You can still read a session after its working folder disappears. Pi Web shows
+a read-only notice and blocks activation, messages, fork, clone, compaction, and
+other agent commands that change the session. Runtime inspection and stopping
+an existing agent remain available. Pi Web does not recreate the folder or run
+the session in a replacement folder.
 
-Existing sessions stay grouped under the same project. Opening an existing session moves the effective working directory back to that session's checkout.
+Folder availability is checked when opening or refreshing a session and when
+opening the picker. The backend checks again before activation and agent
+commands. If the original folder becomes available again, opening the session or
+refreshing the picker restores its controls. This does not activate the agent.
 
-## Creating a Worktree
+Pi Web records observed folder-to-repository associations in
+`web-worktree-projects.json` inside the Pi agent directory (`~/.pi/agent`, or
+`PI_CODING_AGENT_DIR`). This keeps history grouped after Git forgets a removed
+worktree and after Pi Web restarts, without editing session transcripts. Old
+`<repo>-worktrees/<folder>` paths created by Pi Web are also recognized. If an
+arbitrarily located worktree was removed before Pi Web ever saw it, Git may no
+longer provide its repository identity; its history remains available under its
+original folder.
 
-Choose `New worktree...` from the worktree menu and enter a branch name.
+## HTTP interface
 
-Pi Web creates the checkout at:
-
-```text
-<repo>-worktrees/<branch>
-```
-
-For example, if the main checkout is:
-
-```text
-/Users/alex/Documents/Workspace/pi-web
-```
-
-and you create branch `codex/worktree-help`, the worktree is created under:
-
-```text
-/Users/alex/Documents/Workspace/pi-web-worktrees/codex-worktree-help
-```
-
-If the branch already exists, Pi Web adds a worktree for that branch. If it does not exist, Pi Web creates the branch from the current `HEAD`.
-
-## Removing a Worktree
-
-Use the remove button next to a non-main worktree to remove that checkout.
-
-Removing a worktree does not delete:
-
-- The Git branch.
-- Pi Web session history.
-- The main checkout.
-
-If the worktree has uncommitted or untracked files, Git refuses the removal. Pi Web then offers a force remove action. Force removal discards the uncommitted files in that checkout, so use it only when you no longer need those changes.
-
-## Sessions and Worktrees
-
-Pi Web groups sessions by project root, so sessions from the main checkout and linked worktrees appear together.
-
-Each session still remembers the working directory it was created with. That means:
-
-- A session started in a worktree continues to use that worktree path.
-- A session started in the main checkout continues to use the main checkout.
-- If a worktree has been removed, old sessions from it stay visible under the project so you can still find the history.
-
-## Troubleshooting
-
-**I do not see the worktree switcher.**
-Select a Git repository root. Non-Git directories and repo subdirectories show a small hint instead of the switcher.
-
-**A branch cannot be added as a worktree.**
-Git allows a branch to be checked out in only one worktree at a time. Switch to the existing worktree for that branch, or remove it first.
-
-**A removed worktree still shows up in Git.**
-Git can keep prunable worktree records after a checkout disappears. Pi Web filters those out of the switcher.
-
-**The Explorer shows a different branch than the open chat.**
-The Explorer follows the selected worktree. The chat follows the opened session. Click the session again to move the sidebar back to that session's checkout.
+`GET /api/worktrees?cwd=<directory>` lists existing worktrees and reports project
+identity and folder availability. The former `POST` and `DELETE` worktree
+operations are removed and return HTTP 405.

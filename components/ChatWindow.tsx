@@ -229,15 +229,16 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     onTranscriptRefreshChange, onSessionMetadataChange, onSessionStatsPanelOpen,
   });
   const sessionBusy = agentRunning || bashRunning;
+  const readOnly = session?.cwdAvailable === false;
 
   useEffect(() => {
     onToolPresetControlChange?.({
       preset: toolPreset,
-      disabled: loading || Boolean(error) || sessionBusy,
+      disabled: loading || Boolean(error) || sessionBusy || readOnly,
       onChange: handleToolPresetChange,
     });
     return () => onToolPresetControlChange?.(null);
-  }, [error, handleToolPresetChange, loading, onToolPresetControlChange, sessionBusy, toolPreset]);
+  }, [error, handleToolPresetChange, loading, onToolPresetControlChange, sessionBusy, toolPreset, readOnly]);
 
   useEffect(() => {
     if (!extensionDialog || soundedExtensionDialogIdRef.current === extensionDialog.id) return;
@@ -478,7 +479,9 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     ? (modelThinkingLevelMaps[`${displayModelValue.provider}:${displayModelValue.modelId}`] ?? null)
     : null;
 
-  const chatInputElement = (
+  const chatInputElement = readOnly ? (
+    <div role="status" className="project-folder-message">{t("chat.missingWorkingFolder")}</div>
+  ) : (
     <ChatInput
       ref={chatInputRef}
       onSend={handleSend}
@@ -698,11 +701,11 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                     cwd={messageCwd}
                     onOpenFile={onOpenFile}
                     entryId={entryIds[idx]}
-                    onFork={sessionBusy || isNew || (idx === 0 && msg.role === "user") ? undefined : handleFork}
+                    onFork={readOnly || sessionBusy || isNew || (idx === 0 && msg.role === "user") ? undefined : handleFork}
                     forking={forkingEntryId === entryIds[idx]}
-                    onNavigate={sessionBusy ? undefined : handleNavigate}
+                    onNavigate={readOnly || sessionBusy ? undefined : handleNavigate}
                     prevAssistantEntryId={sessionBusy ? undefined : prevAssistantEntryId}
-                    onEditContent={handleEditContent}
+                    onEditContent={readOnly ? undefined : handleEditContent}
                     showTimestamp={showTimestamp}
                     prevTimestamp={idx > 0 ? (messages[idx - 1] as AgentMessage & { timestamp?: number }).timestamp : undefined}
                     sessionId={session?.id ?? sessionIdRef.current ?? undefined}

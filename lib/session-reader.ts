@@ -11,7 +11,7 @@ import type { SessionEntry as PiSessionEntry } from "@earendil-works/pi-coding-a
 import { normalizeToolCalls } from "./normalize";
 import { pathIdentityKey } from "./paths";
 import { MAX_TOOL_RESULT_IMAGE_BYTES, TOOL_RESULT_IMAGE_MIMES } from "./tool-result-images";
-import { resolveProject, type ProjectInfo } from "./worktree";
+import { isWorkingDirectoryAvailable, resolveProject, type ProjectInfo } from "./worktree";
 
 const SESSION_HEADER_MAX_BYTES = 64 * 1024;
 
@@ -69,6 +69,7 @@ export async function attachSessionProjectInfo(sessions: SessionInfo[]): Promise
       : session.cwd;
     return {
       ...session,
+      cwdAvailable: isWorkingDirectoryAvailable(session.cwd),
       projectRoot,
       ...(projectEntryPath !== session.cwd ? { projectEntryPath } : {}),
       projectKey: pathIdentityKey(projectRoot),

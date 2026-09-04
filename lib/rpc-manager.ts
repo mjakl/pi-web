@@ -1,3 +1,4 @@
+import { assertWorkingDirectoryAvailable } from "./worktree";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { createAgentSessionFromServices, createAgentSessionServices, getAgentDir, initTheme, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { randomUUID } from "crypto";
@@ -402,6 +403,10 @@ export class AgentSessionWrapper {
   async send(command: Record<string, unknown>): Promise<unknown> {
     if (!this.isActive()) throw new Error("Session is stopped");
     const type = command.type as string;
+    // Read-only inspection and stopping remain possible after external deletion.
+    if (!["get_state", "get_session_stats", "get_last_assistant_text", "get_tools", "get_commands", "abort", "abort_compaction", "abort_bash", "clear_queue"].includes(type)) {
+      assertWorkingDirectoryAvailable(this.cwd);
+    }
     const allowedDuringReplacement = COMMANDS_ALLOWED_DURING_SESSION_REPLACEMENT.has(type);
     if (this.sessionReplacement && !allowedDuringReplacement) {
       throw new Error("Session is being copied to a new session");
@@ -1120,12 +1125,14 @@ export async function setRpcSessionTools(
     if (!existing?.isAlive()) {
       if (!sessionFile) throw new Error("Session not found");
       const manager = SessionManager.open(sessionFile, undefined);
+      assertWorkingDirectoryAvailable(manager.getCwd());
       appendSessionToolSelection(manager, toolNames);
       const started = await startRpcSession(sessionId, sessionFile, undefined, {}, operation);
       await assertRpcSessionOperationCurrent(operation);
       return { session: started.session, sessionId: started.realSessionId, recreated: false };
     }
 
+    assertWorkingDirectoryAvailable(existing.cwd);
     if (existing.isRunning()) throw new Error("Cannot change tools while the session is running");
 
     const crossesChatOnlyBoundary = existing.isChatOnly() !== (toolNames.length === 0);
@@ -1316,7 +1323,10 @@ export async function startRpcSession(
   const locks = getLocks();
 
   const existing = registry.get(sessionId);
-  if (existing && isRpcSessionActive(existing)) return { session: existing, realSessionId: sessionId };
+  if (existing && isRpcSessionActive(existing)) {
+    assertWorkingDirectoryAvailable(existing.cwd);
+    return { session: existing, realSessionId: sessionId };
+  }
   if (existing?.isAlive()) throw new Error("Session is stopping");
 
   const inflight = locks.get(sessionId);
@@ -1327,9 +1337,11 @@ export async function startRpcSession(
     sessionManager = SessionManager.open(sessionFile, undefined);
   } else {
     if (!cwd) throw new Error("cwd is required for a new session");
+    assertWorkingDirectoryAvailable(cwd);
     sessionManager = SessionManager.create(cwd, undefined);
   }
   const sessionCwd = sessionManager.getCwd();
+  assertWorkingDirectoryAvailable(sessionCwd);
   const persistedToolNames = readSessionToolSelection(
     sessionManager.getEntries() as unknown as SessionEntry[],
   );
@@ -1448,6 +1460,12 @@ export async function startRpcSession(
     if (lifecycle.generation !== startGeneration) {
       await wrapper.shutdown();
       throw new Error("Session was stopped during startup");
+    }
+    try {
+      assertWorkingDirectoryAvailable(sessionCwd);
+    } catch (error) {
+      await wrapper.shutdown();
+      throw error;
     }
     registerRpcWrapper(wrapper);
 

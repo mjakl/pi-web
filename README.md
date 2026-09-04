@@ -10,7 +10,7 @@ This fork follows my own workflow and is not intended to stay compatible with up
 - Run agent turns with model, thinking-level, and tool controls; manage plugins and skills from the browser.
 - Keep assistant text and images visible with structured tool and process details.
 - Browse and upload project files, inspect Git changes, and preview source, Markdown, images, audio, PDFs, and DOCX files.
-- Switch, create, and remove Git worktrees while keeping related sessions grouped. See [Worktrees in Pi Web](./docs/worktrees.md).
+- Switch between existing working folders in one picker, grouped by repository. Missing-folder sessions remain readable without activation. See [Worktrees in Pi Web](./docs/worktrees.md).
 
 ## Host Pi requirement
 

@@ -310,6 +310,8 @@ export interface SessionInfo {
   path: string;
   id: string;
   cwd: string;
+  /** False when the original working folder is missing or inaccessible. */
+  cwdAvailable?: boolean;
   /** Transcript-derived display metadata is absent from the initial inventory
    *  and filled only after this row is requested. */
   name?: string;

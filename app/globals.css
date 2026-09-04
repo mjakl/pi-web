@@ -1832,5 +1832,14 @@ span.linenumber {
 .menu-composer-run-action { position-anchor: --composer-run-action; }
 .anchor-sidebar-project { anchor-name: --sidebar-project; }
 .menu-sidebar-project { position-anchor: --sidebar-project; }
-.anchor-sidebar-worktree { anchor-name: --sidebar-worktree; }
-.menu-sidebar-worktree { position-anchor: --sidebar-worktree; }
+
+/* One folder picker groups checkouts by repository without branch controls. */
+.project-folder-group + .project-folder-group { border-top: 1px solid var(--border); }
+.project-folder-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; background: var(--bg); color: var(--text); text-align: left; cursor: pointer; font-size: 12px; }
+.project-folder-row:hover { background: var(--bg-hover); }
+.project-folder-row[aria-current="true"] { background: var(--bg-selected); }
+.project-folder-child { padding-left: 28px; }
+.project-folder-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.project-folder-path { display: block; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.project-folder-message { padding: 8px 12px 8px 28px; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+@media (pointer: coarse) { .project-folder-row { min-height: 44px; } }
