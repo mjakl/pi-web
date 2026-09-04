@@ -12,9 +12,14 @@ export interface AtQueryMatch {
 }
 
 export interface FileIndexEntry {
-  /** Path relative to the session cwd, "/"-separated, no trailing slash */
+  /** Project-relative or absolute completion path, no trailing slash. */
   path: string;
   isDir: boolean;
+}
+
+/** Explicit paths browse a directory; plain names search the project index. */
+export function isFilePathQuery(query: string): boolean {
+  return /^(?:~(?:\/|$)|\.{1,2}(?:[\\/]|$)|\/|[a-zA-Z]:[\\/]|\\\\)/.test(query);
 }
 
 /**

@@ -74,6 +74,13 @@ Both commands validate the first host `pi` on `PATH` before starting. Open [http
 - Server-side model and API requests honor `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`.
 - The file browser is limited to working directories and known project or session roots. It is not a general filesystem browser.
 
+In the message input, `@name` searches the current project's files. Use `@~/`,
+`@/`, `@./`, or `@../` to complete paths one directory at a time anywhere Pi Web
+can list files. Windows drive and UNC paths also work. Tab selects a folder to
+continue browsing or inserts a file's absolute path, quoting spaces automatically.
+Completion lists names only; it does not change the session's project or grant
+file preview or upload access.
+
 ## Security
 
 Pi Web can run agent tools and project commands. It has no built-in authentication and does not restrict request Host or Origin headers. The default development setup listens only on `127.0.0.1`; if you bind it to a non-loopback address, use a trusted network or an external security layer that restricts access.

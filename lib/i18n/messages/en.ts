@@ -243,6 +243,7 @@ export const enMessages: Record<string, string> = {
     "chat.files": "Files · {label}{hint}",
     "chat.searching": "Searching…",
     "chat.noMatchingFiles": "No matching files",
+    "chat.cannotListFiles": "Cannot list this directory",
     "chat.searchingAll": " · searching all files…",
     "chat.indexTruncated": " · index truncated",
     "chat.steerPlaceholder": "Steer now / queue follow-up...",

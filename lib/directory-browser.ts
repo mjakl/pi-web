@@ -38,10 +38,37 @@ export async function listWindowsDrives(): Promise<BrowsableDirectory[]> {
   return candidates.filter((drive): drive is BrowsableDirectory => drive !== null);
 }
 
-export function normalizeDirectory(directory: string): string {
+export function normalizeDirectory(directory: string, cwd = process.cwd()): string {
   if (directory === "~") return homedir();
   if (directory.startsWith("~/")) return path.resolve(homedir(), directory.slice(2));
-  return path.resolve(directory);
+  return path.resolve(cwd, directory);
+}
+
+/** Complete immediate children only, including hidden files and symlinks. */
+export async function completeFilePath(query: string, cwd?: string) {
+  const normalized = process.platform === "win32" ? query.replaceAll("\\", "/") : query;
+  const input = ["~", ".", ".."].includes(normalized) ? `${normalized}/` : normalized;
+  const slash = input.lastIndexOf("/");
+  const directory = normalizeDirectory(input.slice(0, slash + 1), cwd);
+  const prefix = input.slice(slash + 1).toLowerCase();
+  const entries = await readdir(directory, { withFileTypes: true });
+  const matches = entries
+    .filter((entry) => entry.name.toLowerCase().startsWith(prefix))
+    .sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name, "en"));
+
+  // Bound the dropdown, not the directory search: filter before taking results.
+  return Promise.all(matches.slice(0, 20).map(async (entry) => {
+    const entryPath = path.join(directory, entry.name);
+    let isDir = entry.isDirectory();
+    if (entry.isSymbolicLink()) {
+      try {
+        isDir = (await stat(entryPath)).isDirectory();
+      } catch {
+        // A broken or inaccessible link can still be named in a message.
+      }
+    }
+    return { path: entryPath, isDir };
+  }));
 }
 
 export function getParentDirectory(directory: string): string | null {

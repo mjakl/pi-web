@@ -20,7 +20,7 @@ import {
   isBase64ImageWithinLimits,
 } from "@/lib/image-attachments";
 import {
-  buildEntriesFromFiles, buildAtInsertText, extractAtQuery, filterFileEntries,
+  buildEntriesFromFiles, buildAtInsertText, extractAtQuery, filterFileEntries, isFilePathQuery,
   type AtQueryMatch, type FileIndexEntry,
 } from "@/lib/file-fuzzy";
 import { FolderIcon, getFileIcon } from "./FileIcons";
@@ -481,7 +481,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const [historyCycle, setHistoryCycle] = useState<number | null>(null);
   const [fileIndex, setFileIndex] = useState<{ cwd: string; entries: FileIndexEntry[]; truncated: boolean } | null>(null);
   const [fileIndexLoading, setFileIndexLoading] = useState(false);
-  const [atServerResult, setAtServerResult] = useState<{ cwd: string; query: string; matches: FileIndexEntry[] } | null>(null);
+  const [atServerResult, setAtServerResult] = useState<{ cwd: string; query: string; matches: FileIndexEntry[]; failed?: boolean } | null>(null);
   const [skillModeState, setSkillModeState] = useState<{
     cwd: string;
     values: Record<string, boolean>;
@@ -855,51 +855,54 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
   // ── @ file autocomplete ──────────────────────────────────────────────────
   // Recomputed from the text before the caret on every change/caret move.
-  // Disabled entirely when there is no cwd (new session without a directory).
   const updateAtQuery = useCallback((text: string, cursor: number | null) => {
-    if (!cwd) {
-      setAtQuery(null);
-      return;
-    }
     const pos = cursor ?? text.length;
-    setAtQuery(extractAtQuery(text.slice(0, pos)));
+    const query = extractAtQuery(text.slice(0, pos));
+    setAtQuery(cwd || (query && isFilePathQuery(query.query)) ? query : null);
   }, [cwd]);
 
   const atQueryText = atQuery?.query ?? null;
+  const atPathMode = atQueryText !== null && isFilePathQuery(atQueryText);
   const atLocalMatches: FileIndexEntry[] = React.useMemo(() => (
-    atQueryText !== null && fileIndex && fileIndex.cwd === cwd
+    !atPathMode && atQueryText !== null && fileIndex && fileIndex.cwd === cwd
       ? filterFileEntries(fileIndex.entries, atQueryText)
       : []
-  ), [atQueryText, fileIndex, cwd]);
+  ), [atPathMode, atQueryText, fileIndex, cwd]);
 
-  // When the client index is truncated (repo larger than the index cap),
-  // local filtering cannot see deep files, so queries are also ranked
-  // server-side against the full listing. Local matches render immediately
-  // and are replaced when the (debounced) server result for the current
-  // query arrives; stale responses are ignored via the query/cwd tag.
-  const needsServerSearch = Boolean(atQueryText && fileIndex?.truncated && fileIndex.cwd === cwd);
+  // Explicit paths list one directory; large projects search their full index.
+  const needsServerSearch = atPathMode || Boolean(atQueryText && fileIndex?.truncated && fileIndex.cwd === cwd);
   useEffect(() => {
-    if (!needsServerSearch || !cwd || !atQueryText) return;
-    const fetchCwd = cwd;
+    if (!needsServerSearch || atQueryText === null) return;
+    const fetchCwd = cwd ?? "";
     const query = atQueryText;
+    const controller = new AbortController();
+    let active = true;
     const timer = setTimeout(() => {
-      fetch(`/api/file-index?cwd=${encodeURIComponent(fetchCwd)}&q=${encodeURIComponent(query)}`)
+      const params = new URLSearchParams({ cwd: fetchCwd, q: query });
+      fetch(`/api/${atPathMode ? "file-completion" : "file-index"}?${params}`, { signal: controller.signal })
         .then((res) => {
           if (!res.ok) throw new Error(`file search failed: ${res.status}`);
           return res.json() as Promise<{ matches?: FileIndexEntry[] }>;
         })
-        .then((data) => setAtServerResult({ cwd: fetchCwd, query, matches: data.matches ?? [] }))
+        .then((data) => {
+          if (active) setAtServerResult({ cwd: fetchCwd, query, matches: data.matches ?? [] });
+        })
         .catch(() => {
-          // Keep showing local matches; the next keystroke retries.
+          if (active) setAtServerResult({ cwd: fetchCwd, query, matches: [], failed: true });
         });
     }, 150);
-    return () => clearTimeout(timer);
-  }, [needsServerSearch, atQueryText, cwd]);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [needsServerSearch, atPathMode, atQueryText, cwd]);
 
   const serverResultInUse = needsServerSearch
     && atServerResult !== null
-    && atServerResult.cwd === cwd
-    && atServerResult.query === atQueryText;
+    && atServerResult.cwd === (cwd ?? "")
+    && atServerResult.query === atQueryText
+    && (atPathMode || !atServerResult.failed);
   const atMatches: FileIndexEntry[] = serverResultInUse ? atServerResult.matches : atLocalMatches;
 
   // Open/reset the menu whenever the @token appears or changes (mirrors the
@@ -919,7 +922,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   // ~10s, so re-opening refreshes cheaply; while typing nothing refetches.
   const atTokenActive = atQuery !== null;
   useEffect(() => {
-    if (!atTokenActive || !cwd) return;
+    if (!atTokenActive || atPathMode || !cwd) return;
     const meta = fileIndexMetaRef.current;
     if (meta && meta.cwd === cwd && Date.now() - meta.fetchedAt < 10_000) return;
     if (fileIndexFetchingRef.current === cwd) return;
@@ -943,7 +946,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         fileIndexFetchingRef.current = null;
         setFileIndexLoading(false);
       });
-  }, [atTokenActive, cwd]);
+  }, [atTokenActive, atPathMode, cwd]);
 
   const applyAtCompletion = useCallback((entry: FileIndexEntry) => {
     if (!atQuery) return;
@@ -1637,11 +1640,11 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             </div>
           )}
           {atMenuOpen && atQuery !== null && (() => {
-            const indexLoading = fileIndexLoading && (!fileIndex || fileIndex.cwd !== cwd);
+            const indexLoading = atPathMode ? !serverResultInUse : fileIndexLoading && (!fileIndex || fileIndex.cwd !== cwd);
              const matchCountLabel = atMatches.length === 1 ? t("chat.match") : t("chat.matches", { count: atMatches.length });
             // With a truncated index, local results are provisional — the
             // debounced server search over the full listing replaces them.
-            const truncatedHint = fileIndex?.truncated && !serverResultInUse
+            const truncatedHint = !atPathMode && fileIndex?.truncated && !serverResultInUse
                ? (atQuery.query ? t("chat.searchingAll") : t("chat.indexTruncated"))
               : "";
             return (
@@ -1683,12 +1686,13 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 <div style={{ maxHeight: "calc(min(48vh, 400px) - 34px)", overflowY: "auto", padding: 4 }}>
                   {!indexLoading && atMatches.length === 0 ? (
                     <div style={{ padding: "6px 8px", fontSize: 12, color: "var(--text-dim)" }}>
-                       {needsServerSearch && !serverResultInUse ? t("chat.searching") : t("chat.noMatchingFiles")}
+                       {atPathMode && serverResultInUse && atServerResult.failed ? t("chat.cannotListFiles")
+                         : needsServerSearch && !serverResultInUse ? t("chat.searching") : t("chat.noMatchingFiles")}
                     </div>
                   ) : (
                     atMatches.map((entry, index) => {
                       const active = index === atActiveIndex;
-                      const name = entry.path.split("/").pop() ?? entry.path;
+                      const name = entry.path.split(/[\\/]/).pop() ?? entry.path;
                       const dirPrefix = entry.path.slice(0, entry.path.length - name.length);
                       return (
                         <button
