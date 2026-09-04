@@ -27,7 +27,7 @@ function writePackage(root, name, version, extra = {}) {
   return dir;
 }
 
-function makePi(root, codingVersion = "0.84.3", dependencyVersion = "0.84.4", executableName = "pi") {
+function makePi(root, codingVersion = "0.84.3", dependencyVersion = codingVersion, executableName = "pi") {
   const dependencies = Object.fromEntries([
     "@earendil-works/pi-agent-core",
     "@earendil-works/pi-ai",
@@ -39,7 +39,7 @@ function makePi(root, codingVersion = "0.84.3", dependencyVersion = "0.84.4", ex
   });
   const cli = path.join(codingDir, "cli.js");
   fs.writeFileSync(cli, `#!/usr/bin/env node\nconsole.log(${JSON.stringify(codingVersion)});\n`, { mode: 0o755 });
-  for (const name of Object.keys(dependencies)) writePackage(root, name, dependencyVersion);
+  for (const name of [...Object.keys(dependencies), "@earendil-works/pi-server"]) writePackage(root, name, dependencyVersion);
   const binDir = path.join(root, "node_modules", ".bin");
   fs.mkdirSync(binDir, { recursive: true });
   const executable = path.join(binDir, executableName);
@@ -66,7 +66,7 @@ function assertActionable(run, executable) {
 test("Linux skips only the checkout candidate, not its independently listed symlink target directory", (t) => {
   const base = tempDir(t);
   const checkout = path.join(base, "checkout");
-  const host = makePi(path.join(base, "host"), "0.84.3", "0.84.4");
+  const host = makePi(path.join(base, "host"), "0.84.3");
   fs.mkdirSync(path.join(checkout, "node_modules"), { recursive: true });
   fs.symlinkSync(host.binDir, path.join(checkout, "node_modules", ".bin"), "dir");
 
@@ -95,14 +95,10 @@ test("the first non-checkout pi is authoritative when its graph is invalid", (t)
   }), path.join(firstBin, "pi"));
 });
 
-test("accepts Pi package versions without running the executable", (t) => {
+test("accepts matching Pi package versions without running the executable", (t) => {
   const base = tempDir(t);
-  for (const version of ["0.1.0", "0.85.0", "1.0.0-beta.1", undefined]) {
-    const host = makePi(path.join(base, String(version)), version, "2.0.0");
-    const manifest = path.join(host.codingDir, "package.json");
-    const packageJson = JSON.parse(fs.readFileSync(manifest, "utf8"));
-    packageJson.version = version;
-    fs.writeFileSync(manifest, JSON.stringify(packageJson));
+  for (const version of ["0.1.0", "0.85.0", "1.0.0-beta.1"]) {
+    const host = makePi(path.join(base, version), version);
     const marker = path.join(base, "executed");
     fs.writeFileSync(path.join(host.codingDir, "cli.js"), `#!/usr/bin/env node\nimport fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'executed'); process.exit(1);\n`);
 
@@ -111,9 +107,37 @@ test("accepts Pi package versions without running the executable", (t) => {
       checkoutDir: path.join(base, "checkout"),
       env: { ...process.env, PATH: `${host.binDir}${path.delimiter}${process.env.PATH}` },
     });
-    assert.equal(Object.keys(runtime.packages).length, 4);
+    assert.equal(Object.keys(runtime.packages).length, 5);
     assert.equal(fs.existsSync(marker), false);
   }
+});
+
+test("resolves a matching standalone pi-server installation from PATH", (t) => {
+  const base = tempDir(t);
+  const host = makePi(path.join(base, "host"), "0.85.0");
+  fs.rmSync(path.join(base, "host", "node_modules", "@earendil-works", "pi-server"), { recursive: true });
+  const standalone = path.join(base, "standalone");
+  const serverDir = writePackage(standalone, "@earendil-works/pi-server", "0.85.0");
+  const standaloneBin = path.join(standalone, "node_modules", ".bin");
+  fs.mkdirSync(standaloneBin, { recursive: true });
+
+  const runtime = resolveHostPi({
+    platform: "linux",
+    checkoutDir: path.join(base, "checkout"),
+    env: { ...process.env, PATH: `${host.binDir}${path.delimiter}${standaloneBin}${path.delimiter}${process.env.PATH}` },
+  });
+
+  assert.equal(runtime.packages["@earendil-works/pi-server"].dir, serverDir);
+});
+
+test("rejects mismatched Pi package versions", (t) => {
+  const base = tempDir(t);
+  const host = makePi(path.join(base, "host"), "0.85.0", "0.84.4");
+  assertActionable(() => resolveHostPi({
+    platform: "linux",
+    checkoutDir: path.join(base, "checkout"),
+    env: { ...process.env, PATH: `${host.binDir}${path.delimiter}${process.env.PATH}` },
+  }), host.executable);
 });
 
 test("honors PATHEXT order", (t) => {

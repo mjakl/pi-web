@@ -5,11 +5,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const CODING_AGENT = "@earendil-works/pi-coding-agent";
+const PI_SERVER = "@earendil-works/pi-server";
 const PI_PACKAGES = [
   CODING_AGENT,
   "@earendil-works/pi-agent-core",
   "@earendil-works/pi-ai",
   "@earendil-works/pi-tui",
+  PI_SERVER,
 ];
 
 function validationError(reason, executable) {
@@ -141,6 +143,20 @@ function findDependency(codingDir, packageName) {
   throw new Error(`${packageName} is missing from ${CODING_AGENT}'s dependency graph`);
 }
 
+function findStandaloneDependency(env, platform, checkoutDir, packageName, version) {
+  const checkout = comparableDirectory(checkoutDir, platform);
+  for (const rawDir of (env.PATH || "").split(platform === "win32" ? ";" : path.delimiter)) {
+    const start = rawDir.replace(/^"|"$/g, "") || ".";
+    for (const ancestor of ancestors(start)) {
+      const found = readPackage(path.join(ancestor, "node_modules", ...packageName.split("/")), packageName);
+      if (!found || found.packageJson.version !== version) continue;
+      const dir = comparableDirectory(found.dir, platform);
+      if (dir !== checkout && !dir.startsWith(`${checkout}${path.sep}`)) return found;
+    }
+  }
+  throw new Error(`${packageName} ${version} is missing from ${CODING_AGENT}'s dependency graph and PATH`);
+}
+
 function pickTarget(value) {
   if (typeof value === "string") return value;
   if (!value || typeof value !== "object") return undefined;
@@ -187,9 +203,23 @@ function resolveHostPi({
 
   try {
     const coding = findCodingAgent(executable, platform);
+    const version = coding.packageJson.version;
+    if (typeof version !== "string") throw new Error(`${CODING_AGENT} has no version`);
     const packages = {};
     for (const packageName of PI_PACKAGES) {
-      const found = packageName === CODING_AGENT ? coding : findDependency(coding.dir, packageName);
+      let found;
+      if (packageName === CODING_AGENT) found = coding;
+      else {
+        try {
+          found = findDependency(coding.dir, packageName);
+        } catch (error) {
+          if (packageName !== PI_SERVER) throw error;
+          found = findStandaloneDependency(env, platform, checkoutDir, packageName, version);
+        }
+      }
+      if (found.packageJson.version !== version) {
+        throw new Error(`${packageName} has version ${found.packageJson.version ?? "(missing)"}; required ${version}`);
+      }
       packages[packageName] = {
         dir: found.dir,
         entry: rootEntry(found, packageName),
