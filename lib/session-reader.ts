@@ -463,6 +463,8 @@ export interface BuildSessionContextOptions {
   deferToolResultImages?: boolean;
   tail?: number;
   excludeLeaf?: boolean;
+  /** Expand an older page back to this entry for rail navigation. */
+  throughEntryId?: string;
   /** Session id used to build lazy URLs for historical tool-result images. */
   sessionId?: string;
 }
@@ -472,32 +474,27 @@ export function buildSessionContext(
   leafId?: string | null,
   options: BuildSessionContextOptions = {},
 ): SessionContext {
-  const { tail, excludeLeaf } = options;
-  // Restrict SDK conversion and the response payload to the requested page.
-  const sliced = tail && tail > 0 ? sliceActiveBranch(entries, leafId ?? null, tail, excludeLeaf) : entries;
-  const hasMore = Boolean(tail && tail > 0 && sliced[0]?.parentId);
-  const byId = new Map<string, SessionEntry>();
-  for (const e of sliced) byId.set(e.id, e);
-
-  const piEntries = sliced as unknown as PiSessionEntry[];
-  const contextEntries = piBuildContextEntries(
-    piEntries,
-    leafId,
-    byId as unknown as Map<string, PiSessionEntry>,
+  const { tail, excludeLeaf, throughEntryId } = options;
+  const branch = sliceActiveBranch(entries, leafId ?? null, entries.length, excludeLeaf);
+  const throughIndex = throughEntryId ? branch.findIndex((entry) => entry.id === throughEntryId) : -1;
+  if (throughEntryId && throughIndex < 0) throw new RangeError("History target is not before the current page");
+  // ponytail: distant jumps load the intervening span; use bounded windows if rendering becomes costly.
+  const sliced = throughEntryId ? branch.slice(throughIndex)
+    : tail && tail > 0 ? branch.slice(-tail) : branch;
+  const hasMore = Boolean(sliced[0]?.parentId);
+  // Paged chat history must retain compacted turns, in transcript order.
+  // The unpaged SDK context remains available to context consumers.
+  const contextEntries = tail || throughEntryId ? sliced : piBuildContextEntries(
+    entries as unknown as PiSessionEntry[], leafId,
   );
-  const compactionIndex = sliced.findLastIndex((entry) => entry.type === "compaction");
-  const compaction = sliced[compactionIndex];
-  // The SDK cannot retain entries whose compaction boundary was sliced off the page.
-  if (
-    compactionIndex > 0 &&
-    compaction?.type === "compaction" &&
-    !byId.has(compaction.firstKeptEntryId)
-  ) {
-    contextEntries.splice(1, 0, ...piEntries.slice(0, compactionIndex));
-  }
+  const historyAnchorIds = excludeLeaf ? undefined : branch.filter((entry) => (
+    (entry.type === "message" && entry.message.role === "user")
+    || entry.type === "compaction"
+    || (entry.type === "branch_summary" && Boolean(entry.summary))
+    || (entry.type === "custom_message" && entry.customType === "compaction")
+  )).map((entry) => entry.id);
 
-  // Convert the SDK-selected context entries and their IDs together. This keeps
-  // fork/navigation targets aligned while preserving pi's compaction ordering.
+  // Convert entries and IDs together so fork and navigation targets stay aligned.
   const messages: AgentMessage[] = [];
   const entryIds: string[] = [];
   for (const entry of contextEntries) {
@@ -512,6 +509,7 @@ export function buildSessionContext(
   return {
     messages,
     entryIds,
+    ...(historyAnchorIds ? { historyAnchorIds } : {}),
     oldestEntryId: sliced[0]?.id ?? null,
     hasMore,
     ...getSessionSettings(entries, leafId),

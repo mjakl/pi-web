@@ -18,6 +18,10 @@ export async function GET(
   const rawTail = Number(url.searchParams.get("tail"));
   const tail = Number.isFinite(rawTail) && rawTail > 0 ? Math.min(rawTail, 1000) : 50;
   const before = url.searchParams.get("before") ?? undefined;
+  const throughEntryId = url.searchParams.get("through") ?? undefined;
+  if (throughEntryId && !before) {
+    return NextResponse.json({ error: "A history cursor is required" }, { status: 400 });
+  }
 
   try {
     const rpc = getRpcSession(id);
@@ -35,11 +39,12 @@ export async function GET(
       deferToolResultImages,
       tail,
       excludeLeaf: Boolean(before),
+      throughEntryId,
       sessionId: id,
     });
 
     return NextResponse.json({ context, tail, before: before ?? null });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return NextResponse.json({ error: String(error) }, { status: error instanceof RangeError ? 400 : 500 });
   }
 }

@@ -206,7 +206,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
   }, [chatInputRef]);
 
   const {
-    loading, error, messages, entryIds, historyCursor, hasEarlierMessages, streamState,
+    historyAnchorIds, loading, error, messages, entryIds, historyCursor, hasEarlierMessages, streamState,
     agentRunning, bashRunning, pendingBash, modelNames, modelList, modelError, modelScopeWarnings, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
     retryInfo, contextUsage, forkingEntryId,
     isCompacting, compactError, compactResult, displayModel: displayModelValue, modelSwitching, sessionStats,
@@ -222,7 +222,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     handleRecallQueue,
     handleBuiltinSlashCommand,
     handleToolPresetChange, handleThinkingLevelChange, loadSlashCommands, scrollUserMsgToTop,
-    loadContext, activeLeafId,
+    loadEarlierMessages, activeLeafId,
   } = useAgentSession({
     session, sessionActive, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd: wrappedOnAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked,
     modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange,
@@ -277,7 +277,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
         if (!sid) return;
         loadingOlderRef.current = true;
         prevScrollDistanceRef.current = captureScrollDistance(container.scrollHeight, container.scrollTop);
-        void loadContext(sid, activeLeafId, oldestId).finally(() => {
+        void loadEarlierMessages().finally(() => {
           loadingOlderRef.current = false;
         });
       },
@@ -285,7 +285,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [historyCursor, hasEarlierMessages, session, activeLeafId, loadContext, sessionIdRef, scrollContainerRef]);
+  }, [historyCursor, hasEarlierMessages, session, activeLeafId, loadEarlierMessages, sessionIdRef, scrollContainerRef]);
 
   // After an older page is prepended, restore the scroll position so the
   // viewport doesn't jump.
@@ -855,8 +855,11 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
         <ChatJumpToLatest scrollContainer={scrollContainerRef} />
         {isMobile ? null : (
           <ChatMinimap
+            key={`${session?.id ?? "draft"}:${activeLeafId ?? ""}`}
             messages={messages}
-            streamingMessage={streamState.streamingMessage}
+            entryIds={entryIds}
+            historyAnchorIds={historyAnchorIds}
+            onLoadThrough={loadEarlierMessages}
             scrollContainer={scrollContainerRef}
             messageRefs={messageRefs}
           />

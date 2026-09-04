@@ -364,6 +364,9 @@ test("detail and context routes bound history to the tail window", async (t) => 
   assert.equal(defaultDetail.context.entryIds[0], "e4950");
   assert.equal(defaultDetail.context.hasMore, true);
   assert.equal(defaultDetail.stats.totalMessages, 5000);
+  assert.equal(defaultDetail.context.historyAnchorIds.length, 2500);
+  assert.equal(defaultDetail.context.historyAnchorIds[0], "e0");
+  assert.equal(defaultDetail.context.historyAnchorIds.at(-1), "e4998");
   assert.equal((await detail("?tail=5000")).context.messages.length, 1000);
   assert.equal((await detail("?tail=abc")).context.messages.length, 50);
 
@@ -373,5 +376,11 @@ test("detail and context routes bound history to the tail window", async (t) => 
   const olderPage = await context("?tail=5&before=e4950");
   assert.deepEqual(olderPage.context.entryIds, ["e4945", "e4946", "e4947", "e4948", "e4949"]);
   assert.equal(olderPage.before, "e4950");
+  const jump = await context("?before=e4950&through=e100");
+  assert.equal(jump.context.entryIds.length, 4850);
+  assert.equal(jump.context.entryIds[0], "e100");
+  assert.equal(jump.context.entryIds.at(-1), "e4949");
+  const invalidJump = await getSessionContext(new Request(`http://localhost/api/sessions/${id}/context?before=e4950&through=missing`), routeContext);
+  assert.equal(invalidJump.status, 400);
   assert.equal((await context("?tail=5000&before=e4950")).context.entryIds.length, 1000);
 });

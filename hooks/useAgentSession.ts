@@ -560,6 +560,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     leafId: string | null,
     before?: string | null,
     branchRequest?: BranchContextRequest,
+    throughEntryId?: string,
   ) => {
     const paginationRequest: PaginationRequest | null = before ? {
       order: ++persistedOrderRef.current,
@@ -575,18 +576,19 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         latestRefreshOrder: latestRefreshOrderRef.current,
       }));
 
-    if (!isCurrentContext()) return;
+    if (!isCurrentContext()) return false;
     try {
       const params = new URLSearchParams({ deferThinking: "1", deferMedia: "1" });
       if (leafId) params.set("leafId", leafId);
       // Page upward: ask the server for the `tail` ancestors preceding `before`,
       // then prepend them. Omitting `before` fetches the selected branch.
       if (before) params.set("before", before);
+      if (throughEntryId) params.set("through", throughEntryId);
       const url = `/api/sessions/${encodeURIComponent(sid)}/context?${params}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const d = await res.json() as { context: SessionData["context"] };
-      if (!isCurrentContext()) return;
+      if (!isCurrentContext()) return false;
       if (paginationRequest) acceptedTranscriptOrderRef.current = paginationRequest.order;
       setHistoryCursor(d.context.oldestEntryId);
       setHasEarlierMessages(d.context.hasMore);
@@ -610,10 +612,32 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         setMessages(d.context.messages);
         setEntryIds(d.context.entryIds ?? []);
       }
+      return true;
     } catch (e) {
       console.error("Failed to load context:", e);
+      return false;
     }
   }, [currentPersistedAuthority]);
+
+  const earlierLoadRef = useRef<Promise<boolean> | null>(null);
+  const historyLeafRef = useRef(activeLeafId);
+  historyLeafRef.current = activeLeafId;
+  const loadEarlierMessages = useCallback(async (throughEntryId?: string): Promise<boolean> => {
+    const sid = sessionIdRef.current;
+    const leaf = historyLeafRef.current;
+    while (earlierLoadRef.current) await earlierLoadRef.current;
+    if (!sid || sessionIdRef.current !== sid || historyLeafRef.current !== leaf) return false;
+    const context = dataRef.current?.context;
+    if (throughEntryId && context?.entryIds.includes(throughEntryId)) return true;
+    if (!context?.oldestEntryId || !context.hasMore) return false;
+    const request = loadContext(sid, leaf, context.oldestEntryId, undefined, throughEntryId);
+    earlierLoadRef.current = request;
+    try {
+      return await request;
+    } finally {
+      earlierLoadRef.current = null;
+    }
+  }, [loadContext]);
 
   const loadTools = useCallback(async (sid: string) => {
     try {
@@ -1630,7 +1654,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           await sendAgentCommand(sid, { type: "navigate_tree", targetId: leafId }).catch(() => {});
         }
       }),
-      () => loadContext(sid, leafId, undefined, branchRequest),
+      async () => { await loadContext(sid, leafId, undefined, branchRequest); },
     );
   }, [loadContext, runPersistedWrite]);
 
@@ -2184,6 +2208,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   return {
     // State
+    historyAnchorIds: data?.context.historyAnchorIds,
     loading, error, activeLeafId, messages, entryIds, historyCursor, hasEarlierMessages, streamState,
     agentRunning, modelNames, modelList, modelError, modelScopeWarnings, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
     retryInfo, contextUsage, forkingEntryId,
@@ -2202,7 +2227,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     handleRecallQueue,
     handleBuiltinSlashCommand,
     setNoticePaused: setPausedNoticeId,
-    handleToolPresetChange, handleThinkingLevelChange, loadSlashCommands, loadContext,
+    handleToolPresetChange, handleThinkingLevelChange, loadSlashCommands, loadContext, loadEarlierMessages,
     scrollUserMsgToTop,
     bashRunning, pendingBash,
   };
