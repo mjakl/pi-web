@@ -287,6 +287,7 @@ export const enMessages: Record<string, string> = {
     "chat.sessionRenamed": "Session renamed to {name}",
     "chat.noAssistantMessageToCopy": "No assistant message to copy",
     "chat.copiedLastAssistantMessage": "Copied last assistant message",
+    "chat.copyRefused": "The browser refused to copy to the clipboard",
     "chat.noActiveSessionToClone": "No active session to clone",
     "chat.cannotCloneWhileRunning": "Cannot clone while the session is running",
     "chat.cannotCloneUnsavedSession": "Cannot clone an empty or unsaved session",
