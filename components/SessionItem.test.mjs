@@ -107,11 +107,6 @@ test("each session indicator keeps its own label, colour, and glyph", () => {
   const stopped = renderIndicator("stopped");
   assert.match(stopped, /title="Session stopped" aria-label="Session stopped" style="[^"]*color:var\(--text-dim\)"/);
   assert.match(stopped, /<circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.25" opacity="0.6"/);
-
-  const unread = renderIndicator("unread");
-  assert.match(unread, /title="New activity" aria-label="New session activity" style="[^"]*color:var\(--info\)"/);
-  assert.match(unread, /<circle cx="7" cy="7" r="5" fill="currentColor">/);
-  assert.doesNotMatch(unread, /<animate/);
 });
 
 test("a session row titles itself from the name, then the first message, then the id", () => {
@@ -848,10 +843,34 @@ test("a selected running worktree session shows running, unread, and branch stat
     { ...baseSession, name: "Feature work", isWorktree: true, branch: "feature/seams", messageCount: undefined },
     { isSelected: true, isActive: true, isRunning: true, isUnread: true },
   );
-  assert.match(html, /aria-label="Agent running…"/);
-  assert.match(html, /aria-label="New session activity"/);
+  assert.match(html, /aria-label="Agent running… · New activity"/);
+  assert.equal((html.match(/class="session-indicator-unread"/g) ?? []).length, 1);
   assert.match(html, /aria-label="Loading\.\.\."/);
   assert.match(html, /title="Worktree: \/tmp\/project"/);
   assert.match(html, />feature\/seams</);
   assert.match(html, /border-left:2px solid var\(--accent\)/);
+});
+
+
+test("unread activity decorates one status indicator and clears when read", async () => {
+  for (const [props, label, shape, color] of [
+    [{ isActive: true }, "Session active", "circle", "var(--success)"],
+    [{ isActive: false }, "Session stopped", "circle", "var(--text-dim)"],
+    [{ isActive: true, isRunning: true }, "Agent running…", "path", "var(--accent)"],
+  ]) {
+    const view = await mountItem(baseSession, { ...props, isUnread: true });
+    try {
+      const indicator = view.container.querySelector(`[aria-label="${label} · New activity"]`);
+      assert.ok(indicator);
+      assert.equal(indicator.style.color, "var(--info)");
+      assert.ok(indicator.querySelector(shape));
+      assert.equal(indicator.parentElement.querySelectorAll("svg").length, 1);
+      assert.equal(indicator.className, "session-indicator-unread");
+      await view.rerender(baseSession, { ...props, isUnread: false });
+      assert.equal(view.container.querySelector(".session-indicator-unread"), null);
+      assert.equal(view.container.querySelector(`[aria-label="${label}"]`).style.color, color);
+    } finally {
+      await view.unmount();
+    }
+  }
 });

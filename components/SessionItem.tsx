@@ -105,25 +105,16 @@ const SESSION_INDICATORS = {
       </svg>
     ),
   },
-  unread: {
-    title: "sidebar.newActivity",
-    label: "sidebar.newSessionActivity",
-    color: "var(--info)",
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ display: "block" }}>
-        <circle cx="7" cy="7" r="5" fill="currentColor" />
-      </svg>
-    ),
-  },
 };
 
-export function SessionIndicator({ kind }: { kind: keyof typeof SESSION_INDICATORS }) {
+export function SessionIndicator({ kind, unread = false }: { kind: keyof typeof SESSION_INDICATORS; unread?: boolean }) {
   const { t } = useI18n();
   const { title, label, color, icon } = SESSION_INDICATORS[kind];
   return (
     <span
-      title={t(title)}
-      aria-label={t(label)}
+      title={unread ? t("sidebar.unreadSessionStatus", { status: t(title) }) : t(title)}
+      aria-label={unread ? t("sidebar.unreadSessionStatus", { status: t(label) }) : t(label)}
+      className={unread ? "session-indicator-unread" : undefined}
       style={{
         width: 14,
         height: 14,
@@ -131,7 +122,7 @@ export function SessionIndicator({ kind }: { kind: keyof typeof SESSION_INDICATO
         alignItems: "center",
         justifyContent: "center",
         flexShrink: 0,
-        color,
+        color: unread ? "var(--info)" : color,
       }}
     >
       {icon}
@@ -471,9 +462,8 @@ export function SessionItem({
                 {title}
               </span>
             </div>
-            <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 8, color: "var(--text-dim)", fontSize: 11, minWidth: 0, overflow: "hidden" }}>
-              <SessionIndicator kind={isRunning ? "running" : isActive ? "active" : "stopped"} />
-              {isUnread && <SessionIndicator kind="unread" />}
+            <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 8, color: "var(--text-dim)", fontSize: 11, minWidth: 0, overflow: "clip", overflowClipMargin: 4 }}>
+              <SessionIndicator kind={isRunning ? "running" : isActive ? "active" : "stopped"} unread={isUnread} />
               <span title={session.modified} style={{ whiteSpace: "nowrap", flexShrink: 0 }}>{formatRelativeTime(session.modified)}</span>
               {session.isWorktree && session.branch && (
                 <span

@@ -1624,6 +1624,42 @@ span.linenumber {
   }
 }
 
+.session-indicator-unread {
+  position: relative;
+}
+
+.session-indicator-unread circle {
+  opacity: 1;
+}
+
+.session-indicator-unread::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  pointer-events: none;
+  --notification-halo: color-mix(in srgb, var(--info) 25%, transparent);
+  box-shadow: 0 0 0 3px var(--notification-halo), 0 0 7px 2px var(--notification-halo);
+  animation: session-notification-halo 1.5s ease-in-out infinite;
+}
+
+@keyframes session-notification-halo {
+  0%, 100% {
+    box-shadow: 0 0 0 1px var(--notification-halo), 0 0 3px var(--notification-halo);
+    opacity: 0.45;
+  }
+  50% {
+    box-shadow: 0 0 0 4px var(--notification-halo), 0 0 8px 2px var(--notification-halo);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-indicator-unread::before {
+    animation: none;
+  }
+}
+
 /* Session row hover. Was React state re-rendering the row on every pointer
    enter and leave, when the background was the only thing that changed. A
    selected row keeps --bg-selected because it sets that inline. */

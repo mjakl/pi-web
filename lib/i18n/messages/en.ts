@@ -153,6 +153,7 @@ export const enMessages: Record<string, string> = {
     "sidebar.sessionActive": "Session active",
     "sidebar.sessionStopped": "Session stopped",
     "sidebar.newActivity": "New activity",
+    "sidebar.unreadSessionStatus": "{status} · New activity",
     "sidebar.newSessionActivity": "New session activity",
     "sidebar.sessionActions": "Session actions for {title}",
     "sidebar.stop": "Stop",
