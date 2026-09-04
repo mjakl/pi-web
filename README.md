@@ -32,7 +32,7 @@ Pi Web is a client for Pi and your existing working folders, not a replacement f
 - **Provider accounts and model configuration:** Sign in, add API keys, and edit provider or model metadata in the Pi terminal. Pi Web does not read, write, or serve credentials; it lists the models made available by Pi and lets you select one for a session.
 - **Remote access control:** Pi Web has no user accounts, login screen, or built-in authentication. The default loopback address is intended for local use. Protect any non-loopback deployment with a trusted network or an external security layer.
 - **A separate subagent system:** This fork does not add its own subagent runtime or profile editor. Agent tools and orchestration come from Pi and the extensions you install.
-- **Updates:** Pi Web does not update itself or Pi from the browser. Update the npm package or checkout and your host Pi installation with their normal tools, then restart Pi Web.
+- **Updates:** Pi Web does not update itself or Pi from the browser. Pull the checkout and update your host Pi installation with their normal tools, then restart Pi Web.
 
 ## Get started
 
@@ -44,22 +44,9 @@ npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
 If Pi does not have a model provider yet, configure one in the Pi terminal. Pi Web uses the first host `pi` found on `PATH` (or `PATHEXT` on Windows) and loads Pi's packages in-process.
 
-### Run the published package
+Pi Web supports Linux, macOS, and Windows. Android and Termux are not supported.
 
-```bash
-npx @agegr/pi-web
-```
-
-For a persistent command:
-
-```bash
-npm install --global @agegr/pi-web
-pi-web
-```
-
-Open [http://127.0.0.1:30141](http://127.0.0.1:30141) when the server is ready. Pi Web supports Linux, macOS, and Windows. Android and Termux are not supported.
-
-### Run from a checkout
+Clone and run this fork:
 
 ```bash
 git clone https://github.com/mjakl/pi-web.git
@@ -68,7 +55,7 @@ npm install
 npm run dev
 ```
 
-To update a checkout, stop the server and run:
+Open [http://127.0.0.1:30141](http://127.0.0.1:30141) when the server is ready. To update a checkout, stop the server and run:
 
 ```bash
 git pull --ff-only
@@ -86,7 +73,7 @@ The Pi packages installed with the checkout are build-time dependencies. `npm ru
 - Type `@` in the composer to find project files. `@~/`, `@/`, `@./`, and `@../` complete paths one directory at a time within paths Pi Web can list.
 - Server-side model and API requests honor `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`.
 
-The packaged command accepts `--port`/`-p` and `--hostname`/`-H`. You can also set `PORT` and `PI_WEB_HOSTNAME`. Run `pi-web --help` for the current options. Checkout scripts are listed in [`package.json`](./package.json).
+Checkout scripts, including the explicit LAN variants, are listed in [`package.json`](./package.json).
 
 ## Security
 
