@@ -569,6 +569,72 @@ test("background inventory completion does not show manual Refresh success", asy
   }
 });
 
+test("sidebar Activate starts a saved session without a prompt, reports failure, and allows retry", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  let activationResponse = Promise.resolve(Response.json({ error: "Startup failed" }, { status: 500 }));
+  globalThis.fetch = async (url, init) => {
+    if (url === `/api/agent/${sidebarSession.id}`) {
+      requests.push([url, init.method, JSON.parse(init.body)]);
+      return activationResponse;
+    }
+    if (String(url).startsWith("/api/sessions")) {
+      return Response.json({ sessions: [sidebarSession], activeSessionIds: [], runningSessionIds: [] });
+    }
+    if (url === "/api/agent/running") return Response.json({ activeSessionIds: [], runningSessionIds: [] });
+    if (url === "/api/home") return Response.json({ home: "/tmp" });
+    return Response.json({});
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  let selections = 0;
+  let activeIds = new Set();
+  try {
+    await act(async () => {
+      root.render(React.createElement(SessionSidebar, {
+        selectedSessionId: sidebarSession.id,
+        onSelectSession: () => { selections += 1; },
+        onActiveSessionIdsChange: (ids) => { activeIds = ids; },
+        beginSessionInventoryAttempt: () => 1,
+        actionsAvailable: true,
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const initialSelections = selections;
+    const trigger = () => container.querySelector(".session-row button[aria-controls]");
+    const activate = async () => {
+      await click(trigger());
+      await click([...container.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Activate"));
+    };
+    await activate();
+    assert.match(container.textContent, /Could not activate session: Startup failed/);
+    assert.equal(activeIds.has(sidebarSession.id), false);
+    assert.ok(container.querySelector('[aria-label="Session stopped"]'));
+    assert.equal(document.activeElement, trigger());
+
+    const pending = deferred();
+    activationResponse = pending.promise;
+    await activate();
+    assert.equal(trigger().getAttribute("aria-disabled"), "true");
+    await click(trigger());
+    assert.equal(container.querySelector('[role="group"]'), null);
+    assert.equal(requests.length, 2);
+    await act(async () => pending.resolve(Response.json({ success: true, data: {} })));
+    assert.equal(activeIds.has(sidebarSession.id), true);
+    assert.ok(container.querySelector('[aria-label="Session active"]'));
+    assert.doesNotMatch(container.textContent, /Could not activate session/);
+    assert.equal(selections, initialSelections);
+    assert.deepEqual(requests, Array(2).fill([`/api/agent/${sidebarSession.id}`, "POST", { type: "get_state" }]));
+    await click(trigger());
+    assert.deepEqual([...container.querySelectorAll('[role="group"] button')].map((button) => button.textContent), ["Stop", "Rename", "Delete"]);
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("sidebar puts running then active sessions first and shortcuts follow live ordering", async () => {
   const originalFetch = globalThis.fetch;
   const sessions = ["stopped-new", "active-new", "running-new", "stopped-old", "active-old", "running-old"]

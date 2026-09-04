@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import type { SessionInfo } from "@/lib/types";
 import { formatRelativeTime } from "@/lib/i18n/format";
 import { useI18n } from "@/hooks/useI18n";
+import { sendAgentCommand } from "@/lib/agent-client";
 
 export const SESSION_ITEM_HEIGHT = 54;
 
@@ -35,7 +36,7 @@ function menuPositionFor(
 ): MenuPosition {
   const width = 144;
   const rowHeight = window.matchMedia("(pointer: coarse)").matches ? 44 : 34;
-  const height = (Number(isActive) + (transient ? 0 : 2)) * rowHeight + 10;
+  const height = (transient ? Number(isActive) : 3) * rowHeight + 10;
   return {
     left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
     top: rect.bottom + 4 + height <= window.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4),
@@ -128,6 +129,8 @@ export function SessionItem({
   onClick,
   onRenamed,
   onStopped,
+  onActivated,
+  onActivationFailed,
   onDeleted,
 }: {
   session: SessionInfo;
@@ -140,12 +143,15 @@ export function SessionItem({
   onClick: () => void;
   onRenamed?: () => void;
   onStopped?: (id: string) => void;
+  onActivated?: (id: string) => void;
+  onActivationFailed?: (error: string) => void;
   onDeleted?: (id: string) => void;
 }) {
   const { t } = useI18n();
   const [actionSurface, setActionSurface] = useState<ActionSurface>(IDLE_ACTION_SURFACE);
   const [renameValue, setRenameValue] = useState("");
   const [stopping, setStopping] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -166,7 +172,7 @@ export function SessionItem({
   const menuId = useId();
   const eligibleForActions = isActive || !session.transient;
   const hasActions = actionsAvailable && eligibleForActions;
-  const actionPending = stopping || deleting;
+  const actionPending = stopping || activating || deleting;
   const renderedSurface = actionsAvailable ? actionSurface : IDLE_ACTION_SURFACE;
   actionsAvailableRef.current = actionsAvailable;
   hasActionsRef.current = hasActions;
@@ -297,6 +303,22 @@ export function SessionItem({
     }
   }, [renameValue, session.id, session.name, onRenamed, title, transitionActionSurface]);
 
+  const performActivate = useCallback(async () => {
+    if (isActive || session.transient) return;
+    transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
+    setActivating(true);
+    try {
+      await sendAgentCommand(session.id, { type: "get_state" });
+      onActivated?.(session.id);
+    } catch (error) {
+      onActivationFailed?.(t("sidebar.activationFailed", {
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    } finally {
+      setActivating(false);
+    }
+  }, [isActive, session.id, session.transient, onActivated, onActivationFailed, t, transitionActionSurface]);
+
   const performStop = useCallback(async () => {
     if (!isActive) return;
     transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
@@ -368,12 +390,13 @@ export function SessionItem({
     transitionActionSurface({ kind: "menu", position }, "surface");
   }, [actionPending, isActive, menuPosition, session.transient, transitionActionSurface]);
 
-  const chooseMenuAction = useCallback((e: React.MouseEvent, action: "stop" | "rename" | "delete") => {
+  const chooseMenuAction = useCallback((e: React.MouseEvent, action: "activate" | "stop" | "rename" | "delete") => {
     e.stopPropagation();
     if (action === "rename") startRename();
+    else if (action === "activate") void performActivate();
     else if (action === "stop") void performStop();
     else void performDelete();
-  }, [performDelete, performStop, startRename]);
+  }, [performActivate, performDelete, performStop, startRename]);
 
   // Fixed-height outer wrapper — content swaps in place so the list never reflows.
   return (
@@ -391,7 +414,7 @@ export function SessionItem({
         background: isSelected ? "var(--bg-selected)" : undefined,
         borderLeft: isSelected ? "2px solid var(--accent)" : "2px solid transparent",
         transition: "background 0.1s",
-        opacity: stopping || deleting ? 0.5 : 1,
+        opacity: actionPending ? 0.5 : 1,
         gap: 6,
         overflow: "hidden",
       }}
@@ -562,6 +585,11 @@ export function SessionItem({
               {isActive && (
                 <button type="button" onClick={(e) => chooseMenuAction(e, "stop")} className="menu-item">
                   {t("sidebar.stop")}
+                </button>
+              )}
+              {!isActive && !session.transient && (
+                <button type="button" onClick={(e) => chooseMenuAction(e, "activate")} className="menu-item">
+                  {t("sidebar.activate")}
                 </button>
               )}
               {!session.transient && (

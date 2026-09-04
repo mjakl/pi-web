@@ -141,7 +141,7 @@ test("the always-visible trigger uses native button keyboard semantics and does 
 
   await click(trigger);
   assert.equal(selections, 0);
-  assert.deepEqual([...document.querySelectorAll('[role="group"] button')].map((item) => item.textContent), ["Rename", "Delete"]);
+  assert.deepEqual([...document.querySelectorAll('[role="group"] button')].map((item) => item.textContent), ["Activate", "Rename", "Delete"]);
   await view.unmount();
 
   const transient = await mountItem({ ...baseSession, transient: true }, { isActive: true });

@@ -1241,6 +1241,11 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
             actionsAvailable={actionsAvailable}
             onClick={() => handleSelectSessionFromList(session)}
             onRenamed={loadSessions}
+            onActivated={(id) => {
+              setError(null);
+              setActiveSessionIds((current) => new Set(current).add(id));
+            }}
+            onActivationFailed={setError}
             onStopped={(id) => {
               setActiveSessionIds((current) => {
                 const next = new Set(current);
