@@ -8,6 +8,9 @@ live turns through in-process Pi SDK `AgentSession` instances.
 
 - Use `npm`; requirements and available scripts are authoritative in
   `package.json` and `package-lock.json`.
+- Pi itself is not a dependency of this checkout. Development, build,
+  type-check, and tests all need a host Pi on `PATH`; see
+  [Host Pi runtime](#host-pi-runtime).
 - Treat `~/.pi/agent` (or `PI_CODING_AGENT_DIR`) as user-owned state. Tests and
   experiments that write sessions, settings, credentials, or skills must use a
   temporary agent directory or an explicit fixture. Do not alter the user's
@@ -58,8 +61,30 @@ Start with these owners instead of a broad file inventory:
 | Project resources, trust, plugins, or skills | `lib/project-trust.ts`, `lib/chat-only.ts`, `app/api/{project-trust,plugins,skills}/**` |
 | Models and startup preferences | `lib/model-scope.ts`, `lib/models-cache.ts`, `lib/agent-config-stamp.ts`, `lib/startup-preferences.ts`, `app/api/models/**` |
 | Application shell and session workspace UI | `components/AppShell.tsx`, `components/SessionSidebar.tsx`, `components/ChatWindow.tsx`, `components/ChatInput.tsx` |
+| Host Pi resolution, package shims, and Next.js startup | `bin/host-pi.js`, `bin/host-pi-runtime.js`, `bin/link-host-pi.js`, `bin/run-next.js` |
 
 ## High-risk invariants
+
+### Host Pi runtime
+
+- Pi Web runs the first `pi` on `PATH`, never a copy inside the checkout.
+  `bin/run-next.js` validates that installation with `bin/host-pi.js`,
+  serializes it into `PI_WEB_HOST_PI`, and preloads `bin/host-pi-runtime.js`,
+  which redirects every `@earendil-works/*` import to it. Start Next.js only
+  through `npm run dev`, `npm run build`, `npm start`, or the `pi-web` bin.
+- TypeScript, Turbopack, and webpack resolve Pi through `node_modules` and never
+  see that hook. `bin/link-host-pi.js` writes the packages Pi Web imports as
+  small re-export packages pointing at the validated host entry, refreshed by
+  `npm install` (`prepare`), `npm run dev`, `npm run build`, and `npm test`.
+  Turbopack compiles only files inside the workspace root, so these must stay
+  real files in the checkout; symlinks to the host installation do not resolve.
+- Turbopack requests server externals through a hashed alias of the package name
+  (`@earendil-works/pi-tui-<hash>`), which the preload normalizes before
+  matching. Keep both the alias and bare-name paths working when changing
+  resolution, and keep `next.config.ts` `serverExternalPackages` in step.
+- Pi Web supports whatever Pi version is installed. Do not pin Pi packages in
+  `package.json`; a pinned copy would be what tests and builds validate while
+  the host runs something else.
 
 ### Session lifecycle and branching
 
@@ -171,14 +196,17 @@ Start with these owners instead of a broad file inventory:
 ## Validation and handoff
 
 - Add or update the nearest `*.test.mjs` regression test for changed behavior.
-  Use a focused `node --experimental-strip-types --test <file>` command while
-  iterating.
+  Use a focused
+  `node --require ./bin/host-pi-runtime.js --experimental-strip-types --test <file>`
+  command while iterating; the preload resolves Pi the way the server does,
+  which the `node_modules` shims cover only at the package root.
 - Regression tests exercise exported behavior or rendered output. Never read a
   source file and assert on its text.
 - Before implementation handoff, run `npm test`,
   `node_modules/.bin/tsc --noEmit`, and `npm run lint`. If dependencies are not
   installed or a check cannot run, report that explicitly rather than claiming
-  validation.
+  validation. `tsc` reads the host Pi shims rather than writing them; if it
+  cannot resolve an `@earendil-works` import, run `node bin/link-host-pi.js`.
 - For instruction-only or documentation-only changes, run `git diff --check`
   and validate every referenced path, link, and command; code checks are not
   required unless the change also affects code or configuration.
@@ -189,6 +217,7 @@ Start with these owners instead of a broad file inventory:
   run `npm run build`, then `npm pack`, install the tarball with
   `--omit=dev`, and run its `pi-web` bin. `npm pack` has no build step and
   ships whatever `.next` exists. A consumer install never contains the
-  packages bundled into `.next`, and the build keeps `--webpack` because a
+  packages bundled into `.next` and holds no Pi packages at all, so the started
+  server must reach Pi through the preload, and the build keeps `--webpack` because a
   Turbopack build reaches `serverExternalPackages` through
   `.next/node_modules/<package>-<hash>` symlinks that `npm pack` drops.

@@ -66,9 +66,10 @@ function wireChildProcessLifecycle(
   child.once("exit", (code, signal) => {
     unwire();
 
-    // A shutdown the user asked for needs no explanation; anything else left
-    // the window closing with no stated reason.
-    if (!shuttingDown) {
+    // A shutdown the user asked for, and a command that ran to completion such
+    // as a build, need no explanation; anything else left the window closing
+    // with no stated reason.
+    if (!shuttingDown && code !== 0) {
       log(
         `[pi-web] Next.js exited unexpectedly (${signal ? `signal ${signal}` : `code ${code}`})`,
       );

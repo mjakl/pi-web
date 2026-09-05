@@ -44,10 +44,12 @@ This is a personalized fork of [agegr/pi-web](https://github.com/agegr/pi-web), 
 Pi Web requires Node.js 22.19.0 or newer, npm, and a separate Pi installation. Install Pi and make sure its `pi` executable is on `PATH`:
 
 ```bash
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent @earendil-works/pi-server
 ```
 
-If Pi does not have a model provider yet, configure one in the Pi terminal. Pi Web ignores the checkout-local `node_modules/.bin/pi`, then uses the first matching `pi` executable on `PATH` (with executable extensions from `PATHEXT` on Windows) and loads Pi's packages in-process.
+Pi Web validates the host installation as a set and requires `@earendil-works/pi-server` alongside Pi. With a version manager that keeps each tool in its own directory, such as mise, install both as separate tools and run Pi Web from a shell where that manager is active.
+
+If Pi does not have a model provider yet, configure one in the Pi terminal. Pi Web ignores any `pi` left in the checkout's `node_modules/.bin`, then uses the first matching `pi` executable on `PATH` (with executable extensions from `PATHEXT` on Windows) and loads that installation's packages in-process. A version-manager shim that is not itself inside Pi's package, such as `mise`'s generic shim directory, is reported as an error rather than searched past.
 
 Pi Web supports Linux, macOS, and Windows. Android and Termux are not supported.
 
@@ -74,7 +76,7 @@ git pull --ff-only
 npm install
 ```
 
-Then restart the development server, or rebuild before starting the production server. The Pi packages installed with the checkout are build-time dependencies; both modes still use the host Pi selected from `PATH`.
+Then restart the development server, or rebuild before starting the production server. The checkout installs no Pi packages of its own: `npm install`, `npm run dev`, `npm run build`, and `npm test` point the checkout at the Pi found on `PATH`, so updating Pi is enough to update what Pi Web runs.
 
 ## What stays with Pi and Git
 

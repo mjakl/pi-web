@@ -1,14 +1,15 @@
 {
   "name": "@agegr/pi-web",
   "version": "0.8.11",
+  "private": true,
   "description": "Web UI for the pi coding agent",
-  "homepage": "https://github.com/agegr/pi-web#readme",
+  "homepage": "https://github.com/mjakl/pi-web#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agegr/pi-web.git"
+    "url": "git+https://github.com/mjakl/pi-web.git"
   },
   "bugs": {
-    "url": "https://github.com/agegr/pi-web/issues"
+    "url": "https://github.com/mjakl/pi-web/issues"
   },
   "license": "MIT",
   "engines": {
@@ -45,11 +46,12 @@
   "scripts": {
     "dev": "node bin/run-next.js dev -H 127.0.0.1 -p 30141",
     "dev:lan": "node bin/run-next.js dev -H 0.0.0.0 -p 30141",
-    "build": "next build --webpack",
+    "build": "node bin/run-next.js build --webpack",
     "start": "node bin/run-next.js start -H 127.0.0.1 -p 30141",
     "start:lan": "node bin/run-next.js start -H 0.0.0.0 -p 30141",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"*.test.mjs\" \"app/**/*.test.mjs\" \"bin/**/*.test.mjs\" \"components/**/*.test.mjs\" \"hooks/**/*.test.mjs\" \"lib/**/*.test.mjs\" \"public/**/*.test.mjs\""
+    "prepare": "node bin/link-host-pi.js",
+    "test": "node bin/link-host-pi.js && node --require ./bin/host-pi-runtime.js --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"*.test.mjs\" \"app/**/*.test.mjs\" \"bin/**/*.test.mjs\" \"components/**/*.test.mjs\" \"hooks/**/*.test.mjs\" \"lib/**/*.test.mjs\" \"public/**/*.test.mjs\""
   },
   "dependencies": {
     "next": "16.3.1",
@@ -59,10 +61,6 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "@earendil-works/pi-agent-core": "0.84.3",
-    "@earendil-works/pi-ai": "0.84.3",
-    "@earendil-works/pi-coding-agent": "0.84.3",
-    "@earendil-works/pi-tui": "0.84.3",
     "@types/node": "^25",
     "@types/proper-lockfile": "4.1.4",
     "@types/react": "^19",
