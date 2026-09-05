@@ -109,3 +109,60 @@ test("New session restores the selected message and images after switching, pres
     globalThis.fetch = originalFetch;
   }
 });
+
+test("Rewind confirms, retains the draft on failure, and restores the removed message and images on success", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalConfirm = window.confirm;
+  let confirmed = false;
+  let fail = true;
+  let rewound = false;
+  const commands = [];
+  window.confirm = (text) => { assert.match(text, /permanently removes/); return confirmed; };
+  globalThis.fetch = async (url, options) => {
+    const path = String(url);
+    if (path === "/api/agent/fork-source") {
+      commands.push(JSON.parse(options.body));
+      if (fail) return Response.json({ error: "fixture failure" }, { status: 500 });
+      rewound = true;
+      return Response.json({ success: true, data: { message: selectedMessage } });
+    }
+    if (path.startsWith("/api/sessions/fork-source?")) return Response.json({
+      sessionId: session.id, filePath: session.path, info: session, totalActiveMs: 0,
+      tree: [], leafId: rewound ? "answer" : "selected",
+      context: { messages: rewound ? history : [...history, selectedMessage],
+        entryIds: rewound ? ["question", "answer"] : ["question", "answer", "selected"], hasMore: false },
+    });
+    if (path.endsWith("/state")) return Response.json({ active: false, running: false });
+    if (path.startsWith("/api/models")) return Response.json({ models: {}, modelList: [] });
+    return Response.json({});
+  };
+  setDraft(session.id, { value: "Unsent draft", images: [] });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const rewindButton = () => [...container.querySelectorAll("button")].filter(button => button.textContent.trim() === "Rewind").at(-1);
+  try {
+    await React.act(() => root.render(React.createElement(ChatWindow, { session, newSessionCwd: null, newSessionDraftKey: null })));
+    assert.equal([...container.querySelectorAll("button")].filter(button => button.textContent.trim() === "Rewind").length, 2, "the first user message can also be rewound");
+    await React.act(() => rewindButton().click());
+    assert.deepEqual(commands, []);
+    assert.equal(container.querySelector("textarea").value, "Unsent draft");
+    confirmed = true;
+    await React.act(() => rewindButton().click());
+    assert.match(container.textContent, /Could not rewind: fixture failure/);
+    assert.equal(container.querySelector("textarea").value, "Unsent draft");
+    fail = false;
+    await React.act(() => rewindButton().click());
+    assert.equal(container.querySelector("textarea").value, "/skill:review src/main.ts");
+    assert.deepEqual(getDraft(session.id), { value: "/skill:review src/main.ts", images: [image] });
+    assert.match(container.textContent, /Earlier answer/);
+    assert.equal([...container.querySelectorAll("button")].filter(button => button.textContent.trim() === "Rewind").length, 1);
+    assert.deepEqual(commands, [{ type: "rewind", entryId: "selected" }, { type: "rewind", entryId: "selected" }]);
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+    clearDraft(session.id);
+    globalThis.fetch = originalFetch;
+    window.confirm = originalConfirm;
+  }
+});

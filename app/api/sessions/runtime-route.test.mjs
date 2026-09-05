@@ -364,9 +364,9 @@ test("detail and context routes bound history to the tail window", async (t) => 
   assert.equal(defaultDetail.context.entryIds[0], "e4950");
   assert.equal(defaultDetail.context.hasMore, true);
   assert.equal(defaultDetail.stats.totalMessages, 5000);
-  assert.equal(defaultDetail.context.historyAnchorIds.length, 2500);
-  assert.equal(defaultDetail.context.historyAnchorIds[0], "e0");
-  assert.equal(defaultDetail.context.historyAnchorIds.at(-1), "e4998");
+  assert.equal(defaultDetail.context.historyAnchors.length, 2500);
+  assert.equal(defaultDetail.context.historyAnchors[0].id, "e0");
+  assert.equal(defaultDetail.context.historyAnchors.at(-1).id, "e4998");
   assert.equal((await detail("?tail=5000")).context.messages.length, 1000);
   assert.equal((await detail("?tail=abc")).context.messages.length, 50);
 

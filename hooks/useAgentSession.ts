@@ -10,6 +10,7 @@ import type {
   SessionContext,
   SessionInfo,
   SessionTreeNode,
+  UserMessage,
 } from "@/lib/types";
 import { errorMessage } from "@/lib/error-message";
 import { isBlockingExtensionUiRequest } from "@/lib/browser-notifications";
@@ -41,7 +42,8 @@ import {
 import { AgentEventConnection } from "@/lib/agent-event-connection";
 import { useI18n } from "@/hooks/useI18n";
 import type { AgentEventLike } from "@/lib/agent-event-wire";
-import type { AttachedImage, ChatInputHandle } from "@/components/ChatInput";
+import { getUserMessageText, getUserMessageDraftImages, type AttachedImage, type ChatInputHandle } from "@/components/ChatInput";
+import { skillExpansionToCommand } from "@/lib/slash-display";
 import { copyText } from "@/lib/clipboard";
 import { getSnapshotTail } from "@/lib/chat-lazy-load";
 import {
@@ -1581,6 +1583,30 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
   }, [onSessionForked]);
 
+  const rewindingRef = useRef(false);
+  const handleRewind = useCallback(async (entryId: string) => {
+    const sid = sessionIdRef.current;
+    if (!sid || rewindingRef.current || bashRunningRef.current) return;
+    rewindingRef.current = true;
+    commitLocalSnapshotMutation();
+    setLoading(true);
+    try {
+      const result = await runPersistedWrite(() => sendAgentCommand<{ message: UserMessage }>(sid, { type: "rewind", entryId }));
+      const text = getUserMessageText(result.message);
+      setDraft(sid, { value: skillExpansionToCommand(text) ?? text, images: getUserMessageDraftImages(result.message) });
+      if (sessionIdRef.current !== sid || !sessionHookMountedRef.current) return;
+      closeEvents();
+      await loadSession(sid, true, true);
+    } catch (error) {
+      if (sessionIdRef.current === sid && sessionHookMountedRef.current) {
+        addNotice({ type: "error", message: t("chat.rewindFailed", { error: errorMessage(error) }) });
+      }
+    } finally {
+      rewindingRef.current = false;
+      if (sessionIdRef.current === sid && sessionHookMountedRef.current) setLoading(false);
+    }
+  }, [addNotice, closeEvents, commitLocalSnapshotMutation, loadSession, runPersistedWrite, t]);
+
   const navigateTranscriptBranch = useCallback(async (leafId: string | null) => {
     if (bashRunningRef.current) return;
     const sid = sessionIdRef.current;
@@ -2059,7 +2085,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   return {
     // State
-    historyAnchorIds: data?.context.historyAnchorIds,
+    historyAnchors: data?.context.historyAnchors,
     loading, error, activeLeafId, messages, entryIds, historyCursor, hasEarlierMessages, streamState,
     agentRunning, modelNames, modelList, modelError, modelScopeWarnings, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
     retryInfo, contextUsage, forkingEntryId,
@@ -2073,7 +2099,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     // Refs
     sessionIdRef,
     // Actions
-    handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
+    handleSend, handleAbort, handleFork, handleRewind, handleNavigate, handleModelChange,
     handleCompact, handleSteer, handleFollowUp, handlePromptWithStreamingBehavior, handleAbortCompaction,
     handleRecallQueue,
     handleBuiltinSlashCommand,

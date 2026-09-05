@@ -489,12 +489,17 @@ export function buildSessionContext(
   const contextEntries = tail || throughEntryId ? sliced : piBuildContextEntries(
     entries as unknown as PiSessionEntry[], leafId,
   );
-  const historyAnchorIds = excludeLeaf ? undefined : branch.filter((entry) => (
+  const historyAnchors = excludeLeaf ? undefined : branch.filter((entry) => (
     (entry.type === "message" && entry.message.role === "user")
     || entry.type === "compaction"
     || (entry.type === "branch_summary" && Boolean(entry.summary))
     || (entry.type === "custom_message" && entry.customType === "compaction")
-  )).map((entry) => entry.id);
+  )).map((entry) => ({
+    id: entry.id,
+    timestamp: entry.type === "message"
+      ? entry.message.timestamp ?? parseEntryTimestamp(entry.timestamp)
+      : parseEntryTimestamp(entry.timestamp),
+  }));
 
   // Convert entries and IDs together so fork and navigation targets stay aligned.
   const messages: AgentMessage[] = [];
@@ -511,7 +516,7 @@ export function buildSessionContext(
   return {
     messages,
     entryIds,
-    ...(historyAnchorIds ? { historyAnchorIds } : {}),
+    ...(historyAnchors ? { historyAnchors } : {}),
     oldestEntryId: sliced[0]?.id ?? null,
     hasMore,
     ...getSessionSettings(entries, leafId),

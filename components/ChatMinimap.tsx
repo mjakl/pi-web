@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo, type RefObject } from "react";
 import { isMessageGroupAnchor } from "@/lib/message-display";
-import type { AgentMessage } from "@/lib/types";
+import { formatTimestamp } from "@/lib/i18n/format";
+import type { AgentMessage, SessionContext } from "@/lib/types";
 
 interface Props {
   messages: AgentMessage[];
   entryIds: string[];
-  historyAnchorIds?: string[];
+  historyAnchors?: SessionContext["historyAnchors"];
   onLoadThrough: (entryId: string) => Promise<boolean>;
   scrollContainer: RefObject<HTMLDivElement | null>;
   messageRefs: RefObject<(HTMLDivElement | null)[]>;
@@ -65,7 +66,7 @@ function layoutNodes(allNodes: NodeInfo[], minimapHeight: number): NodeLayout {
 export function ChatMinimap({
   messages,
   entryIds,
-  historyAnchorIds,
+  historyAnchors,
   onLoadThrough,
   scrollContainer,
   messageRefs,
@@ -95,7 +96,16 @@ export function ChatMinimap({
   const loadedAnchorIds = useMemo(() => messages.flatMap((message, index) => (
     isMessageGroupAnchor(message) ? [entryIds[index] ?? `live:${index - entryIds.length}`] : []
   )), [messages, entryIds]);
-  const anchorIds = useMemo(() => [...new Set([...(historyAnchorIds ?? []), ...loadedAnchorIds])], [historyAnchorIds, loadedAnchorIds]);
+  const anchorIds = useMemo(() => [...new Set([...(historyAnchors ?? []).map((anchor) => anchor.id), ...loadedAnchorIds])], [historyAnchors, loadedAnchorIds]);
+  const timestamps = useMemo(() => {
+    const result = new Map((historyAnchors ?? []).map(({ id, timestamp }) => [id, timestamp]));
+    messages.forEach((message, index) => {
+      if (isMessageGroupAnchor(message) && message.timestamp !== undefined) {
+        result.set(entryIds[index] ?? `live:${index - entryIds.length}`, message.timestamp);
+      }
+    });
+    return result;
+  }, [historyAnchors, messages, entryIds]);
   const anchorsRef = useRef({ anchorIds, loadedAnchorIds });
   anchorsRef.current = { anchorIds, loadedAnchorIds };
 
@@ -311,11 +321,13 @@ export function ChatMinimap({
     ? positionedNodes[positionedNodes.length - 1].topRatio * minimapHeight
     : MINIMAP_PADDING;
   const railHeight = Math.max(1, lastNodeTop - MINIMAP_PADDING);
+  const hoveredTimestamp = hoveredIndex === null ? undefined : timestamps.get(positionedNodes[hoveredIndex]?.id);
 
   return (
     <div
       ref={containerRef}
       className="chat-minimap"
+      title={hoveredTimestamp !== undefined && Number.isFinite(hoveredTimestamp) ? formatTimestamp(hoveredTimestamp) : undefined}
       onMouseDown={handleMouseDown}
       onMouseMove={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();

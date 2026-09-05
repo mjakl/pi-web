@@ -14,6 +14,7 @@ import {
   preferUserBashExtension,
 } from "./project-command-env";
 import { extractTextContent, sessionTitleFromFirstMessage } from "./session-metadata";
+import { rewindSessionFile } from "./session-rewind";
 import { cacheSessionPath } from "./session-reader";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
 import { persistExplicitStartupPreferences } from "./startup-preferences";
@@ -57,7 +58,7 @@ const IDLE_RESET_EVENT_TYPES = new Set([
 ]);
 const SESSION_SHUTDOWN_TIMEOUT_MS = 5_000;
 
-const SESSION_REPLACEMENT_COMMAND_TYPES = new Set(["fork", "clone"]);
+const SESSION_REPLACEMENT_COMMAND_TYPES = new Set(["fork", "clone", "rewind"]);
 const COMMANDS_ALLOWED_DURING_SESSION_REPLACEMENT = new Set([
   "get_state",
   "get_session_stats",
@@ -100,7 +101,7 @@ export class AgentSessionWrapper {
   private readonly extensionUi = new ExtensionUiBridge((event) => this.emit(event));
   private pendingPromptCount = 0;
   private activeMutatingCommands = 0;
-  private sessionReplacement: "fork" | "clone" | null = null;
+  private sessionReplacement: "fork" | "clone" | "rewind" | null = null;
   private agentRunNeedsCompletion = false;
   private promptAdmissionTail: Promise<void> = Promise.resolve();
   private extensionsBound = false;
@@ -367,10 +368,10 @@ export class AgentSessionWrapper {
   }
 
   private async withSessionReplacement<T>(
-    replacement: "fork" | "clone",
+    replacement: "fork" | "clone" | "rewind",
     operation: () => Promise<T>,
   ): Promise<T> {
-    if (this.sessionReplacement) throw new Error("Session is already being copied");
+    if (this.sessionReplacement) throw new Error("Session history is already being changed");
     this.sessionReplacement = replacement;
     try {
       return await operation();
@@ -406,7 +407,7 @@ export class AgentSessionWrapper {
     }
     const allowedDuringReplacement = COMMANDS_ALLOWED_DURING_SESSION_REPLACEMENT.has(type);
     if (this.sessionReplacement && !allowedDuringReplacement) {
-      throw new Error("Session is being copied to a new session");
+      throw new Error("Session history is being changed");
     }
     if (SESSION_REPLACEMENT_COMMAND_TYPES.has(type) && this.activeMutatingCommands > 0) {
       throw new Error(`Cannot ${type} while another session command is running`);
@@ -420,7 +421,7 @@ export class AgentSessionWrapper {
       if (type !== "get_state") this.resetIdleTimer();
       if (this.shouldWaitForExtensions(type)) await this.waitForExtensionsBound();
       if (this.sessionReplacement && !allowedDuringReplacement) {
-        throw new Error("Session is being copied to a new session");
+        throw new Error("Session history is being changed");
       }
 
       if (type === "prompt" || type === "steer" || type === "follow_up") {
@@ -636,6 +637,25 @@ export class AgentSessionWrapper {
         });
       }
 
+      case "rewind": {
+        if (!this.isActive()) throw new Error("Session is stopped");
+        if (this.isSessionRunningForReplacement()) throw new Error("Cannot rewind while the session is running");
+        const entryId = command.entryId;
+        const target = typeof entryId === "string" ? this.inner.sessionManager.getEntry(entryId) : undefined;
+        if (!target || target.type !== "message" || target.message.role !== "user") {
+          throw new Error("Rewind requires an existing user message");
+        }
+        const file = this.sessionFile;
+        if (!file || !existsSync(file)) throw new Error("Rewind requires a saved session");
+        return this.withSessionReplacement("rewind", async () => {
+          let message: unknown;
+          await this.shutdown({ afterDispose: () => {
+            message = rewindSessionFile(file, this.sessionId, entryId as string);
+          } });
+          return { message };
+        });
+      }
+
       case "navigate_tree": {
         if (this.inner.isBashRunning) {
           throw new Error("Cannot navigate while a shell command is running");
@@ -826,7 +846,9 @@ export class AgentSessionWrapper {
     }
   }
 
-  destroy(): void {
+  // A history rewrite runs synchronously after SDK disposal and before the
+  // registry releases this session for another startup.
+  destroy(afterDispose?: () => void): void {
     if (!this._alive) return;
     this._stopping = true;
     this.agentRunNeedsCompletion = false;
@@ -840,6 +862,7 @@ export class AgentSessionWrapper {
     const finishDispose = () => {
       try {
         this.inner.dispose();
+        afterDispose?.();
       } finally {
         this.onDestroyCallback?.();
       }
@@ -864,7 +887,7 @@ export class AgentSessionWrapper {
       .finally(finishDispose);
   }
 
-  async shutdown(options: { manual?: boolean } = {}): Promise<void> {
+  async shutdown(options: { manual?: boolean; afterDispose?: () => void } = {}): Promise<void> {
     const emitStopped = options.manual && this._alive && !this.sessionStoppedEmitted;
     this._stopping = true;
     this.agentRunNeedsCompletion = false;
@@ -904,7 +927,7 @@ export class AgentSessionWrapper {
         if (timeout) clearTimeout(timeout);
         // A timed-out binding must not make destroy() wait on a second hook.
         this.sessionShutdownEmitted = true;
-        this.destroy();
+        this.destroy(options.afterDispose);
       }
     })();
     return this.shutdownPromise;
@@ -1117,6 +1140,7 @@ export async function setRpcSessionTools(
     const sessionId = operation.sessionId;
     const toolNames = validateSessionToolSelection(requestedToolNames);
     const existing = getRpcSession(sessionId);
+    if (existing?.isAlive() && !existing.isActive()) throw new Error("Session is stopping");
 
     if (!existing?.isAlive()) {
       if (!sessionFile) throw new Error("Session not found");
