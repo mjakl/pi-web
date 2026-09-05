@@ -255,9 +255,6 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
       images: getUserMessageDraftImages(message),
     });
   }, [handleFork]);
-  const handleRewindMessage = useCallback((entryId: string) => {
-    if (window.confirm(t("chat.rewindConfirm"))) void handleRewind(entryId);
-  }, [handleRewind, t]);
   const sessionBusy = agentRunning || bashRunning;
   const readOnly = session?.cwdAvailable === false;
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -767,7 +764,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                     entryId={entryIds[idx]}
                     onFork={readOnly || sessionBusy || isNew || (idx === 0 && msg.role === "user") ? undefined : handleForkMessage}
                     forking={forkingEntryId === entryIds[idx]}
-                    onRewind={readOnly || sessionBusy || isCompacting || isNew || forkingEntryId ? undefined : handleRewindMessage}
+                    onRewind={readOnly || sessionBusy || isCompacting || isNew || forkingEntryId ? undefined : handleRewind}
                     onNavigate={readOnly || sessionBusy ? undefined : handleNavigate}
                     prevAssistantEntryId={sessionBusy ? undefined : prevAssistantEntryId}
                     onEditContent={readOnly ? undefined : handleEditContent}

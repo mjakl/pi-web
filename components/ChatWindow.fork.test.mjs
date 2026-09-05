@@ -110,14 +110,14 @@ test("New session restores the selected message and images after switching, pres
   }
 });
 
-test("Rewind confirms, retains the draft on failure, and restores the removed message and images on success", async () => {
+test("Rewind runs without confirmation, retains the draft on failure, and restores the removed message and images on success", async () => {
   const originalFetch = globalThis.fetch;
   const originalConfirm = window.confirm;
-  let confirmed = false;
+  let confirmationCount = 0;
   let fail = true;
   let rewound = false;
   const commands = [];
-  window.confirm = (text) => { assert.match(text, /permanently removes/); return confirmed; };
+  window.confirm = () => { confirmationCount += 1; return false; };
   globalThis.fetch = async (url, options) => {
     const path = String(url);
     if (path === "/api/agent/fork-source") {
@@ -145,14 +145,12 @@ test("Rewind confirms, retains the draft on failure, and restores the removed me
     await React.act(() => root.render(React.createElement(ChatWindow, { session, newSessionCwd: null, newSessionDraftKey: null })));
     assert.equal([...container.querySelectorAll("button")].filter(button => button.textContent.trim() === "Rewind").length, 2, "the first user message can also be rewound");
     await React.act(() => rewindButton().click());
-    assert.deepEqual(commands, []);
-    assert.equal(container.querySelector("textarea").value, "Unsent draft");
-    confirmed = true;
-    await React.act(() => rewindButton().click());
+    assert.equal(confirmationCount, 0, "Rewind must not ask for confirmation");
     assert.match(container.textContent, /Could not rewind: fixture failure/);
     assert.equal(container.querySelector("textarea").value, "Unsent draft");
     fail = false;
     await React.act(() => rewindButton().click());
+    assert.equal(confirmationCount, 0);
     assert.equal(container.querySelector("textarea").value, "/skill:review src/main.ts");
     assert.deepEqual(getDraft(session.id), { value: "/skill:review src/main.ts", images: [image] });
     assert.match(container.textContent, /Earlier answer/);

@@ -207,7 +207,6 @@ export const enMessages: Record<string, string> = {
     "chat.loadingSession": "Loading session...",
     "chat.rewind": "Rewind",
     "chat.rewindTitle": "Rewind — remove this message and later history, then edit it again",
-    "chat.rewindConfirm": "Rewind from this message? This permanently removes this message and everything after it from this session. The message returns to the composer. File changes and commands are not undone.",
     "chat.rewindFailed": "Could not rewind: {error}",
     "chat.refreshPage": "Refresh page",
     "chat.refreshPageTitle": "Refresh page and reconnect",
