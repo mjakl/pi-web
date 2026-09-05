@@ -846,7 +846,7 @@ function TextBlock({ block, isStreaming, cwd, onOpenFile, sessionId }: { block: 
   // message so far. Deferring lets React drop intermediate parses it cannot keep up
   // with; a settled message renders its exact text.
   const streamingText = useDeferredValue(block.text);
-  return <SafeMarkdownBody isStreaming={isStreaming} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId}>{isStreaming ? streamingText : block.text}</SafeMarkdownBody>;
+  return <SafeMarkdownBody className="markdown-assistant-message" isStreaming={isStreaming} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId}>{isStreaming ? streamingText : block.text}</SafeMarkdownBody>;
 }
 
 function AssistantImageBlock({ block }: { block: ImageContent }) {

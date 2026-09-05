@@ -500,6 +500,13 @@ pre, code {
 .markdown-body .katex {
   font-size: 1.05em;
 }
+@media (min-width: 641px) {
+  .markdown-user-message,
+  .markdown-assistant-message {
+    font-size: 15px;
+  }
+}
+
 .markdown-user-message p {
   white-space: pre-wrap;
 }
