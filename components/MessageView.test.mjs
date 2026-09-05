@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createJiti } from "jiti";
+import { Window } from "happy-dom";
 
 const jiti = createJiti(import.meta.url, {
   jsx: { runtime: "automatic" },
@@ -20,6 +21,31 @@ function renderMessage(message, props = {}) {
     React.createElement(MessageView, { message, ...props }),
   );
 }
+
+test("keeps the user message scroll area inside the rounded bubble's padding", async () => {
+  const window = new Window();
+  try {
+    window.document.body.innerHTML = renderMessage({
+      role: "user",
+      content: "A long paragraph.\n\n".repeat(80),
+    });
+    const content = window.document.querySelector(".markdown-user-message");
+    const scroller = content.parentElement;
+    const shell = scroller.parentElement;
+    assert.equal(scroller.style.overflowY, "auto");
+    assert.equal(scroller.style.minHeight, "0");
+    assert.equal(shell.style.overflow, "hidden");
+    assert.equal(shell.style.borderRadius, "12px");
+    assert.equal(shell.style.maxHeight, "300px");
+    assert.equal(shell.style.paddingTop, "8px");
+    assert.equal(shell.style.paddingBottom, "8px");
+    assert.equal(scroller.style.marginRight, "4px");
+    assert.equal(content.querySelectorAll("p").length, 80);
+    assert.equal(content.lastElementChild.textContent, "A long paragraph.");
+  } finally {
+    await window.happyDOM.close();
+  }
+});
 
 test("keeps streaming metrics in reserved slots while the model label truncates", () => {
   const modelLabel = "A deliberately long model name for narrow layouts";

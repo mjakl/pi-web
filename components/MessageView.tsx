@@ -323,80 +323,84 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
             background: "var(--user-bg)",
             border: "1px solid rgba(59,130,246,0.2)",
             borderRadius: 12,
-            padding: "8px 12px",
+            padding: "8px 0",
+            display: "flex",
+            flexDirection: "column",
             fontSize: 14,
             lineHeight: 1.6,
             color: "var(--text)",
             wordBreak: "break-word",
             maxHeight: USER_BUBBLE_MAX_HEIGHT,
-            overflowY: "auto",
+            overflow: "hidden",
           }}
         >
-          {commandText ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
-              {imageBlocksNode}
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
-                <button
-                  onClick={() => setExpanded((prev) => !prev)}
-                  title={expanded ? t("i18n.collapse") : t("i18n.expand")}
-                  aria-expanded={expanded}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    flexShrink: 0,
-                    padding: 0,
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "var(--accent)",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: 13,
-                    textAlign: "left",
-                  }}
-                >
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {commandName}
-                  </span>
-                  <svg
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    style={{ flexShrink: 0, opacity: 0.75, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}
-                    aria-hidden="true"
+          <div style={{ minHeight: 0, overflowY: "auto", marginRight: 4, padding: "0 8px 0 12px" }}>
+            {commandText ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                {imageBlocksNode}
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => setExpanded((prev) => !prev)}
+                    title={expanded ? t("i18n.collapse") : t("i18n.expand")}
+                    aria-expanded={expanded}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      flexShrink: 0,
+                      padding: 0,
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--accent)",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 13,
+                      textAlign: "left",
+                    }}
                   >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
-                {commandArgs && (
-                  <span style={{
-                    color: "var(--text)",
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                    minWidth: 0,
-                    flex: 1,
-                  }}>
-                    {commandArgs}
-                  </span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {commandName}
+                    </span>
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ flexShrink: 0, opacity: 0.75, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}
+                      aria-hidden="true"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  {commandArgs && (
+                    <span style={{
+                      color: "var(--text)",
+                      fontSize: 14,
+                      lineHeight: 1.6,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      minWidth: 0,
+                      flex: 1,
+                    }}>
+                      {commandArgs}
+                    </span>
+                  )}
+                </div>
+                {expanded && (
+                  <MarkdownBody className="markdown-user-message" cwd={cwd} onOpenFile={onOpenFile}>{content}</MarkdownBody>
                 )}
               </div>
-              {expanded && (
-                <MarkdownBody className="markdown-user-message" cwd={cwd} onOpenFile={onOpenFile}>{content}</MarkdownBody>
-              )}
-            </div>
-          ) : (
-          <>
-          {imageBlocksNode}
-          {content && <SafeMarkdownBody className="markdown-user-message" cwd={cwd} onOpenFile={onOpenFile}>{content}</SafeMarkdownBody>}
-          </>
-          )}
+            ) : (
+              <>
+                {imageBlocksNode}
+                {content && <SafeMarkdownBody className="markdown-user-message" cwd={cwd} onOpenFile={onOpenFile}>{content}</SafeMarkdownBody>}
+              </>
+            )}
+          </div>
         </div>
 
       </div>
