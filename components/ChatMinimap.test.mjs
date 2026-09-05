@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Window } from "happy-dom";
 import { createJiti } from "jiti";
+import { readFileSync } from "node:fs";
 
 process.env.NODE_ENV = "test";
 const window = new Window({ url: "http://localhost" });
@@ -18,6 +19,50 @@ const rect = (top = 0) => ({ top, left: 0, width: 36, height: 600, bottom: top +
 Object.defineProperty(window.HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 600 });
 window.HTMLElement.prototype.getBoundingClientRect = () => rect();
 const settle = () => React.act(() => new Promise((resolve) => setTimeout(resolve, 230)));
+
+test("paints the rail on the whole chat pane only while desktop navigation is visible", async () => {
+  const style = document.createElement("style");
+  style.textContent = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  document.head.append(style);
+  const container = document.createElement("section");
+  container.className = "chat-window";
+  document.body.append(container);
+  const root = createRoot(container);
+  const scroll = document.createElement("div");
+  Object.defineProperty(scroll, "scrollHeight", { get: () => 2000 });
+  const background = () => window.getComputedStyle(container).backgroundImage;
+  try {
+    window.happyDOM.setWindowSize({ width: 1024, height: 844 });
+    assert.ok(!background().includes("linear-gradient"));
+    await React.act(() => root.render(React.createElement(React.Fragment, null,
+      React.createElement("div", { className: "chat-body" }, React.createElement(ChatMinimap, {
+        messages: [{ role: "user", content: "Prompt" }], entryIds: ["prompt"],
+        scrollContainer: { current: scroll }, messageRefs: { current: [] }, onLoadThrough: async () => false,
+      })),
+      React.createElement("footer", { className: "chat-composer" }, React.createElement("textarea")),
+    )));
+    await settle();
+    assert.ok(container.querySelector(".chat-minimap"));
+    assert.ok(background().includes("linear-gradient"), "the pane paints the strip behind both transcript and composer");
+    assert.ok(!container.querySelector(".chat-minimap textarea"), "composer stays outside the navigation target");
+    window.happyDOM.setWindowSize({ width: 390, height: 844 });
+    // Happy DOM does not invalidate cached media-query styles on resize.
+    style.remove();
+    document.head.append(style);
+    assert.equal(background(), "none");
+    window.happyDOM.setWindowSize({ width: 1024, height: 844 });
+    style.remove();
+    document.head.append(style);
+    assert.ok(background().includes("linear-gradient"));
+    await React.act(() => root.render(null));
+    assert.ok(!background().includes("linear-gradient"));
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+    style.remove();
+    window.happyDOM.setWindowSize({ width: 1024, height: 768 });
+  }
+});
 
 test("shows unloaded turns and completes the latest requested jump after its messages mount", async () => {
   const container = document.createElement("div");

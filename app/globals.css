@@ -1150,6 +1150,16 @@ span.linenumber {
   overflow-y: auto;
 }
 
+/* Continue the 36px minimap strip beside the composer and safe-area padding.
+   Only the transcript's ChatMinimap owns navigation and pointer handling. */
+.chat-window:has(.chat-minimap) {
+  background-image: linear-gradient(to left,
+    var(--bg-panel) 35px,
+    var(--border) 35px,
+    var(--border) 36px,
+    transparent 36px);
+}
+
 .chat-window.is-empty::after {
   content: "";
 }
@@ -1870,6 +1880,9 @@ span.linenumber {
 
 /* No rail on mobile, so it sits at the edge and clears the composer. */
 @media (max-width: 640px) {
+  .chat-window:has(.chat-minimap) {
+    background-image: none;
+  }
   .chat-body {
     grid-template-columns: minmax(0, 1fr);
   }
