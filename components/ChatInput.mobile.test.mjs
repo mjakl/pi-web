@@ -21,7 +21,7 @@ const { ChatInput } = await jiti.import("./ChatInput.tsx");
 const { ExtensionStatusBar } = await jiti.import("./ExtensionStatusBar.tsx");
 after(() => window.happyDOM.close());
 
-test("extension info stays in the mobile menu while desktop retains other controls", async () => {
+test("Session controls is mobile-only and disappears when its menu has no actions", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -30,33 +30,29 @@ test("extension info stays in the mobile menu while desktop retains other contro
     onThinkingLevelChange() {}, thinkingLevel: "high",
     extensionStatuses: [{ key: "mode", text: "ponytail: FULL" }],
   };
+  const more = () => container.querySelector('button[aria-label="Session controls"]');
   try {
     window.happyDOM.setWindowSize({ width: 1024, height: 844 });
     await React.act(() => root.render(React.createElement(ChatInput, props)));
-    const menu = container.querySelector(".menu-composer-controls");
-    const more = container.querySelector('button[aria-label="Session controls"]');
-    assert.doesNotMatch(menu.textContent, /ponytail: FULL/);
-    assert.equal(more.disabled, true);
-
-    await React.act(() => window.happyDOM.setWindowSize({ width: 390, height: 844 }));
-    assert.match(menu.textContent, /ponytail: FULL/);
-    assert.equal(more.disabled, false);
-
-    await React.act(() => window.happyDOM.setWindowSize({ width: 1024, height: 844 }));
-    assert.doesNotMatch(menu.textContent, /ponytail: FULL/);
-    assert.equal(more.disabled, true);
-
+    assert.equal(more(), null);
     await React.act(() => root.render(React.createElement(ChatInput, { ...props, isStreaming: true })));
-    assert.equal(more.disabled, false);
-    assert.match(menu.textContent, /Stop agent/);
-
-    await React.act(() => root.render(React.createElement(ChatInput, { ...props, onModelChange: undefined })));
-    assert.equal(more.disabled, false);
-    assert.ok(menu.querySelector("select"));
-    assert.doesNotMatch(menu.textContent, /ponytail: FULL/);
-
+    assert.equal(more(), null);
     await React.act(() => window.happyDOM.setWindowSize({ width: 390, height: 844 }));
-    assert.match(menu.textContent, /ponytail: FULL/);
+    assert.ok(more());
+    assert.match(container.querySelector(".menu-composer-controls").textContent, /ponytail: FULL/);
+    await React.act(() => root.render(React.createElement(ChatInput, { ...props, extensionStatuses: [] })));
+    assert.equal(more(), null);
+    await React.act(() => root.render(React.createElement(ChatInput, { ...props, extensionStatuses: [], isStreaming: true })));
+    assert.ok(more());
+    await React.act(() => container.querySelector(".menu-composer-controls").dispatchEvent(Object.assign(new window.Event("toggle"), { newState: "open", oldState: "closed" })));
+    assert.equal(more().getAttribute("aria-expanded"), "true");
+    await React.act(() => window.happyDOM.setWindowSize({ width: 1024, height: 844 }));
+    assert.equal(more(), null);
+    await React.act(() => root.render(React.createElement(ChatInput, { ...props, onModelChange: undefined })));
+    assert.equal(more(), null);
+    assert.ok(container.querySelector("select"), "standalone reasoning stays accessible");
+    await React.act(() => window.happyDOM.setWindowSize({ width: 390, height: 844 }));
+    assert.equal(more().getAttribute("aria-expanded"), "false");
   } finally {
     await React.act(() => root.unmount());
     container.remove();

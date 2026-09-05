@@ -228,7 +228,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
   }, [chatInputRef]);
 
   const {
-    historyAnchorIds, loading, error, messages, entryIds, historyCursor, hasEarlierMessages, streamState,
+    historyAnchors, loading, error, messages, entryIds, historyCursor, hasEarlierMessages, streamState,
     agentRunning, bashRunning, pendingBash, modelNames, modelList, modelError, modelScopeWarnings, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
     retryInfo, contextUsage, forkingEntryId,
     isCompacting, compactError, compactResult, displayModel: displayModelValue, modelSwitching, sessionStats,
@@ -238,7 +238,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
     agentPhase,
     isNew,
     sessionIdRef,
-    handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
+    handleSend, handleAbort, handleFork, handleRewind, handleNavigate, handleModelChange,
     handleCompact, handleSteer, handleFollowUp, handlePromptWithStreamingBehavior, handleAbortCompaction,
     handleRecallQueue,
     handleBuiltinSlashCommand,
@@ -255,6 +255,9 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
       images: getUserMessageDraftImages(message),
     });
   }, [handleFork]);
+  const handleRewindMessage = useCallback((entryId: string) => {
+    if (window.confirm(t("chat.rewindConfirm"))) void handleRewind(entryId);
+  }, [handleRewind, t]);
   const sessionBusy = agentRunning || bashRunning;
   const readOnly = session?.cwdAvailable === false;
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -764,6 +767,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
                     entryId={entryIds[idx]}
                     onFork={readOnly || sessionBusy || isNew || (idx === 0 && msg.role === "user") ? undefined : handleForkMessage}
                     forking={forkingEntryId === entryIds[idx]}
+                    onRewind={readOnly || sessionBusy || isCompacting || isNew || forkingEntryId ? undefined : handleRewindMessage}
                     onNavigate={readOnly || sessionBusy ? undefined : handleNavigate}
                     prevAssistantEntryId={sessionBusy ? undefined : prevAssistantEntryId}
                     onEditContent={readOnly ? undefined : handleEditContent}
@@ -877,7 +881,7 @@ export function ChatWindow({ session, sessionActive, sessionRunning, newSessionC
           key={`${session?.id ?? "draft"}:${activeLeafId ?? ""}`}
           messages={messages}
           entryIds={entryIds}
-          historyAnchorIds={historyAnchorIds}
+          historyAnchors={historyAnchors}
           onLoadThrough={loadEarlierMessages}
           scrollContainer={scrollContainerRef}
           messageRefs={messageRefs}

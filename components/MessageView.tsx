@@ -137,6 +137,7 @@ interface Props {
   entryId?: string;
   onFork?: (entryId: string, message: UserMessage) => void;
   forking?: boolean;
+  onRewind?: (entryId: string) => void;
   onNavigate?: (entryId: string) => void;
   prevAssistantEntryId?: string;
   onEditContent?: (message: UserMessage) => void;
@@ -189,9 +190,9 @@ function haveSameRelevantToolValues<T>(
   return true;
 }
 
-export const MessageView = memo(function MessageView({ message, isStreaming, toolResults, activeTools, modelNames, cwd, onOpenFile, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, prevTimestamp, sessionId, writtenFiles }: Props) {
+export const MessageView = memo(function MessageView({ message, isStreaming, toolResults, activeTools, modelNames, cwd, onOpenFile, entryId, onFork, forking, onRewind, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, prevTimestamp, sessionId, writtenFiles }: Props) {
   if (message.role === "user") {
-    return <UserMessageView message={message as UserMessage} cwd={cwd} onOpenFile={onOpenFile} entryId={entryId} onFork={onFork} forking={forking} onNavigate={onNavigate} prevAssistantEntryId={prevAssistantEntryId} onEditContent={onEditContent} />;
+    return <UserMessageView message={message as UserMessage} cwd={cwd} onOpenFile={onOpenFile} entryId={entryId} onFork={onFork} forking={forking} onRewind={onRewind} onNavigate={onNavigate} prevAssistantEntryId={prevAssistantEntryId} onEditContent={onEditContent} />;
   }
   if (message.role === "assistant") {
     return <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} activeTools={activeTools} modelNames={modelNames} cwd={cwd} onOpenFile={onOpenFile} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} sessionId={sessionId} entryId={entryId} writtenFiles={writtenFiles} />;
@@ -220,6 +221,7 @@ export const MessageView = memo(function MessageView({ message, isStreaming, too
     && prev.onOpenFile === next.onOpenFile
     && prev.entryId === next.entryId
     && prev.onFork === next.onFork
+    && prev.onRewind === next.onRewind
     && prev.forking === next.forking
     && prev.onNavigate === next.onNavigate
     && prev.prevAssistantEntryId === next.prevAssistantEntryId
@@ -229,13 +231,14 @@ export const MessageView = memo(function MessageView({ message, isStreaming, too
     && prev.sessionId === next.sessionId;
 });
 
-function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent }: {
+function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, onRewind, onNavigate, prevAssistantEntryId, onEditContent }: {
   message: UserMessage;
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
   entryId?: string;
   onFork?: (entryId: string, message: UserMessage) => void;
   forking?: boolean;
+  onRewind?: (entryId: string) => void;
   onNavigate?: (entryId: string) => void;
   prevAssistantEntryId?: string;
   onEditContent?: (message: UserMessage) => void;
@@ -268,6 +271,7 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
 
   const time = formatTime(message.timestamp);
   const canFork = !!entryId && !!onFork;
+  const canRewind = !!entryId && !!onRewind;
   const copyTarget = commandText ?? content;
   const editTarget = commandText ? replaceUserMessageText(message, commandText) : message;
 
@@ -401,7 +405,7 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
       {(time || canFork || canNavigate || true) && (
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "flex-end",
-          gap: 6, marginTop: 3,
+          gap: 6, marginTop: 3, flexWrap: "wrap",
         }}>
           <div className="message-actions" style={{ display: "flex", gap: 3 }}>
             <button
@@ -434,8 +438,21 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
                {copied ? t("i18n.copied") : t("i18n.copy")}
             </button>
           </div>
-          {(canFork || canNavigate) && (
-            <div className="message-actions" data-forking={forking || undefined} style={{ display: "flex", gap: 3 }}>
+          {(canFork || canNavigate || canRewind) && (
+            <div className="message-actions" data-forking={forking || undefined} style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {canRewind && (
+                <button
+                  type="button"
+                  className="message-rewind"
+                  onClick={() => onRewind!(entryId!)}
+                  title={t("chat.rewindTitle")}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7M12 7v5l3 2" />
+                  </svg>
+                  {t("chat.rewind")}
+                </button>
+              )}
               {canNavigate && (
                 <button
                   onClick={() => { onNavigate!(prevAssistantEntryId!); onEditContent?.(editTarget); }}

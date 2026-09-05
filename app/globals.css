@@ -1312,8 +1312,8 @@ span.linenumber {
   flex-direction: column;
   overflow: hidden;
 }
-.context-compact-button { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 28px; height: 28px; align-self: center; margin-right: 4px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; }
-.context-compact-button:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.context-compact-button, .page-refresh-button { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 28px; height: 28px; align-self: center; margin-right: 4px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; }
+.context-compact-button:hover:not(:disabled), .page-refresh-button:hover { background: var(--bg-hover); color: var(--text); }
 .context-compact-button:disabled { opacity: 0.4; cursor: default; }
 .context-compact-button[data-warning] { color: var(--success); }
 .context-compact-button[data-compacting] { color: var(--danger); }
@@ -1922,6 +1922,9 @@ span.linenumber {
   .composer-toolbar > button { min-width: 44px; }
   .model-selector.is-composer { max-width: calc(100% - 132px); }
 }
+@media (max-width: 640px), (pointer: coarse) {
+  .page-refresh-button { width: 36px; height: 36px; margin-right: 0; }
+}
 @media (pointer: coarse) {
   .context-compact-button { min-width: 44px; min-height: 44px; }
 }
@@ -2180,3 +2183,6 @@ span.linenumber {
 .subagent-settings dd { margin: 0; overflow-wrap: anywhere; }
 .subagent-agent { border-top: 1px solid var(--border); }
 @media (pointer: coarse) { .subagent-card summary { min-height: 44px; box-sizing: border-box; } }
+
+.message-rewind { display: flex; align-items: center; gap: 4px; padding: 3px 8px; height: 22px; background: none; border: none; border-radius: 5px; color: var(--text-dim); cursor: pointer; font-size: 11px; font-weight: 400; white-space: nowrap; }
+.message-rewind:hover { color: var(--accent); }

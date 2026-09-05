@@ -728,3 +728,28 @@ test("sidebar puts running then active sessions first and shortcuts follow live 
     globalThis.fetch = originalFetch;
   }
 });
+
+test("the header can refresh the current page on desktop and mobile", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalReload = window.location.reload;
+  let reloads = 0;
+  window.location.reload = () => { reloads++; };
+  try {
+    for (const width of [1064, 390]) {
+      await act(() => window.happyDOM.setWindowSize({ width, height: 844 }));
+      await act(() => root.render(appShell()));
+      const buttons = container.querySelectorAll('button[aria-label="Refresh page"]');
+      assert.equal(buttons.length, 1);
+      assert.equal(buttons[0].title, "Refresh page and reconnect");
+      await act(() => buttons[0].click());
+    }
+    assert.equal(reloads, 2);
+  } finally {
+    window.location.reload = originalReload;
+    await act(() => root.unmount());
+    container.remove();
+    window.happyDOM.setWindowSize({ width: 1024, height: 768 });
+  }
+});

@@ -445,6 +445,8 @@ export function ChatInput({
   const isMobile = useIsMobile();
   const [value, setValue] = useState(() => (draftKey ? getDraft(draftKey)?.value ?? "" : ""));
   const [controlsOpen, setControlsOpen] = useState(false);
+  const showControls = isMobile && (isStreaming || extensionStatuses.length > 0 || !onModelChange);
+  if (controlsOpen && !showControls) setControlsOpen(false);
   const [queueModifier, setQueueModifier] = useState(false);
   const touchSubmissionRef = useRef(false);
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>(() => (
@@ -1711,35 +1713,39 @@ export function ChatInput({
               <button type="button" className="composer-attach" onClick={() => fileInputRef.current?.click()} title={t("chat.attachImage")} aria-label={t("chat.attachImage")}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
               </button>
-              <button
-                type="button"
-                className="anchor-composer-controls composer-more"
-                popoverTarget={controlsMenuId}
-                disabled={!isStreaming && (!isMobile || extensionStatuses.length === 0) && Boolean(onModelChange)}
-                title={t("chat.composerSettings")}
-                aria-label={t("chat.composerSettings")}
-                aria-expanded={controlsOpen}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg>
-              </button>
-              <div
-                ref={controlsMenuRef}
-                id={controlsMenuId}
-                popover="auto"
-                className="anchored-menu menu-surface opens-up menu-composer-controls"
-                onToggle={(event) => setControlsOpen((event as unknown as { newState?: string }).newState === "open")}
-                onKeyDown={(event) => {
-                  if (event.key !== "Escape") return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setControlsOpen(false);
-                  textareaRef.current?.focus();
-                }}
-              >
-                {isStreaming && <button type="button" className="menu-item" onClick={() => { setControlsOpen(false); onAbort(); }}>{t("chat.stopAgent")}</button>}
-                {!onModelChange && reasoningControl}
-                {isMobile && extensionStatuses.length > 0 && <section aria-label={t("chat.extensionStatus")}><div className="menu-section-label">{t("chat.extensionStatus")}</div><ExtensionStatusBar statuses={extensionStatuses} announce={false} /></section>}
-              </div>
+              {showControls && (
+                <>
+                  <button
+                    type="button"
+                    className="anchor-composer-controls composer-more"
+                    popoverTarget={controlsMenuId}
+                    title={t("chat.composerSettings")}
+                    aria-label={t("chat.composerSettings")}
+                    aria-expanded={controlsOpen}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg>
+                  </button>
+                  <div
+                    ref={controlsMenuRef}
+                    id={controlsMenuId}
+                    popover="auto"
+                    className="anchored-menu menu-surface opens-up menu-composer-controls"
+                    onToggle={(event) => setControlsOpen((event as unknown as { newState?: string }).newState === "open")}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Escape") return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setControlsOpen(false);
+                      textareaRef.current?.focus();
+                    }}
+                  >
+                    {isStreaming && <button type="button" className="menu-item" onClick={() => { setControlsOpen(false); onAbort(); }}>{t("chat.stopAgent")}</button>}
+                    {!onModelChange && reasoningControl}
+                    {isMobile && extensionStatuses.length > 0 && <section aria-label={t("chat.extensionStatus")}><div className="menu-section-label">{t("chat.extensionStatus")}</div><ExtensionStatusBar statuses={extensionStatuses} announce={false} /></section>}
+                  </div>
+                </>
+              )}
+              {!isMobile && !onModelChange && reasoningControl}
               {onModelChange && (
                 <ModelSelector
                   options={modelOptions}

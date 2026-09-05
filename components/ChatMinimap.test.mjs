@@ -34,11 +34,17 @@ test("shows unloaded turns and completes the latest requested jump after its mes
   const render = async (ids) => {
     messageRefs.current = ids.map((id) => ({ getBoundingClientRect: () => rect(id === "old" ? 500 : id === "middle" ? 800 : 1000) }));
     await React.act(() => root.render(React.createElement(ChatMinimap, {
-      messages: ids.map(() => ({ role: "user", content: "prompt" })),
-      entryIds: ids, historyAnchorIds: ["old", "middle", "recent"],
+      messages: ids.map(id => ({ role: "user", content: "prompt", ...(id === "recent" ? { timestamp: new Date(2025, 0, 2, 16, 42).getTime() } : {}) })),
+      entryIds: ids, historyAnchors: [{ id: "old", timestamp: new Date(2025, 0, 2, 14, 35).getTime() }, { id: "middle" }, { id: "recent" }],
       scrollContainer, messageRefs, onLoadThrough,
     })));
     await settle();
+  };
+  const hover = async (id) => {
+    const node = container.querySelector(`[data-minimap-entry-id="${id}"]`);
+    const clientY = Number.parseFloat(node.style.top) * 6;
+    await React.act(() => node.parentElement.dispatchEvent(new window.MouseEvent("mousemove", { bubbles: true, clientY })));
+    return node.parentElement.title;
   };
   const select = async (id) => {
     const node = container.querySelector(`[data-minimap-entry-id="${id}"]`);
@@ -51,6 +57,10 @@ test("shows unloaded turns and completes the latest requested jump after its mes
   try {
     await render(["recent"]);
     assert.equal(container.querySelectorAll("[data-minimap-entry-id]").length, 3);
+    assert.match(await hover("old"), /14:35$/);
+    assert.equal(pending.length, 0, "hovering unloaded history does not fetch it");
+    assert.match(await hover("recent"), /16:42$/);
+    assert.equal(await hover("middle"), "", "a missing timestamp clears the previous tooltip");
     await select("old");
     assert.equal(pending[0].id, "old");
     assert.deepEqual(jumps, []);
