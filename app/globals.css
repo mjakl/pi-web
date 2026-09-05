@@ -500,6 +500,11 @@ pre, code {
 .markdown-body .katex {
   font-size: 1.05em;
 }
+.markdown-user-message,
+.markdown-assistant-message {
+  font-size: 13px;
+}
+
 @media (min-width: 641px) {
   .markdown-user-message,
   .markdown-assistant-message {
