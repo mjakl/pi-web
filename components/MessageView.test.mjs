@@ -22,7 +22,7 @@ function renderMessage(message, props = {}) {
   );
 }
 
-test("keeps the user message scroll area inside the rounded bubble's padding", async () => {
+test("keeps long human messages scrollable inside the band and actions outside", async () => {
   const window = new Window();
   try {
     window.document.body.innerHTML = renderMessage({
@@ -35,10 +35,13 @@ test("keeps the user message scroll area inside the rounded bubble's padding", a
     assert.equal(scroller.style.overflowY, "auto");
     assert.equal(scroller.style.minHeight, "0");
     assert.equal(shell.style.overflow, "hidden");
-    assert.equal(shell.style.borderRadius, "12px");
     assert.equal(shell.style.maxHeight, "300px");
-    assert.equal(shell.style.paddingTop, "8px");
-    assert.equal(shell.style.paddingBottom, "8px");
+    assert.equal(shell.style.paddingTop, "14px");
+    assert.equal(shell.style.paddingBottom, "14px");
+    const band = content.closest(".user-message-band");
+    assert.ok(band);
+    assert.equal(band.querySelector("button"), null);
+    assert.ok(band.parentElement.querySelector(".message-actions button"));
     assert.equal(scroller.style.marginRight, "4px");
     assert.equal(content.querySelectorAll("p").length, 80);
     assert.equal(content.lastElementChild.textContent, "A long paragraph.");

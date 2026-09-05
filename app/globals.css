@@ -10,6 +10,8 @@
   --text-dim: #5f6672;
   --accent: #225bd8;
   --user-bg: #eff6ff;
+  --user-band-bg: #edf3fc;
+  --user-band-border: #c6d7ee;
   --bg-subtle: rgba(0,0,0,0.03);
   /* Status colours. Values are chosen against --bg-selected, the lowest
      contrast surface any of them lands on, so every one clears WCAG AA. */
@@ -35,6 +37,8 @@ html.dark {
   --text-dim: #9ca3af;
   --accent: #60a5fa;
   --user-bg: #1e293b;
+  --user-band-bg: #202c3d;
+  --user-band-border: #334b69;
   --bg-subtle: rgba(255,255,255,0.04);
   --danger: #fb8a8a;
   --success: #4ade80;
@@ -1243,6 +1247,7 @@ span.linenumber {
 }
 
 .chat-scroll {
+  container-type: inline-size;
   min-width: 0;
   min-height: 0;
   overflow-x: hidden;
@@ -1267,6 +1272,22 @@ span.linenumber {
   min-height: 100%;
   max-width: 820px;
   margin: 0 auto;
+}
+
+.user-message-band {
+  align-self: center;
+  display: flex;
+  justify-content: center;
+  width: 100cqw;
+  background: var(--user-band-bg);
+  border-block: 1px solid var(--user-band-border);
+}
+.user-message-band-content {
+  display: flex;
+  justify-content: flex-end;
+  width: calc(100% - 32px);
+  max-width: 820px;
+  min-width: 0;
 }
 
 .chat-empty {
