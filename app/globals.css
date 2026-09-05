@@ -20,7 +20,6 @@
   --warning: #8a5a06;
   --info: #0b6c85;
   --compaction-text: #a33e50;
-  --compaction-bg: #fff2f4;
   --compaction-border: #e4b6bf;
   --on-accent: #ffffff;
 }
@@ -45,7 +44,6 @@ html.dark {
   --warning: #e5b163;
   --info: #22d3ee;
   --compaction-text: #eea0ac;
-  --compaction-bg: #302326;
   --compaction-border: #70404c;
   --on-accent: #1a1a1a;
 }
@@ -570,43 +568,55 @@ pre, code {
   margin: 6px 0;
 }
 
-.compaction-card {
-  margin-bottom: 16px;
-  border: 1px solid var(--compaction-border);
-  border-radius: 7px;
-  overflow: hidden;
-  background: var(--bg);
+.compaction-marker {
+  margin: 24px 0;
 }
 .compaction-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   width: 100%;
-  padding: 8px 10px;
+  min-height: 44px;
+  padding: 0;
   border: none;
-  background: var(--compaction-bg);
+  background: transparent;
   color: var(--compaction-text);
   font-size: 12px;
   text-align: left;
   cursor: pointer;
 }
-.compaction-header > svg { flex-shrink: 0; }
+.compaction-rule {
+  flex: 1;
+  min-width: 16px;
+  height: 1px;
+  background: var(--compaction-border);
+}
+.compaction-header-core {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.compaction-header-core > svg { flex-shrink: 0; }
 .compaction-header-main {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 2px 12px;
-  flex: 1;
   min-width: 0;
 }
 .compaction-label { font-weight: 500; overflow-wrap: anywhere; }
-.compaction-token-count { font-size: 11px; font-variant-numeric: tabular-nums; }
-.compaction-time { flex-shrink: 0; color: var(--text-dim); font-size: 11px; }
+.compaction-token-count { font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.compaction-time { flex-shrink: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
 .compaction-header[aria-expanded="true"] .compaction-chevron { transform: rotate(180deg); }
-.compaction-header:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
-.compaction-body { padding: 11px 13px 12px; border-top: 1px solid var(--compaction-border); }
-@media (pointer: coarse) {
-  .compaction-header { min-height: 44px; }
+.compaction-header:hover .compaction-label { text-decoration: underline; text-underline-offset: 3px; }
+.compaction-header:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 2px; }
+.compaction-body { padding: 14px 0 20px; border-bottom: 1px solid var(--compaction-border); }
+@media (max-width: 520px) {
+  .compaction-header { gap: 8px; }
+  .compaction-header-core { gap: 6px; }
+  .compaction-header-main { flex-direction: column; align-items: flex-start; }
+  .compaction-rule { min-width: 8px; }
 }
 
 .compaction-file-details {

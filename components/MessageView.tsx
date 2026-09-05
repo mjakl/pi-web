@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useRef, useEffect, useMemo, useDeferredValue } from "react";
+import { memo, useState, useRef, useEffect, useMemo, useDeferredValue, useId } from "react";
 import { MarkdownBody } from "./MarkdownBody";
 import { SafeMarkdownBody } from "./SafeMarkdownBody";
 import { SubagentToolCall } from "./SubagentToolCall";
@@ -1353,6 +1353,7 @@ function PairedResult({ text, images, isEmpty, isError }: {
 function CompactionMessageView({ message }: { message: CustomMessage }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  const summaryId = useId();
   const summary = getMessageText(message.content);
   const parsedSummary = useMemo(() => parseCompactionSummary(summary), [summary]);
   const time = formatTime(message.timestamp);
@@ -1366,29 +1367,34 @@ function CompactionMessageView({ message }: { message: CustomMessage }) {
     : after !== null ? t("chat.compaction.tokensAfter", { after }) : null;
 
   return (
-    <div className="compaction-card">
+    <div className="compaction-marker">
       <button
         type="button"
         className="compaction-header"
         aria-expanded={expanded}
+        aria-controls={summaryId}
         title={t(expanded ? "i18n.collapse" : "i18n.expand")}
         onClick={() => setExpanded((value) => !value)}
       >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <rect x="3" y="3" width="18" height="4" rx="1" />
-          <path d="M5 7v13h14V7M10 11h4" />
-        </svg>
-        <span className="compaction-header-main">
-          <span className="compaction-label">{t("i18n.conversationCompacted")}</span>
-          {tokens && <span className="compaction-token-count" title={after !== null ? t("chat.compaction.tokenEstimate") : undefined}>{tokens}</span>}
+        <span className="compaction-rule" aria-hidden="true" />
+        <span className="compaction-header-core">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="4" rx="1" />
+            <path d="M5 7v13h14V7M10 11h4" />
+          </svg>
+          <span className="compaction-header-main">
+            <span className="compaction-label">{t("i18n.conversationCompacted")}</span>
+            {tokens && <span className="compaction-token-count" title={after !== null ? t("chat.compaction.tokenEstimate") : undefined}>{tokens}</span>}
+          </span>
+          <svg className="compaction-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="2 3.5 5 6.5 8 3.5" />
+          </svg>
         </span>
+        <span className="compaction-rule" aria-hidden="true" />
         {time && <span className="compaction-time">{time}</span>}
-        <svg className="compaction-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <polyline points="2 3.5 5 6.5 8 3.5" />
-        </svg>
       </button>
 
-      {expanded && <div className="compaction-body">
+      {expanded && <div id={summaryId} className="compaction-body">
         <div style={{ marginBottom: 10, color: "var(--text)", fontSize: 14, lineHeight: 1.5 }}>
            {t("i18n.compactionDescription")}
         </div>

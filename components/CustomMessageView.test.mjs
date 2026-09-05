@@ -103,10 +103,14 @@ test("compaction starts collapsed with context counts and reveals its summary an
     assert.equal(header.getAttribute("aria-expanded"), "false");
     assert.match(header.textContent, /Conversation compacted/);
     assert.match(header.textContent, /120k → ~18k tokens/);
+    const time = header.querySelector(".compaction-time").textContent;
+    assert.match(time, /\d{2}:\d{2}$/);
     assert.equal(view.container.querySelector(".markdown-compaction-message"), null);
     assert.doesNotMatch(view.container.textContent, /existing controls|File context/);
     await act(async () => header.click());
     assert.equal(header.getAttribute("aria-expanded"), "true");
+    assert.equal(view.container.querySelector(".compaction-body").id, header.getAttribute("aria-controls"));
+    assert.equal(header.querySelector(".compaction-time").textContent, time);
     assert.equal(view.container.querySelector("h2").textContent, "Retained context");
     assert.equal(view.container.querySelector("strong").textContent, "existing controls");
     assert.match(view.container.querySelector(".compaction-file-details").textContent, /1 read, 1 modified/);
