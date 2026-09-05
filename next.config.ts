@@ -7,6 +7,7 @@ const configDir = dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(readFileSync(join(configDir, "package.json"), "utf8")) as { version: string };
 
 const nextConfig: NextConfig = {
+  agentRules: false,
   outputFileTracingRoot: configDir,
   serverExternalPackages: [
     "undici",
