@@ -7,7 +7,7 @@ import { SessionSidebar } from "./SessionSidebar";
 import { ChatWindow, EMPTY_CHAT_DISPLAY, type ChatActions, type ChatDisplayState } from "./ChatWindow";
 import { FileViewer } from "./FileViewer";
 import { TabBar } from "./TabBar";
-import { formatCompactCount } from "@/lib/i18n/format";
+import { formatCompactCount, formatContextUsage } from "@/lib/i18n/format";
 import { errorMessage } from "@/lib/error-message";
 import { openFileTab, saveFileViewerState, type Tab } from "@/lib/file-tab-state";
 import { SettingsPanel } from "./SettingsPanel";
@@ -236,6 +236,7 @@ export function AppShell({ homeDir }: { homeDir: string }) {
     branchTree, branchActiveLeafId, systemPrompt, systemTools,
     sessionStats, contextUsage, compactionControl, toolPresetControl,
   } = chatDisplay;
+  const contextStats = formatContextUsage(contextUsage ?? sessionStats?.contextUsage);
   const sessionHasBranches = hasSessionBranches(branchTree);
 
   const handleBranchLeafChange = useCallback((leafId: string | null) => {
@@ -1178,17 +1179,8 @@ export function AppShell({ homeDir }: { homeDir: string }) {
 
     const tokens = sessionStats?.tokens;
     let contextColor = "var(--text-muted)";
-    let desktopContextText: string | null = null;
-    let mobileContextText: string | null = null;
-    if (contextUsage?.contextWindow) {
-      const percent = contextUsage.percent;
-      if (contextWarningLevel === "red") contextColor = "var(--danger)";
-      else if (contextWarningLevel === "yellow") contextColor = "rgba(234,179,8,0.95)";
-      desktopContextText = percent !== null
-        ? `${percent.toFixed(0)}% / ${formatCompactCount(contextUsage.contextWindow)}`
-        : `? / ${formatCompactCount(contextUsage.contextWindow)}`;
-      mobileContextText = percent !== null ? `${percent.toFixed(0)}%` : null;
-    }
+    if (contextWarningLevel === "red") contextColor = "var(--danger)";
+    else if (contextWarningLevel === "yellow") contextColor = "rgba(234,179,8,0.95)";
 
     const tooltipParts: string[] = [];
     if (tokens) {
@@ -1197,15 +1189,14 @@ export function AppShell({ homeDir }: { homeDir: string }) {
       tooltipParts.push(`cache read: ${tokens.cacheRead.toLocaleString("en")}`);
       tooltipParts.push(`cache write: ${tokens.cacheWrite.toLocaleString("en")}`);
     }
-    if (contextUsage?.contextWindow) {
-      const percent = contextUsage.percent;
-      tooltipParts.push(`context: ${percent !== null ? percent.toFixed(1) + "%" : "unknown"} of ${contextUsage.contextWindow.toLocaleString("en")} tokens`);
+    if (contextStats) {
+      tooltipParts.push(translate("session.contextTooltip", contextStats));
     }
     const tooltip = tooltipParts.join("  |  ");
     const covered = mobile && isNarrowMobile && mobileToolbarMoreOpen;
     const hasMobileValues = Boolean(
       (tokens && (tokens.input > 0 || tokens.output > 0))
-      || mobileContextText,
+      || contextStats,
     );
 
     return (
@@ -1265,9 +1256,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
                 {formatCompactCount(tokens.output)}
               </span>
             )}
-            {mobileContextText && (
-              <span style={{ color: contextColor, flexShrink: 0 }}>
-                {mobileContextText}
+            {contextStats && (
+              <span className="mobile-session-context" style={{ color: contextColor }}>
+                {contextStats.summary}
               </span>
             )}
             {!hasMobileValues && showChat && (
@@ -1302,12 +1293,12 @@ export function AppShell({ homeDir }: { homeDir: string }) {
                 {formatCompactCount(tokens.cacheRead)}
               </span>
             )}
-            {desktopContextText && (
+            {contextStats && (
               <span style={{ display: "flex", alignItems: "center", gap: 4, color: contextColor }}>
                 <svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M1 9 L1 5 Q1 1 5 1 Q9 1 9 5 L9 9" /><line x1="1" y1="9" x2="9" y2="9" />
                 </svg>
-                {desktopContextText}
+                {contextStats.summary}
               </span>
             )}
           </>
@@ -1416,7 +1407,13 @@ export function AppShell({ homeDir }: { homeDir: string }) {
       .mobile-session-stats {
         container-type: inline-size;
       }
-      @container (max-width: 158px) {
+      .mobile-session-context {
+        min-width: 0;
+        white-space: normal;
+        line-height: 1.2;
+        text-align: right;
+      }
+      @container (max-width: 240px) {
         .mobile-session-stat-io {
           display: none !important;
         }
@@ -1680,9 +1677,11 @@ export function AppShell({ homeDir }: { homeDir: string }) {
                        ...(sessionStats.tokens.cacheWrite > 0 ? [[translate("session.cacheWrite"), sessionStats.tokens.cacheWrite.toLocaleString("en")]] : []),
                        [translate("session.total"), sessionStats.tokens.total.toLocaleString("en")],
                     ];
-                    const ctx = contextUsage ?? sessionStats.contextUsage;
                     const extraTokenRows = [
-                       ...(ctx?.contextWindow ? [[translate("session.context"), `${ctx.percent !== null ? `${ctx.percent.toFixed(1)}%` : "?"} / ${formatCompactCount(ctx.contextWindow)}`]] : []),
+                       ...(contextStats ? [
+                         [translate("session.contextWindow"), contextStats.size],
+                         [translate("session.contextUsage"), contextStats.percent],
+                       ] : []),
                        // Cache hit rate = cache reads / (input + cache writes + cache reads) — the denominator covers all input-class tokens.
                        ...(sessionStats.tokens.cacheRead + sessionStats.tokens.cacheWrite > 0 && sessionStats.tokens.cacheRead + sessionStats.tokens.cacheWrite + sessionStats.tokens.input > 0
                          ? [[translate("session.cacheHitRate"), `${(sessionStats.tokens.cacheRead / (sessionStats.tokens.cacheRead + sessionStats.tokens.cacheWrite + sessionStats.tokens.input) * 100).toFixed(1)}%`]]
@@ -1698,7 +1697,7 @@ export function AppShell({ homeDir }: { homeDir: string }) {
                           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>{title}</div>
                           <div style={{
                             display: "grid",
-                            gridTemplateColumns: compact ? "max-content max-content" : "auto minmax(0, 1fr)",
+                            gridTemplateColumns: compact ? "max-content minmax(0, 1fr)" : "auto minmax(0, 1fr)",
                             columnGap: compact ? 14 : 12,
                             rowGap: 4,
                             justifyContent: compact ? "start" : undefined,
@@ -1711,7 +1710,7 @@ export function AppShell({ homeDir }: { homeDir: string }) {
                                   minWidth: 0,
                                   overflowWrap: compact ? "normal" : "anywhere",
                                   textAlign: valueAlign,
-                                  whiteSpace: valueAlign === "right" ? "nowrap" : "normal",
+                                  whiteSpace: "normal",
                                 }}>{value}</div>
                               </div>
                             ))}

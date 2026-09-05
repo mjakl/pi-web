@@ -59,13 +59,13 @@ const router = {
   prefetch() {},
 };
 
-function appShell() {
+function appShell(params = "") {
   return React.createElement(
     AppRouterContext.Provider,
     { value: router },
     React.createElement(
       SearchParamsContext.Provider,
-      { value: new URLSearchParams() },
+      { value: new URLSearchParams(params) },
       React.createElement(AppShell, { homeDir: "/tmp" }),
     ),
   );
@@ -750,6 +750,57 @@ test("the header can refresh the current page on desktop and mobile", async () =
     window.location.reload = originalReload;
     await act(() => root.unmount());
     container.remove();
+    window.happyDOM.setWindowSize({ width: 1024, height: 768 });
+  }
+});
+
+test("context usage agrees between the top bar and statistics panel on desktop and mobile", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalResizeObserver = globalThis.ResizeObserver;
+  const originalIntersectionObserver = globalThis.IntersectionObserver;
+  globalThis.ResizeObserver = class { observe() {} disconnect() {} };
+  globalThis.IntersectionObserver = class { observe() {} disconnect() {} };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  globalThis.fetch = async (input) => {
+    const path = new URL(String(input), "http://localhost").pathname;
+    if (path === `/api/sessions/${sidebarSession.id}/state`) {
+      return Response.json({ active: false, running: false, state: {
+        contextUsage: { tokens: 48000, contextWindow: 200000, percent: 24 },
+      } });
+    }
+    if (path === `/api/sessions/${sidebarSession.id}`) {
+      return Response.json({ sessionId: sidebarSession.id, filePath: sidebarSession.path, info: sidebarSession,
+        totalActiveMs: 0, tree: [], leafId: null,
+        context: { messages: [], entryIds: [], hasMore: false },
+        stats: { userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0, totalMessages: 0,
+          tokens: { input: 12000, output: 4000, cacheRead: 32000, cacheWrite: 0, total: 48000 }, cost: 0 },
+      });
+    }
+    return Response.json({ sessions: [sidebarSession], activeSessionIds: [], runningSessionIds: [], projects: [], models: [] });
+  };
+  try {
+    for (const width of [1064, 390, 320]) {
+      await act(() => window.happyDOM.setWindowSize({ width, height: 844 }));
+      await act(() => root.render(appShell(`session=${sidebarSession.id}`)));
+      const button = container.querySelector('button[aria-label="Session info"]');
+      assert.ok(button, "session statistics button exists");
+      assert.match(button.textContent, /48k \/ 200k \(24%\)/);
+      assert.match(button.title, /Context: 48,000 \/ 200,000 tokens \(24%\)/);
+      if (button.getAttribute("aria-pressed") !== "true") await act(() => button.click());
+      const panel = container.querySelector(".session-info-popover");
+      assert.ok(panel, "statistics panel opens");
+      const valueFor = (label) => [...panel.querySelectorAll("div")].find((element) => element.textContent === label)?.nextElementSibling?.textContent;
+      assert.equal(valueFor("Context window"), "48,000 / 200,000 tokens");
+      assert.equal(valueFor("Context usage"), "24%");
+    }
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+    globalThis.fetch = originalFetch;
+    globalThis.ResizeObserver = originalResizeObserver;
+    globalThis.IntersectionObserver = originalIntersectionObserver;
     window.happyDOM.setWindowSize({ width: 1024, height: 768 });
   }
 });

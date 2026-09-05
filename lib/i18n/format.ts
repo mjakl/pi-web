@@ -1,4 +1,5 @@
 import { enMessages } from "./messages/en";
+import type { ContextUsage } from "../pi-types";
 
 /** Values inserted into English UI messages at runtime. */
 export type TranslationParams = Record<string, string | number>;
@@ -29,6 +30,24 @@ export function formatCompactCount(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${Math.round(value / 1_000)}k`;
   return value.toLocaleString("en");
+}
+
+/** Current context usage, distinct from cumulative session token totals. */
+export function formatContextUsage(usage: ContextUsage | null | undefined): { summary: string; size: string; percent: string } | null {
+  if (!usage?.contextWindow) return null;
+  const percent = usage.percent === null ? "?" : `${usage.percent.toLocaleString("en", { maximumFractionDigits: 1 })}%`;
+  return {
+    summary: translateMessage("session.contextSummary", {
+      used: usage.tokens === null ? "?" : formatCompactCount(usage.tokens),
+      max: formatCompactCount(usage.contextWindow),
+      percent,
+    }),
+    size: translateMessage("session.contextSize", {
+      used: usage.tokens === null ? "?" : usage.tokens.toLocaleString("en"),
+      max: usage.contextWindow.toLocaleString("en"),
+    }),
+    percent,
+  };
 }
 
 /** Formats a message timestamp in English with a 24-hour clock. */
