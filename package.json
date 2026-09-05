@@ -1,6 +1,6 @@
 {
-  "name": "@agegr/pi-web",
-  "version": "0.8.11",
+  "name": "@mjakl/pi-web",
+  "version": "0.99.0",
   "private": true,
   "description": "Web UI for the pi coding agent",
   "homepage": "https://github.com/mjakl/pi-web#readme",
