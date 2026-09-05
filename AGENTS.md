@@ -66,10 +66,10 @@ Start with these owners instead of a broad file inventory:
 - Keep one live wrapper per source session id in the `globalThis` registry, and
   keep concurrent startup coalesced by the shared start locks. Destruction must
   remove registry entries and release owned resources on success and failure.
-- Fork and clone replace the source wrapper's usable runtime. Reject conflicting
-  active work, create the branched session, then shut the source wrapper down
-  through `shutdownAfterSessionReplacement()`; never continue using that
-  wrapper under the old registry key.
+- Fork and clone create independent child sessions while keeping the source
+  wrapper active under its original session id. Reject conflicting active work
+  and copy history through a separate `SessionManager` so the source runtime
+  keeps its session file and branch.
 - Keep independent session forks distinct from in-session tree navigation.
   `parentSession` is family/display metadata, not chat context. `entryIds[]`
   remains parallel to displayed `messages[]` so fork and navigation target the

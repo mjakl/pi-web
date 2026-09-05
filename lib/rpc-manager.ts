@@ -387,17 +387,6 @@ export class AgentSessionWrapper {
       || this.pendingPromptCount > 0;
   }
 
-  private async shutdownAfterSessionReplacement(replacement: "fork" | "clone"): Promise<void> {
-    try {
-      await this.shutdown();
-    } catch (error) {
-      console.error(
-        `[pi-web] ${replacement} succeeded, but source session shutdown failed:`,
-        error instanceof Error ? error.message : error,
-      );
-    }
-  }
-
   async send(command: Record<string, unknown>): Promise<unknown> {
     if (!this.isActive()) throw new Error("Session is stopped");
     const type = command.type as string;
@@ -605,7 +594,6 @@ export class AgentSessionWrapper {
 
           const newSessionId = SessionManager.open(newSessionFile, sessionDir).getSessionId();
           cacheSessionPath(newSessionId, newSessionFile);
-          await this.shutdownAfterSessionReplacement("fork");
           return { cancelled: false, newSessionId };
         });
       }
@@ -632,7 +620,6 @@ export class AgentSessionWrapper {
 
           const newSessionId = SessionManager.open(clonedPath, sessionDir).getSessionId();
           cacheSessionPath(newSessionId, clonedPath);
-          await this.shutdownAfterSessionReplacement("clone");
           return { cancelled: false, newSessionId };
         });
       }
