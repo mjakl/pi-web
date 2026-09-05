@@ -100,7 +100,6 @@ test("names the reason when the child stops on its own", () => {
   for (const [code, signal, expectedReason, expectedExitCode] of [
     [null, "SIGKILL", "signal SIGKILL", 137],
     [1, null, "code 1", 1],
-    [0, null, "code 0", 0],
   ]) {
     const { parent, child, exitCodes } = createProcesses();
     const logged = [];
@@ -111,6 +110,17 @@ test("names the reason when the child stops on its own", () => {
     assert.deepEqual(logged, [`[pi-web] Next.js exited unexpectedly (${expectedReason})`]);
     assert.deepEqual(exitCodes, [expectedExitCode]);
   }
+});
+
+test("stays quiet when the child completes, as a build does", () => {
+  const { parent, child, exitCodes } = createProcesses();
+  const logged = [];
+
+  wireChildProcessLifecycle(child, parent, 10, (line) => logged.push(line));
+  child.emit("exit", 0, null);
+
+  assert.deepEqual(logged, []);
+  assert.deepEqual(exitCodes, [0]);
 });
 
 test("keeps the shutdown fallback armed when signaling the child fails", async () => {

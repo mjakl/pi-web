@@ -9,15 +9,10 @@ import { resolveSessionPath } from "@/lib/session-reader";
 
 const execFileAsync = promisify(execFile);
 
-const CODING_AGENT = "@earendil-works/pi-coding-agent";
-
 function getPiCliPath(): string {
-  const runtime = JSON.parse(process.env.PI_WEB_HOST_PI ?? "{}") as {
-    packages?: Record<string, { dir?: unknown }>;
-  };
-  const packageDir = runtime.packages?.[CODING_AGENT]?.dir;
-  if (typeof packageDir !== "string") throw new Error("Validated host Pi runtime is missing");
-  return join(packageDir, "dist", "bundle", "cli.js");
+  const { cli } = JSON.parse(process.env.PI_WEB_HOST_PI ?? "{}") as { cli?: unknown };
+  if (typeof cli !== "string") throw new Error("Validated host Pi runtime is missing");
+  return cli;
 }
 
 /**
@@ -41,9 +36,9 @@ function getPiCliPath(): string {
  *      Same depth → same overflow.
  *
  * Both functions are inlined in the HTML by pi-coding-agent at export
- * time. We cannot modify template.js directly (it's in node_modules
- * and would be overwritten on npm install). Instead, we patch the
- * generated HTML string before returning it to the client.
+ * time. template.js belongs to the host Pi installation resolved at
+ * startup, which Pi Web never modifies, so we patch the generated
+ * HTML string before returning it to the client.
  *
  * ## Fix
  * Replace each recursive function with an iterative equivalent:
@@ -55,17 +50,13 @@ function getPiCliPath(): string {
  *                   stack2 for processing children before parent)
  *
  * ## Line Ending Normalization
- * This file (route.ts) uses CRLF (Windows), while template.js uses LF
- * (Unix). The template strings in the backtick literals inherit the
- * file's CRLF line endings. At runtime, readFileSync() also returns
- * CRLF on Windows. We normalize everything to LF before matching.
- *
- * The helper `n(s)` strips \r\n → \n on both the HTML and the
- * replacement strings, ensuring cross-platform matching.
+ * A Windows checkout can store this file with CRLF, which the search
+ * and replacement literals below would inherit, and the exported HTML
+ * carries whatever line endings the host Pi wrote. The helper `n(s)`
+ * strips \r\n → \n on both sides so the exact matches still apply.
  */
 function patchExportHtml(html: string): string {
-  // Normalize line endings: route.ts is CRLF, template.js is LF.
-  // Without this, the replace() below would fail on Windows.
+  // Normalize both sides before matching; either can carry CRLF.
   const n = (s: string) => s.replace(/\r\n/g, "\n");
   html = n(html);
 

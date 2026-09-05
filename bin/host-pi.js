@@ -17,7 +17,7 @@ const PI_PACKAGES = [
 function validationError(reason, executable) {
   const found = executable ? ` Executable: ${executable}.` : "";
   return new Error(
-    `Host Pi validation failed: ${reason}.${found} Pi Web supports Linux, macOS, and Windows and requires ${CODING_AGENT}. Install or update Pi with "npm install -g --ignore-scripts ${CODING_AGENT}", put the intended pi executable first on PATH, and restart Pi Web.`,
+    `Host Pi validation failed: ${reason}.${found} Pi Web supports Linux, macOS, and Windows and requires ${CODING_AGENT} and ${PI_SERVER}. Install or update Pi with "npm install -g --ignore-scripts ${CODING_AGENT} ${PI_SERVER}", put the real pi executable (not a version-manager shim) first on PATH, and restart Pi Web.`,
   );
 }
 
@@ -64,6 +64,9 @@ function isExecutable(file, platform) {
 
 function findPiExecutable(env, platform, checkoutDir) {
   const names = executableNames(platform, env);
+  // npm puts <checkoutDir>/node_modules/.bin first on PATH for every script. A
+  // checkout that still holds a Pi install from before this project stopped
+  // depending on one must not be mistaken for the host installation.
   const localCandidates = new Set(names.map((name) => (
     comparablePath(path.join(checkoutDir, "node_modules", ".bin", name), platform)
   )));
@@ -106,6 +109,10 @@ function sameFile(left, right, platform) {
   }
 }
 
+function piBin(packageJson) {
+  return typeof packageJson.bin === "string" ? packageJson.bin : packageJson.bin?.pi;
+}
+
 function findCodingAgent(executable, platform) {
   const realExecutable = fs.realpathSync(executable);
   const starts = [...new Set([path.dirname(realExecutable), path.dirname(executable)])];
@@ -113,26 +120,27 @@ function findCodingAgent(executable, platform) {
   for (const start of starts) {
     for (const ancestor of ancestors(start)) {
       const direct = readPackage(ancestor, CODING_AGENT);
-      if (direct) {
-        const bin = typeof direct.packageJson.bin === "string"
-          ? direct.packageJson.bin
-          : direct.packageJson.bin?.pi;
-        if (bin && sameFile(path.join(direct.dir, bin), realExecutable, platform)) return direct;
+      const directBin = direct && piBin(direct.packageJson);
+      if (directBin && sameFile(path.join(direct.dir, directBin), realExecutable, platform)) {
+        return { ...direct, cli: path.join(direct.dir, directBin) };
       }
 
       const dependency = readPackage(path.join(ancestor, "node_modules", ...CODING_AGENT.split("/")), CODING_AGENT);
       if (!dependency) continue;
-      const bin = typeof dependency.packageJson.bin === "string"
-        ? dependency.packageJson.bin
-        : dependency.packageJson.bin?.pi;
+      const bin = piBin(dependency.packageJson);
       const executableDir = path.dirname(executable);
+      // Isolated package managers install Pi behind their own node_modules/.bin
+      // script, which is neither the package's own bin file nor adjacent to it.
       const adjacentShim = comparableDirectory(executableDir, platform) === comparableDirectory(ancestor, platform)
         || path.basename(executableDir).toLowerCase() === ".bin";
-      if (bin && (sameFile(path.join(dependency.dir, bin), realExecutable, platform) || adjacentShim)) return dependency;
+      if (bin && (sameFile(path.join(dependency.dir, bin), realExecutable, platform) || adjacentShim)) {
+        return { ...dependency, cli: path.join(dependency.dir, bin) };
+      }
     }
   }
 
-  throw new Error(`the first non-checkout pi is not owned by ${CODING_AGENT}`);
+  const via = realExecutable === executable ? "" : ` -> ${realExecutable}`;
+  throw new Error(`the first pi on PATH (${executable}${via}) is not inside ${CODING_AGENT}; a version-manager shim does not count`);
 }
 
 function findDependency(codingDir, packageName) {
@@ -143,6 +151,10 @@ function findDependency(codingDir, packageName) {
   throw new Error(`${packageName} is missing from ${CODING_AGENT}'s dependency graph`);
 }
 
+// An isolated package manager installs each tool in its own tree and puts that
+// tree's node_modules/.bin on PATH, even when the directory holds no executable.
+// Walking those ancestors reaches the checkout first, which must never supply a
+// Pi package: `npm install` without `-g` would otherwise be silently accepted.
 function findStandaloneDependency(env, platform, checkoutDir, packageName, version) {
   const checkout = comparableDirectory(checkoutDir, platform);
   for (const rawDir of (env.PATH || "").split(platform === "win32" ? ";" : path.delimiter)) {
@@ -227,7 +239,7 @@ function resolveHostPi({
       };
     }
 
-    return { executable, packages };
+    return { executable, cli: coding.cli, packages };
   } catch (error) {
     throw validationError(error instanceof Error ? error.message : String(error), executable);
   }
