@@ -11,7 +11,12 @@ function Disclosure({ label, children, className = "" }: { label: ReactNode; chi
   const [open, setOpen] = useState(false);
   return (
     <details className={className} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>{label}</summary>
+      <summary>
+        <span className="subagent-summary-label">{label}</span>
+        <svg className="subagent-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="2 3.5 5 6.5 8 3.5" />
+        </svg>
+      </summary>
       {open && children()}
     </details>
   );

@@ -180,3 +180,29 @@ test("Markdown soft breaks use normal whitespace while plain errors preserve lin
     assert.equal(window.getComputedStyle(view.container.querySelector(".subagent-plain")).whiteSpace, "pre-wrap");
   } finally { await view.close(); style.remove(); }
 });
+
+test("subagent disclosures keep a trailing chevron aligned with the first header line", async () => {
+  const style = document.createElement("style");
+  style.textContent = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  document.head.append(style);
+  const view = await mount({ activeTools: new Map([["sub-1", { progress: "Subagents: 0/1 done, 1 running with a long progress description" }]]) });
+  try {
+    const details = view.container.querySelector("details");
+    const summary = details.querySelector(":scope > summary");
+    const chevron = summary.lastElementChild;
+    assert.equal(chevron.tagName.toLowerCase(), "svg");
+    assert.equal(chevron.getAttribute("aria-hidden"), "true");
+    assert.equal(window.getComputedStyle(summary).display, "flex");
+    assert.equal(window.getComputedStyle(summary).alignItems, "flex-start");
+    assert.equal(window.getComputedStyle(chevron).flexShrink, "0");
+    assert.notEqual(window.getComputedStyle(chevron).transform, "rotate(180deg)");
+    await expand(details);
+    assert.equal(window.getComputedStyle(chevron).transform, "rotate(180deg)");
+    const nested = namedDetails(view.container, "Prompt").querySelector("summary");
+    assert.equal(nested.lastElementChild.tagName.toLowerCase(), "svg");
+    assert.equal(nested.textContent, "Prompt");
+    await act(async () => { details.open = false; details.dispatchEvent(new window.Event("toggle")); });
+    assert.equal(view.container.querySelector(".subagent-body"), null);
+    assert.notEqual(window.getComputedStyle(chevron).transform, "rotate(180deg)");
+  } finally { await view.close(); style.remove(); }
+});
