@@ -9,7 +9,7 @@ import { ImagePreview } from "./ImagePreview";
 import { errorMessage } from "@/lib/error-message";
 import { copyText } from "@/lib/clipboard";
 import { useI18n } from "@/hooks/useI18n";
-import { formatTimestamp } from "@/lib/i18n/format";
+import { formatCompactCount, formatTimestamp } from "@/lib/i18n/format";
 import { parseCompactionSummary } from "@/lib/compaction-summary";
 import { getAssistantErrorMessage, isEmptyAssistantBlock } from "@/lib/message-display";
 import { parseUnifiedPatch, type SplitDiffCell } from "@/lib/patch";
@@ -1354,52 +1354,53 @@ function PairedResult({ text, images, isEmpty, isError }: {
 
 function CompactionMessageView({ message }: { message: CustomMessage }) {
   const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
   const summary = getMessageText(message.content);
   const parsedSummary = useMemo(() => parseCompactionSummary(summary), [summary]);
   const time = formatTime(message.timestamp);
+  const details = isRecord(message.details) ? message.details : {};
+  const before = typeof details.tokensBefore === "number" && Number.isFinite(details.tokensBefore) && details.tokensBefore >= 0
+    ? formatCompactCount(details.tokensBefore) : null;
+  const after = typeof details.estimatedTokensAfter === "number" && Number.isFinite(details.estimatedTokensAfter) && details.estimatedTokensAfter >= 0
+    ? formatCompactCount(details.estimatedTokensAfter) : null;
+  const tokens = before !== null && after !== null ? t("chat.compaction.tokens", { before, after })
+    : before !== null ? t("chat.compaction.tokensBefore", { before })
+    : after !== null ? t("chat.compaction.tokensAfter", { after }) : null;
 
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div
-        style={{
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          overflow: "hidden",
-          background: "var(--bg)",
-        }}
+    <div className="compaction-card">
+      <button
+        type="button"
+        className="compaction-header"
+        aria-expanded={expanded}
+        title={t(expanded ? "i18n.collapse" : "i18n.expand")}
+        onClick={() => setExpanded((value) => !value)}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "7px 10px",
-            borderBottom: "1px solid var(--border)",
-            background: "var(--bg-panel)",
-            color: "var(--text-muted)",
-          }}
-        >
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 650 }}>
-            compaction
-          </span>
-          {time && <span style={{ marginLeft: "auto", color: "var(--text-dim)", fontSize: 10 }}>{time}</span>}
-        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="4" rx="1" />
+          <path d="M5 7v13h14V7M10 11h4" />
+        </svg>
+        <span className="compaction-header-main">
+          <span className="compaction-label">{t("i18n.conversationCompacted")}</span>
+          {tokens && <span className="compaction-token-count" title={after !== null ? t("chat.compaction.tokenEstimate") : undefined}>{tokens}</span>}
+        </span>
+        {time && <span className="compaction-time">{time}</span>}
+        <svg className="compaction-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="2 3.5 5 6.5 8 3.5" />
+        </svg>
+      </button>
 
-        <div style={{ padding: "11px 13px 12px" }}>
-          <div style={{ color: "var(--text)", fontSize: 15, fontWeight: 700, lineHeight: 1.35 }}>
-             {t("i18n.conversationCompacted")}
-          </div>
-          <div style={{ marginTop: 3, marginBottom: 10, color: "var(--text)", fontSize: 14, lineHeight: 1.5 }}>
-             {t("i18n.compactionDescription")}
-          </div>
-          {parsedSummary.body ? (
-            <MarkdownBody className="markdown-compaction-message">{parsedSummary.body}</MarkdownBody>
-          ) : (
-             <span style={{ color: "var(--text-dim)", fontSize: 12 }}>{t("i18n.noSummary")}</span>
-          )}
-          <CompactionFileMetadata readFiles={parsedSummary.readFiles} modifiedFiles={parsedSummary.modifiedFiles} />
+      {expanded && <div className="compaction-body">
+        <div style={{ marginBottom: 10, color: "var(--text)", fontSize: 14, lineHeight: 1.5 }}>
+           {t("i18n.compactionDescription")}
         </div>
-      </div>
+        {parsedSummary.body ? (
+          <MarkdownBody className="markdown-compaction-message">{parsedSummary.body}</MarkdownBody>
+        ) : (
+           <span style={{ color: "var(--text-dim)", fontSize: 12 }}>{t("i18n.noSummary")}</span>
+        )}
+        <CompactionFileMetadata readFiles={parsedSummary.readFiles} modifiedFiles={parsedSummary.modifiedFiles} />
+      </div>}
     </div>
   );
 }
@@ -1438,7 +1439,7 @@ function CompactionFileList({ title, files }: { title: string; files: string[] }
 function CustomMessageView({ message, cwd, onOpenFile }: { message: CustomMessage; cwd?: string; onOpenFile?: (filePath: string) => void }) {
   const { t } = useI18n();
   const isHiddenDisplay = message.display === false;
-  const [contentExpanded, setContentExpanded] = useState(!isHiddenDisplay);
+  const [contentExpanded, setContentExpanded] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const text = getMessageText(message.content);
@@ -1466,26 +1467,41 @@ function CustomMessageView({ message, cwd, onOpenFile }: { message: CustomMessag
           opacity: isHiddenDisplay && !contentExpanded ? 0.82 : 1,
         }}
       >
-        <div
+        <button
+          type="button"
+          onClick={() => setContentExpanded((v) => !v)}
+          aria-expanded={contentExpanded}
+          title={t(contentExpanded ? "i18n.collapse" : "i18n.expand")}
           style={{
             display: "flex",
             alignItems: "center",
             gap: 8,
+            width: "100%",
+            minWidth: 0,
             padding: "7px 10px",
-            borderBottom: "1px solid var(--border)",
+            border: "none",
+            borderBottom: contentExpanded ? "1px solid var(--border)" : undefined,
             background: "var(--bg-panel)",
             color: "var(--text-muted)",
             fontSize: 12,
+            cursor: "pointer",
+            textAlign: "left",
           }}
         >
-          <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 650 }}>
+          <span style={{ minWidth: 0, overflowWrap: "anywhere", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 650 }}>
             {title}
+            {isHiddenDisplay && <span style={{ display: "block", color: "var(--text-dim)", fontSize: 11, fontWeight: 400 }}>{t("i18n.hiddenExtensionMessage")}</span>}
           </span>
-           {isHiddenDisplay && <span style={{ color: "var(--text-dim)", fontSize: 11 }}>{t("i18n.hiddenExtensionMessage")}</span>}
-          {time && <span style={{ marginLeft: "auto", color: "var(--text-dim)", fontSize: 10 }}>{time}</span>}
-        </div>
+          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-dim)", fontSize: 11 }}>
+            {!contentExpanded && (previewText(text) || t("i18n.showExtensionMessage"))}
+          </span>
+          {time && <span style={{ flexShrink: 0, color: "var(--text-dim)", fontSize: 10 }}>{time}</span>}
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--text-dim)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, transform: contentExpanded ? "rotate(180deg)" : "none" }}>
+            <polyline points="2 3.5 5 6.5 8 3.5" />
+          </svg>
+        </button>
 
-        {contentExpanded ? (
+        {contentExpanded && <>
           <div style={{ padding: "6px 9px" }}>
             {images.length > 0 && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: text ? 8 : 0 }}>
@@ -1507,93 +1523,72 @@ function CustomMessageView({ message, cwd, onOpenFile }: { message: CustomMessag
             )}
              {text ? <MarkdownBody className="markdown-custom-message" cwd={cwd} onOpenFile={onOpenFile}>{text}</MarkdownBody> : <span style={{ color: "var(--text-dim)", fontSize: 12 }}>{t("i18n.noMessage")}</span>}
           </div>
-        ) : (
-          <button
-            onClick={() => setContentExpanded(true)}
-            style={{
-              display: "block",
-              width: "100%",
-              padding: "8px 10px",
-              border: "none",
-              background: "transparent",
-              color: "var(--text-dim)",
-              cursor: "pointer",
-              fontSize: 12,
-              textAlign: "left",
-            }}
-          >
-             {text ? previewText(text) : t("i18n.showExtensionMessage")}
-          </button>
-        )}
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "4px 9px",
-            borderTop: "1px solid var(--border)",
-            background: "var(--bg-subtle)",
-          }}
-        >
-          {text || detailsText ? (
-            <button
-              onClick={copyContent}
-              style={{
-                padding: "3px 7px",
-                border: "none",
-                background: "none",
-                color: copied ? "var(--accent)" : "var(--text-dim)",
-                cursor: "pointer",
-                fontSize: 11,
-              }}
-            >
-               {copied ? t("i18n.copied") : t("i18n.copy")}
-            </button>
-          ) : null}
-          {(hasDetails || isHiddenDisplay) && (
-            <button
-              onClick={() => {
-                if (isHiddenDisplay) setContentExpanded((v) => !v);
-                else setDetailsExpanded((v) => !v);
-              }}
-              style={{
-                marginLeft: "auto",
-                padding: "3px 7px",
-                border: "none",
-                background: "none",
-                color: "var(--text-dim)",
-                cursor: "pointer",
-                fontSize: 11,
-              }}
-            >
-              {isHiddenDisplay
-                 ? (contentExpanded ? t("i18n.collapse") : t("i18n.expand"))
-                 : (detailsExpanded ? t("i18n.hideDetails") : t("i18n.showDetails"))}
-            </button>
-          )}
-        </div>
-
-        {hasDetails && ((isHiddenDisplay && contentExpanded) || (!isHiddenDisplay && detailsExpanded)) && (
-          <pre
+          <div
             style={{
-              margin: 0,
-              padding: "9px 10px",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "4px 9px",
               borderTop: "1px solid var(--border)",
-              background: "var(--bg)",
-              color: "var(--text-muted)",
-              fontSize: 12,
-              lineHeight: 1.5,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              maxHeight: 360,
-              overflow: "auto",
-              fontFamily: "var(--font-mono)",
+              background: "var(--bg-subtle)",
             }}
           >
-            {detailsText}
-          </pre>
-        )}
+            {text || detailsText ? (
+              <button
+                onClick={copyContent}
+                style={{
+                  padding: "3px 7px",
+                  border: "none",
+                  background: "none",
+                  color: copied ? "var(--accent)" : "var(--text-dim)",
+                  cursor: "pointer",
+                  fontSize: 11,
+                }}
+              >
+                 {copied ? t("i18n.copied") : t("i18n.copy")}
+              </button>
+            ) : null}
+            {hasDetails && (
+              <button
+                onClick={() => setDetailsExpanded((v) => !v)}
+                aria-expanded={detailsExpanded}
+                style={{
+                  marginLeft: "auto",
+                  padding: "3px 7px",
+                  border: "none",
+                  background: "none",
+                  color: "var(--text-dim)",
+                  cursor: "pointer",
+                  fontSize: 11,
+                }}
+              >
+                {t(detailsExpanded ? "i18n.hideDetails" : "i18n.showDetails")}
+              </button>
+            )}
+          </div>
+
+          {hasDetails && detailsExpanded && (
+            <pre
+              style={{
+                margin: 0,
+                padding: "9px 10px",
+                borderTop: "1px solid var(--border)",
+                background: "var(--bg)",
+                color: "var(--text-muted)",
+                fontSize: 12,
+                lineHeight: 1.5,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                maxHeight: 360,
+                overflow: "auto",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              {detailsText}
+            </pre>
+          )}
+        </>}
       </div>
     </div>
   );
@@ -1640,7 +1635,6 @@ function formatCustomType(type: string): string {
 
 function previewText(text: string): string {
   const normalized = text.replace(/\s+/g, " ").trim();
-  if (!normalized) return "Show extension message";
   return normalized.length > 140 ? `${normalized.slice(0, 140)}...` : normalized;
 }
 

@@ -1561,8 +1561,8 @@ export function AppShell({ homeDir }: { homeDir: string }) {
               )}
               {!isNarrowMobile && renderChatToolbarActions(true)}
               {renderSessionStatsButton(true)}
-              {renderPageRefreshButton()}
               <CompactButton control={showChat ? compactionControl : null} warning={contextWarningLevel !== "none"} hidden={isNarrowMobile && mobileToolbarMoreOpen} />
+              {renderPageRefreshButton()}
               {renderMainFileToggle(true)}
               {isNarrowMobile && mobileToolbarMoreOpen && (
                 <div
@@ -1594,8 +1594,8 @@ export function AppShell({ homeDir }: { homeDir: string }) {
               {renderProjectTrustWarning(false)}
               {renderChatToolbarActions(false)}
               {renderSessionStatsButton(false)}
-              {renderPageRefreshButton()}
               <CompactButton control={showChat ? compactionControl : null} warning={contextWarningLevel !== "none"} />
+              {renderPageRefreshButton()}
             </>
           )}
           {!isMobile && renderMainFileToggle(false)}

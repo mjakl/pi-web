@@ -1,6 +1,8 @@
 import {
   SessionManager,
   buildContextEntries as piBuildContextEntries,
+  buildSessionContext as piBuildSessionContext,
+  estimateTokens,
   getAgentDir,
 } from "@earendil-works/pi-coding-agent";
 import { closeSync, type Dirent, existsSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from "fs";
@@ -508,6 +510,15 @@ export function buildSessionContext(
     const localEntry = entry as unknown as SessionEntry;
     const m = entryToUiMessage(localEntry, options);
     if (m) {
+      if (localEntry.type === "compaction" && m.role === "custom") {
+        // Reconstruct the context at this compaction, excluding later turns.
+        // Match Pi's post-compaction estimate, including retained messages.
+        const compacted = piBuildSessionContext(entries as unknown as PiSessionEntry[], localEntry.id);
+        m.details = {
+          ...(isRecord(m.details) ? m.details : {}),
+          estimatedTokensAfter: compacted.messages.reduce((total, message) => total + estimateTokens(message), 0),
+        };
+      }
       messages.push(m);
       entryIds.push(localEntry.id);
     }

@@ -260,7 +260,7 @@ test("renders user-message images as buttons that open a larger preview", () => 
   assert.match(html, /<img[^>]+src="data:image\/png;base64,YWJj"/);
 });
 
-test("renders custom-message images as buttons that open a larger preview", () => {
+test("keeps custom-message images collapsed when the display flag is absent", () => {
   const html = renderMessage({
     role: "custom",
     customType: "extension",
@@ -268,8 +268,8 @@ test("renders custom-message images as buttons that open a larger preview", () =
     timestamp: Date.now(),
   });
 
-  assert.match(html, /<button[^>]+aria-label="Preview image"[^>]*>/);
-  assert.match(html, /<img[^>]+src="data:image\/png;base64,YWJj"/);
+  assert.match(html, /aria-expanded="false"/);
+  assert.doesNotMatch(html, /<img/);
 });
 
 test("hands the hover reveal of message actions to CSS", () => {

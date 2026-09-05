@@ -17,6 +17,9 @@
   --success: #13703a;
   --warning: #8a5a06;
   --info: #0b6c85;
+  --compaction-text: #a33e50;
+  --compaction-bg: #fff2f4;
+  --compaction-border: #e4b6bf;
   --on-accent: #ffffff;
 }
 
@@ -37,6 +40,9 @@ html.dark {
   --success: #4ade80;
   --warning: #e5b163;
   --info: #22d3ee;
+  --compaction-text: #eea0ac;
+  --compaction-bg: #302326;
+  --compaction-border: #70404c;
   --on-accent: #1a1a1a;
 }
 
@@ -546,6 +552,45 @@ pre, code {
 .markdown-compaction-message .markdown-table-wrap,
 .markdown-compaction-message .markdown-code-block {
   margin: 6px 0;
+}
+
+.compaction-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--compaction-border);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.compaction-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: var(--compaction-bg);
+  color: var(--compaction-text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.compaction-header > svg { flex-shrink: 0; }
+.compaction-header-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  flex: 1;
+  min-width: 0;
+}
+.compaction-label { font-weight: 500; overflow-wrap: anywhere; }
+.compaction-token-count { font-size: 11px; font-variant-numeric: tabular-nums; }
+.compaction-time { flex-shrink: 0; color: var(--text-dim); font-size: 11px; }
+.compaction-header[aria-expanded="true"] .compaction-chevron { transform: rotate(180deg); }
+.compaction-header:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.compaction-body { padding: 11px 13px 12px; border-top: 1px solid var(--compaction-border); }
+@media (pointer: coarse) {
+  .compaction-header { min-height: 44px; }
 }
 
 .compaction-file-details {
