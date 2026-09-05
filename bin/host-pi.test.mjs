@@ -157,6 +157,28 @@ test("resolves a matching standalone pi-server installation from PATH", (t) => {
   assert.equal(runtime.packages["@earendil-works/pi-server"].dir, serverDir);
 });
 
+test("a pi-server left in the checkout never supplies the standalone package", (t) => {
+  const base = tempDir(t);
+  const checkout = path.join(base, "checkout");
+  const host = makePi(path.join(base, "host"), "0.85.0");
+  fs.rmSync(path.join(base, "host", "node_modules", "@earendil-works", "pi-server"), { recursive: true });
+  writePackage(checkout, "@earendil-works/pi-server", "0.85.0");
+  const checkoutBin = path.join(checkout, "node_modules", ".bin");
+  fs.mkdirSync(checkoutBin, { recursive: true });
+  const standalone = path.join(base, "standalone");
+  const serverDir = writePackage(standalone, "@earendil-works/pi-server", "0.85.0");
+  const standaloneBin = path.join(standalone, "node_modules", ".bin");
+  fs.mkdirSync(standaloneBin, { recursive: true });
+
+  const runtime = resolveHostPi({
+    platform: "linux",
+    checkoutDir: checkout,
+    env: { ...process.env, PATH: [checkoutBin, host.binDir, standaloneBin, process.env.PATH].join(path.delimiter) },
+  });
+
+  assert.equal(runtime.packages["@earendil-works/pi-server"].dir, serverDir);
+});
+
 test("rejects mismatched Pi package versions", (t) => {
   const base = tempDir(t);
   const host = makePi(path.join(base, "host"), "0.85.0", "0.84.4");

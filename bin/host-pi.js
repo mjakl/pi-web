@@ -153,12 +153,17 @@ function findDependency(codingDir, packageName) {
 
 // An isolated package manager installs each tool in its own tree and puts that
 // tree's node_modules/.bin on PATH, even when the directory holds no executable.
-function findStandaloneDependency(env, platform, packageName, version) {
+// Walking those ancestors reaches the checkout first, which must never supply a
+// Pi package: `npm install` without `-g` would otherwise be silently accepted.
+function findStandaloneDependency(env, platform, checkoutDir, packageName, version) {
+  const checkout = comparableDirectory(checkoutDir, platform);
   for (const rawDir of (env.PATH || "").split(platform === "win32" ? ";" : path.delimiter)) {
     const start = rawDir.replace(/^"|"$/g, "") || ".";
     for (const ancestor of ancestors(start)) {
       const found = readPackage(path.join(ancestor, "node_modules", ...packageName.split("/")), packageName);
-      if (found && found.packageJson.version === version) return found;
+      if (!found || found.packageJson.version !== version) continue;
+      const dir = comparableDirectory(found.dir, platform);
+      if (dir !== checkout && !dir.startsWith(`${checkout}${path.sep}`)) return found;
     }
   }
   throw new Error(`${packageName} ${version} is missing from ${CODING_AGENT}'s dependency graph and PATH`);
@@ -221,7 +226,7 @@ function resolveHostPi({
           found = findDependency(coding.dir, packageName);
         } catch (error) {
           if (packageName !== PI_SERVER) throw error;
-          found = findStandaloneDependency(env, platform, packageName, version);
+          found = findStandaloneDependency(env, platform, checkoutDir, packageName, version);
         }
       }
       if (found.packageJson.version !== version) {
