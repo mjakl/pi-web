@@ -14,7 +14,11 @@ type ThemeState = {
 type ToggleOrigin = { x: number; y: number };
 
 const STORAGE_KEY = "pi-theme";
-const PREFERENCE_CYCLE: ThemePreference[] = ["light", "dark", "auto"];
+const NEXT_PREFERENCE: Record<ThemePreference, ThemePreference> = {
+  light: "dark",
+  dark: "auto",
+  auto: "light",
+};
 const SERVER_SNAPSHOT: ThemeState = { preference: "auto", theme: "light" };
 
 const listeners = new Set<() => void>();
@@ -119,8 +123,7 @@ function getServerSnapshot(): ThemeState {
 }
 
 function nextPreference(preference: ThemePreference): ThemePreference {
-  const index = PREFERENCE_CYCLE.indexOf(preference);
-  return PREFERENCE_CYCLE[(index + 1) % PREFERENCE_CYCLE.length];
+  return NEXT_PREFERENCE[preference];
 }
 
 export function useTheme() {

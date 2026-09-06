@@ -109,6 +109,84 @@ test("paints the rail on the whole chat pane only while desktop navigation is vi
   }
 });
 
+test("empty and single-turn rails preserve hit testing and clear a removed hover target", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scroll = document.createElement("div");
+  Object.defineProperty(scroll, "scrollHeight", { get: () => 2000 });
+  const jumps = [];
+  scroll.scrollTo = (options) => jumps.push(options.top);
+  const scrollContainer = { current: scroll };
+  const messageRefs = { current: [] };
+  const render = async (ids) => {
+    messageRefs.current = ids.map((_, index) => ({
+      getBoundingClientRect: () => rect(500 + index * 300),
+    }));
+    await React.act(() =>
+      root.render(
+        React.createElement(ChatMinimap, {
+          messages: ids.map((id) => ({
+            role: "user",
+            content: id,
+            timestamp: 1000,
+          })),
+          entryIds: ids,
+          scrollContainer,
+          messageRefs,
+          onLoadThrough: async () =>
+            assert.fail("loaded turns must not fetch history"),
+        }),
+      ),
+    );
+    await settle();
+  };
+  const click = async (clientY) =>
+    React.act(() => {
+      container
+        .querySelector(".chat-minimap")
+        .dispatchEvent(
+          new window.MouseEvent("mousedown", { bubbles: true, clientY }),
+        );
+      window.dispatchEvent(new window.MouseEvent("mouseup"));
+    });
+  try {
+    await render([]);
+    await click(12);
+    assert.deepEqual(jumps, []);
+    await render(["first"]);
+    await click(12);
+    assert.deepEqual(jumps, [320]);
+    await click(200);
+    assert.deepEqual(
+      jumps,
+      [320],
+      "space outside the short rail is not a target",
+    );
+    await render(["first", "second"]);
+    const secondNode = container.querySelector(
+      '[data-minimap-entry-id="second"]',
+    );
+    const secondY = Number.parseFloat(secondNode.style.top) * 6;
+    await click(secondY);
+    assert.equal(jumps.at(-1), 620, "the second dot selects its loaded turn");
+    await React.act(() =>
+      container.querySelector(".chat-minimap").dispatchEvent(
+        new window.MouseEvent("mousemove", {
+          bubbles: true,
+          clientY: secondY,
+        }),
+      ),
+    );
+    assert.notEqual(container.querySelector(".chat-minimap").title, "");
+    await render(["first"]);
+    assert.equal(container.querySelector(".chat-minimap").title, "");
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+  }
+});
+
 test("shows unloaded turns and completes the latest requested jump after its messages mount", async () => {
   const container = document.createElement("div");
   document.body.append(container);

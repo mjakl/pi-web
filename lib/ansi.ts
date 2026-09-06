@@ -43,10 +43,7 @@ function firstVisibleChar(text: string): string | undefined {
 
 function lastNonSpaceVisibleCharIndex(text: string): number {
   const positions = visibleCharPositions(text);
-  for (let i = positions.length - 1; i >= 0; i--) {
-    if (positions[i].char.trim() !== "") return i;
-  }
-  return -1;
+  return positions.findLastIndex((position) => position.char.trim() !== "");
 }
 
 function trimEndVisibleSpaces(text: string): string {
@@ -87,12 +84,12 @@ export function normalizeCustomPanelLines(lines: string[]): string[] {
     normalized.push(trimEndVisibleSpaces(line));
   }
 
-  while (normalized.length > 0 && stripAnsi(normalized[0]).trim() === "")
-    normalized.shift();
-  while (
-    normalized.length > 0 &&
-    stripAnsi(normalized[normalized.length - 1]).trim() === ""
-  )
-    normalized.pop();
-  return normalized.length ? normalized : lines;
+  const firstContent = normalized.findIndex(
+    (line) => stripAnsi(line).trim() !== "",
+  );
+  if (firstContent === -1) return lines;
+  const lastContent = normalized.findLastIndex(
+    (line) => stripAnsi(line).trim() !== "",
+  );
+  return normalized.slice(firstContent, lastContent + 1);
 }

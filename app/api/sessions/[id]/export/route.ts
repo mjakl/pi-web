@@ -10,7 +10,7 @@ import { resolveSessionPath } from "@/lib/session-reader";
 const execFileAsync = promisify(execFile);
 
 function getPiCliPath(): string {
-  const { cli } = JSON.parse(process.env.PI_WEB_HOST_PI ?? "{}") as {
+  const { cli } = JSON.parse(process.env["PI_WEB_HOST_PI"] ?? "{}") as {
     cli?: unknown;
   };
   if (typeof cli !== "string")

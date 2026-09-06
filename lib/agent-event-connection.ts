@@ -161,8 +161,8 @@ export class AgentEventConnection {
         this.stopRetrying();
       } else if (event.type === "startup_error") {
         const message =
-          typeof event.errorMessage === "string"
-            ? event.errorMessage
+          typeof event["errorMessage"] === "string"
+            ? event["errorMessage"]
             : undefined;
         this.fail(
           connection,

@@ -10,12 +10,15 @@ export async function getAllowedFileRoots(): Promise<Set<string>> {
   const roots = new Set<string>();
   const sessionCwds = await listSessionCwds();
   const projects = await Promise.all(
-    sessionCwds.map((cwd) => resolveProject(cwd)),
+    sessionCwds.map(async (cwd) => ({
+      cwd,
+      project: await resolveProject(cwd),
+    })),
   );
-  sessionCwds.forEach((cwd, index) => {
+  for (const { cwd, project } of projects) {
     roots.add(toSlashPath(cwd));
-    roots.add(toSlashPath(projects[index].projectRoot));
-  });
+    roots.add(toSlashPath(project.projectRoot));
+  }
 
   for (const root of getAdditionalAllowedRoots()) roots.add(root);
 

@@ -1560,7 +1560,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       switch (event.type) {
         case "connected": {
           dispatch({ type: "end" });
-          if (event.isStreaming === true) {
+          if (event["isStreaming"] === true) {
             cancelEventStreamGrace();
             sdkAgentActiveRef.current = true;
             agentRunningRef.current = true;
@@ -1675,7 +1675,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           addNotice({
             type: "error",
             message:
-              (event.errorMessage as string | undefined) ??
+              (event["errorMessage"] as string | undefined) ??
               t("chat.commandFailed"),
           });
           break;
@@ -1683,7 +1683,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           addNotice({
             type: "error",
             message:
-              (event.error as string | undefined) ??
+              (event["error"] as string | undefined) ??
               t("chat.extensionCommandFailed"),
           });
           break;
@@ -1694,7 +1694,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           // reconcile) — they would resurrect a ghost streaming bubble.
           if (!agentRunningRef.current) break;
           if (event.type === "message_start") {
-            const msg = event.message as AgentMessage | undefined;
+            const msg = event["message"] as AgentMessage | undefined;
             if (msg?.role === "user") break;
             if (msg?.role === "assistant") {
               dispatch({ type: "snapshot", message: msg });
@@ -1703,7 +1703,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
               setAgentPhase(null);
             }
           } else {
-            const delta = event.assistantMessageEvent as
+            const delta = event["assistantMessageEvent"] as
               | ClientAssistantMessageEvent
               | undefined;
             if (delta) {
@@ -1723,7 +1723,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           // loadSession already loaded this message from the session file —
           // appending it again would duplicate it.
           if (!agentRunningRef.current) break;
-          const completed = event.message as AgentMessage | undefined;
+          const completed = event["message"] as AgentMessage | undefined;
           if (completed && completed.role === "user") {
             // Delivered steering/follow-up messages surface here as user
             // messages. The run's initial prompt also emits one, but handleSend
@@ -1754,8 +1754,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           break;
         }
         case "tool_execution_start": {
-          const id = event.toolCallId as string;
-          const name = event.toolName as string;
+          const id = event["toolCallId"] as string;
+          const name = event["toolName"] as string;
           setAgentPhase((prev) => {
             const tools = prev?.kind === "running_tools" ? [...prev.tools] : [];
             if (!tools.some((t) => t.id === id)) tools.push({ id, name });
@@ -1764,9 +1764,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           break;
         }
         case "tool_execution_update": {
-          const id = event.toolCallId as string;
-          const name = event.toolName as string;
-          const progress = (event.progress as string | null) ?? null;
+          const id = event["toolCallId"] as string;
+          const name = event["toolName"] as string;
+          const progress = (event["progress"] as string | null) ?? null;
           setAgentPhase((prev) => {
             const tools = prev?.kind === "running_tools" ? [...prev.tools] : [];
             const existing = tools.find((tool) => tool.id === id);
@@ -1783,7 +1783,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           break;
         }
         case "tool_execution_end": {
-          const id = event.toolCallId as string;
+          const id = event["toolCallId"] as string;
           setAgentPhase((prev) => {
             if (prev?.kind !== "running_tools") return prev;
             const tools = prev.tools.filter((t) => t.id !== id);
@@ -1794,15 +1794,15 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         }
         case "queue_update":
           setQueuedMessages({
-            steering: [...((event.steering as string[] | undefined) ?? [])],
-            followUp: [...((event.followUp as string[] | undefined) ?? [])],
+            steering: [...((event["steering"] as string[] | undefined) ?? [])],
+            followUp: [...((event["followUp"] as string[] | undefined) ?? [])],
           });
           break;
         case "auto_retry_start":
           setRetryInfo({
-            attempt: event.attempt as number,
-            maxAttempts: event.maxAttempts as number,
-            errorMessage: event.errorMessage as string | undefined,
+            attempt: event["attempt"] as number,
+            maxAttempts: event["maxAttempts"] as number,
+            errorMessage: event["errorMessage"] as string | undefined,
           });
           break;
         case "auto_retry_end":
@@ -1815,14 +1815,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           break;
         case "compaction_end":
           setIsCompacting(false);
-          if (event.errorMessage) {
-            setCompactError(event.errorMessage as string);
+          if (event["errorMessage"]) {
+            setCompactError(event["errorMessage"] as string);
             setCompactResult(null);
-          } else if (!event.aborted) {
+          } else if (!event["aborted"]) {
             setCompactResult(
               readCompactResult(
-                event.result,
-                (event.reason as string | undefined) ?? "auto",
+                event["result"],
+                (event["reason"] as string | undefined) ?? "auto",
               ),
             );
             if (sessionIdRef.current) loadSession(sessionIdRef.current);

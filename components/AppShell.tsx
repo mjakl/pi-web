@@ -1030,7 +1030,7 @@ export function AppShell({ homeDir }: { homeDir: string }) {
       setActiveFileTabId((cur) => {
         if (cur !== tabId) return cur;
         const remaining = fileTabs.filter((t) => t.id !== tabId);
-        return remaining.length > 0 ? remaining[remaining.length - 1].id : null;
+        return remaining.at(-1)?.id ?? null;
       });
     },
     [fileTabs],

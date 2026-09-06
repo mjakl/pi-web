@@ -26,7 +26,7 @@ export function rewindSessionFile(
   const target = entries[index];
   if (
     index <= 0 ||
-    target.type !== "message" ||
+    target?.type !== "message" ||
     target.message.role !== "user"
   ) {
     throw new Error("Rewind requires an existing user message");

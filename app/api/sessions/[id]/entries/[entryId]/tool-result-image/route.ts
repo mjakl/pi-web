@@ -8,19 +8,25 @@ import { isRecord } from "@/lib/types";
 function readBase64Image(
   block: unknown,
 ): { data: string; mime: string } | null {
-  if (!isRecord(block) || block.type !== "image") return null;
+  if (!isRecord(block) || block["type"] !== "image") return null;
 
-  if (typeof block.data === "string" && typeof block.mimeType === "string") {
-    return { data: block.data, mime: block.mimeType };
+  if (
+    typeof block["data"] === "string" &&
+    typeof block["mimeType"] === "string"
+  ) {
+    return { data: block["data"], mime: block["mimeType"] };
   }
 
   if (
-    isRecord(block.source) &&
-    block.source.type === "base64" &&
-    typeof block.source.data === "string" &&
-    typeof block.source.media_type === "string"
+    isRecord(block["source"]) &&
+    block["source"]["type"] === "base64" &&
+    typeof block["source"]["data"] === "string" &&
+    typeof block["source"]["media_type"] === "string"
   ) {
-    return { data: block.source.data, mime: block.source.media_type };
+    return {
+      data: block["source"]["data"],
+      mime: block["source"]["media_type"],
+    };
   }
 
   return null;

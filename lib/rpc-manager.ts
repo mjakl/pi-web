@@ -460,7 +460,7 @@ export class AgentSessionWrapper {
 
   async send(command: Record<string, unknown>): Promise<unknown> {
     if (!this.isActive()) throw new Error("Session is stopped");
-    const type = command.type as string;
+    const type = command["type"] as string;
     // Read-only inspection and stopping remain possible after external deletion.
     if (
       ![
@@ -504,7 +504,7 @@ export class AgentSessionWrapper {
       }
 
       if (type === "prompt" || type === "steer" || type === "follow_up") {
-        const imageError = validateAgentImages(command.images);
+        const imageError = validateAgentImages(command["images"]);
         if (imageError) throw new Error(imageError);
       }
 
@@ -520,10 +520,10 @@ export class AgentSessionWrapper {
                 "Cannot send a prompt while a shell command is running",
               );
             }
-            const promptImages = command.images as
+            const promptImages = command["images"] as
               | Array<{ type: "image"; data: string; mimeType: string }>
               | undefined;
-            const streamingBehavior = command.streamingBehavior as
+            const streamingBehavior = command["streamingBehavior"] as
               | "steer"
               | "followUp"
               | undefined;
@@ -560,7 +560,7 @@ export class AgentSessionWrapper {
             this.pendingPromptCount += 1;
             let prompt: Promise<void>;
             try {
-              prompt = this.inner.prompt(command.message as string, {
+              prompt = this.inner.prompt(command["message"] as string, {
                 ...(promptImages?.length ? { images: promptImages } : {}),
                 ...(streamingBehavior ? { streamingBehavior } : {}),
                 source: "rpc",
@@ -681,7 +681,7 @@ export class AgentSessionWrapper {
             throw new Error("Cannot fork while the session is running");
           }
           return this.withSessionReplacement("fork", async () => {
-            const entryId = command.entryId as string;
+            const entryId = command["entryId"] as string;
             const sessionManager = this.inner.sessionManager;
             const currentSessionFile = this.inner.sessionFile;
 
@@ -733,8 +733,8 @@ export class AgentSessionWrapper {
           const sessionManager = this.inner.sessionManager;
           const currentSessionFile = this.inner.sessionFile;
           const leafId =
-            typeof command.leafId === "string"
-              ? command.leafId
+            typeof command["leafId"] === "string"
+              ? command["leafId"]
               : sessionManager.getLeafId();
           const branchHasAssistant =
             leafId &&
@@ -774,7 +774,7 @@ export class AgentSessionWrapper {
           if (!this.isActive()) throw new Error("Session is stopped");
           if (this.isSessionRunningForReplacement())
             throw new Error("Cannot rewind while the session is running");
-          const entryId = command.entryId;
+          const entryId = command["entryId"];
           const target =
             typeof entryId === "string"
               ? this.inner.sessionManager.getEntry(entryId)
@@ -809,14 +809,14 @@ export class AgentSessionWrapper {
             throw new Error("Cannot navigate while a shell command is running");
           }
           const result = await this.inner.navigateTree(
-            command.targetId as string,
+            command["targetId"] as string,
             {},
           );
           return { cancelled: result.cancelled };
         }
 
         case "set_thinking_level": {
-          const level = command.level as string;
+          const level = command["level"] as string;
           this.inner.setThinkingLevel(level);
           // setThinkingLevel clamps xhigh→high for models where supportsXhigh()===false.
           // If the model has DeepSeek thinking compat (reasoningEffortMap maps xhigh→max),
@@ -838,13 +838,13 @@ export class AgentSessionWrapper {
         case "compact": {
           return await this.withFinalIdleReset(() =>
             this.inner.compact(
-              command.customInstructions as string | undefined,
+              command["customInstructions"] as string | undefined,
             ),
           );
         }
 
         case "set_session_name": {
-          const name = (command.name as string | undefined)?.trim();
+          const name = (command["name"] as string | undefined)?.trim();
           if (!name) throw new Error("Session name cannot be empty");
           this.inner.setSessionName(name);
           return null;
@@ -862,7 +862,7 @@ export class AgentSessionWrapper {
         }
 
         case "set_auto_compaction": {
-          this.inner.setAutoCompactionEnabled(command.enabled as boolean);
+          this.inner.setAutoCompactionEnabled(command["enabled"] as boolean);
           return null;
         }
 
@@ -873,22 +873,22 @@ export class AgentSessionWrapper {
         }
 
         case "steer": {
-          const steerImages = command.images as
+          const steerImages = command["images"] as
             | Array<{ type: "image"; data: string; mimeType: string }>
             | undefined;
           await this.inner.steer(
-            command.message as string,
+            command["message"] as string,
             steerImages?.length ? steerImages : undefined,
           );
           return null;
         }
 
         case "follow_up": {
-          const followImages = command.images as
+          const followImages = command["images"] as
             | Array<{ type: "image"; data: string; mimeType: string }>
             | undefined;
           await this.inner.followUp(
-            command.message as string,
+            command["message"] as string,
             followImages?.length ? followImages : undefined,
           );
           return null;
@@ -933,7 +933,7 @@ export class AgentSessionWrapper {
         }
 
         case "set_tools": {
-          const toolNames = command.toolNames as string[];
+          const toolNames = command["toolNames"] as string[];
           this.setActiveToolSelection(toolNames);
           return null;
         }
@@ -962,14 +962,14 @@ export class AgentSessionWrapper {
 
         case "extension_ui_input": {
           this.extensionUi.handleInput(
-            command.id as string,
-            command.data as string,
+            command["id"] as string,
+            command["data"] as string,
           );
           return null;
         }
 
         case "set_auto_retry": {
-          this.inner.setAutoRetryEnabled(command.enabled as boolean);
+          this.inner.setAutoRetryEnabled(command["enabled"] as boolean);
           return null;
         }
 
@@ -985,10 +985,10 @@ export class AgentSessionWrapper {
             );
           }
           const execution = this.inner.executeBash(
-            command.command as string,
+            command["command"] as string,
             undefined,
             {
-              excludeFromContext: command.excludeFromContext as
+              excludeFromContext: command["excludeFromContext"] as
                 | boolean
                 | undefined,
               operations: createProjectCommandBashOperations({

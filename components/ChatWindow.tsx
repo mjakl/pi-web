@@ -136,9 +136,10 @@ function phaseLabel(
       return `${t("chat.runningNamedTool", { name: latest.name })} ${latest.progress}`;
     }
     const names = phase.tools.map((t) => t.name);
-    if (names.length === 0) return t("chat.runningTool");
+    const [firstName] = names;
+    if (firstName === undefined) return t("chat.runningTool");
     if (names.length === 1)
-      return t("chat.runningNamedTool", { name: names[0] });
+      return t("chat.runningNamedTool", { name: firstName });
     if (names.length <= 3)
       return t("chat.runningTools", { names: names.join(", ") });
     return t("chat.runningToolsMore", {
@@ -161,18 +162,11 @@ function hasFinalAssistantAnswer(message: AgentMessage): boolean {
   );
 }
 
-function findFinalAssistantIndex(
-  messages: AgentMessage[],
-  userIdx: number,
-  endIdx: number,
-): number {
-  for (let candidateIdx = endIdx - 1; candidateIdx > userIdx; candidateIdx--) {
-    if (hasFinalAssistantAnswer(messages[candidateIdx])) return candidateIdx;
-  }
-  for (let candidateIdx = endIdx - 1; candidateIdx > userIdx; candidateIdx--) {
-    if (messages[candidateIdx]?.role === "assistant") return candidateIdx;
-  }
-  return -1;
+function findFinalAssistantIndex(messages: AgentMessage[]): number {
+  const answerIndex = messages.findLastIndex(hasFinalAssistantAnswer);
+  return answerIndex === -1
+    ? messages.findLastIndex((message) => message.role === "assistant")
+    : answerIndex;
 }
 
 function getUserInputText(message: AgentMessage): string | null {
@@ -189,11 +183,10 @@ function getUserInputText(message: AgentMessage): string | null {
   return text.length > 0 ? text : null;
 }
 
-function countToolCalls(messages: AgentMessage[], indices: number[]): number {
+function countToolCalls(messages: AgentMessage[]): number {
   let count = 0;
-  for (const idx of indices) {
-    const msg = messages[idx];
-    if (msg?.role !== "assistant") continue;
+  for (const msg of messages) {
+    if (msg.role !== "assistant") continue;
     count += countToolCallBlocks(
       getDisplayableAssistantBlocks(msg as AssistantMessage),
     );
@@ -702,13 +695,14 @@ export function ChatWindow({
   const inputHistory = useMemo(() => {
     const seen = new Set<string>();
     const history: string[] = [];
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const text = getUserInputText(messages[i]);
-      if (!text || seen.has(text)) continue;
-      seen.add(text);
-      history.push(text);
-      if (history.length >= 50) break;
-    }
+    messages.findLast((message) => {
+      const text = getUserInputText(message);
+      if (text && !seen.has(text)) {
+        seen.add(text);
+        history.push(text);
+      }
+      return history.length >= 50;
+    });
     return history.reverse();
   }, [messages]);
   const messageRefs = useMessageRefs(anchorCount);
@@ -730,7 +724,7 @@ export function ChatWindow({
       {
         endIdx: number;
         finalAssistantIdx: number;
-        visibleProcessIndices: number[];
+        visibleProcessMessages: { index: number; message: AgentMessage }[];
         finalProcessMessage: AssistantMessage | null;
         finalAnswerMessage: AssistantMessage | null;
         processCount: number;
@@ -739,24 +733,21 @@ export function ChatWindow({
         writtenFiles: WrittenFile[];
       }
     >();
-    for (let userIdx = 0; userIdx < messages.length; userIdx++) {
-      if (!isMessageGroupAnchor(messages[userIdx])) continue;
-      let endIdx = userIdx + 1;
-      while (
-        endIdx < messages.length &&
-        !isMessageGroupAnchor(messages[endIdx])
-      )
-        endIdx += 1;
-      const finalAssistantIdx = findFinalAssistantIndex(
-        messages,
-        userIdx,
-        endIdx,
-      );
-      if (finalAssistantIdx === -1) {
+    const anchorIndices = messages.flatMap((message, index) =>
+      isMessageGroupAnchor(message) ? [index] : [],
+    );
+    for (const [anchorPosition, userIdx] of anchorIndices.entries()) {
+      const endIdx = anchorIndices[anchorPosition + 1] ?? messages.length;
+      const turnMessages = messages.slice(userIdx + 1, endIdx);
+      const finalOffset = findFinalAssistantIndex(turnMessages);
+      const finalAssistant = turnMessages[finalOffset];
+      const finalAssistantIdx =
+        finalOffset === -1 ? -1 : userIdx + 1 + finalOffset;
+      if (finalAssistant?.role !== "assistant") {
         groups.set(userIdx, {
           endIdx,
           finalAssistantIdx,
-          visibleProcessIndices: [],
+          visibleProcessMessages: [],
           finalProcessMessage: null,
           finalAnswerMessage: null,
           processCount: 0,
@@ -766,16 +757,13 @@ export function ChatWindow({
         });
         continue;
       }
-      const visibleProcessIndices: number[] = [];
-      for (
-        let processIdx = userIdx + 1;
-        processIdx < finalAssistantIdx;
-        processIdx++
-      ) {
-        if (hasDisplayableProcessMessage(messages[processIdx]))
-          visibleProcessIndices.push(processIdx);
-      }
-      const finalAssistant = messages[finalAssistantIdx] as AssistantMessage;
+      const visibleProcessMessages = turnMessages
+        .slice(0, finalOffset)
+        .flatMap((message, offset) =>
+          hasDisplayableProcessMessage(message)
+            ? [{ index: userIdx + 1 + offset, message }]
+            : [],
+        );
       const finalSplit = splitFinalAssistantBlocks(finalAssistant);
       const finalProcessMessage =
         finalSplit.processBlocks.length > 0
@@ -788,18 +776,21 @@ export function ChatWindow({
         getAssistantErrorMessage(finalAssistant)
           ? withAssistantBlocks(finalAssistant, finalSplit.answerBlocks)
           : null;
-      const processMessages = visibleProcessIndices.map(
-        (processIdx) => messages[processIdx],
+      const processMessages = visibleProcessMessages.map(
+        ({ message }) => message,
       );
+      const toolCallCount =
+        countToolCalls(processMessages) +
+        countToolCallBlocks(finalSplit.processBlocks);
       if (finalProcessMessage) processMessages.push(finalProcessMessage);
       // Each tool call is stored as its own assistant entry, so the final
       // answer alone carries no record of what the turn wrote. Gather the
       // turn's assistant blocks and derive the file list from the write/edit
       // calls among them.
       const turnContent: AssistantContentBlock[] = [];
-      for (let i = userIdx + 1; i <= finalAssistantIdx; i++) {
-        const m = messages[i];
-        if (m?.role === "assistant") {
+      for (const [offset, m] of turnMessages.entries()) {
+        if (offset > finalOffset) break;
+        if (m.role === "assistant") {
           for (const b of (m as AssistantMessage).content ?? [])
             turnContent.push(b);
         }
@@ -807,14 +798,12 @@ export function ChatWindow({
       groups.set(userIdx, {
         endIdx,
         finalAssistantIdx,
-        visibleProcessIndices,
+        visibleProcessMessages,
         finalProcessMessage,
         finalAnswerMessage,
         processCount:
-          visibleProcessIndices.length + (finalProcessMessage ? 1 : 0),
-        toolCallCount:
-          countToolCalls(messages, visibleProcessIndices) +
-          countToolCallBlocks(finalSplit.processBlocks),
+          visibleProcessMessages.length + (finalProcessMessage ? 1 : 0),
+        toolCallCount,
         defaultExpanded: shouldExpandProcessDetails(processMessages, {
           hasFinalAnswer: Boolean(finalAnswerMessage),
         }),
@@ -1068,21 +1057,28 @@ export function ChatWindow({
               {(() => {
                 // A compaction summary can replace the last user message while
                 // its turn is still streaming, so it also counts as a live tail.
-                let lastAnchorIdx = -1;
-                for (let i = messages.length - 1; i >= 0; i--) {
-                  if (isMessageGroupAnchor(messages[i])) {
-                    lastAnchorIdx = i;
-                    break;
-                  }
-                }
+                const lastAnchorIdx =
+                  messages.findLastIndex(isMessageGroupAnchor);
 
                 // Only group anchors get a minimap ref — one dot per turn.
                 const anchorRefIndexByMessage = new Map<number, number>();
+                const timestampIndices = new Set<number>();
+                let lastAssistantIdx: number | undefined;
                 let refIdx = 0;
                 messages.forEach((msg, idx) => {
                   if (isMessageGroupAnchor(msg))
                     anchorRefIndexByMessage.set(idx, refIdx++);
+                  if (msg.role === "assistant") lastAssistantIdx = idx;
+                  else if (
+                    msg.role === "user" &&
+                    lastAssistantIdx !== undefined
+                  ) {
+                    timestampIndices.add(lastAssistantIdx);
+                    lastAssistantIdx = undefined;
+                  }
                 });
+                if (lastAssistantIdx !== undefined)
+                  timestampIndices.add(lastAssistantIdx);
 
                 const renderKeyForIndex = (idx: number) =>
                   entryIds[idx] ?? `live:${idx}`;
@@ -1095,19 +1091,17 @@ export function ChatWindow({
 
                 const renderMessage = (
                   idx: number,
+                  msg: AgentMessage,
                   options: {
                     attachRef?: boolean;
                     keyPrefix?: string;
-                    messageOverride?: AgentMessage;
                     showTimestamp?: boolean;
                     writtenFiles?: WrittenFile[];
                   } = {},
                 ): ReactNode => {
-                  const msg = options.messageOverride ?? messages[idx];
+                  const previousMessage = messages[idx - 1];
                   const prevAssistantEntryId =
-                    msg.role === "user" &&
-                    idx > 0 &&
-                    messages[idx - 1].role === "assistant"
+                    msg.role === "user" && previousMessage?.role === "assistant"
                       ? entryIds[idx - 1]
                       : undefined;
                   const isVisible =
@@ -1117,15 +1111,7 @@ export function ChatWindow({
                   const messageKey = renderKeyForIndex(idx);
                   let showTimestamp = false;
                   if (msg.role === "assistant") {
-                    showTimestamp = true;
-                    for (let j = idx + 1; j < messages.length; j++) {
-                      const r = messages[j].role;
-                      if (r === "user") break;
-                      if (r === "assistant") {
-                        showTimestamp = false;
-                        break;
-                      }
-                    }
+                    showTimestamp = timestampIndices.has(idx);
                     // Hide on the currently-streaming tail (the streaming bubble owns the live timestamp)
                     if (
                       showTimestamp &&
@@ -1173,15 +1159,7 @@ export function ChatWindow({
                       }
                       onEditContent={readOnly ? undefined : handleEditContent}
                       showTimestamp={showTimestamp}
-                      prevTimestamp={
-                        idx > 0
-                          ? (
-                              messages[idx - 1] as AgentMessage & {
-                                timestamp?: number;
-                              }
-                            ).timestamp
-                          : undefined
-                      }
+                      prevTimestamp={previousMessage?.timestamp}
                       sessionId={
                         session?.id ?? sessionIdRef.current ?? undefined
                       }
@@ -1200,14 +1178,14 @@ export function ChatWindow({
                 };
 
                 const rendered: ReactNode[] = [];
-                for (let idx = 0; idx < messages.length;) {
-                  const msg = messages[idx];
+                let renderedThrough = 0;
+                for (const [idx, msg] of messages.entries()) {
+                  if (idx < renderedThrough) continue;
                   const turn = isMessageGroupAnchor(msg)
                     ? turnGroups.get(idx)
                     : undefined;
                   if (!turn) {
-                    rendered.push(renderMessage(idx));
-                    idx += 1;
+                    rendered.push(renderMessage(idx, msg));
                     continue;
                   }
 
@@ -1215,7 +1193,7 @@ export function ChatWindow({
                   const {
                     endIdx,
                     finalAssistantIdx,
-                    visibleProcessIndices,
+                    visibleProcessMessages,
                     finalProcessMessage,
                     finalAnswerMessage,
                     processCount,
@@ -1225,18 +1203,16 @@ export function ChatWindow({
                     endIdx === messages.length &&
                     userIdx === lastAnchorIdx;
                   if (finalAssistantIdx === -1 || isLiveTail) {
-                    for (
-                      let renderIdx = userIdx;
-                      renderIdx < endIdx;
-                      renderIdx++
-                    ) {
-                      rendered.push(renderMessage(renderIdx));
+                    for (const [offset, message] of messages
+                      .slice(userIdx, endIdx)
+                      .entries()) {
+                      rendered.push(renderMessage(userIdx + offset, message));
                     }
-                    idx = endIdx;
+                    renderedThrough = endIdx;
                     continue;
                   }
 
-                  rendered.push(renderMessage(userIdx));
+                  rendered.push(renderMessage(userIdx, msg));
 
                   if (processCount > 0) {
                     const processGroup = (
@@ -1246,19 +1222,22 @@ export function ChatWindow({
                         t={t}
                         toolCallCount={turn.toolCallCount}
                       >
-                        {visibleProcessIndices.map((processIdx) =>
-                          renderMessage(processIdx, {
+                        {visibleProcessMessages.map(({ index, message }) =>
+                          renderMessage(index, message, {
                             attachRef: false,
                             keyPrefix: "process",
                           }),
                         )}
                         {finalProcessMessage &&
-                          renderMessage(finalAssistantIdx, {
-                            attachRef: false,
-                            keyPrefix: "process-final",
-                            messageOverride: finalProcessMessage,
-                            showTimestamp: false,
-                          })}
+                          renderMessage(
+                            finalAssistantIdx,
+                            finalProcessMessage,
+                            {
+                              attachRef: false,
+                              keyPrefix: "process-final",
+                              showTimestamp: false,
+                            },
+                          )}
                       </ProcessDetailsGroup>
                     );
                     rendered.push(
@@ -1272,20 +1251,19 @@ export function ChatWindow({
 
                   if (finalAnswerMessage) {
                     rendered.push(
-                      renderMessage(finalAssistantIdx, {
-                        messageOverride: finalAnswerMessage,
+                      renderMessage(finalAssistantIdx, finalAnswerMessage, {
                         writtenFiles: turn.writtenFiles,
                       }),
                     );
                   }
-                  for (
-                    let renderIdx = finalAssistantIdx + 1;
-                    renderIdx < endIdx;
-                    renderIdx++
-                  ) {
-                    rendered.push(renderMessage(renderIdx));
+                  for (const [offset, message] of messages
+                    .slice(finalAssistantIdx + 1, endIdx)
+                    .entries()) {
+                    rendered.push(
+                      renderMessage(finalAssistantIdx + 1 + offset, message),
+                    );
                   }
-                  idx = endIdx;
+                  renderedThrough = endIdx;
                 }
                 return (
                   <>

@@ -99,8 +99,9 @@ export function ProjectFolderGroup({
       data?.projectRoot ?? project.root,
       data?.projectKey ?? project.key,
     );
-  const direct = folders.length === 1;
-  const displayPath = direct ? folders[0] : project.root;
+  const directFolder = folders.length === 1 ? folders[0] : undefined;
+  const direct = directFolder !== undefined;
+  const displayPath = directFolder ?? project.root;
 
   return (
     <div className="project-folder-group">
@@ -113,7 +114,7 @@ export function ProjectFolderGroup({
         disabled={!data && !error}
         aria-busy={!data && !error}
         onClick={() => {
-          if (direct) select(folders[0]);
+          if (direct) select(directFolder);
           else {
             if (!expanded) setRefreshKey((value) => value + 1);
             setExpanded((value) => !value);

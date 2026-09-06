@@ -9,7 +9,7 @@ import { errorMessage } from "./error-message";
 const CHECK_TIMEOUT_MS = 15_000;
 const GIT_CHECK_TIMEOUT_MS = 30_000;
 const DEFAULT_SKILLS_API_BASE =
-  process.env.SKILLS_API_URL || "https://skills.sh";
+  process.env["SKILLS_API_URL"] || "https://skills.sh";
 const execFileAsync = promisify(execFile);
 
 type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
@@ -162,7 +162,7 @@ async function checkGlobalSkill(
     "User-Agent": "pi-web",
   };
   if (options.githubToken)
-    headers.Authorization = `Bearer ${options.githubToken}`;
+    headers["Authorization"] = `Bearer ${options.githubToken}`;
   const folder = skillFolder(install.skillPath!);
   let latestVersion: string | undefined;
 
@@ -213,7 +213,7 @@ async function checkProjectSkill(
 ): Promise<SkillUpdateResult> {
   const [owner, repo] = install.source.split("/");
   const name = skillSlug(skillNameFromPackage(install.package));
-  const url = `${options.skillsApiBase}/api/download/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(name)}`;
+  const url = `${options.skillsApiBase}/api/download/${encodeURIComponent(String(owner))}/${encodeURIComponent(String(repo))}/${encodeURIComponent(name)}`;
   const raw = (await fetchJson(url, options.fetcher)) as SnapshotResponse;
   const latestVersion = typeof raw.hash === "string" ? raw.hash : undefined;
   if (!latestVersion) {

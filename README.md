@@ -235,6 +235,15 @@ a shorter entry point:
 | `just test`                          | Run the full native Node suite                                                          |
 | `just qa` / `just ci`                | Run lint, typecheck, and tests, stopping on failure                                     |
 
+TypeScript 5.9.3 remains the compiler resolved by the npm lockfile.
+[`tsconfig.json`](./tsconfig.json) enables strict checking, including unchecked
+indexed access, explicit index-signature property access, implicit returns and
+overrides, unused locals and parameters, switch fallthrough, and unreachable
+code. Prefer iterating over values or retaining a checked lookup instead of
+asserting that an indexed element exists. [`env.d.ts`](./env.d.ts) declares the
+public build-time version injected by Next.js without changing its client-side
+substitution.
+
 [Oxfmt](https://oxc.rs/docs/guide/usage/formatter/) is pinned as a development
 dependency. [`.oxfmtrc.json`](./.oxfmtrc.json) sets two-space indentation,
 double quotes, semicolons, trailing commas, and an 80-column target. Markdown

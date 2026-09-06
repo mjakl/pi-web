@@ -91,6 +91,7 @@ export function SubagentToolCall({
 }) {
   const { t } = useI18n();
   const rows = getSubagentResults(calls, result);
+  const singleCall = calls.length === 1 ? calls[0] : undefined;
   const rawOutput =
     result?.content
       .filter((part) => part.type === "text")
@@ -223,8 +224,8 @@ export function SubagentToolCall({
         <span className="subagent-header">
           <span className="subagent-name">
             {t("chat.subagent.title")} ·{" "}
-            {calls.length === 1
-              ? calls[0].agent
+            {singleCall
+              ? singleCall.agent
               : t("chat.subagent.agents", {
                   count: calls.length.toLocaleString("en"),
                 })}
@@ -261,8 +262,8 @@ export function SubagentToolCall({
               </SafeMarkdownBody>
             </div>
           )}
-          {calls.length === 1
-            ? renderCall(calls[0], rows?.[0])
+          {singleCall
+            ? renderCall(singleCall, rows?.[0])
             : calls.map((call, index) => (
                 <Disclosure
                   key={index}

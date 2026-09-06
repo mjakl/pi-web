@@ -34,10 +34,10 @@ function formatValue(value: unknown): string {
 }
 
 function formatSchemaType(schema: Record<string, unknown>): string {
-  const variants = Array.isArray(schema.anyOf)
-    ? schema.anyOf
-    : Array.isArray(schema.oneOf)
-      ? schema.oneOf
+  const variants = Array.isArray(schema["anyOf"])
+    ? schema["anyOf"]
+    : Array.isArray(schema["oneOf"])
+      ? schema["oneOf"]
       : null;
   if (variants) {
     return variants
@@ -50,32 +50,32 @@ function formatSchemaType(schema: Record<string, unknown>): string {
       .join(" | ");
   }
 
-  if (schema.const !== undefined) return formatValue(schema.const);
+  if (schema["const"] !== undefined) return formatValue(schema["const"]);
   if (
-    Array.isArray(schema.enum) &&
-    schema.enum.length > 0 &&
-    schema.type === undefined
+    Array.isArray(schema["enum"]) &&
+    schema["enum"].length > 0 &&
+    schema["type"] === undefined
   ) {
     return [
       ...new Set(
-        schema.enum.map((value) => (value === null ? "null" : typeof value)),
+        schema["enum"].map((value) => (value === null ? "null" : typeof value)),
       ),
     ].join(" | ");
   }
 
-  const rawType = schema.type;
+  const rawType = schema["type"];
   const type = Array.isArray(rawType)
     ? rawType
         .filter((value): value is string => typeof value === "string")
         .join(" | ")
     : typeof rawType === "string"
       ? rawType
-      : typeof schema.$ref === "string"
-        ? (schema.$ref.split("/").pop() ?? "object")
+      : typeof schema["$ref"] === "string"
+        ? (schema["$ref"].split("/").pop() ?? "object")
         : "unknown";
 
   if (type === "array") {
-    const items = schema.items;
+    const items = schema["items"];
     const itemType =
       items && typeof items === "object"
         ? formatSchemaType(items as Record<string, unknown>)
@@ -90,14 +90,14 @@ export function getToolParameterFields(
 ): ParameterField[] {
   if (
     !parameters ||
-    !parameters.properties ||
-    typeof parameters.properties !== "object"
+    !parameters["properties"] ||
+    typeof parameters["properties"] !== "object"
   )
     return [];
-  const properties = parameters.properties as Record<string, unknown>;
+  const properties = parameters["properties"] as Record<string, unknown>;
   const required = new Set(
-    Array.isArray(parameters.required)
-      ? parameters.required.filter(
+    Array.isArray(parameters["required"])
+      ? parameters["required"].filter(
           (value): value is string => typeof value === "string",
         )
       : [],
@@ -112,13 +112,17 @@ export function getToolParameterFields(
       name,
       type: formatSchemaType(schema),
       description:
-        typeof schema.description === "string" ? schema.description : undefined,
+        typeof schema["description"] === "string"
+          ? schema["description"]
+          : undefined,
       required: required.has(name),
-      allowedValues: Array.isArray(schema.enum)
-        ? schema.enum.map(formatValue).join(", ")
+      allowedValues: Array.isArray(schema["enum"])
+        ? schema["enum"].map(formatValue).join(", ")
         : undefined,
       defaultValue:
-        schema.default === undefined ? undefined : formatValue(schema.default),
+        schema["default"] === undefined
+          ? undefined
+          : formatValue(schema["default"]),
     };
   });
 }

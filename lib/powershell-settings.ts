@@ -60,16 +60,16 @@ function parseSettings(path: string): Record<string, unknown> {
 function configuredTools(
   settings: Record<string, unknown>,
 ): string[] | undefined {
-  if (settings.defaultTools === undefined) return undefined;
+  if (settings["defaultTools"] === undefined) return undefined;
   if (
-    !Array.isArray(settings.defaultTools) ||
-    settings.defaultTools.some((name) => typeof name !== "string")
+    !Array.isArray(settings["defaultTools"]) ||
+    settings["defaultTools"].some((name) => typeof name !== "string")
   ) {
     throw new Error(
       "Invalid settings.json: defaultTools must be an array of strings",
     );
   }
-  return settings.defaultTools as string[];
+  return settings["defaultTools"] as string[];
 }
 
 export async function readPowerShellToolEnabled(
@@ -116,7 +116,7 @@ export async function writePowerShellToolEnabled(
     if (!currentTools.some((name) => SHELL_TOOLS.has(name))) {
       nextTools.push(enabled ? "powershell" : "bash");
     }
-    settings.defaultTools = nextTools;
+    settings["defaultTools"] = nextTools;
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf8");
     chmodSync(settingsPath, 0o600);
   } finally {

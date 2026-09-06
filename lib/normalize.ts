@@ -2,16 +2,18 @@ import { isRecord } from "./types";
 import type { AgentMessage, AssistantMessage, ToolCallContent } from "./types";
 
 function streamingRawInput(block: Record<string, unknown>): string | undefined {
-  if (typeof block.rawInput === "string") return block.rawInput;
-  if (typeof block.partialJson === "string") return block.partialJson;
-  if (typeof block.partialArgs === "string") return block.partialArgs;
+  if (typeof block["rawInput"] === "string") return block["rawInput"];
+  if (typeof block["partialJson"] === "string") return block["partialJson"];
+  if (typeof block["partialArgs"] === "string") return block["partialArgs"];
 
-  const customInput = isRecord(block.customInput) ? block.customInput : null;
+  const customInput = isRecord(block["customInput"])
+    ? block["customInput"]
+    : null;
   const property =
-    customInput && typeof customInput.property === "string"
-      ? customInput.property
+    customInput && typeof customInput["property"] === "string"
+      ? customInput["property"]
       : null;
-  const args = isRecord(block.arguments) ? block.arguments : null;
+  const args = isRecord(block["arguments"]) ? block["arguments"] : null;
   return property && args && typeof args[property] === "string"
     ? args[property]
     : undefined;
@@ -21,30 +23,30 @@ function normalizeToolCallBlock(
   block: unknown,
   options: { includeStreamingRawInput?: boolean } = {},
 ): ToolCallContent | null {
-  if (!isRecord(block) || block.type !== "toolCall") return null;
+  if (!isRecord(block) || block["type"] !== "toolCall") return null;
   const normalized: ToolCallContent = {
     type: "toolCall",
     toolCallId:
-      typeof block.toolCallId === "string"
-        ? block.toolCallId
-        : typeof block.id === "string"
-          ? block.id
+      typeof block["toolCallId"] === "string"
+        ? block["toolCallId"]
+        : typeof block["id"] === "string"
+          ? block["id"]
           : "",
     toolName:
-      typeof block.toolName === "string"
-        ? block.toolName
-        : typeof block.name === "string"
-          ? block.name
+      typeof block["toolName"] === "string"
+        ? block["toolName"]
+        : typeof block["name"] === "string"
+          ? block["name"]
           : "",
     input:
-      typeof block.input === "object" &&
-      block.input !== null &&
-      !Array.isArray(block.input)
-        ? (block.input as Record<string, unknown>)
-        : typeof block.arguments === "object" &&
-            block.arguments !== null &&
-            !Array.isArray(block.arguments)
-          ? (block.arguments as Record<string, unknown>)
+      typeof block["input"] === "object" &&
+      block["input"] !== null &&
+      !Array.isArray(block["input"])
+        ? (block["input"] as Record<string, unknown>)
+        : typeof block["arguments"] === "object" &&
+            block["arguments"] !== null &&
+            !Array.isArray(block["arguments"])
+          ? (block["arguments"] as Record<string, unknown>)
           : {},
   };
   const rawInput = options.includeStreamingRawInput

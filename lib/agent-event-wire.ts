@@ -44,27 +44,28 @@ function toolCallMetadata(
   event: Record<string, unknown>,
 ): { id: string; toolName: string } | null {
   if (
-    (event.type !== "toolcall_start" && event.type !== "toolcall_delta") ||
-    !isRecord(event.partial)
+    (event["type"] !== "toolcall_start" &&
+      event["type"] !== "toolcall_delta") ||
+    !isRecord(event["partial"])
   )
     return null;
-  const content = event.partial.content;
-  const contentIndex = event.contentIndex;
+  const content = event["partial"]["content"];
+  const contentIndex = event["contentIndex"];
   if (!Array.isArray(content) || typeof contentIndex !== "number") return null;
 
   const block = content[contentIndex];
-  if (!isRecord(block) || block.type !== "toolCall") return null;
+  if (!isRecord(block) || block["type"] !== "toolCall") return null;
   const id =
-    typeof block.id === "string"
-      ? block.id
-      : typeof block.toolCallId === "string"
-        ? block.toolCallId
+    typeof block["id"] === "string"
+      ? block["id"]
+      : typeof block["toolCallId"] === "string"
+        ? block["toolCallId"]
         : null;
   const toolName =
-    typeof block.name === "string"
-      ? block.name
-      : typeof block.toolName === "string"
-        ? block.toolName
+    typeof block["name"] === "string"
+      ? block["name"]
+      : typeof block["toolName"] === "string"
+        ? block["toolName"]
         : null;
   return id !== null && toolName !== null ? { id, toolName } : null;
 }
@@ -76,7 +77,7 @@ export function toClientAgentEvent(
   if (OMITTED_EVENT_TYPES.has(event.type)) return null;
 
   if (event.type === "message_update") {
-    const assistantMessageEvent = event.assistantMessageEvent;
+    const assistantMessageEvent = event["assistantMessageEvent"];
     if (
       typeof assistantMessageEvent !== "object" ||
       assistantMessageEvent === null ||
@@ -107,9 +108,9 @@ export function toClientAgentEvent(
   if (event.type === "tool_execution_update") {
     return {
       type: "tool_execution_update",
-      toolCallId: event.toolCallId,
-      toolName: event.toolName,
-      progress: getToolExecutionProgress(event.partialResult),
+      toolCallId: event["toolCallId"],
+      toolName: event["toolName"],
+      progress: getToolExecutionProgress(event["partialResult"]),
     };
   }
 
@@ -124,6 +125,6 @@ export function isEventIncludedInSnapshot(
   return (
     snapshot !== undefined &&
     (event.type === "message_start" || event.type === "message_update") &&
-    event.message === snapshot
+    event["message"] === snapshot
   );
 }

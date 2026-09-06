@@ -29,19 +29,19 @@ export function isFilePathQuery(query: string): boolean {
  * @"my dir/fi so drill-down into space-containing paths keeps working.
  */
 export function extractAtQuery(textBeforeCursor: string): AtQueryMatch | null {
-  const quoted = /(?:^|\s)@"([^"\n]*)$/.exec(textBeforeCursor);
-  if (quoted) {
+  const quoted = /(?:^|\s)@"([^"\n]*)$/.exec(textBeforeCursor)?.[1];
+  if (quoted !== undefined) {
     return {
-      start: textBeforeCursor.length - (quoted[1].length + 2),
-      query: quoted[1],
+      start: textBeforeCursor.length - (quoted.length + 2),
+      query: quoted,
       quoted: true,
     };
   }
-  const plain = /(?:^|\s)@([^\s"]*)$/.exec(textBeforeCursor);
-  if (plain) {
+  const plain = /(?:^|\s)@([^\s"]*)$/.exec(textBeforeCursor)?.[1];
+  if (plain !== undefined) {
     return {
-      start: textBeforeCursor.length - (plain[1].length + 1),
-      query: plain[1],
+      start: textBeforeCursor.length - (plain.length + 1),
+      query: plain,
       quoted: false,
     };
   }

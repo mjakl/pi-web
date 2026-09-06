@@ -990,8 +990,8 @@ export function SessionSidebar({
         // Session not found — notify parent so it can show the placeholder
         onInitialRestoreDone?.();
       }
-      const projects = getRecentProjects(allSessions);
-      if (projects.length > 0) setSelectedCwd(projects[0].cwd);
+      const [project] = getRecentProjects(allSessions);
+      if (project) setSelectedCwd(project.cwd);
     }
   }, [
     allSessions,
@@ -1206,7 +1206,9 @@ export function SessionSidebar({
       (entries) => {
         const visible = entries.flatMap((entry) => {
           if (!entry.isIntersecting) return [];
-          const id = (entry.target as HTMLElement).dataset.sessionInventoryId;
+          const id = (entry.target as HTMLElement).dataset[
+            "sessionInventoryId"
+          ];
           const session = id
             ? allSessionsRef.current.find((candidate) => candidate.id === id)
             : undefined;

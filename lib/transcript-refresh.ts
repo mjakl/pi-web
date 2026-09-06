@@ -240,10 +240,10 @@ export function mergeTranscriptRefreshMessages(
   if (liveIndex < 0) return [...persisted, ...liveTail];
 
   let refreshedIndex = 0;
-  while (liveIndex < liveTail.length) {
+  for (const liveMessage of liveTail.slice(liveIndex)) {
     const matchIndex = refreshedTail.findIndex(
       (message, index) =>
-        index >= refreshedIndex && sameMessage(message, liveTail[liveIndex]),
+        index >= refreshedIndex && sameMessage(message, liveMessage),
     );
     if (matchIndex < 0) break;
     refreshedIndex = matchIndex + 1;

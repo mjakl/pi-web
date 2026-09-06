@@ -7,15 +7,15 @@ export function getToolExecutionProgress(
 ): string | null {
   if (!isRecord(partialResult)) return null;
 
-  const content = partialResult.content;
+  const content = partialResult["content"];
   if (!Array.isArray(content)) return null;
 
   const text = content
     .filter(
       (block) =>
         isRecord(block) &&
-        block.type === "text" &&
-        typeof block.text === "string",
+        block["type"] === "text" &&
+        typeof block["text"] === "string",
     )
     .map((block) => block.text as string)
     .join("\n");

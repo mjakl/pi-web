@@ -19,12 +19,12 @@ export function buildSearchTree(paths: string[]): SearchTreeNode[] {
     const segments = relative.split("/");
     let current = roots;
     let currentPath = "";
-    for (let i = 0; i < segments.length; i++) {
-      currentPath = currentPath ? `${currentPath}/${segments[i]}` : segments[i];
+    for (const [i, segment] of segments.entries()) {
+      currentPath = currentPath ? `${currentPath}/${segment}` : segment;
       let node = byPath.get(currentPath);
       if (!node) {
         node = {
-          name: segments[i],
+          name: segment,
           path: currentPath,
           isDir: i < segments.length - 1,
           children: [],

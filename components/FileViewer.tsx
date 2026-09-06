@@ -143,8 +143,8 @@ function getSelectedSourceLineRange(
   )
     return null;
 
-  let startLine = Number(startElement.dataset.lineNumber);
-  let endLine = Number(endElement.dataset.lineNumber);
+  let startLine = Number(startElement.dataset["lineNumber"]);
+  let endLine = Number(endElement.dataset["lineNumber"]);
   if (!Number.isInteger(startLine) || !Number.isInteger(endLine)) return null;
 
   if (startLine < endLine) {
@@ -165,7 +165,7 @@ function getSelectedSourceLineRange(
           nextLine.matches(".file-source-line[data-line-number]")
         ) {
           startElement = nextLine;
-          startLine = Number(startElement.dataset.lineNumber);
+          startLine = Number(startElement.dataset["lineNumber"]);
         }
       }
     }
@@ -184,7 +184,7 @@ function getSelectedSourceLineRange(
           previousLine.matches(".file-source-line[data-line-number]")
         ) {
           endElement = previousLine;
-          endLine = Number(endElement.dataset.lineNumber);
+          endLine = Number(endElement.dataset["lineNumber"]);
         }
       }
     }
@@ -376,12 +376,9 @@ function DiffView({ patch }: { patch: string }) {
   let i = 0;
   while (i < diff.length) {
     if (visible.has(i)) {
-      const block: DiffLine[] = [];
-      while (i < diff.length && visible.has(i)) {
-        block.push(diff[i]);
-        i++;
-      }
-      segments.push({ hidden: false, lines: block });
+      const start = i;
+      while (i < diff.length && visible.has(i)) i++;
+      segments.push({ hidden: false, lines: diff.slice(start, i) });
     } else {
       let count = 0;
       while (i < diff.length && !visible.has(i)) {

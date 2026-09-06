@@ -100,10 +100,17 @@ const session = {
 };
 const recentMessages = [
   { role: "user", content: "Recent question" },
-  assistant([
-    { type: "thinking", thinking: "Reasoning" },
-    { type: "text", text: "Recent answer" },
-  ]),
+  {
+    ...assistant([{ type: "thinking", thinking: "Intermediate progress" }]),
+    timestamp: new Date(2025, 0, 2, 16, 30).getTime(),
+  },
+  {
+    ...assistant([
+      { type: "thinking", thinking: "", deferred: true },
+      { type: "text", text: "Recent answer" },
+    ]),
+    timestamp: new Date(2025, 0, 2, 16, 42).getTime(),
+  },
 ];
 
 function sessionSnapshot() {
@@ -116,18 +123,23 @@ function sessionSnapshot() {
     leafId: "recent-answer",
     context: {
       messages: recentMessages,
-      entryIds: ["recent-question", "recent-answer"],
+      entryIds: ["recent-question", "recent-progress", "recent-answer"],
       oldestEntryId: "recent-question",
       hasMore: true,
     },
   };
 }
 
-test("transcript expansion and history prepend preserve the reader's position", async () => {
+test("transcript expansion and history prepend preserve position and deferred entry identity", async () => {
   const contextRequest = deferred();
+  const thinkingRequests = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
     const path = String(url);
+    if (path.includes("/entries/")) {
+      thinkingRequests.push(path);
+      return Response.json({ thinking: "Reasoning from the recent entry" });
+    }
     if (path.startsWith("/api/sessions/session/context?"))
       return contextRequest.promise;
     if (path.startsWith("/api/sessions/session?"))
@@ -211,6 +223,20 @@ test("transcript expansion and history prepend preserve the reader's position", 
       "true",
     );
     assert.equal(transcript.scrollTop, 800);
+    assert.equal(container.textContent.split("Recent answer").length - 1, 1);
+    assert.equal(container.textContent.split("16:42").length - 1, 1);
+    assert.doesNotMatch(container.textContent, /16:30/);
+    assert.equal(container.textContent.split("Older answer").length - 1, 1);
+
+    const thinkingToggle = [...container.querySelectorAll("button")]
+      .filter((button) => button.textContent.trim().startsWith("Thinking"))
+      .at(-1);
+    assert.ok(thinkingToggle);
+    await act(() => thinkingToggle.click());
+    assert.deepEqual(thinkingRequests, [
+      "/api/sessions/session/entries/recent-answer/thinking?blockIndex=0",
+    ]);
+    assert.match(container.textContent, /Reasoning from the recent entry/);
   } finally {
     await act(() => root.unmount());
     container.remove();
