@@ -335,7 +335,9 @@ function AddPluginPanel({
           id="plugin-source"
           ref={inputRef}
           value={source}
-          onChange={(e) => onSourceChange(e.target.value)}
+          onChange={(e) => {
+            onSourceChange(e.target.value);
+          }}
           onPaste={(e) => {
             const pasted = e.clipboardData.getData("text");
             const normalized = normalizePluginSourceInput(pasted);
@@ -343,9 +345,9 @@ function AddPluginPanel({
             e.preventDefault();
             onSourceChange(normalized);
           }}
-          onBlur={(e) =>
-            onSourceChange(normalizePluginSourceInput(e.currentTarget.value))
-          }
+          onBlur={(e) => {
+            onSourceChange(normalizePluginSourceInput(e.currentTarget.value));
+          }}
           placeholder="npm:@scope/package"
           style={{
             width: "100%",
@@ -399,7 +401,9 @@ function AddPluginPanel({
             <button
               key={example}
               type="button"
-              onClick={() => onSourceChange(example)}
+              onClick={() => {
+                onSourceChange(example);
+              }}
               style={{
                 width: "100%",
                 minHeight: 30,
@@ -517,7 +521,9 @@ function PackageDetail({
         <ConfigDetailActions>
           <ConfigButton
             size="small"
-            onClick={() => onAction("update", pkg)}
+            onClick={() => {
+              onAction("update", pkg);
+            }}
             disabled={busy || reloadBusy}
           >
             {busyKey === `update:${key}`
@@ -539,7 +545,9 @@ function PackageDetail({
           <ConfigButton
             variant="danger"
             size="small"
-            onClick={() => onAction("remove", pkg)}
+            onClick={() => {
+              onAction("remove", pkg);
+            }}
             disabled={busy || reloadBusy}
           >
             {busyKey === `remove:${key}`
@@ -549,7 +557,9 @@ function PackageDetail({
           <ConfigSwitch
             checked={enabled}
             loading={busy || reloadBusy}
-            onChange={() => onAction(pkg.disabled ? "enable" : "disable", pkg)}
+            onChange={() => {
+              onAction(pkg.disabled ? "enable" : "disable", pkg);
+            }}
             label={
               pkg.disabled ? t("i18n.enablePackage") : t("i18n.disablePackage")
             }
@@ -893,7 +903,9 @@ export function PluginsConfig({
                 actionError={actionError}
                 onSourceChange={setInstallSource}
                 onScopeChange={setInstallScope}
-                onInstall={installPlugin}
+                onInstall={() => {
+                  void installPlugin();
+                }}
               />
             ) : loading ? null : selectedPackage ? (
               <PackageDetail
@@ -904,8 +916,12 @@ export function PluginsConfig({
                 actionError={actionError}
                 actionMessage={actionMessage}
                 sessionId={sessionId}
-                onAction={runAction}
-                onReloadSession={reloadSession}
+                onAction={(...args) => {
+                  void runAction(...args);
+                }}
+                onReloadSession={() => {
+                  void reloadSession();
+                }}
               />
             ) : (
               <ConfigEmptyState>{t("i18n.selectPackage")}</ConfigEmptyState>

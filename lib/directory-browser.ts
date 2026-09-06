@@ -15,7 +15,7 @@ export function shouldShowWindowsDrivePicker(
 }
 
 export function getBrowseStartDirectory(directory?: string): string {
-  return directory || homedir();
+  return (directory ?? "") || homedir();
 }
 
 export function getWindowsDriveCandidates(): BrowsableDirectory[] {

@@ -6,7 +6,7 @@ export interface InitialNavigation {
 export function getInitialNavigation(
   searchParams: Pick<URLSearchParams, "get">,
 ): InitialNavigation {
-  const requestedCwd = searchParams.get("cwd")?.trim() || null;
+  const requestedCwd = (searchParams.get("cwd")?.trim() ?? "") || null;
 
   return {
     requestedCwd,

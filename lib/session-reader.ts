@@ -333,14 +333,12 @@ function findSessionIdByPath(filePath: string): string | undefined {
 }
 
 function getPathCache(): Map<string, string> {
-  if (!globalThis.__piSessionPathCache)
-    globalThis.__piSessionPathCache = new Map();
+  globalThis.__piSessionPathCache ??= new Map();
   return globalThis.__piSessionPathCache;
 }
 
 function getPathToIdCache(): Map<string, string> {
-  if (!globalThis.__piPathToSessionIdCache)
-    globalThis.__piPathToSessionIdCache = new Map();
+  globalThis.__piPathToSessionIdCache ??= new Map();
   return globalThis.__piPathToSessionIdCache;
 }
 

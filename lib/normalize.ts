@@ -1,5 +1,5 @@
 import { isRecord } from "./types";
-import type { AgentMessage, AssistantMessage, ToolCallContent } from "./types";
+import type { AgentMessage, ToolCallContent } from "./types";
 
 function streamingRawInput(block: Record<string, unknown>): string | undefined {
   if (typeof block["rawInput"] === "string") return block["rawInput"];
@@ -62,13 +62,13 @@ function normalizeAssistantToolCalls(
   // Non-assistant roles (user, toolResult, bashExecution, custom) are returned
   // unchanged — only assistant messages go through tool-call field normalization.
   if (msg.role !== "assistant") return msg;
-  const content = (msg as AssistantMessage).content;
+  const content = msg.content;
   if (!Array.isArray(content)) return msg;
   const normalized = content.map((block) => {
     const result = normalizeToolCallBlock(block, options);
     return result ?? block;
   });
-  return { ...msg, content: normalized } as AgentMessage;
+  return { ...msg, content: normalized };
 }
 
 export function normalizeToolCalls(msg: AgentMessage): AgentMessage {

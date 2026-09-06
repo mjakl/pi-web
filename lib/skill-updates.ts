@@ -9,7 +9,7 @@ import { errorMessage } from "./error-message";
 const CHECK_TIMEOUT_MS = 15_000;
 const GIT_CHECK_TIMEOUT_MS = 30_000;
 const DEFAULT_SKILLS_API_BASE =
-  process.env["SKILLS_API_URL"] || "https://skills.sh";
+  (process.env["SKILLS_API_URL"] ?? "") || "https://skills.sh";
 const execFileAsync = promisify(execFile);
 
 type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
@@ -75,7 +75,7 @@ function skillNameFromPackage(pkg: string): string {
   return at >= 0 ? pkg.slice(at + 1) : pkg;
 }
 
-function skillFolder(skillPath: string): string {
+function skillFolder(skillPath = ""): string {
   let folder = skillPath.replace(/\\/g, "/");
   if (folder.toLowerCase().endsWith("/skill.md")) folder = folder.slice(0, -9);
   else if (folder.toLowerCase().endsWith("skill.md"))
@@ -115,8 +115,8 @@ async function fetchJson(
 
 async function resolveGitTreeHash(install: SkillInstallInfo): Promise<string> {
   const repository = `https://github.com/${install.source}.git`;
-  const ref = install.ref || "HEAD";
-  const folder = skillFolder(install.skillPath!);
+  const ref = (install.ref ?? "") || "HEAD";
+  const folder = skillFolder(install.skillPath);
   const gitDir = await mkdtemp(join(tmpdir(), "pi-web-skill-check-"));
 
   try {
@@ -155,7 +155,7 @@ async function checkGlobalSkill(
   options: Required<Pick<CheckOptions, "fetcher" | "resolveGitTreeHash">> &
     CheckOptions,
 ): Promise<SkillUpdateResult> {
-  const ref = install.ref || "HEAD";
+  const ref = (install.ref ?? "") || "HEAD";
   const url = `https://api.github.com/repos/${install.source}/git/trees/${encodeURIComponent(ref)}?recursive=1`;
   const headers: Record<string, string> = {
     Accept: "application/vnd.github.v3+json",
@@ -163,7 +163,7 @@ async function checkGlobalSkill(
   };
   if (options.githubToken)
     headers["Authorization"] = `Bearer ${options.githubToken}`;
-  const folder = skillFolder(install.skillPath!);
+  const folder = skillFolder(install.skillPath);
   let latestVersion: string | undefined;
 
   try {

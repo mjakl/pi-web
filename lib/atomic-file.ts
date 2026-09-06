@@ -12,7 +12,13 @@ export function writePrivateFileAtomicSync(
 ): void {
   const dir = dirname(path);
   const tempPath = join(dir, `.${basename(path)}-${randomUUID()}.tmp`);
-  let operationFailed = false;
+  const cleanup = () => {
+    try {
+      unlinkSync(tempPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  };
 
   try {
     writeFileSync(tempPath, contents, {
@@ -23,18 +29,12 @@ export function writePrivateFileAtomicSync(
     });
     renameSync(tempPath, path);
   } catch (error) {
-    operationFailed = true;
-    throw error;
-  } finally {
     try {
-      unlinkSync(tempPath);
-    } catch (error) {
-      if (
-        (error as NodeJS.ErrnoException).code !== "ENOENT" &&
-        !operationFailed
-      ) {
-        throw error;
-      }
+      cleanup();
+    } catch {
+      // The operation error takes precedence over a secondary cleanup failure.
     }
+    throw error;
   }
+  cleanup();
 }

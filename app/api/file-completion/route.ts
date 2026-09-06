@@ -6,7 +6,7 @@ import { isFilePathQuery } from "@/lib/file-fuzzy";
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const query = params.get("q") ?? "";
-  const cwd = params.get("cwd") || undefined;
+  const cwd = (params.get("cwd") ?? "") || undefined;
   if (
     !isFilePathQuery(query) ||
     (cwd && !path.isAbsolute(cwd)) ||

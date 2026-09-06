@@ -573,9 +573,9 @@ export async function GET(
         return Response.json({ error: "Not a file" }, { status: 400 });
       }
       const mime =
-        getImageMime(filePath) ||
-        getAudioMime(filePath) ||
-        getDocumentMime(filePath) ||
+        getImageMime(filePath) ??
+        getAudioMime(filePath) ??
+        getDocumentMime(filePath) ??
         "application/octet-stream";
       return streamFile(
         filePath,
@@ -596,7 +596,7 @@ export async function GET(
       return Response.json({
         size: stat.size,
         language: getLanguage(filePath),
-        mime: imageMime || audioMime || documentMime || "text/plain",
+        mime: imageMime ?? audioMime ?? documentMime ?? "text/plain",
         previewKind: documentPreviewKind(filePath),
       });
     }
@@ -664,10 +664,7 @@ export async function GET(
             watcher = fs.watch(watchedDirectory, (_eventType, changedName) => {
               if (
                 changedName != null &&
-                !samePath(
-                  path.join(watchedDirectory, changedName.toString()),
-                  filePath,
-                )
+                !samePath(path.join(watchedDirectory, changedName), filePath)
               )
                 return;
               try {

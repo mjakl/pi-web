@@ -338,7 +338,9 @@ export function ModelSelector({
               <input
                 ref={filterInputRef}
                 value={filter}
-                onChange={(event) => setFilter(event.target.value)}
+                onChange={(event) => {
+                  setFilter(event.target.value);
+                }}
                 placeholder={t("chat.filterModels")}
                 aria-label={t("chat.filterModels")}
                 autoComplete="off"
@@ -401,7 +403,9 @@ export function ModelSelector({
                         option.provider === value?.provider
                       }
                       label={option.name}
-                      onClick={() => choose(option)}
+                      onClick={() => {
+                        choose(option);
+                      }}
                     />
                   ))}
                 </div>

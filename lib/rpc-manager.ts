@@ -44,7 +44,6 @@ import type {
 import type { AgentSessionLike, ToolInfo } from "./pi-types";
 import type {
   AgentEvent,
-  ExtensionUiRequest,
   ExtensionUiResponse,
   SessionEntry,
   SessionInfo,
@@ -136,9 +135,9 @@ function withExtensionTools(
 
 export class AgentSessionWrapper {
   private listeners = new Set<EventListener>();
-  private readonly extensionUi = new ExtensionUiBridge((event) =>
-    this.emit(event),
-  );
+  private readonly extensionUi = new ExtensionUiBridge((event) => {
+    this.emit(event);
+  });
   private pendingPromptCount = 0;
   private activeMutatingCommands = 0;
   private sessionReplacement: "fork" | "clone" | "rewind" | null = null;
@@ -238,7 +237,7 @@ export class AgentSessionWrapper {
   }
 
   beginExtensionBinding(): void {
-    void this.ensureExtensionsBound().catch((err) => {
+    void this.ensureExtensionsBound().catch((err: unknown) => {
       console.error(
         "[pi-web] failed to dispatch session_start to extensions:",
         err instanceof Error ? err.message : err,
@@ -264,7 +263,7 @@ export class AgentSessionWrapper {
         uiContext: this.extensionUi.createUiContext(),
         mode: "rpc",
         commandContextActions: this.createExtensionCommandContextActions(),
-        shutdownHandler: () =>
+        shutdownHandler: () => {
           this.emit({
             type: "extension_ui_request",
             id: randomUUID(),
@@ -272,21 +271,23 @@ export class AgentSessionWrapper {
             notifyType: "warning",
             message:
               "Extension requested shutdown, but shutdown is not supported in Pi Web.",
-          } as ExtensionUiRequest as AgentEvent),
-        onError: (error) =>
+          });
+        },
+        onError: (error) => {
           this.emit({
             type: "extension_error",
             extensionPath: error.extensionPath,
             event: error.event,
             error: error.error,
-          }),
+          });
+        },
       });
       this.extensionsBound = true;
       this.applyExactSystemPrompt();
       console.log(
         `[pi-web] session_start dispatched to extensions for session ${this.inner.sessionId}`,
       );
-    })().catch((err) => {
+    })().catch((err: unknown) => {
       this.extensionBindingError = err;
       throw err;
     });
@@ -304,7 +305,7 @@ export class AgentSessionWrapper {
     if (this.extensionBindingError) {
       throw this.extensionBindingError instanceof Error
         ? this.extensionBindingError
-        : new Error(String(this.extensionBindingError));
+        : new Error(errorMessage(this.extensionBindingError));
     }
   }
 
@@ -332,7 +333,8 @@ export class AgentSessionWrapper {
   }
 
   private installExactSystemPromptContinuation(): void {
-    if (!this.exactSystemPrompt) return;
+    const exactSystemPrompt = this.exactSystemPrompt;
+    if (!exactSystemPrompt) return;
     const previous = this.inner.agent.prepareNextTurnWithContext;
     this.inner.agent.prepareNextTurnWithContext = async (turn, signal) => {
       const prepared = await previous?.(turn, signal);
@@ -340,7 +342,7 @@ export class AgentSessionWrapper {
         ...prepared,
         context: {
           ...(prepared?.context ?? turn.context),
-          systemPrompt: this.exactSystemPrompt!(),
+          systemPrompt: exactSystemPrompt(),
         },
       };
     };
@@ -366,6 +368,8 @@ export class AgentSessionWrapper {
 
   private async acquirePromptAdmission(): Promise<() => void> {
     const previous = this.promptAdmissionTail;
+    // No-value promise resolver; void is the Promise type argument, not a stored value.
+    // oxlint-disable-next-line typescript/no-invalid-void-type
     const { promise, resolve: release } = Promise.withResolvers<void>();
     this.promptAdmissionTail = promise;
     await previous;
@@ -391,7 +395,7 @@ export class AgentSessionWrapper {
           this.resetIdleTimer();
           return;
         }
-        void this.shutdown().catch((error) => {
+        void this.shutdown().catch((error: unknown) => {
           console.error(
             "[pi-web] failed to shut down abandoned draft:",
             error instanceof Error ? error.message : error,
@@ -543,6 +547,8 @@ export class AgentSessionWrapper {
               rejectPreflight = (error) => {
                 if (preflightSettled) return;
                 preflightSettled = true;
+                // Forward the SDK rejection unchanged; the HTTP/event owners format it.
+                // oxlint-disable-next-line typescript/prefer-promise-reject-errors
                 reject(error);
               };
             });
@@ -587,7 +593,7 @@ export class AgentSessionWrapper {
                   finishPrompt();
                   if (!streamingBehavior) this.emit({ type: "prompt_done" });
                 },
-                (error) => {
+                (error: unknown) => {
                   rejectPreflight(error);
                   finishPrompt();
                   // A preflight rejection is returned by the POST itself. Only an
@@ -601,7 +607,7 @@ export class AgentSessionWrapper {
                   }
                 },
               )
-              .catch((error) => {
+              .catch((error: unknown) => {
                 console.error(
                   "[pi-web] prompt completion handler failed:",
                   error instanceof Error ? error.message : error,
@@ -680,6 +686,10 @@ export class AgentSessionWrapper {
           if (this.isSessionRunningForReplacement()) {
             throw new Error("Cannot fork while the session is running");
           }
+          // Replacement admission is held by withSessionReplacement; send's
+          // mutation accounting intentionally ends before the returned work settles.
+          // Keep the async callback's rejection timing for synchronous SDK failures.
+          // oxlint-disable-next-line typescript/return-await, typescript/require-await
           return this.withSessionReplacement("fork", async () => {
             const entryId = command["entryId"] as string;
             const sessionManager = this.inner.sessionManager;
@@ -702,6 +712,9 @@ export class AgentSessionWrapper {
                 sessionDir,
               );
               newManager.newSession({ parentSession: currentSessionFile });
+              // create/newSession allocates a file path; only in-memory managers lack one.
+              // Keep that API distinction without introducing a forbidden non-null assertion.
+              // oxlint-disable-next-line typescript/non-nullable-type-assertion-style
               newSessionFile = newManager.getSessionFile() as string;
             } else {
               // Fork after some history: copy path up to (but not including) the fork point
@@ -751,6 +764,9 @@ export class AgentSessionWrapper {
           if (!currentSessionFile || !existsSync(currentSessionFile))
             return { cancelled: true };
 
+          // As with fork, replacement admission owns this lifetime, not send's counter.
+          // Preserve async rejection timing for synchronous SDK failures.
+          // oxlint-disable-next-line typescript/return-await, typescript/require-await
           return this.withSessionReplacement("clone", async () => {
             const sessionDir = sessionManager.getSessionDir();
             const sourceManager = SessionManager.open(
@@ -789,6 +805,8 @@ export class AgentSessionWrapper {
           const file = this.sessionFile;
           if (!file || !existsSync(file))
             throw new Error("Rewind requires a saved session");
+          // Rewind owns replacement admission through shutdown; do not extend send accounting.
+          // oxlint-disable-next-line typescript/return-await
           return this.withSessionReplacement("rewind", async () => {
             let message: unknown;
             await this.shutdown({
@@ -1027,7 +1045,7 @@ export class AgentSessionWrapper {
     if (this.inner.isBashRunning) this.inner.abortBash();
     if (this.inner.isCompacting) this.inner.abortCompaction();
     if (this.pendingPromptCount > 0 || this.inner.isStreaming) {
-      void this.inner.abort().catch((error) => {
+      void this.inner.abort().catch((error: unknown) => {
         console.error(
           "[pi-web] failed to cancel active session work:",
           error instanceof Error ? error.message : error,
@@ -1072,7 +1090,7 @@ export class AgentSessionWrapper {
         type: "session_shutdown",
         reason: "quit",
       }))()
-      .catch((error) => {
+      .catch((error: unknown) => {
         console.error(
           "[pi-web] session_shutdown before dispose failed:",
           error instanceof Error ? error.message : error,
@@ -1110,7 +1128,7 @@ export class AgentSessionWrapper {
       })();
       try {
         await Promise.race([
-          cleanup.catch((error) => {
+          cleanup.catch((error: unknown) => {
             console.error(
               "[pi-web] session shutdown cleanup failed:",
               error instanceof Error ? error.message : error,
@@ -1138,15 +1156,15 @@ export class AgentSessionWrapper {
   private createExtensionCommandContextActions(): ExtensionCommandContextActions {
     return {
       waitForIdle: () => this.inner.agent.waitForIdle(),
-      newSession: async () => ({ cancelled: true }),
-      fork: async () => ({ cancelled: true }),
+      newSession: () => Promise.resolve({ cancelled: true }),
+      fork: () => Promise.resolve({ cancelled: true }),
       navigateTree: async (targetId, options) => {
         const result = await this.inner.navigateTree(targetId, {
           summarize: options?.summarize,
         });
         return { cancelled: result.cancelled };
       },
-      switchSession: async () => ({ cancelled: true }),
+      switchSession: () => Promise.resolve({ cancelled: true }),
       reload: async () => {
         this.extensionUi.resetForReload();
         this.syncProjectTrust();
@@ -1201,7 +1219,9 @@ function getRegistry(): Map<string, AgentSessionWrapper> {
   if (!globalThis.__piSessions) {
     globalThis.__piSessions = new Map();
     const destroy = () =>
-      globalThis.__piSessions?.forEach((session) => session.destroy());
+      globalThis.__piSessions?.forEach((session) => {
+        session.destroy();
+      });
     const shutdown = () => {
       const sessions = Array.from(globalThis.__piSessions?.values() ?? []);
       void Promise.allSettled(sessions.map((session) => session.shutdown()));
@@ -1231,13 +1251,12 @@ function getLocks(): Map<
   string,
   Promise<{ session: AgentSessionWrapper; realSessionId: string }>
 > {
-  if (!globalThis.__piStartLocks) globalThis.__piStartLocks = new Map();
+  globalThis.__piStartLocks ??= new Map();
   return globalThis.__piStartLocks;
 }
 
 function getLifecycle(sessionId: string): RpcSessionLifecycle {
-  if (!globalThis.__piSessionLifecycles)
-    globalThis.__piSessionLifecycles = new Map();
+  globalThis.__piSessionLifecycles ??= new Map();
   let lifecycle = globalThis.__piSessionLifecycles.get(sessionId);
   if (!lifecycle) {
     lifecycle = {
@@ -1279,6 +1298,8 @@ async function acquireRpcSessionToolChange(
   await assertRpcSessionOperationCurrent(operation);
   const lifecycle = getLifecycle(operation.sessionId);
   const previous = lifecycle.toolChangeTail;
+  // No-value promise resolver; void is the Promise type argument, not a stored value.
+  // oxlint-disable-next-line typescript/no-invalid-void-type
   const { promise: current, resolve: release } = Promise.withResolvers<void>();
   lifecycle.toolChangeTail = previous.then(() => current);
   await previous;
@@ -1301,8 +1322,7 @@ function normalizeRpcCwd(cwd: string): string {
 }
 
 function getStartingSessionCwds(): Map<string, number> {
-  if (!globalThis.__piStartingSessionCwds)
-    globalThis.__piStartingSessionCwds = new Map();
+  globalThis.__piStartingSessionCwds ??= new Map();
   return globalThis.__piStartingSessionCwds;
 }
 
@@ -1584,9 +1604,8 @@ export async function stopRpcSession(sessionId: string): Promise<boolean> {
   const priorStop = lifecycle.stopping;
   const registry = getRegistry();
   const locks = getLocks();
-  const hadRuntime = Boolean(
-    registry.get(sessionId)?.isAlive() || locks.has(sessionId),
-  );
+  const hadRuntime =
+    (registry.get(sessionId)?.isAlive() ?? false) || locks.has(sessionId);
   lifecycle.generation += 1;
   const stopping = (async () => {
     await priorStop;
@@ -1800,15 +1819,17 @@ export async function startRpcSession(
       exactSystemPrompt,
       chatOnly,
       onAgentRunComplete: (completedSessionId) => {
-        void notifySessionComplete(completedSessionId).catch((error) => {
-          console.error(
-            "[pi-web] failed to send completion push:",
-            error instanceof Error ? error.message : error,
-          );
-        });
+        void notifySessionComplete(completedSessionId).catch(
+          (error: unknown) => {
+            console.error(
+              "[pi-web] failed to send completion push:",
+              error instanceof Error ? error.message : error,
+            );
+          },
+        );
       },
     });
-    const realSessionId = inner.sessionId as string;
+    const realSessionId = inner.sessionId;
     if (lifecycle.generation !== startGeneration) {
       await wrapper.shutdown();
       throw new Error("Session was stopped during startup");

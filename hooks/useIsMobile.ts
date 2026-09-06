@@ -11,7 +11,9 @@ function subscribeToQuery(query: string, cb: () => void): () => void {
   if (typeof window === "undefined") return () => {};
   const mql = window.matchMedia(query);
   mql.addEventListener("change", cb);
-  return () => mql.removeEventListener("change", cb);
+  return () => {
+    mql.removeEventListener("change", cb);
+  };
 }
 
 function queryMatches(query: string): boolean {

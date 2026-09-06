@@ -4,20 +4,16 @@
 const {
   getUnsupportedNodeVersionMessage,
   isNodeVersionSupported,
-} = require("./node-version"); // eslint-disable-line @typescript-eslint/no-require-imports
+} = require("./node-version");
 
 if (!isNodeVersionSupported(process.versions.node)) {
   console.error(getUnsupportedNodeVersionMessage(process.versions.node));
   process.exit(1);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const path = require("node:path");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const fs = require("node:fs");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { getHelpText, parseLaunchOptions } = require("./pi-web-options");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { runNext } = require("./run-next");
 
 let launchOptions;

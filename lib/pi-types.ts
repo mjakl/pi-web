@@ -210,12 +210,12 @@ export interface AgentSessionLike {
       preflightResult?: (success: boolean) => void;
     },
   ): Promise<void>;
-  sendCustomMessage<T = unknown>(
+  sendCustomMessage(
     message: {
       customType: string;
       content: string | (TextContent | ImageContent)[];
       display: boolean;
-      details?: T;
+      details?: unknown;
     },
     options?: {
       triggerTurn?: boolean;

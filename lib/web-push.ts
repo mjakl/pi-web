@@ -154,11 +154,9 @@ declare global {
 }
 
 function getNotifier(): Promise<WebPushNotifier> {
-  if (!globalThis.__piWebPushNotifier) {
-    globalThis.__piWebPushNotifier = Promise.resolve().then(() =>
-      createWebPushNotifier(getDefaultEnvironment()),
-    );
-  }
+  globalThis.__piWebPushNotifier ??= Promise.resolve().then(() =>
+    createWebPushNotifier(getDefaultEnvironment()),
+  );
   return globalThis.__piWebPushNotifier;
 }
 
@@ -169,9 +167,9 @@ export function getVapidPublicKey(): Promise<string> {
 export function addSubscription(
   subscription: PushSubscriptionRecord,
 ): Promise<void> {
-  return getNotifier().then((notifier) =>
-    notifier.addSubscription(subscription),
-  );
+  return getNotifier().then((notifier) => {
+    notifier.addSubscription(subscription);
+  });
 }
 
 export async function notifySessionComplete(sessionId: string): Promise<void> {

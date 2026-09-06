@@ -4,7 +4,8 @@ import { errorMessage } from "@/lib/error-message";
 const DEFAULT_LIMIT = 50;
 const MIN_LIMIT = 1;
 const MAX_LIMIT = 50;
-const SEARCH_API_BASE = process.env["SKILLS_API_URL"] || "https://skills.sh";
+const SEARCH_API_BASE =
+  (process.env["SKILLS_API_URL"] ?? "") || "https://skills.sh";
 
 interface SkillsApiSkill {
   id?: string;
@@ -48,9 +49,10 @@ async function searchSkillsApi(
       const name = skill.name?.trim();
       const source = skill.source?.trim();
       const slug = skill.id?.trim();
-      if (!name || (!source && !slug)) return null;
+      const packageSource = (source ?? "") || slug;
+      if (!name || !packageSource) return null;
 
-      const pkg = `${source || slug}@${name}`;
+      const pkg = `${packageSource}@${name}`;
       return {
         package: pkg,
         installs: formatInstalls(skill.installs),

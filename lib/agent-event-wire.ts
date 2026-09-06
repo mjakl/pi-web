@@ -53,7 +53,7 @@ function toolCallMetadata(
   const contentIndex = event["contentIndex"];
   if (!Array.isArray(content) || typeof contentIndex !== "number") return null;
 
-  const block = content[contentIndex];
+  const block: unknown = content[contentIndex];
   if (!isRecord(block) || block["type"] !== "toolCall") return null;
   const id =
     typeof block["id"] === "string"
@@ -89,12 +89,10 @@ export function toClientAgentEvent(
       return {
         type: "message_update",
         assistantMessageEvent,
-      } as ClientMessageUpdateEvent;
+      };
     }
 
-    const metadata = toolCallMetadata(
-      assistantMessageEvent as Record<string, unknown>,
-    );
+    const metadata = toolCallMetadata(assistantMessageEvent);
     const { partial: _partial, ...deltaEvent } = assistantMessageEvent;
     void _partial;
     return {
@@ -102,7 +100,7 @@ export function toClientAgentEvent(
       assistantMessageEvent: metadata
         ? { ...deltaEvent, ...metadata }
         : deltaEvent,
-    } as ClientMessageUpdateEvent;
+    };
   }
 
   if (event.type === "tool_execution_update") {

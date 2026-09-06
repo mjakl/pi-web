@@ -101,9 +101,32 @@ function formattingFixture(t) {
     path.join(dir, "node_modules"),
     "junction",
   );
+  copyFileSync(
+    path.join(root, ".oxlintrc.json"),
+    path.join(dir, ".oxlintrc.json"),
+  );
+  writeFileSync(
+    path.join(dir, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        noEmit: true,
+        target: "ES2022",
+        module: "esnext",
+        moduleResolution: "bundler",
+        jsx: "react-jsx",
+        skipLibCheck: true,
+      },
+      include: ["**/*.ts", "**/*.tsx"],
+    }),
+  );
+  copyFileSync(
+    path.join(root, "eslint.config.mjs"),
+    path.join(dir, "eslint.base.mjs"),
+  );
   writeFileSync(
     path.join(dir, "eslint.config.mjs"),
-    'export default [{ rules: { "prefer-const": "error" } }];\n',
+    'import config from "./eslint.base.mjs";\nconst fixture = [...config, { rules: { "prefer-const": "error" } }];\nexport default fixture;\n',
   );
   return dir;
 }
@@ -145,6 +168,81 @@ test("explicit fix applies ESLint fixes and formatting, then lint passes without
   assert.equal(readFileSync(file, "utf8"), expected);
   const repeated = just(["fix"], dir);
   assert.equal(repeated.status, 0, repeated.output);
+  assert.equal(readFileSync(file, "utf8"), expected);
+});
+
+for (const [name, filename, source, rule, expectedStatus = 1] of [
+  [
+    "native correctness in untyped tests",
+    "example.test.mjs",
+    "export const invalid = NaN === NaN;\n",
+    /use-isnan/,
+  ],
+  [
+    "native unused JavaScript",
+    "example.mjs",
+    "const unused = 1;\n",
+    /no-unused-vars/,
+  ],
+  [
+    "typed promise correctness",
+    "example.ts",
+    "export function forget(): void {\n  Promise.resolve();\n}\n",
+    /no-floating-promises/,
+  ],
+  [
+    "typed unsafe returns",
+    "example.ts",
+    "export function unsafe(value: any): string {\n  return value;\n}\n",
+    /no-unsafe-return/,
+  ],
+  [
+    "Next correctness",
+    "page.tsx",
+    'export default function Page() {\n  return <script src="/probe.js" />;\n}\n',
+    /@next\/next\/no-sync-scripts/,
+  ],
+  [
+    "React Hooks correctness",
+    "page.tsx",
+    'import { useState } from "react";\n\nexport default function Page({ ready }: { ready: boolean }) {\n  if (ready) useState(0);\n  return null;\n}\n',
+    /react-hooks\/rules-of-hooks/,
+  ],
+  [
+    "accessibility",
+    "page.tsx",
+    'export default function Page() {\n  return <img src="/probe.png" />;\n}\n',
+    /jsx-a11y\/alt-text/,
+    0, // Next deliberately reports this accessibility check as a warning.
+  ],
+]) {
+  test(`lint retains ${name} without rewriting source`, (t) => {
+    const dir = formattingFixture(t);
+    const prepared = just(["fix"], dir);
+    assert.equal(prepared.status, 0, prepared.output);
+    const file = path.join(dir, filename);
+    writeFileSync(file, source);
+    const result = just(["lint"], dir);
+    assert.equal(result.status, expectedStatus, result.output);
+    assert.match(result.output, rule);
+    assert.equal(readFileSync(file, "utf8"), source);
+  });
+}
+
+test("explicit fix applies supported typed Oxlint fixes before final formatting", (t) => {
+  const dir = formattingFixture(t);
+  const file = path.join(dir, "example.ts");
+  writeFileSync(
+    file,
+    "export function run(): void {}\nexport const callback = () => run();\n",
+  );
+  const result = just(["fix"], dir);
+  assert.equal(result.status, 0, result.output);
+  const expected =
+    "export function run(): void {}\nexport const callback = () => {\n  run();\n};\n";
+  assert.equal(readFileSync(file, "utf8"), expected);
+  const checked = just(["lint"], dir);
+  assert.equal(checked.status, 0, checked.output);
   assert.equal(readFileSync(file, "utf8"), expected);
 });
 

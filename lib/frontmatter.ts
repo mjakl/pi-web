@@ -65,6 +65,8 @@ function formatValue(value: unknown, ancestors: WeakSet<object>): string {
     }
   }
 
+  // Objects and arrays were handled above; remaining scalar/callable values keep their display label.
+  // oxlint-disable-next-line typescript/no-base-to-string
   return String(value);
 }
 

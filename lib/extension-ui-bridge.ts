@@ -200,7 +200,7 @@ export class ExtensionUiBridge {
       widgetKey: key,
       widgetLines: undefined,
       widgetPlacement: undefined,
-    } as ExtensionUiRequest as AgentEvent);
+    });
   }
 
   private clearExtensionWidget(key: string, emitClear = true): number {
@@ -313,7 +313,7 @@ export class ExtensionUiBridge {
     )
       return;
 
-    const widgetLines = lines as string[];
+    const widgetLines = lines;
     this.extensionWidgets.set(active.key, {
       key: active.key,
       lines: widgetLines,
@@ -327,7 +327,7 @@ export class ExtensionUiBridge {
       widgetKey: active.key,
       widgetLines,
       widgetPlacement: active.placement,
-    } as ExtensionUiRequest as AgentEvent);
+    });
   }
 
   private setExtensionWidgetFactory(
@@ -389,8 +389,10 @@ export class ExtensionUiBridge {
       return DEFAULT_CUSTOM_UI_COLUMNS;
     const overlayOptions = (options as { overlayOptions?: unknown })
       .overlayOptions;
-    const resolved =
-      typeof overlayOptions === "function" ? overlayOptions() : overlayOptions;
+    const resolved: unknown =
+      typeof overlayOptions === "function"
+        ? Reflect.apply(overlayOptions, undefined, [])
+        : overlayOptions;
     if (!resolved || typeof resolved !== "object")
       return DEFAULT_CUSTOM_UI_COLUMNS;
     const width = (resolved as { width?: unknown }).width;
@@ -433,7 +435,7 @@ export class ExtensionUiBridge {
       method: "custom",
       lines: [],
       closed: true,
-    } as ExtensionUiRequest as AgentEvent);
+    });
     custom.resolve(value);
   }
 
@@ -483,7 +485,15 @@ export class ExtensionUiBridge {
       };
 
       Promise.resolve()
-        .then(() => factory(tui, PLAIN_TEXT_THEME, CUSTOM_UI_KEYBINDINGS, done))
+        .then(() => {
+          const component: unknown = Reflect.apply(factory, undefined, [
+            tui,
+            PLAIN_TEXT_THEME,
+            CUSTOM_UI_KEYBINDINGS,
+            done,
+          ]);
+          return component;
+        })
         .then((component) => {
           if (completed) {
             try {
@@ -504,13 +514,15 @@ export class ExtensionUiBridge {
           const custom: ActiveCustomUi = {
             component: component as CustomUiComponent,
             width,
-            resolve: (value) => finish(value as T),
+            resolve: (value) => {
+              finish(value as T);
+            },
             settled: false,
           };
           this.activeCustomUis.set(id, custom);
           this.emitCustomUiRender(id, custom);
         })
-        .catch((error) => {
+        .catch((error: unknown) => {
           if (completed) return;
           this.emit({
             type: "extension_error",
@@ -552,17 +564,26 @@ export class ExtensionUiBridge {
         cleanup();
         resolve(value);
       };
-      const onAbort = () => settle(defaultValue);
+      const onAbort = () => {
+        settle(defaultValue);
+      };
 
-      if (timeout) timeoutId = setTimeout(() => settle(defaultValue), timeout);
+      if (timeout)
+        timeoutId = setTimeout(() => {
+          settle(defaultValue);
+        }, timeout);
       signal?.addEventListener("abort", onAbort, { once: true });
 
-      this.pendingUiRequests.set(id, fullRequest as AgentEvent);
+      this.pendingUiRequests.set(id, fullRequest);
       this.pendingUiResponses.set(id, {
-        resolve: (response) => settle(parseResponse(response)),
-        cancel: () => settle(defaultValue),
+        resolve: (response) => {
+          settle(parseResponse(response));
+        },
+        cancel: () => {
+          settle(defaultValue);
+        },
       });
-      this.emit(fullRequest as AgentEvent);
+      this.emit(fullRequest);
     });
   }
 
@@ -627,7 +648,7 @@ export class ExtensionUiBridge {
           method: "notify",
           message,
           notifyType: type,
-        } as ExtensionUiRequest as AgentEvent);
+        });
       },
       onTerminalInput: () => () => {},
       setStatus: (key, text) => {
@@ -639,7 +660,7 @@ export class ExtensionUiBridge {
           method: "setStatus",
           statusKey: key,
           statusText: text,
-        } as ExtensionUiRequest as AgentEvent);
+        });
       },
       setWorkingMessage: () => {},
       setWorkingVisible: () => {},
@@ -676,7 +697,7 @@ export class ExtensionUiBridge {
           widgetKey: key,
           widgetLines: content,
           widgetPlacement: options?.placement,
-        } as ExtensionUiRequest as AgentEvent);
+        });
       },
       setFooter: () => {},
       setHeader: () => {},
@@ -686,7 +707,7 @@ export class ExtensionUiBridge {
           id: randomUUID(),
           method: "setTitle",
           title,
-        } as ExtensionUiRequest as AgentEvent);
+        });
       },
       custom: <T = unknown>(factory: unknown, options?: unknown) =>
         this.requestExtensionCustomUi<T>(factory, options),
@@ -696,7 +717,7 @@ export class ExtensionUiBridge {
           id: randomUUID(),
           method: "set_editor_text",
           text,
-        } as ExtensionUiRequest as AgentEvent);
+        });
       },
       setEditorText: (text) => {
         this.emit({
@@ -704,7 +725,7 @@ export class ExtensionUiBridge {
           id: randomUUID(),
           method: "set_editor_text",
           text,
-        } as ExtensionUiRequest as AgentEvent);
+        });
       },
       getEditorText: () => "",
       addAutocompleteProvider: () => {},

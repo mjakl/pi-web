@@ -1,5 +1,6 @@
 "use client";
 
+import { errorMessage } from "@/lib/error-message";
 import React, {
   useRef,
   useState,
@@ -8,7 +9,7 @@ import React, {
   useId,
   useLayoutEffect,
   useImperativeHandle,
-  KeyboardEvent,
+  type KeyboardEvent,
 } from "react";
 import type {
   BuiltinSlashCommandResult,
@@ -62,6 +63,7 @@ export interface AttachedImage {
 
 interface Props {
   onSend: (message: string, images?: AttachedImage[]) => void;
+  onError?: (message: string) => void;
   onAbort: () => void;
   onSteer?: (message: string, images?: AttachedImage[]) => void;
   onFollowUp?: (message: string, images?: AttachedImage[]) => void;
@@ -374,7 +376,9 @@ function readImageFile(
       }
       resolve({ data, mimeType });
     };
-    reader.onerror = reject;
+    reader.onerror = () => {
+      reject(reader.error ?? new Error("Failed to read image"));
+    };
     reader.readAsDataURL(file);
   });
 }
@@ -398,21 +402,22 @@ export async function compressImageFile(
     canvas.width = Math.max(1, Math.round(bitmap.width * scale));
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));
     const ctx = canvas.getContext("2d");
-    if (!ctx) return original();
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const data = canvas
-      .toDataURL("image/jpeg", CLIENT_JPEG_QUALITY)
-      .split(",")[1];
-    return data && data.length < Math.ceil(file.size / 3) * 4
-      ? { data, mimeType: "image/jpeg" }
-      : original();
+    if (ctx) {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const data = canvas
+        .toDataURL("image/jpeg", CLIENT_JPEG_QUALITY)
+        .split(",")[1];
+      if (data && data.length < Math.ceil(file.size / 3) * 4)
+        return { data, mimeType: "image/jpeg" };
+    }
   } catch {
-    return original();
+    // Compression is optional; read the original once after releasing the bitmap.
   } finally {
     bitmap.close();
   }
+  return original();
 }
 
 function imageToDraftImage(image: AttachedImage): ChatDraftImage {
@@ -606,6 +611,7 @@ export function ModelScopeWarningBanner({ warnings }: { warnings?: string[] }) {
 
 export function ChatInput({
   onSend,
+  onError,
   onAbort,
   onSteer,
   onFollowUp,
@@ -904,46 +910,59 @@ export function ChatInput({
       });
     },
     addImages(files: File[]) {
-      processImageFiles(files);
+      void processImageFiles(files);
     },
   }));
 
-  const processImageFiles = useCallback(async (files: File[]) => {
-    const remaining = Math.max(
-      0,
-      MAX_ATTACHED_IMAGES -
-        attachedImagesRef.current.length -
-        pendingImageCountRef.current,
-    );
-    const imageFiles = files
-      .filter(
-        (f) =>
-          f.type.startsWith("image/") && f.size <= MAX_ATTACHED_IMAGE_BYTES,
-      )
-      .slice(0, remaining);
-    if (!imageFiles.length) return;
-    pendingImageCountRef.current += imageFiles.length;
-    try {
-      const newImages = await Promise.all(
-        imageFiles.map(async (file) => ({
-          ...(await compressImageFile(file)),
-          previewUrl: URL.createObjectURL(file),
-        })),
+  const processImageFiles = useCallback(
+    async (files: File[]) => {
+      const remaining = Math.max(
+        0,
+        MAX_ATTACHED_IMAGES -
+          attachedImagesRef.current.length -
+          pendingImageCountRef.current,
       );
-      setAttachedImages((prev) => {
-        const accepted = newImages.slice(
-          0,
-          Math.max(0, MAX_ATTACHED_IMAGES - prev.length),
+      const imageFiles = files
+        .filter(
+          (f) =>
+            f.type.startsWith("image/") && f.size <= MAX_ATTACHED_IMAGE_BYTES,
+        )
+        .slice(0, remaining);
+      if (!imageFiles.length) return;
+      pendingImageCountRef.current += imageFiles.length;
+      const newImages: AttachedImage[] = [];
+      try {
+        // Prepare the entire batch before owning previews or accepting attachments.
+        const prepared = await Promise.all(
+          imageFiles.map(async (file) => ({
+            file,
+            image: await compressImageFile(file),
+          })),
         );
-        newImages.slice(accepted.length).forEach(revokeImagePreview);
-        const next = [...prev, ...accepted];
-        attachedImagesRef.current = next;
-        return next;
-      });
-    } finally {
-      pendingImageCountRef.current -= imageFiles.length;
-    }
-  }, []);
+        for (const { file, image } of prepared) {
+          newImages.push({ ...image, previewUrl: URL.createObjectURL(file) });
+        }
+        setAttachedImages((prev) => {
+          const accepted = newImages.slice(
+            0,
+            Math.max(0, MAX_ATTACHED_IMAGES - prev.length),
+          );
+          newImages.slice(accepted.length).forEach(revokeImagePreview);
+          const next = [...prev, ...accepted];
+          attachedImagesRef.current = next;
+          return next;
+        });
+      } catch (error) {
+        newImages.forEach(revokeImagePreview);
+        const message = t("chat.attachFailed", { error: errorMessage(error) });
+        if (onError) onError(message);
+        else console.error(message);
+      } finally {
+        pendingImageCountRef.current -= imageFiles.length;
+      }
+    },
+    [onError, t],
+  );
 
   const removeImage = useCallback((index: number) => {
     setAttachedImages((prev) => {
@@ -1110,7 +1129,9 @@ export function ChatInput({
           !isComposingRef.current,
       );
     };
-    const clearModifier = () => setQueueModifier(false);
+    const clearModifier = () => {
+      setQueueModifier(false);
+    };
     const onVisibility = () => {
       if (document.hidden) clearModifier();
     };
@@ -1428,6 +1449,8 @@ export function ChatInput({
       const isComposing =
         isComposingRef.current ||
         nativeEvent.isComposing ||
+        // IME composition fallback for browsers whose isComposing clears too early.
+        // oxlint-disable-next-line typescript/no-deprecated
         nativeEvent.keyCode === 229;
 
       if (sendShortcut && (isComposing || recentlyComposed)) {
@@ -1566,7 +1589,7 @@ export function ChatInput({
               : "steer",
           );
         } else {
-          handleSend();
+          void handleSend();
         }
       }
     },
@@ -1605,7 +1628,7 @@ export function ChatInput({
       const files = imageItems
         .map((item) => item.getAsFile())
         .filter((f): f is File => f !== null);
-      processImageFiles(files);
+      void processImageFiles(files);
     },
     [processImageFiles],
   );
@@ -1717,11 +1740,11 @@ export function ChatInput({
       <select
         value={thinkingLevel ?? "auto"}
         disabled={isStreaming || isCompacting}
-        onChange={(event) =>
+        onChange={(event) => {
           onThinkingLevelChange(
             event.target.value as NonNullable<Props["thinkingLevel"]>,
-          )
-        }
+          );
+        }}
       >
         {THINKING_LEVELS.filter(
           (level) =>
@@ -1766,7 +1789,7 @@ export function ChatInput({
         style={{ display: "none" }}
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);
-          processImageFiles(files);
+          void processImageFiles(files);
           e.target.value = "";
         }}
       />
@@ -2069,7 +2092,9 @@ export function ChatInput({
                                 e.preventDefault();
                                 applySlashCommand(command);
                               }}
-                              onMouseEnter={() => setSlashActiveIndex(index)}
+                              onMouseEnter={() => {
+                                setSlashActiveIndex(index);
+                              }}
                               className="menu-item"
                               data-active={active}
                               style={{ alignItems: "baseline" }}
@@ -2226,7 +2251,9 @@ export function ChatInput({
                               e.preventDefault();
                               applyAtCompletion(entry);
                             }}
-                            onMouseEnter={() => setAtActiveIndex(index)}
+                            onMouseEnter={() => {
+                              setAtActiveIndex(index);
+                            }}
                             className="menu-item"
                             data-active={active}
                             style={{ fontFamily: "var(--font-mono)" }}
@@ -2303,7 +2330,9 @@ export function ChatInput({
                     />
                     <button
                       aria-label={t("chat.removeImage")}
-                      onClick={() => removeImage(i)}
+                      onClick={() => {
+                        removeImage(i);
+                      }}
                       style={{
                         position: "absolute",
                         top: -4,
@@ -2419,12 +2448,12 @@ export function ChatInput({
                     id={controlsMenuId}
                     popover="auto"
                     className="anchored-menu menu-surface opens-up menu-composer-controls"
-                    onToggle={(event) =>
+                    onToggle={(event) => {
                       setControlsOpen(
                         (event as unknown as { newState?: string }).newState ===
                           "open",
-                      )
-                    }
+                      );
+                    }}
                     onKeyDown={(event) => {
                       if (event.key !== "Escape") return;
                       event.preventDefault();
@@ -2491,7 +2520,9 @@ export function ChatInput({
                 aria-label={actionLabel}
                 title={actionTitle}
                 disabled={!isStreaming && !canQueueStreamingMessage}
-                onMouseDown={(event) => event.preventDefault()}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
                 onPointerDown={(event) => {
                   touchSubmissionRef.current = event.pointerType === "touch";
                   if (touchSubmissionRef.current) setQueueModifier(false);

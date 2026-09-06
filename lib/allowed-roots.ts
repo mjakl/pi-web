@@ -7,9 +7,7 @@ declare global {
 }
 
 export function getAdditionalAllowedRoots(): Set<string> {
-  if (!globalThis.__piAdditionalAllowedRoots) {
-    globalThis.__piAdditionalAllowedRoots = new Set();
-  }
+  globalThis.__piAdditionalAllowedRoots ??= new Set();
   return globalThis.__piAdditionalAllowedRoots;
 }
 

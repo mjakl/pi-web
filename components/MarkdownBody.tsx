@@ -40,8 +40,11 @@ export function MarkdownBody({
         const lang = className?.replace("language-", "").toLowerCase() ?? "";
         // react-markdown passes undefined for an empty <code>, which happens on
         // the frame a fence opens mid-stream. String(undefined) printed the word.
+        // react-markdown code nodes contain text; ReactNode is wider than that callback contract.
+        // oxlint-disable-next-line typescript/no-base-to-string
         const raw = children == null ? "" : String(children);
-        const isBlock = className?.includes("language-") || raw.includes("\n");
+        const isBlock =
+          (className?.includes("language-") ?? false) || raw.includes("\n");
         if (isBlock) {
           if (lang === "mermaid") {
             return (

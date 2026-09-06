@@ -108,8 +108,8 @@ function applyDelta(
         current?.type === "toolCall"
           ? {
               ...current,
-              toolCallId: event.id || current.toolCallId,
-              toolName: event.toolName || current.toolName,
+              toolCallId: (event.id ?? "") || current.toolCallId,
+              toolName: (event.toolName ?? "") || current.toolName,
               rawInput: (current.rawInput ?? "") + event.delta,
             }
           : null,

@@ -121,7 +121,8 @@ export async function resolveProject(
   cwd: string,
   refresh = false,
 ): Promise<ProjectInfo> {
-  const cache = (globalThis.__piProjectCache ??= new Map());
+  globalThis.__piProjectCache ??= new Map();
+  const cache = globalThis.__piProjectCache;
   const key = `${getAgentDir()}:${pathIdentityKey(cwd)}`;
   // Availability must never be hidden by the identity cache.
   if (!isWorkingDirectoryAvailable(cwd)) {

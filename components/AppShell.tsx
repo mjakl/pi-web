@@ -359,15 +359,18 @@ export function AppShell({ homeDir }: { homeDir: string }) {
   );
   const handleCopySessionField = useCallback(
     (field: SessionCopyField, value: string) => {
-      void copyText(value).then(() => {
-        if (sessionCopyTimerRef.current)
-          clearTimeout(sessionCopyTimerRef.current);
-        setCopiedSessionField(field);
-        sessionCopyTimerRef.current = setTimeout(
-          () => setCopiedSessionField(null),
-          1400,
-        );
-      });
+      void copyText(value)
+        .then(() => {
+          if (sessionCopyTimerRef.current)
+            clearTimeout(sessionCopyTimerRef.current);
+          setCopiedSessionField(field);
+          sessionCopyTimerRef.current = setTimeout(() => {
+            setCopiedSessionField(null);
+          }, 1400);
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to copy session information:", error);
+        });
     },
     [],
   );
@@ -429,7 +432,7 @@ export function AppShell({ homeDir }: { homeDir: string }) {
       const loadId = ++systemInfoLoadIdRef.current;
       setSystemInfoLoading(true);
       void load()
-        .catch((error) => {
+        .catch((error: unknown) => {
           console.error("Failed to load system information:", error);
         })
         .finally(() => {
@@ -498,9 +501,10 @@ export function AppShell({ homeDir }: { homeDir: string }) {
   }, [isMobile, isNarrowMobile, selectedSession?.id, newSessionDraftId]);
 
   useEffect(() => {
-    if (!activeTopPanel || !topBarRef.current) return;
+    const topBar = topBarRef.current;
+    if (!activeTopPanel || !topBar) return;
     const update = () => {
-      const topBarRect = topBarRef.current!.getBoundingClientRect();
+      const topBarRect = topBar.getBoundingClientRect();
       setTopPanelPos({
         top: topBarRect.bottom,
         left: topBarRect.left,
@@ -509,8 +513,10 @@ export function AppShell({ homeDir }: { homeDir: string }) {
     };
     update();
     const ro = new ResizeObserver(update);
-    ro.observe(topBarRef.current);
-    return () => ro.disconnect();
+    ro.observe(topBar);
+    return () => {
+      ro.disconnect();
+    };
   }, [activeTopPanel, isMobile]);
 
   // Right panel — file tabs only
@@ -631,7 +637,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
         setInitialCwdStatus("error");
       });
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+    };
   }, [initialNavigation]);
 
   // Restore the workspace's last open session after switching to it. Called
@@ -826,7 +834,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
 
   // Global keyboard shortcuts (handles Esc, Cmd/Ctrl+K etc.)
   useGlobalKeyboardShortcuts({
-    onNewSession: (cwd: string) => handleNewSession(`kb-${Date.now()}`, cwd),
+    onNewSession: (cwd: string) => {
+      handleNewSession(`kb-${Date.now()}`, cwd);
+    },
     activeCwd,
   });
 
@@ -1078,12 +1088,14 @@ export function AppShell({ homeDir }: { homeDir: string }) {
           throw new Error(data.error ?? `HTTP ${response.status}`);
         setProjectTrust(data);
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError")
           return;
         console.error("Failed to load project trust:", error);
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+    };
   }, [projectTrustCwd]);
 
   const handleTrustProject = useCallback(async () => {
@@ -1151,9 +1163,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
         onSessionsChange={handleSessionsChange}
         onRefreshSelectedSession={handleRefreshSelectedSession}
         actionsAvailable={sidebarOpen}
-        onOpenSettings={() =>
-          setSettingsSection(getLastSettingsSection(projectTrustCwd))
-        }
+        onOpenSettings={() => {
+          setSettingsSection(getLastSettingsSection(projectTrustCwd));
+        }}
       />
     </>
   );
@@ -1219,7 +1231,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
     <button
       type="button"
       className="page-refresh-button"
-      onClick={() => window.location.reload()}
+      onClick={() => {
+        window.location.reload();
+      }}
       aria-label={translate("chat.refreshPage")}
       title={translate("chat.refreshPageTitle")}
     >
@@ -1315,7 +1329,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
           (mobile ? (
             <button
               type="button"
-              onClick={() => toggleTopPanel("branches", true)}
+              onClick={() => {
+                toggleTopPanel("branches", true);
+              }}
               title={translate("i18n.branches")}
               aria-label={translate("i18n.branches")}
               aria-pressed={activeTopPanel === "branches"}
@@ -1372,14 +1388,18 @@ export function AppShell({ homeDir }: { homeDir: string }) {
               inline
               containerRef={topBarRef}
               open={activeTopPanel === "branches"}
-              onToggle={() => toggleTopPanel("branches")}
+              onToggle={() => {
+                toggleTopPanel("branches");
+              }}
               hasSession
             />
           ))}
         <button
           ref={systemBtnRef}
           type="button"
-          onClick={() => handleSystemInfoToggle("system", mobile)}
+          onClick={() => {
+            handleSystemInfoToggle("system", mobile);
+          }}
           disabled={mobile && !showChat}
           title={translate("system.prompt")}
           aria-label={translate("system.prompt")}
@@ -1442,7 +1462,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
         </button>
         <button
           type="button"
-          onClick={() => handleSystemInfoToggle("tools", mobile)}
+          onClick={() => {
+            handleSystemInfoToggle("tools", mobile);
+          }}
           disabled={mobile && !showChat}
           title={translate("tools.title")}
           aria-label={translate("tools.title")}
@@ -1530,13 +1552,16 @@ export function AppShell({ homeDir }: { homeDir: string }) {
     const tooltip = tooltipParts.join("  |  ");
     const covered = mobile && isNarrowMobile && mobileToolbarMoreOpen;
     const hasMobileValues = Boolean(
-      (tokens && (tokens.input > 0 || tokens.output > 0)) || contextStats,
+      Boolean(tokens && (tokens.input > 0 || tokens.output > 0)) ||
+      contextStats,
     );
 
     return (
       <button
         type="button"
-        onClick={() => toggleTopPanel("session")}
+        onClick={() => {
+          toggleTopPanel("session");
+        }}
         disabled={!showChat || covered}
         tabIndex={covered ? -1 : undefined}
         title={tooltip || translate("session.title")}
@@ -1917,7 +1942,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
         {/* Mobile overlay backdrop */}
         <div
           className={`sidebar-overlay-backdrop${mobileSidebarReady ? "" : " sidebar-mobile-pending"}`}
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => {
+            setSidebarOpen(false);
+          }}
           style={{
             position: "fixed",
             inset: 0,
@@ -2189,7 +2216,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
                   compact
                   containerRef={topBarRef}
                   open={activeTopPanel === "branches"}
-                  onToggle={() => toggleTopPanel("branches")}
+                  onToggle={() => {
+                    toggleTopPanel("branches");
+                  }}
                   hasSession={showChat}
                   hideInlineButton
                 />
@@ -2420,7 +2449,7 @@ export function AppShell({ homeDir }: { homeDir: string }) {
                               >
                                 {sectionRows.map(([label, value]) => (
                                   <div
-                                    key={`${title}:${label}`}
+                                    key={`${title}:${String(label)}`}
                                     style={{ display: "contents" }}
                                   >
                                     <div
@@ -2470,9 +2499,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
                                     ? translate("session.copied")
                                     : translate(copyTitleKey[field])
                                 }
-                                onClick={() =>
-                                  handleCopySessionField(field, value)
-                                }
+                                onClick={() => {
+                                  handleCopySessionField(field, value);
+                                }}
                                 style={{
                                   alignSelf: "start",
                                   display: "inline-flex",
@@ -2891,7 +2920,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
         <div
           aria-hidden="true"
           className={`right-panel-overlay-backdrop${rightPanelOpen ? " is-open" : ""}`}
-          onClick={() => setRightPanelOpen(false)}
+          onClick={() => {
+            setRightPanelOpen(false);
+          }}
         />
         {rightPanelOpen && (
           <div
@@ -2940,7 +2971,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
             </div>
             <button
               type="button"
-              onClick={() => setRightPanelOpen(false)}
+              onClick={() => {
+                setRightPanelOpen(false);
+              }}
               aria-controls="file-panel"
               aria-expanded={rightPanelOpen}
               title={translate("files.hidePanel")}
@@ -3002,22 +3035,22 @@ export function AppShell({ homeDir }: { homeDir: string }) {
                 initialDisplayMode={activeFileTab.initialDisplayMode}
                 initialState={activeFileTab.viewerState}
                 watchEnabled={rightPanelOpen}
-                onStateChange={(viewerState) =>
+                onStateChange={(viewerState) => {
                   handleFileViewerStateChange(
                     activeFileTab.id,
                     activeFileTab.viewerRevision ?? 0,
                     viewerState,
-                  )
-                }
+                  );
+                }}
                 onMentionLines={
                   rightPanelOpen ? handleFileLineMention : undefined
                 }
                 onAtMention={handleAtMention}
-                onOpenFile={(filePath) =>
+                onOpenFile={(filePath) => {
                   handleOpenFile(filePath, getFileName(filePath), {
                     sourceSessionId: activeFileTab.sourceSessionId,
-                  })
-                }
+                  });
+                }}
               />
             ) : (
               <div
@@ -3050,7 +3083,9 @@ export function AppShell({ homeDir }: { homeDir: string }) {
             setSettingsSection(null);
             setModelsRefreshKey((key) => key + 1);
           }}
-          onSessionReloaded={() => setSessionKey((key) => key + 1)}
+          onSessionReloaded={() => {
+            setSessionKey((key) => key + 1);
+          }}
         />
       )}
       {projectTrustDialogOpen && projectTrustCwd && (

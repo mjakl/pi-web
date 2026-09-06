@@ -38,8 +38,8 @@ export function buildActivePath(
     node: n,
     path: [n.entry.id],
   }));
-  while (stack.length > 0) {
-    const { node, path } = stack.pop()!;
+  for (let item = stack.pop(); item; item = stack.pop()) {
+    const { node, path } = item;
     if (node.entry.id === target || node.compressedEntryIds?.includes(target)) {
       return new Set(path);
     }
@@ -109,7 +109,13 @@ function getLabel(entry: SessionEntry): string {
       text = content;
     } else if (Array.isArray(content)) {
       text = content
-        .filter((b): b is { type: "text"; text: string } => b.type === "text")
+        .filter(
+          (b: unknown): b is { type: "text"; text: string } =>
+            typeof b === "object" &&
+            b !== null &&
+            "type" in b &&
+            b.type === "text",
+        )
         .map((b) => b.text)
         .join(" ");
     }
@@ -126,8 +132,7 @@ export function hasSessionBranches(nodes: SessionTreeNode[]): boolean {
   // Sessions branched from the very first message have multiple root nodes.
   if (nodes.length > 1) return true;
   const stack: SessionTreeNode[] = [...nodes];
-  while (stack.length > 0) {
-    const node = stack.pop()!;
+  for (let node = stack.pop(); node; node = stack.pop()) {
     if (node.children.length > 1) return true;
     for (const child of node.children) stack.push(child);
   }
@@ -172,7 +177,9 @@ function TreeNodeView({
           height: 24,
           cursor: "pointer",
         }}
-        onClick={() => onSelect(rep.entry.id)}
+        onClick={() => {
+          onSelect(rep.entry.id);
+        }}
       >
         {/* Indent guide lines */}
         {parentLines.map((hasLine, i) => (
@@ -339,7 +346,7 @@ export function BranchNavigator({
 }: Props) {
   const { t } = useI18n();
   const [openInternal, setOpenInternal] = useState(false);
-  const open = openProp !== undefined ? openProp : openInternal;
+  const open = openProp ?? openInternal;
   const btnRef = useRef<HTMLButtonElement>(null);
   const [dropdownPos, setDropdownPos] = useState<{
     top: number;
@@ -358,7 +365,9 @@ export function BranchNavigator({
     update();
     const ro = new ResizeObserver(update);
     ro.observe(anchor);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+    };
   }, [open, inline, containerRef]);
 
   const activePathIds = useMemo(
@@ -429,7 +438,10 @@ export function BranchNavigator({
       <div style={{ height: "100%", display: "flex", alignItems: "stretch" }}>
         <button
           ref={btnRef}
-          onClick={() => (onToggle ? onToggle() : setOpenInternal((v) => !v))}
+          onClick={() => {
+            if (onToggle) onToggle();
+            else setOpenInternal((v) => !v);
+          }}
           style={{
             display: hideInlineButton ? "none" : "flex",
             alignItems: "center",
@@ -523,7 +535,9 @@ export function BranchNavigator({
     >
       {/* Header toggle */}
       <button
-        onClick={() => setOpenInternal((v) => !v)}
+        onClick={() => {
+          setOpenInternal((v) => !v);
+        }}
         style={{
           display: "flex",
           alignItems: "center",

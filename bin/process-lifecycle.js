@@ -1,6 +1,5 @@
 "use strict";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const os = require("node:os");
 
 const forwardedSignals = ["SIGINT", "SIGTERM"];

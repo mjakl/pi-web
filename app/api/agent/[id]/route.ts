@@ -33,7 +33,9 @@ export async function POST(
     const toolNames = requestedToolNames as string[] | undefined;
     const existing = getRpcSession(id);
     const filePath =
-      existing?.sessionFile || (await resolveSessionPath(id)) || undefined;
+      (existing?.sessionFile ?? "") ||
+      ((await resolveSessionPath(id)) ?? "") ||
+      undefined;
 
     if (body.type === "set_tools") {
       if (!isRpcSessionActive(existing) && !filePath) {

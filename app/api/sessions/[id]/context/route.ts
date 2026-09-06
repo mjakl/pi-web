@@ -33,11 +33,13 @@ export async function GET(
     const rpc = getRpcSession(id);
     const liveRpc = rpc?.isAlive() ? rpc : undefined;
     const filePath = liveRpc ? null : await resolveSessionPath(id);
-    if (!liveRpc && !filePath) {
+    const sm =
+      liveRpc?.inner.sessionManager ??
+      (filePath ? SessionManager.open(filePath) : undefined);
+    if (!sm) {
       return Response.json({ error: "Session not found" }, { status: 404 });
     }
 
-    const sm = liveRpc?.inner.sessionManager ?? SessionManager.open(filePath!);
     // `before` is the oldest entry already on the client; fetch its ancestors
     // only (excludeLeaf) so prepending the page does not duplicate `before`.
     const context = buildSessionContext(

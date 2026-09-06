@@ -64,7 +64,9 @@ export function ImagePreview({
           cursor: "zoom-in",
           ...style,
         }}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+        }}
         aria-label={t("chat.previewImage")}
         aria-haspopup="dialog"
         aria-expanded={open}

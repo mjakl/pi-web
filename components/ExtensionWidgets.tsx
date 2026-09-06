@@ -225,7 +225,9 @@ export function ExtensionWidgets({
               aria-expanded={expanded}
               aria-label={`${placementLabel}: ${widget.key}, ${lineCountLabel}`}
               title={`${widget.key} - ${placementLabel} - ${expanded ? t("i18n.collapse") : t("i18n.expand")}`}
-              onClick={() => toggleWidget(widget)}
+              onClick={() => {
+                toggleWidget(widget);
+              }}
             >
               {content}
             </button>

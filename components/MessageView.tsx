@@ -133,7 +133,7 @@ function loadThinkingContent(
         throw new Error(t("i18n.invalidThinkingResponse"));
       return data.thinking;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       thinkingContentCache.delete(key);
       throw error;
     });
@@ -150,6 +150,7 @@ type ToolActivities = Map<string, { progress?: string }>;
 
 interface Props {
   message: AgentMessage;
+  onError?: (message: string) => void;
   isStreaming?: boolean;
   toolResults?: Map<string, ToolResultMessage>;
   activeTools?: ToolActivities;
@@ -207,7 +208,7 @@ function haveSameRelevantToolValues<T>(
   next: Map<string, T> | undefined,
 ): boolean {
   if (previous === next || message.role !== "assistant") return true;
-  for (const block of (message as AssistantMessage).content ?? []) {
+  for (const block of message.content ?? []) {
     if (
       block.type === "toolCall" &&
       previous?.get(block.toolCallId) !== next?.get(block.toolCallId)
@@ -221,6 +222,7 @@ function haveSameRelevantToolValues<T>(
 export const MessageView = memo(
   function MessageView({
     message,
+    onError = console.error,
     isStreaming,
     toolResults,
     activeTools,
@@ -242,7 +244,8 @@ export const MessageView = memo(
     if (message.role === "user") {
       return (
         <UserMessageView
-          message={message as UserMessage}
+          message={message}
+          onError={onError}
           cwd={cwd}
           onOpenFile={onOpenFile}
           entryId={entryId}
@@ -258,7 +261,8 @@ export const MessageView = memo(
     if (message.role === "assistant") {
       return (
         <AssistantMessageView
-          message={message as AssistantMessage}
+          message={message}
+          onError={onError}
           isStreaming={isStreaming}
           toolResults={toolResults}
           activeTools={activeTools}
@@ -278,30 +282,27 @@ export const MessageView = memo(
       return null;
     }
     if (message.role === "custom") {
-      if ((message as CustomMessage).customType === "compaction") {
-        return <CompactionMessageView message={message as CustomMessage} />;
+      if (message.customType === "compaction") {
+        return <CompactionMessageView message={message} />;
       }
       return (
         <CustomMessageView
-          message={message as CustomMessage}
+          message={message}
+          onError={onError}
           cwd={cwd}
           onOpenFile={onOpenFile}
         />
       );
     }
     if (message.role === "bashExecution") {
-      return (
-        <BashExecutionView
-          message={message as BashExecutionMessage}
-          sessionId={sessionId}
-        />
-      );
+      return <BashExecutionView message={message} sessionId={sessionId} />;
     }
     return null;
   },
   (prev, next) => {
     return (
       prev.message === next.message &&
+      prev.onError === next.onError &&
       prev.isStreaming === next.isStreaming &&
       haveSameRelevantToolValues(
         prev.message,
@@ -332,6 +333,7 @@ export const MessageView = memo(
 
 function UserMessageView({
   message,
+  onError,
   cwd,
   onOpenFile,
   entryId,
@@ -343,6 +345,7 @@ function UserMessageView({
   onEditContent,
 }: {
   message: UserMessage;
+  onError: (message: string) => void;
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
   entryId?: string;
@@ -402,14 +405,7 @@ function UserMessageView({
       {imageBlocks.map((img, i) => {
         // lib/types.ts ImageContent uses {source:{type,data,media_type,url}}
         // pi-ai on-disk format uses flat {data, mimeType} — handle both
-        const flat = img as unknown as { data?: string; mimeType?: string };
-        const src = img.source
-          ? img.source.type === "base64"
-            ? `data:${img.source.media_type};base64,${img.source.data}`
-            : (img.source.url ?? "")
-          : flat.data
-            ? `data:${flat.mimeType};base64,${flat.data}`
-            : "";
+        const src = imageSource(img);
         return (
           <ImagePreview key={i} src={src}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -433,10 +429,16 @@ function UserMessageView({
   const canNavigate = !!prevAssistantEntryId && !!onNavigate;
 
   const copyContent = () => {
-    copyText(copyTarget).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    copyText(copyTarget)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => {
+          setCopied(false);
+        }, 1500);
+      })
+      .catch((error: unknown) => {
+        onError(t("chat.copyFailed", { error: errorMessage(error) }));
+      });
   };
 
   return (
@@ -493,7 +495,9 @@ function UserMessageView({
                     }}
                   >
                     <button
-                      onClick={() => setExpanded((prev) => !prev)}
+                      onClick={() => {
+                        setExpanded((prev) => !prev);
+                      }}
                       title={expanded ? t("i18n.collapse") : t("i18n.expand")}
                       aria-expanded={expanded}
                       style={{
@@ -586,223 +590,221 @@ function UserMessageView({
       </div>
 
       {/* Bottom row: action buttons + timestamp */}
-      {(time || canFork || canNavigate || true) && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "flex-end",
-            gap: 6,
-            marginTop: 3,
-            flexWrap: "wrap",
-          }}
-        >
-          <div className="message-actions" style={{ display: "flex", gap: 3 }}>
-            <button
-              onClick={copyContent}
-              title={t("i18n.copyMessage")}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "3px 8px",
-                height: 22,
-                background: "none",
-                border: "none",
-                borderRadius: 5,
-                color: copied ? "var(--accent)" : "var(--text-dim)",
-                cursor: "pointer",
-                fontSize: 11,
-                fontWeight: 400,
-                whiteSpace: "nowrap",
-                transition: "color 0.12s",
-              }}
-              onMouseEnter={(e) => {
-                if (!copied) e.currentTarget.style.color = "var(--accent)";
-              }}
-              onMouseLeave={(e) => {
-                if (!copied) e.currentTarget.style.color = "var(--text-dim)";
-              }}
-            >
-              {copied ? (
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : (
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-              )}
-              {copied ? t("i18n.copied") : t("i18n.copy")}
-            </button>
-          </div>
-          {(canFork || canNavigate || canRewind) && (
-            <div
-              className="message-actions"
-              data-forking={forking || undefined}
-              style={{
-                display: "flex",
-                gap: 3,
-                flexWrap: "wrap",
-                justifyContent: "flex-end",
-              }}
-            >
-              {canRewind && (
-                <button
-                  type="button"
-                  className="message-rewind"
-                  onClick={() => onRewind!(entryId!)}
-                  title={t("chat.rewindTitle")}
-                >
-                  <svg
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7M12 7v5l3 2" />
-                  </svg>
-                  {t("chat.rewind")}
-                </button>
-              )}
-              {canNavigate && (
-                <button
-                  onClick={() => {
-                    onNavigate!(prevAssistantEntryId!);
-                    onEditContent?.(editTarget);
-                  }}
-                  title={t("i18n.editFromHereTitle")}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "3px 8px",
-                    height: 22,
-                    background: "none",
-                    border: "none",
-                    borderRadius: 5,
-                    color: "var(--text-dim)",
-                    cursor: "pointer",
-                    fontSize: 11,
-                    fontWeight: 400,
-                    whiteSpace: "nowrap",
-                    transition: "color 0.12s",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = "var(--accent)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = "var(--text-dim)";
-                  }}
-                >
-                  <svg
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="15 10 20 15 15 20" />
-                    <path d="M4 4v7a4 4 0 0 0 4 4h12" />
-                  </svg>
-                  {t("i18n.editFromHere")}
-                </button>
-              )}
-              {canFork && (
-                <button
-                  onClick={() => {
-                    onFork!(entryId!, editTarget);
-                  }}
-                  disabled={forking}
-                  title={
-                    forking
-                      ? t("i18n.creatingSession")
-                      : t("i18n.newSessionTitle")
-                  }
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "3px 8px",
-                    height: 22,
-                    background: "none",
-                    border: "none",
-                    borderRadius: 5,
-                    color: forking ? "var(--accent)" : "var(--text-dim)",
-                    cursor: forking ? "not-allowed" : "pointer",
-                    fontSize: 11,
-                    fontWeight: 400,
-                    whiteSpace: "nowrap",
-                    transition: "color 0.12s",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!forking) e.currentTarget.style.color = "var(--accent)";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!forking)
-                      e.currentTarget.style.color = "var(--text-dim)";
-                  }}
-                >
-                  <svg
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="6" y1="3" x2="6" y2="15" />
-                    <circle cx="18" cy="6" r="3" />
-                    <circle cx="6" cy="18" r="3" />
-                    <path d="M18 9a9 9 0 0 1-9 9" />
-                  </svg>
-                  {forking ? t("i18n.creating") : t("i18n.newSession")}
-                </button>
-              )}
-            </div>
-          )}
-          {time && (
-            <span style={{ fontSize: 10, color: "var(--text-dim)" }}>
-              {time}
-            </span>
-          )}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: 6,
+          marginTop: 3,
+          flexWrap: "wrap",
+        }}
+      >
+        <div className="message-actions" style={{ display: "flex", gap: 3 }}>
+          <button
+            onClick={copyContent}
+            title={t("i18n.copyMessage")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "3px 8px",
+              height: 22,
+              background: "none",
+              border: "none",
+              borderRadius: 5,
+              color: copied ? "var(--accent)" : "var(--text-dim)",
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 400,
+              whiteSpace: "nowrap",
+              transition: "color 0.12s",
+            }}
+            onMouseEnter={(e) => {
+              if (!copied) e.currentTarget.style.color = "var(--accent)";
+            }}
+            onMouseLeave={(e) => {
+              if (!copied) e.currentTarget.style.color = "var(--text-dim)";
+            }}
+          >
+            {copied ? (
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            )}
+            {copied ? t("i18n.copied") : t("i18n.copy")}
+          </button>
         </div>
-      )}
+        {(canFork || canNavigate || canRewind) && (
+          <div
+            className="message-actions"
+            data-forking={forking ? true : undefined}
+            style={{
+              display: "flex",
+              gap: 3,
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+            }}
+          >
+            {canRewind && (
+              <button
+                type="button"
+                className="message-rewind"
+                onClick={() => {
+                  onRewind(entryId);
+                }}
+                title={t("chat.rewindTitle")}
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7M12 7v5l3 2" />
+                </svg>
+                {t("chat.rewind")}
+              </button>
+            )}
+            {canNavigate && (
+              <button
+                onClick={() => {
+                  onNavigate(prevAssistantEntryId);
+                  onEditContent?.(editTarget);
+                }}
+                title={t("i18n.editFromHereTitle")}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "3px 8px",
+                  height: 22,
+                  background: "none",
+                  border: "none",
+                  borderRadius: 5,
+                  color: "var(--text-dim)",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  fontWeight: 400,
+                  whiteSpace: "nowrap",
+                  transition: "color 0.12s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = "var(--accent)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = "var(--text-dim)";
+                }}
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="15 10 20 15 15 20" />
+                  <path d="M4 4v7a4 4 0 0 0 4 4h12" />
+                </svg>
+                {t("i18n.editFromHere")}
+              </button>
+            )}
+            {canFork && (
+              <button
+                onClick={() => {
+                  onFork(entryId, editTarget);
+                }}
+                disabled={forking}
+                title={
+                  forking
+                    ? t("i18n.creatingSession")
+                    : t("i18n.newSessionTitle")
+                }
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "3px 8px",
+                  height: 22,
+                  background: "none",
+                  border: "none",
+                  borderRadius: 5,
+                  color: forking ? "var(--accent)" : "var(--text-dim)",
+                  cursor: forking ? "not-allowed" : "pointer",
+                  fontSize: 11,
+                  fontWeight: 400,
+                  whiteSpace: "nowrap",
+                  transition: "color 0.12s",
+                }}
+                onMouseEnter={(e) => {
+                  if (!forking) e.currentTarget.style.color = "var(--accent)";
+                }}
+                onMouseLeave={(e) => {
+                  if (!forking) e.currentTarget.style.color = "var(--text-dim)";
+                }}
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="6" y1="3" x2="6" y2="15" />
+                  <circle cx="18" cy="6" r="3" />
+                  <circle cx="6" cy="18" r="3" />
+                  <path d="M18 9a9 9 0 0 1-9 9" />
+                </svg>
+                {forking ? t("i18n.creating") : t("i18n.newSession")}
+              </button>
+            )}
+          </div>
+        )}
+        {time && (
+          <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{time}</span>
+        )}
+      </div>
     </div>
   );
 }
 
 function AssistantMessageView({
   message,
+  onError,
   isStreaming,
   toolResults,
   activeTools,
@@ -816,6 +818,7 @@ function AssistantMessageView({
   writtenFiles,
 }: {
   message: AssistantMessage;
+  onError: (message: string) => void;
   isStreaming?: boolean;
   toolResults?: Map<string, ToolResultMessage>;
   activeTools?: ToolActivities;
@@ -909,10 +912,16 @@ function AssistantMessageView({
       .filter((b): b is TextContent => b.type === "text")
       .map((b) => b.text)
       .join("\n");
-    copyText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    copyText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => {
+          setCopied(false);
+        }, 1500);
+      })
+      .catch((error: unknown) => {
+        onError(t("chat.copyFailed", { error: errorMessage(error) }));
+      });
   };
 
   useEffect(() => {
@@ -949,11 +958,8 @@ function AssistantMessageView({
           const originalIndex = previousIndex;
           previousIndex = nextOriginalIndex;
           if (originalIndex === undefined) continue;
-          if (
-            !next.has(originalIndex) &&
-            blockStartTimesRef.current.has(originalIndex)
-          ) {
-            const start = blockStartTimesRef.current.get(originalIndex)!;
+          const start = blockStartTimesRef.current.get(originalIndex);
+          if (!next.has(originalIndex) && start !== undefined) {
             const nextStart =
               blockStartTimesRef.current.get(nextOriginalIndex) ?? now;
             next.set(originalIndex, Math.round((nextStart - start) / 1000));
@@ -965,12 +971,14 @@ function AssistantMessageView({
 
       const tokens = estimatedTokensRef.current;
       if (tokens === 0) return;
-      if (streamStartRef.current === null) streamStartRef.current = now;
+      streamStartRef.current ??= now;
       const elapsed = (now - streamStartRef.current) / 1000;
       if (elapsed > 0.5) setTps(tokens / elapsed);
     };
     const id = setInterval(tick, 300);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+    };
   }, [isStreaming]);
 
   if (blocks.length === 0 && !isStreaming && !providerError) return null;
@@ -1221,7 +1229,7 @@ function BlockView({
   if (block.type === "text") {
     return (
       <TextBlock
-        block={block as TextContent}
+        block={block}
         isStreaming={isStreaming}
         cwd={cwd}
         onOpenFile={onOpenFile}
@@ -1230,12 +1238,12 @@ function BlockView({
     );
   }
   if (block.type === "image") {
-    return <AssistantImageBlock block={block as ImageContent} />;
+    return <AssistantImageBlock block={block} />;
   }
   if (block.type === "thinking") {
     return (
       <ThinkingBlock
-        block={block as ThinkingContent}
+        block={block}
         duration={streamingDuration}
         sessionId={sessionId}
         entryId={entryId}
@@ -1244,7 +1252,7 @@ function BlockView({
     );
   }
   if (block.type === "toolCall") {
-    const tc = block as ToolCallContent;
+    const tc = block;
     const result = toolResults?.get(tc.toolCallId);
     const duration = toolCallDurations?.get(tc.toolCallId);
     const calls = getSubagentCalls(tc);
@@ -1469,7 +1477,9 @@ function ToolCallBlock({
       {/* ── Tool call header ── */}
       <div style={{ display: "flex", alignItems: "stretch", minWidth: 0 }}>
         <button
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => {
+            setExpanded((v) => !v);
+          }}
           style={{
             display: "flex",
             alignItems: "center",
@@ -1639,11 +1649,11 @@ function SplitPatchView({ text }: { text: string }) {
               }}
             >
               <SplitDiffHeader
-                title={file.oldPath || t("i18n.before")}
+                title={(file.oldPath ?? "") || t("i18n.before")}
                 side="left"
               />
               <SplitDiffHeader
-                title={file.newPath || t("i18n.after")}
+                title={(file.newPath ?? "") || t("i18n.after")}
                 side="right"
               />
             </div>
@@ -2004,7 +2014,9 @@ function CompactionMessageView({ message }: { message: CustomMessage }) {
             ? "chat.compaction.collapseSummary"
             : "chat.compaction.expandSummary",
         )}
-        onClick={() => setExpanded((value) => !value)}
+        onClick={() => {
+          setExpanded((value) => !value);
+        }}
       >
         <span className="compaction-rule" aria-hidden="true" />
         <span className="compaction-header-core">
@@ -2112,10 +2124,12 @@ function CompactionFileList({
 
 function CustomMessageView({
   message,
+  onError,
   cwd,
   onOpenFile,
 }: {
-  message: CustomMessage;
+  message: Omit<CustomMessage, "display"> & { display?: boolean };
+  onError: (message: string) => void;
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
 }) {
@@ -2132,10 +2146,16 @@ function CustomMessageView({
   const time = formatTime(message.timestamp);
 
   const copyContent = () => {
-    copyText(text || detailsText).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    copyText(text || detailsText)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => {
+          setCopied(false);
+        }, 1500);
+      })
+      .catch((error: unknown) => {
+        onError(t("chat.copyFailed", { error: errorMessage(error) }));
+      });
   };
 
   return (
@@ -2151,7 +2171,9 @@ function CustomMessageView({
       >
         <button
           type="button"
-          onClick={() => setContentExpanded((v) => !v)}
+          onClick={() => {
+            setContentExpanded((v) => !v);
+          }}
           aria-expanded={contentExpanded}
           title={t(contentExpanded ? "i18n.collapse" : "i18n.expand")}
           style={{
@@ -2313,7 +2335,9 @@ function CustomMessageView({
               ) : null}
               {hasDetails && (
                 <button
-                  onClick={() => setDetailsExpanded((v) => !v)}
+                  onClick={() => {
+                    setDetailsExpanded((v) => !v);
+                  }}
                   aria-expanded={detailsExpanded}
                   style={{
                     marginLeft: "auto",
@@ -2357,9 +2381,7 @@ function CustomMessageView({
   );
 }
 
-function getMessageText(
-  content: CustomMessage["content"] | UserMessage["content"],
-): string {
+function getMessageText(content: CustomMessage["content"]): string {
   if (typeof content === "string") return content;
   return content
     .filter((b): b is TextContent => b.type === "text")
@@ -2367,21 +2389,18 @@ function getMessageText(
     .join("\n");
 }
 
-function getMessageImages(
-  content: CustomMessage["content"] | UserMessage["content"],
-): ImageContent[] {
+function getMessageImages(content: CustomMessage["content"]): ImageContent[] {
   if (typeof content === "string") return [];
   return content.filter((b): b is ImageContent => b.type === "image");
 }
 
 function imageSource(img: ImageContent): string {
-  const flat = img as unknown as { data?: string; mimeType?: string };
   if (img.source) {
     return img.source.type === "base64"
       ? `data:${img.source.media_type};base64,${img.source.data}`
       : (img.source.url ?? "");
   }
-  return flat.data ? `data:${flat.mimeType};base64,${flat.data}` : "";
+  return img.data ? `data:${img.mimeType};base64,${img.data}` : "";
 }
 
 function safeJson(value: unknown): string {
@@ -2416,7 +2435,9 @@ function getToolPreview(block: ToolCallContent): string {
   const preview = (value: unknown) =>
     (typeof value === "object"
       ? safeJson(value).replace(/\s+/g, " ")
-      : String(value)
+      : // Objects use safeJson above; remaining values keep their display representation.
+        // oxlint-disable-next-line typescript/no-base-to-string
+        String(value)
     ).slice(0, 120);
 
   // Common tool input patterns
@@ -2461,7 +2482,7 @@ function BashExecutionView({
   const isPending =
     !message.output && message.exitCode === undefined && !message.cancelled;
   const isError =
-    message.cancelled ||
+    (message.cancelled ?? false) ||
     (message.exitCode !== undefined && message.exitCode !== 0);
   const fullOutputUrl =
     sessionId && message.fullOutputPath
@@ -2522,7 +2543,9 @@ function BashExecutionView({
         <div style={{ padding: "4px 10px", fontSize: 11, marginTop: -1 }}>
           {showFullButton && (
             <button
-              onClick={loadFullOutput}
+              onClick={() => {
+                void loadFullOutput();
+              }}
               disabled={loadingFull}
               style={{
                 background: "none",

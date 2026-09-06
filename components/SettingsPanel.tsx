@@ -188,7 +188,7 @@ function GeneralSettings({
           throw new Error(data.error ?? `HTTP ${response.status}`);
         if (!cancelled) setShellSettings(data);
       })
-      .catch((cause) => {
+      .catch((cause: unknown) => {
         if (!cancelled) setShellError(errorMessage(cause));
       });
     return () => {
@@ -244,7 +244,9 @@ function GeneralSettings({
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                onClick={() => setThemePreference(option.id)}
+                onClick={() => {
+                  setThemePreference(option.id);
+                }}
                 className="settings-theme-option"
               >
                 <ThemeIcon preference={option.id} />
@@ -303,7 +305,9 @@ function GeneralSettings({
                 role="radio"
                 aria-checked={selected}
                 disabled={toolPresetControl?.disabled}
-                onClick={() => selectToolPreset(option.id)}
+                onClick={() => {
+                  selectToolPreset(option.id);
+                }}
                 className="settings-theme-option"
               >
                 <span className="settings-theme-option-label">
@@ -388,7 +392,9 @@ export function SettingsPanel({
     { id: "plugins", label: t("common.plugins"), requiresProject: true },
   ];
 
-  useEffect(() => setLastSettingsSection(initialSection), [initialSection]);
+  useEffect(() => {
+    setLastSettingsSection(initialSection);
+  }, [initialSection]);
 
   // showModal() supplies the backdrop, the focus trap, the top layer and the
   // focus restoration the hand-rolled overlay had none of. Escape moves to an
@@ -427,7 +433,9 @@ export function SettingsPanel({
       ref={dialogRef}
       className="settings-dialog"
       aria-label={t("settings.title")}
-      onCancel={(event) => event.preventDefault()}
+      onCancel={(event) => {
+        event.preventDefault();
+      }}
       onKeyDown={(event) => {
         if (event.key !== "Escape") return;
         // Own the key so the global Esc shortcut cannot abort the turn
@@ -447,9 +455,9 @@ export function SettingsPanel({
           <select
             aria-label={t("settings.title")}
             value={section}
-            onChange={(event) =>
-              activateSection(event.target.value as SettingsSection)
-            }
+            onChange={(event) => {
+              activateSection(event.target.value as SettingsSection);
+            }}
             className="settings-mobile-section-picker"
           >
             {sections.map((item) => (
@@ -477,7 +485,9 @@ export function SettingsPanel({
                   disabled={disabled}
                   title={disabled ? t("settings.projectRequired") : item.label}
                   aria-current={selected ? "page" : undefined}
-                  onClick={() => activateSection(item.id)}
+                  onClick={() => {
+                    activateSection(item.id);
+                  }}
                 >
                   <SettingsSectionIcon section={item.id} />
                   <span>{item.label}</span>

@@ -185,7 +185,9 @@ function uploadFiles(
 ): Promise<{ status: number; data: UploadResponse }> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
-    files.forEach((file) => formData.append("files", file, file.name));
+    files.forEach((file) => {
+      formData.append("files", file, file.name);
+    });
 
     const xhr = new XMLHttpRequest();
     xhr.open(
@@ -197,8 +199,12 @@ function uploadFiles(
         onProgress(Math.round((event.loaded / event.total) * 100));
       }
     };
-    xhr.onerror = () => reject(new Error(t("files.uploadNetworkError")));
-    xhr.onabort = () => reject(new Error(t("files.uploadCancelled")));
+    xhr.onerror = () => {
+      reject(new Error(t("files.uploadNetworkError")));
+    };
+    xhr.onabort = () => {
+      reject(new Error(t("files.uploadCancelled")));
+    };
     xhr.onload = () => {
       let data: UploadResponse = {};
       try {
@@ -319,7 +325,7 @@ function TreeNode({
   // Re-fetch children when the tree refreshes and the directory is open.
   useEffect(() => {
     if (refreshToken !== undefined && open && loaded) {
-      loadChildren(true);
+      void loadChildren(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshToken]);
@@ -328,7 +334,7 @@ function TreeNode({
     if (node.isDir) {
       const next = !open;
       onToggleExpanded(node.fullPath, next);
-      if (next && !loaded) loadChildren();
+      if (next && !loaded) void loadChildren();
     } else {
       onOpenFile(node.fullPath, node.name);
     }
@@ -347,8 +353,12 @@ function TreeNode({
     <div>
       <div
         onClick={handleClick}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseEnter={() => {
+          setHovered(true);
+        }}
+        onMouseLeave={() => {
+          setHovered(false);
+        }}
         style={{
           position: "relative",
           display: "flex",
@@ -501,7 +511,9 @@ function TreeNode({
           <a
             href={getFileApiUrl(node.fullPath, "download")}
             download
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
             title={t("files.download")}
             style={{
               position: "absolute",
@@ -605,7 +617,9 @@ function ChangeRow({
   return (
     <div
       className="file-explorer-change-row"
-      onClick={() => onOpenFile(status.filePath, name, { modeHint: "diff" })}
+      onClick={() => {
+        onOpenFile(status.filePath, name, { modeHint: "diff" });
+      }}
       title={status.filePath}
       style={{
         display: "flex",
@@ -721,13 +735,13 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
               ? (response.json() as Promise<{ matches?: FileIndexEntry[] }>)
               : Promise.reject(new Error("Search failed")),
           )
-          .then((data) =>
+          .then((data) => {
             setSearchPaths(
               (data.matches ?? [])
                 .filter((entry) => !entry.isDir)
                 .map((entry) => entry.path),
-            ),
-          )
+            );
+          })
           .catch(() => {
             if (!controller.signal.aborted) {
               setSearchPaths([]);
@@ -972,7 +986,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
         .then((entries) => {
           if (!cancelled) setRoots(entries);
         })
-        .catch((e) => {
+        .catch((e: unknown) => {
           if (!cancelled) setError(errorMessage(e));
         })
         .finally(() => {
@@ -1201,7 +1215,9 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPendingConflict(null)}
+                    onClick={() => {
+                      setPendingConflict(null);
+                    }}
                     style={{
                       height: 22,
                       padding: "0 7px",
@@ -1237,7 +1253,9 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
                   {uploadError}
                 </span>
                 <DismissButton
-                  onClick={() => setUploadError(null)}
+                  onClick={() => {
+                    setUploadError(null);
+                  }}
                   title={t("files.dismissError")}
                 />
               </div>
@@ -1384,7 +1402,9 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
                     </button>
                   )}
                   <DismissButton
-                    onClick={() => setUploadSummary(null)}
+                    onClick={() => {
+                      setUploadSummary(null);
+                    }}
                     title={t("files.dismissUploadResults")}
                   />
                 </div>
@@ -1468,7 +1488,9 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
               <input
                 ref={searchInputRef}
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") onFileSearchOpenChange?.(false);
                 }}
@@ -1490,7 +1512,9 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => {
+                    setSearchQuery("");
+                  }}
                   title={t("sidebar.clearSearch")}
                   aria-label={t("sidebar.clearSearch")}
                   className="file-explorer-search-clear"

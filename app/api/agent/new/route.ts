@@ -57,6 +57,8 @@ export async function POST(req: Request) {
       ? thinkingLevel
       : undefined;
     if (thinkingLevel !== undefined && explicitThinkingLevel === undefined) {
+      // Keep the rejected JSON value's existing error representation.
+      // oxlint-disable-next-line typescript/no-base-to-string
       throw new Error(`Invalid thinking level: ${String(thinkingLevel)}`);
     }
 

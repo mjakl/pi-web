@@ -56,10 +56,12 @@ export function ProjectFolderGroup({
       ? `~${path.slice(homeDir.length)}`
       : path;
   const name = (path: string) =>
-    path
+    (path
       .replace(/[\\/]+$/, "")
       .split(/[\\/]/)
-      .pop() || path;
+      .pop() ??
+      "") ||
+    path;
 
   const queryCwd = selected ? (selectedCwd ?? project.cwd) : project.cwd;
   useEffect(() => {
@@ -69,7 +71,9 @@ export function ProjectFolderGroup({
       cache: "no-store",
     })
       .then(async (response) => {
-        const result = await response.json();
+        const result = (await response.json()) as ProjectFolders & {
+          error?: string;
+        };
         if (!response.ok)
           throw new Error(result.error ?? `HTTP ${response.status}`);
         if (!controller.signal.aborted) {
@@ -77,10 +81,12 @@ export function ProjectFolderGroup({
           setError(null);
         }
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         if (!controller.signal.aborted) setError(String(error));
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+    };
   }, [refreshKey, queryCwd]);
 
   const folders = data
@@ -93,12 +99,13 @@ export function ProjectFolderGroup({
   const selectedPath = selected
     ? (data?.currentWorktreePath ?? selectedCwd)
     : selectedCwd;
-  const select = (path: string) =>
+  const select = (path: string) => {
     onSelect(
       path,
       data?.projectRoot ?? project.root,
       data?.projectKey ?? project.key,
     );
+  };
   const directFolder = folders.length === 1 ? folders[0] : undefined;
   const direct = directFolder !== undefined;
   const displayPath = directFolder ?? project.root;
@@ -171,7 +178,9 @@ export function ProjectFolderGroup({
               key={path}
               className="menu-item project-folder-row project-folder-child"
               aria-current={selectedPath === path ? "true" : undefined}
-              onClick={() => select(path)}
+              onClick={() => {
+                select(path);
+              }}
               title={path}
             >
               <FolderIcon />

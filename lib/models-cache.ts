@@ -28,13 +28,11 @@ const SAFE_MODEL_LOAD_FAILURE_MESSAGE =
   "Model list is temporarily unavailable. Check your configuration and try again.";
 
 function getModelsCacheState(): ModelsCacheState {
-  if (!globalThis.__piModelsCacheState) {
-    globalThis.__piModelsCacheState = {
-      entries: new Map(),
-      inFlight: new Map(),
-      generation: 0,
-    };
-  }
+  globalThis.__piModelsCacheState ??= {
+    entries: new Map(),
+    inFlight: new Map(),
+    generation: 0,
+  };
   return globalThis.__piModelsCacheState;
 }
 
