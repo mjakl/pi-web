@@ -152,12 +152,23 @@ shorter entry point:
 
 | Command | What it does |
 | --- | --- |
-| `just fix` | Apply supported ESLint automatic fixes; inspect the diff afterward |
-| `just lint` | Check ESLint rules without fixing source |
+| `just fix` | Apply supported ESLint automatic fixes and Oxfmt formatting; inspect the diff afterward |
+| `just lint` | Check Oxfmt formatting and ESLint rules without fixing source |
 | `just typecheck` | Run TypeScript with `--noEmit` |
 | `just test-one bin/host-pi.test.mjs` | Run selected native Node test files with the host Pi preload |
 | `just test` | Run the full native Node suite |
 | `just qa` / `just ci` | Run lint, typecheck, and tests, stopping on failure |
+
+[Oxfmt](https://oxc.rs/docs/guide/usage/formatter/) is pinned as a development
+dependency. [`.oxfmtrc.json`](./.oxfmtrc.json) sets two-space indentation, double
+quotes, semicolons, trailing commas, and an 80-column target. Markdown prose wraps
+to that target. Import sorting, package-field sorting, and embedded-code
+formatting are disabled. Generated files, dependency and skill locks, vendored
+icons, skill sources, and compatibility symlinks are excluded.
+
+For formatting alone, run `npm exec -- oxfmt .`; to check it without writing,
+run `npm exec -- oxfmt --check .`. `just fix` also applies ESLint fixes, so inspect
+the resulting diff before committing.
 
 For a focused name filter, put Node options before file paths and quote patterns:
 

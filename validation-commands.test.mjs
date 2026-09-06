@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,6 +56,55 @@ test("test-one propagates test failure and rejects missing selection", (t) => {
   assert.notEqual(result.status, 0, result.output);
   assert.match(result.output, /failure reached caller/);
   assert.notEqual(just(["test-one"]).status, 0);
+});
+
+function formattingFixture(t) {
+  const dir = temporaryDirectory(t);
+  writeFileSync(path.join(dir, "package.json"), JSON.stringify({ scripts }));
+  copyFileSync(path.join(root, ".oxfmtrc.json"), path.join(dir, ".oxfmtrc.json"));
+  symlinkSync(path.join(root, "node_modules"), path.join(dir, "node_modules"), "junction");
+  writeFileSync(path.join(dir, "eslint.config.mjs"), 'export default [{ rules: { "prefer-const": "error" } }];\n');
+  return dir;
+}
+
+test("lint rejects unformatted source without changing it", (t) => {
+  const dir = formattingFixture(t);
+  const file = path.join(dir, "example.js");
+  const source = "const value={label:'hello'};console.log(value)\n";
+  writeFileSync(file, source);
+  const result = just(["lint"], dir);
+  assert.notEqual(result.status, 0, result.output);
+  assert.match(result.output, /example\.js/);
+  assert.equal(readFileSync(file, "utf8"), source);
+});
+
+test("lint still rejects ESLint violations after formatting passes", (t) => {
+  const dir = formattingFixture(t);
+  const fixed = just(["fix"], dir);
+  assert.equal(fixed.status, 0, fixed.output);
+  const file = path.join(dir, "example.js");
+  const source = 'let value = "hello";\nconsole.log(value);\n';
+  writeFileSync(file, source);
+  const result = just(["lint"], dir);
+  assert.notEqual(result.status, 0, result.output);
+  assert.match(result.output, /prefer-const/);
+  assert.equal(readFileSync(file, "utf8"), source);
+});
+
+test("explicit fix applies ESLint fixes and formatting, then lint passes without writes", (t) => {
+  const dir = formattingFixture(t);
+  const file = path.join(dir, "example.js");
+  writeFileSync(file, "let value={label:'hello'};console.log(value)\n");
+  const fixed = just(["fix"], dir);
+  assert.equal(fixed.status, 0, fixed.output);
+  const expected = 'const value = { label: "hello" };\nconsole.log(value);\n';
+  assert.equal(readFileSync(file, "utf8"), expected);
+  const checked = just(["lint"], dir);
+  assert.equal(checked.status, 0, checked.output);
+  assert.equal(readFileSync(file, "utf8"), expected);
+  const repeated = just(["fix"], dir);
+  assert.equal(repeated.status, 0, repeated.output);
+  assert.equal(readFileSync(file, "utf8"), expected);
 });
 
 for (const recipe of ["qa", "ci"]) {
