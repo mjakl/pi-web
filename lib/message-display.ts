@@ -59,7 +59,7 @@ export function getAssistantErrorMessage(
   options: DisplayOptions = {},
 ): string | null {
   if (options.isStreaming || message.stopReason !== "error") return null;
-  return message.errorMessage?.trim() || "Unknown provider error";
+  return (message.errorMessage?.trim() ?? "") || "Unknown provider error";
 }
 
 function isFinalAnswerBlock(block: AssistantContentBlock): boolean {
@@ -101,8 +101,6 @@ export function shouldExpandProcessDetails(
   return messages.some(
     (message) =>
       message.role === "assistant" &&
-      getDisplayableAssistantBlocks(message as AssistantMessage).some(
-        isFinalAnswerBlock,
-      ),
+      getDisplayableAssistantBlocks(message).some(isFinalAnswerBlock),
   );
 }

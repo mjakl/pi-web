@@ -43,7 +43,9 @@ export function ProjectTrustDialog({
         event.preventDefault();
         if (!busy) onCancel();
       }}
-      onCancel={(event) => event.preventDefault()}
+      onCancel={(event) => {
+        event.preventDefault();
+      }}
       onClick={(event) => {
         if (!busy && event.target === event.currentTarget) onCancel();
       }}

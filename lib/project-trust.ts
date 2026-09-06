@@ -53,5 +53,8 @@ export function projectTrustReloadOptions(
   const status = getProjectTrustStatus(cwd, agentDir);
   if (!status.requiresTrust) return undefined;
   const trustStore = new ProjectTrustStore(agentDir);
-  return { resolveProjectTrust: async () => trustStore.get(cwd) === true };
+  return {
+    resolveProjectTrust: async () =>
+      Promise.resolve(trustStore.get(cwd) === true),
+  };
 }

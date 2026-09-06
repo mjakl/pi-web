@@ -14,7 +14,6 @@ import type {
   AgentMessage,
   AssistantContentBlock,
   AssistantMessage,
-  BashExecutionMessage,
   BlockingExtensionUiRequest,
   ExtensionUiRequest,
   SessionInfo,
@@ -153,9 +152,7 @@ function phaseLabel(
 
 function hasFinalAssistantAnswer(message: AgentMessage): boolean {
   if (message.role !== "assistant") return false;
-  return splitFinalAssistantBlocks(
-    message as AssistantMessage,
-  ).answerBlocks.some(
+  return splitFinalAssistantBlocks(message).answerBlocks.some(
     (block) =>
       block.type === "image" ||
       (block.type === "text" && block.text.trim().length > 0),
@@ -187,18 +184,14 @@ function countToolCalls(messages: AgentMessage[]): number {
   let count = 0;
   for (const msg of messages) {
     if (msg.role !== "assistant") continue;
-    count += countToolCallBlocks(
-      getDisplayableAssistantBlocks(msg as AssistantMessage),
-    );
+    count += countToolCallBlocks(getDisplayableAssistantBlocks(msg));
   }
   return count;
 }
 
 function hasDisplayableProcessMessage(message: AgentMessage): boolean {
   if (message.role === "assistant") {
-    return (
-      getDisplayableAssistantBlocks(message as AssistantMessage).length > 0
-    );
+    return getDisplayableAssistantBlocks(message).length > 0;
   }
   return message.role === "custom";
 }
@@ -241,7 +234,9 @@ function ProcessDetailsGroup({
       <button
         type="button"
         aria-expanded={expanded}
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => {
+          setExpanded((v) => !v);
+        }}
         style={{
           display: "flex",
           alignItems: "center",
@@ -366,6 +361,7 @@ export function ChatWindow({
     slashCommandsLoading,
     queuedMessages,
     notices,
+    reportActionError,
     extensionDialog,
     extensionCustomUi,
     extensionStatuses,
@@ -517,7 +513,13 @@ export function ChatWindow({
 
   // Register the abort handler for the global Esc shortcut
   useEffect(() => {
-    registerAbortHandler(sessionBusy ? handleAbort : null);
+    registerAbortHandler(
+      sessionBusy
+        ? () => {
+            void handleAbort();
+          }
+        : null,
+    );
   }, [sessionBusy, handleAbort]);
 
   // --- Lazy-load historical messages ---
@@ -570,7 +572,9 @@ export function ChatWindow({
       { root: container, threshold: 0 },
     );
     observer.observe(sentinel);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+    };
   }, [entryIds, historyCursor, hasEarlierMessages, loadEarlierMessages]);
   // Push session stats up to AppShell for the top bar.
   // Compare scalar fields to avoid loops from new object identity each render.
@@ -638,7 +642,9 @@ export function ChatWindow({
     onChatActionsChange?.({
       loadSystemInfo,
       refreshTranscript: session ? refreshTranscript : null,
-      changeBranchLeaf: handleLeafChange,
+      changeBranchLeaf: (...args) => {
+        void handleLeafChange(...args);
+      },
     });
   }, [
     onChatActionsChange,
@@ -684,10 +690,7 @@ export function ChatWindow({
     const map = new Map<string, ToolResultMessage>();
     for (const msg of messages) {
       if (msg.role === "toolResult") {
-        map.set(
-          (msg as ToolResultMessage).toolCallId,
-          msg as ToolResultMessage,
-        );
+        map.set(msg.toolCallId, msg);
       }
     }
     return map;
@@ -791,8 +794,7 @@ export function ChatWindow({
       for (const [offset, m] of turnMessages.entries()) {
         if (offset > finalOffset) break;
         if (m.role === "assistant") {
-          for (const b of (m as AssistantMessage).content ?? [])
-            turnContent.push(b);
+          for (const b of m.content ?? []) turnContent.push(b);
         }
       }
       groups.set(userIdx, {
@@ -872,7 +874,9 @@ export function ChatWindow({
       else syncScrollPosition();
     });
     observer.observe(container);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+    };
   }, [error, loading, scrollToLatest, syncScrollPosition]);
 
   const availableThinkingLevels = displayModelValue
@@ -894,12 +898,33 @@ export function ChatWindow({
   ) : (
     <ChatInput
       ref={chatInputRef}
-      onSend={handleSend}
-      onAbort={handleAbort}
-      onSteer={agentRunning ? handleSteer : undefined}
-      onFollowUp={agentRunning ? handleFollowUp : undefined}
+      onError={reportActionError}
+      onSend={(...args) => {
+        void handleSend(...args);
+      }}
+      onAbort={(...args) => {
+        void handleAbort(...args);
+      }}
+      onSteer={
+        agentRunning
+          ? (...args) => {
+              void handleSteer(...args);
+            }
+          : undefined
+      }
+      onFollowUp={
+        agentRunning
+          ? (...args) => {
+              void handleFollowUp(...args);
+            }
+          : undefined
+      }
       onPromptWithStreamingBehavior={
-        agentRunning ? handlePromptWithStreamingBehavior : undefined
+        agentRunning
+          ? (...args) => {
+              void handlePromptWithStreamingBehavior(...args);
+            }
+          : undefined
       }
       isStreaming={sessionBusy}
       model={displayModelValue}
@@ -908,14 +933,20 @@ export function ChatWindow({
       modelList={modelList}
       modelError={modelError}
       modelScopeWarnings={modelScopeWarnings}
-      onModelChange={handleModelChange}
+      onModelChange={(...args) => {
+        void handleModelChange(...args);
+      }}
       modelSwitching={modelSwitching}
       isCompacting={isCompacting}
       compactError={compactError}
       compactResult={compactResult}
       thinkingLevel={thinkingLevel}
       onThinkingLevelChange={
-        session || isNew ? handleThinkingLevelChange : undefined
+        session || isNew
+          ? (...args) => {
+              void handleThinkingLevelChange(...args);
+            }
+          : undefined
       }
       availableThinkingLevels={availableThinkingLevels}
       thinkingLevelMap={currentThinkingLevelMap}
@@ -923,7 +954,9 @@ export function ChatWindow({
       retryInfo={retryInfo}
       queuedMessages={queuedMessages}
       inputHistory={inputHistory}
-      onRecallQueue={handleRecallQueue}
+      onRecallQueue={(...args) => {
+        void handleRecallQueue(...args);
+      }}
       slashCommands={slashCommands}
       slashCommandsLoading={slashCommandsLoading}
       onLoadSlashCommands={loadSlashCommands}
@@ -1019,14 +1052,18 @@ export function ChatWindow({
       {extensionDialog && (
         <ExtensionDialog
           request={extensionDialog}
-          onRespond={respondToExtensionUi}
+          onRespond={(...args) => {
+            void respondToExtensionUi(...args);
+          }}
         />
       )}
 
       {extensionCustomUi && (
         <ExtensionCustomPanel
           request={extensionCustomUi}
-          onInput={sendExtensionCustomInput}
+          onInput={(...args) => {
+            void sendExtensionCustomInput(...args);
+          }}
         />
       )}
 
@@ -1127,6 +1164,7 @@ export function ChatWindow({
                     <MessageView
                       key={`${keyPrefix}-view-${messageKey}`}
                       message={msg}
+                      onError={reportActionError}
                       toolResults={toolResultsMap}
                       activeTools={activeTools}
                       modelNames={modelNames}
@@ -1149,10 +1187,16 @@ export function ChatWindow({
                         isNew ||
                         forkingEntryId
                           ? undefined
-                          : handleRewind
+                          : (...args) => {
+                              void handleRewind(...args);
+                            }
                       }
                       onNavigate={
-                        readOnly || sessionBusy ? undefined : handleNavigate
+                        readOnly || sessionBusy
+                          ? undefined
+                          : (...args) => {
+                              void handleNavigate(...args);
+                            }
                       }
                       prevAssistantEntryId={
                         sessionBusy ? undefined : prevAssistantEntryId
@@ -1280,7 +1324,8 @@ export function ChatWindow({
                 hasStreamingContent &&
                 streamState.streamingMessage && (
                   <MessageView
-                    message={streamState.streamingMessage as AgentMessage}
+                    message={streamState.streamingMessage}
+                    onError={reportActionError}
                     activeTools={activeTools}
                     isStreaming
                     modelNames={modelNames}
@@ -1310,14 +1355,12 @@ export function ChatWindow({
 
               {pendingBash && (
                 <MessageView
-                  message={
-                    {
-                      role: "bashExecution",
-                      command: pendingBash.command,
-                      output: "",
-                      excludeFromContext: pendingBash.excludeFromContext,
-                    } as BashExecutionMessage
-                  }
+                  message={{
+                    role: "bashExecution",
+                    command: pendingBash.command,
+                    output: "",
+                    excludeFromContext: pendingBash.excludeFromContext,
+                  }}
                   sessionId={session?.id ?? sessionIdRef.current ?? undefined}
                 />
               )}
@@ -1525,7 +1568,9 @@ export function ExtensionDialog({
         event.preventDefault();
         onRespond(request, { cancelled: true });
       }}
-      onCancel={(event) => event.preventDefault()}
+      onCancel={(event) => {
+        event.preventDefault();
+      }}
     >
       <div
         style={{
@@ -1587,7 +1632,9 @@ export function ExtensionDialog({
               {request.options.map((option) => (
                 <button
                   key={option}
-                  onClick={() => onRespond(request, { value: option })}
+                  onClick={() => {
+                    onRespond(request, { value: option });
+                  }}
                   style={{
                     width: "100%",
                     padding: "9px 10px",
@@ -1611,7 +1658,9 @@ export function ExtensionDialog({
               autoFocus
               value={value}
               placeholder={request.placeholder}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={(e) => {
+                setValue(e.target.value);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") submitValue();
               }}
@@ -1631,7 +1680,9 @@ export function ExtensionDialog({
             <textarea
               autoFocus
               value={value}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={(e) => {
+                setValue(e.target.value);
+              }}
               onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === "Enter")
                   submitValue();
@@ -1666,7 +1717,9 @@ export function ExtensionDialog({
           }}
         >
           <button
-            onClick={() => onRespond(request, { cancelled: true })}
+            onClick={() => {
+              onRespond(request, { cancelled: true });
+            }}
             style={{
               padding: "6px 10px",
               borderRadius: 6,
@@ -1750,7 +1803,9 @@ function ExtensionCustomPanel({
       aria-label={t("chat.extensionInput")}
       // The textarea forwards Escape to the TUI as \x1b, so the dialog must
       // never treat it as a request to close.
-      onCancel={(event) => event.preventDefault()}
+      onCancel={(event) => {
+        event.preventDefault();
+      }}
     >
       <div
         onClick={(event) => {
@@ -1831,7 +1886,9 @@ function ExtensionCustomPanel({
             {t("chat.extensionPanel")}
           </div>
           <button
-            onClick={() => onInput(request, "\x03")}
+            onClick={() => {
+              onInput(request, "\x03");
+            }}
             style={{
               padding: "5px 9px",
               borderRadius: 6,

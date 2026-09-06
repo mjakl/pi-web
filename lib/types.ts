@@ -25,15 +25,15 @@ export interface TextContent {
   text: string;
 }
 
-export interface ImageContent {
-  type: "image";
-  source: {
-    type: "base64" | "url";
-    media_type?: string;
-    data?: string;
-    url?: string;
-  };
-}
+// Persisted source blocks and flat SDK image blocks are both supported.
+export type ImageContent =
+  | {
+      type: "image";
+      source:
+        | { type: "base64"; media_type: string; data: string }
+        | { type: "url"; url: string; media_type?: string };
+    }
+  | { type: "image"; data: string; mimeType: string; source?: never };
 
 export interface ThinkingContent {
   type: "thinking";

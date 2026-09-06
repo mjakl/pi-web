@@ -59,7 +59,7 @@ const session = {
   modified: "2026-09-04T00:00:00.000Z",
 };
 
-function stubFetch() {
+function stubFetch(messages = []) {
   globalThis.fetch = async () =>
     Response.json({
       sessionId: "s1",
@@ -68,7 +68,11 @@ function stubFetch() {
       totalActiveMs: 0,
       tree: [],
       leafId: "a",
-      context: { messages: [], entryIds: [], hasMore: false },
+      context: {
+        messages,
+        entryIds: messages.map((_, index) => `entry-${index}`),
+        hasMore: false,
+      },
     });
 }
 
@@ -94,6 +98,7 @@ async function mount(props) {
     });
   await React.act(() => root.render(render()));
   return {
+    container,
     display,
     actions,
     rerender: async (extra) => {
@@ -153,6 +158,139 @@ for (const [name, props] of [
       actionCalls,
       "actions re-registered without a callable change",
     );
+  });
+}
+
+test("attachment failure keeps existing attachments and reports through the chat notice shelf", async (t) => {
+  stubFetch();
+  const readers = [];
+  const created = [];
+  const revoked = [];
+  t.mock.method(URL, "createObjectURL", (file) => {
+    if (file.name === "preview-fails") throw new Error("Preview unavailable");
+    const url = `blob:probe-${file.name}`;
+    created.push(url);
+    return url;
+  });
+  t.mock.method(URL, "revokeObjectURL", (url) => revoked.push(url));
+  const originalReader = globalThis.FileReader;
+  globalThis.FileReader = class {
+    readAsDataURL(file) {
+      this.file = file;
+      readers.push(this);
+    }
+  };
+  t.after(() => {
+    globalThis.FileReader = originalReader;
+  });
+  const ref = React.createRef();
+  const view = await mount({
+    session: null,
+    chatInputRef: ref,
+    newSessionDraftKey: "image-errors",
+  });
+  try {
+    const add = (names) =>
+      ref.current.addImages(
+        names.map((name) => ({ name, type: "image/png", size: 12 })),
+      );
+    const succeed = (reader) => {
+      reader.result = "data:image/png;base64,QUJD";
+      reader.onload();
+    };
+    await React.act(async () => {
+      add(["existing"]);
+      succeed(readers.shift());
+    });
+    assert.equal(
+      view.container.querySelectorAll('[aria-label="Remove image"]').length,
+      1,
+    );
+    await React.act(async () => {
+      add(["good", "bad"]);
+      succeed(readers.shift());
+      const failed = readers.shift();
+      failed.error = new Error("Image unreadable");
+      failed.onerror();
+    });
+    assert.match(
+      view.container.querySelector('[role="alert"]').textContent,
+      /Could not attach images: Image unreadable/,
+    );
+    assert.equal(
+      view.container.querySelectorAll('[aria-label="Remove image"]').length,
+      1,
+    );
+    assert.deepEqual(created, ["blob:probe-existing"]);
+    assert.deepEqual(revoked, []);
+    await React.act(async () => {
+      add(["preview-good", "preview-fails"]);
+      readers.splice(0).forEach(succeed);
+    });
+    assert.deepEqual(revoked, ["blob:probe-preview-good"]);
+    assert.equal(
+      view.container.querySelectorAll('[aria-label="Remove image"]').length,
+      1,
+    );
+    // A failed batch releases its admission slots; later attachment still works.
+    await React.act(async () => {
+      add(["later"]);
+      succeed(readers.shift());
+    });
+    assert.equal(
+      view.container.querySelectorAll('[aria-label="Remove image"]').length,
+      2,
+    );
+  } finally {
+    await view.unmount();
+  }
+});
+
+for (const message of [
+  { role: "user", content: "Copy me" },
+  { role: "assistant", content: [{ type: "text", text: "Copy me" }] },
+  { role: "custom", customType: "probe", display: true, content: "Copy me" },
+]) {
+  test(`${message.role} copy rejection reaches the chat notice shelf without copied success`, async (t) => {
+    stubFetch([message]);
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {
+        clipboard: {
+          writeText: () => Promise.reject(new Error("Clipboard denied")),
+        },
+      },
+    });
+    t.after(() => Object.defineProperty(globalThis, "navigator", descriptor));
+    const view = await mount({ session });
+    try {
+      if (message.role === "custom") {
+        const disclosure = [
+          ...view.container.querySelectorAll("button[aria-expanded]"),
+        ].find((button) => button.textContent.includes("probe"));
+        assert.ok(disclosure);
+        await React.act(() => {
+          disclosure.click();
+        });
+      }
+      const copy = [...view.container.querySelectorAll("button")].find(
+        (button) =>
+          button.title === "Copy message" || button.textContent === "Copy",
+      );
+      assert.ok(copy);
+      const before = copy.innerHTML;
+      await React.act(async () => {
+        copy.click();
+      });
+      assert.match(
+        view.container.querySelector('[role="alert"]').textContent,
+        /Could not copy: Clipboard denied/,
+      );
+      assert.equal(copy.innerHTML, before);
+    } finally {
+      await view.unmount();
+    }
   });
 }
 

@@ -13,7 +13,7 @@ export function rewindSessionFile(
   const lines = readFileSync(filePath, "utf8")
     .split("\n")
     .filter((line) => line.trim());
-  const entries = lines.map((line) => JSON.parse(line)) as (
+  const entries = lines.map((line): unknown => JSON.parse(line)) as (
     | SessionEntry
     | SessionHeader
   )[];

@@ -538,7 +538,7 @@ function useWatchedFile(
           setError(null);
           setBust((value) => value + 1);
         })
-        .catch((nextError) => {
+        .catch((nextError: unknown) => {
           if (active && requestId === syncRequestRef.current)
             setError(errorMessage(nextError));
         });
@@ -553,10 +553,10 @@ function useWatchedFile(
       setWatching(true);
       synchronize();
     });
-    es.addEventListener("change", (e) => {
+    es.addEventListener("change", (e: MessageEvent<string>) => {
       syncRequestRef.current += 1;
       try {
-        const d = JSON.parse((e as MessageEvent).data) as { size?: number };
+        const d = JSON.parse(e.data) as { size?: number };
         if (typeof d.size === "number") setSize(d.size);
       } catch {
         /* ignore */
@@ -592,7 +592,9 @@ function ImageViewer({
     w: number;
     h: number;
   } | null>(null);
-  const resetNaturalSize = useCallback(() => setNaturalSize(null), []);
+  const resetNaturalSize = useCallback(() => {
+    setNaturalSize(null);
+  }, []);
   const { watching, bust, size, error, setError } = useWatchedFile(
     filePath,
     sourceSessionId,
@@ -695,7 +697,9 @@ function ImageViewer({
               const img = e.currentTarget;
               setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
             }}
-            onError={() => setError(t("files.imageLoadFailed"))}
+            onError={() => {
+              setError(t("files.imageLoadFailed"));
+            }}
             style={{
               maxWidth: "100%",
               maxHeight: "100%",
@@ -725,7 +729,9 @@ function AudioViewer({
 }: Props) {
   const { t } = useI18n();
   const [duration, setDuration] = useState<number | null>(null);
-  const resetDuration = useCallback(() => setDuration(null), []);
+  const resetDuration = useCallback(() => {
+    setDuration(null);
+  }, []);
   const { watching, bust, size, error, setError } = useWatchedFile(
     filePath,
     sourceSessionId,
@@ -824,8 +830,12 @@ function AudioViewer({
             controls
             preload="metadata"
             src={src}
-            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-            onError={() => setError(t("files.audioLoadFailed"))}
+            onLoadedMetadata={(e) => {
+              setDuration(e.currentTarget.duration);
+            }}
+            onError={() => {
+              setError(t("files.audioLoadFailed"));
+            }}
             style={{ width: "100%" }}
           />
         </div>
@@ -884,7 +894,7 @@ function DocumentViewer({
           }
         }
       })
-      .catch((nextError) => {
+      .catch((nextError: unknown) => {
         if (active && requestId === syncRequestRef.current)
           setError(errorMessage(nextError));
       });
@@ -925,7 +935,7 @@ function DocumentViewer({
           setError(null);
           setBust((value) => value + 1);
         })
-        .catch((nextError) => {
+        .catch((nextError: unknown) => {
           if (active && requestId === syncRequestRef.current)
             setError(errorMessage(nextError));
         });
@@ -940,10 +950,10 @@ function DocumentViewer({
       setWatching(true);
       synchronize();
     });
-    es.addEventListener("change", (e) => {
+    es.addEventListener("change", (e: MessageEvent<string>) => {
       syncRequestRef.current += 1;
       try {
-        const d = JSON.parse((e as MessageEvent).data) as { size?: number };
+        const d = JSON.parse(e.data) as { size?: number };
         if (typeof d.size === "number") {
           setSize(d.size);
           if (!isPdf && d.size > DOCX_PREVIEW_MAX_BYTES) {
@@ -1229,7 +1239,7 @@ function TextFileViewer({
           setData(d);
           return d;
         })
-        .catch((e) => {
+        .catch((e: unknown) => {
           if (requestId !== contentRequestRef.current) return null;
           setError(errorMessage(e));
           return null;
@@ -1284,7 +1294,7 @@ function TextFileViewer({
     setGitDiffResolved(false);
     setWatching(false);
 
-    fetchContent(filePath).finally(() => {
+    void fetchContent(filePath).finally(() => {
       if (active) setLoading(false);
     });
 
@@ -1352,9 +1362,9 @@ function TextFileViewer({
     }
   }, [data?.language, updateDisplayMode]);
 
-  const hasGitDiff =
-    gitDiff?.supported === true && typeof gitDiff.patch === "string";
-  const isDeletedDiff = hasGitDiff && gitDiff.status === "deleted";
+  const diffPatch = gitDiff?.supported === true ? gitDiff.patch : undefined;
+  const hasGitDiff = typeof diffPatch === "string";
+  const isDeletedDiff = hasGitDiff && gitDiff?.status === "deleted";
 
   useEffect(() => {
     if (gitDiffResolved && !hasGitDiff && displayMode === "diff")
@@ -1483,8 +1493,9 @@ function TextFileViewer({
     if (!onMentionLines || displayMode !== "source") return;
 
     document.addEventListener("selectionchange", updateSelectedLineRange);
-    return () =>
+    return () => {
       document.removeEventListener("selectionchange", updateSelectedLineRange);
+    };
   }, [data?.content, displayMode, onMentionLines]);
 
   const mentionLineRange = useCallback(
@@ -1580,9 +1591,10 @@ function TextFileViewer({
         ...(hasPreview ? ["preview" as const] : []),
         ...(hasGitDiff ? ["diff" as const] : []),
       ];
-  const metadata = isDeletedDiff
-    ? t("files.deleted")
-    : `${language} · ${lines.length} lines · ${formatSize(data!.size)}`;
+  const metadata =
+    data && !isDeletedDiff
+      ? `${language} · ${lines.length} lines · ${formatSize(data.size)}`
+      : t("files.deleted");
 
   return (
     <div
@@ -1644,7 +1656,9 @@ function TextFileViewer({
                   <button
                     key={mode}
                     type="button"
-                    onClick={() => updateDisplayMode(mode)}
+                    onClick={() => {
+                      updateDisplayMode(mode);
+                    }}
                     title={mode === "diff" ? t("i18n.compareHead") : undefined}
                     aria-pressed={active}
                     className="file-viewer-mode-button"
@@ -1657,10 +1671,12 @@ function TextFileViewer({
           )}
 
           <div className="file-viewer-actions">
-            {(onAtMention || onMentionLines) && (
+            {(Boolean(onAtMention) || Boolean(onMentionLines)) && (
               <button
                 type="button"
-                onPointerDown={(event) => event.preventDefault()}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                }}
                 onClick={() => {
                   // Mention selected lines when a range is active (and line
                   // mention is wired up); otherwise fall back to a whole-file
@@ -1738,7 +1754,7 @@ function TextFileViewer({
         style={{ flex: 1, overflow: "auto", background: "var(--bg)" }}
       >
         {effectiveDisplayMode === "diff" && hasGitDiff ? (
-          <DiffView patch={gitDiff.patch!} />
+          <DiffView patch={diffPatch} />
         ) : isHtml && effectiveDisplayMode === "preview" ? (
           <iframe
             srcDoc={content}

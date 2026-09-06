@@ -147,7 +147,7 @@ export type AgentPhase =
   | null;
 
 export interface CompactResultInfo {
-  reason: "manual" | "threshold" | "overflow" | "auto" | string;
+  reason: string;
   tokensBefore: number;
   estimatedTokensAfter: number;
 }
@@ -271,7 +271,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   } = opts;
 
   const isNew = session === null && newSessionCwd !== null;
-  const runtimeActive = Boolean(sessionActive || sessionRunning);
+  const runtimeActive = Boolean((sessionActive ?? false) || sessionRunning);
 
   const [data, setData] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(!isNew);
@@ -412,27 +412,25 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   sessionPropIdRef.current = session?.id ?? null;
   sessionActiveRef.current = runtimeActive;
 
-  if (!eventConnectionRef.current) {
-    eventConnectionRef.current = new AgentEventConnection({
-      createSource: (sid, activate) =>
-        new EventSource(
-          `/api/agent/${encodeURIComponent(sid)}/events${activate ? "?activate=1" : ""}`,
-        ),
-      onEvent: (event) =>
-        handleAgentEventRef.current?.(event as AgentEventLike),
-      shouldMaintain: (sid) =>
-        sessionHookMountedRef.current &&
-        sessionIdRef.current === sid &&
-        (agentRunningRef.current ||
-          eventStreamGraceActiveRef.current ||
-          (sessionPropIdRef.current === sid && sessionActiveRef.current)),
-      readinessTimeoutMs: EVENT_STREAM_READY_TIMEOUT_MS,
-      reconnectDelayMs: EVENT_STREAM_RECONNECT_DELAY_MS,
-      onUnexpectedError: (error) => {
-        console.error("Failed to maintain the agent event stream:", error);
-      },
-    });
-  }
+  eventConnectionRef.current ??= new AgentEventConnection({
+    createSource: (sid, activate) =>
+      new EventSource(
+        `/api/agent/${encodeURIComponent(sid)}/events${activate ? "?activate=1" : ""}`,
+      ),
+    onEvent: (event) => handleAgentEventRef.current?.(event),
+    shouldMaintain: (sid) =>
+      sessionHookMountedRef.current &&
+      sessionIdRef.current === sid &&
+      (agentRunningRef.current ||
+        eventStreamGraceActiveRef.current ||
+        (sessionPropIdRef.current === sid && sessionActiveRef.current)),
+    readinessTimeoutMs: EVENT_STREAM_READY_TIMEOUT_MS,
+    reconnectDelayMs: EVENT_STREAM_RECONNECT_DELAY_MS,
+    onUnexpectedError: (error) => {
+      console.error("Failed to maintain the agent event stream:", error);
+    },
+  });
+  const eventConnection = eventConnectionRef.current;
 
   const existingSessionId = session?.id;
 
@@ -505,7 +503,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (stats.tokens.total === 0 && messages.length === 0 && !fileStats)
       return null;
     return {
-      sessionFile: data?.filePath || undefined,
+      sessionFile: (data?.filePath ?? "") || undefined,
       sessionId: sessionIdRef.current ?? session?.id ?? "",
       sessionName: session?.name,
       ...stats,
@@ -1022,13 +1020,16 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const ensureEventsConnected = useCallback(
     (sid: string, activate = false) =>
-      eventConnectionRef.current!.ensureConnected(sid, activate),
-    [],
+      eventConnection.ensureConnected(sid, activate),
+    [eventConnection],
   );
 
-  const maintainEventsConnected = useCallback((sid: string) => {
-    eventConnectionRef.current!.maintain(sid);
-  }, []);
+  const maintainEventsConnected = useCallback(
+    (sid: string) => {
+      eventConnection.maintain(sid);
+    },
+    [eventConnection],
+  );
 
   // A different browser can activate this session after it was opened here.
   // The sidebar's lightweight lifecycle poll lets the selected chat attach
@@ -1105,6 +1106,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       });
     },
     [],
+  );
+
+  const reportActionError = useCallback(
+    (message: string) => {
+      addNotice({ type: "error", message });
+    },
+    [addNotice],
   );
 
   const refreshTranscript = useCallback(async (): Promise<boolean> => {
@@ -1313,7 +1321,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           const promptActive = Boolean(
             data.running &&
             state &&
-            (state.isStreaming || state.isPromptRunning),
+            ((state.isStreaming ?? false) || state.isPromptRunning),
           );
           if (promptActive) {
             eventStreamGraceActiveRef.current = false;
@@ -1376,6 +1384,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       try {
         if (sid) await loadSession(sid);
       } finally {
+        // A stale finish, including its load failure, must not affect a newer run.
+        // oxlint-disable-next-line no-unsafe-finally
         if (promptRunIdRef.current !== runId) return;
         const promptWasPending = rpcPromptPendingRef.current;
         const agentWasActive = sdkAgentActiveRef.current;
@@ -1501,7 +1511,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         const busy =
           data.running &&
           state &&
-          (state.isStreaming || state.isPromptRunning || state.isCompacting);
+          ((state.isStreaming ?? false) ||
+            (state.isPromptRunning ?? false) ||
+            state.isCompacting);
         if (busy) {
           sdkAgentActiveRef.current = Boolean(state.isStreaming);
           rpcPromptPendingRef.current = Boolean(state.isPromptRunning);
@@ -1772,7 +1784,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             const existing = tools.find((tool) => tool.id === id);
             const updated = {
               id,
-              name: name || existing?.name || "tool",
+              name: name || (existing?.name ?? "") || "tool",
               progress: progress ?? existing?.progress,
             };
             return {
@@ -1825,7 +1837,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                 (event["reason"] as string | undefined) ?? "auto",
               ),
             );
-            if (sessionIdRef.current) loadSession(sessionIdRef.current);
+            if (sessionIdRef.current) void loadSession(sessionIdRef.current);
           }
           break;
         case "extension_ui_request":
@@ -2526,8 +2538,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       images?: AttachedImage[],
     ) => {
       const sid = sessionIdRef.current;
-      const restore = () =>
+      const restore = () => {
         restoreSubmission(message, images, composerDraftKey);
+      };
       if (!sid) {
         restore();
         addNotice({
@@ -2702,9 +2715,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     sessionHookMountedRef.current = true;
     if (session) {
       sessionIdRef.current = session.id;
-      loadSession(session.id, true, true).then((agentState) => {
+      void loadSession(session.id, true, true).then((agentState) => {
         if (agentState?.active) {
-          loadTools(session.id);
+          void loadTools(session.id);
           if (
             agentState.running &&
             (agentState.state?.isStreaming || agentState.state?.isPromptRunning)
@@ -2721,7 +2734,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                 : { kind: "running_command" },
             );
             dispatch({ type: "start" });
-            void maintainEventsConnected(session.id);
+            maintainEventsConnected(session.id);
             if (
               !agentState.state.isStreaming &&
               agentState.state.isPromptRunning
@@ -2780,16 +2793,22 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   // Load model list
   useEffect(() => {
     const controller = new AbortController();
-    loadModels(controller.signal).catch((e) => {
+    loadModels(controller.signal).catch((e: unknown) => {
       if (e instanceof DOMException && e.name === "AbortError") return;
     });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+    };
   }, [loadModels, modelsRefreshKey]);
 
   useEffect(() => {
     if (!compactResult) return;
-    const t = setTimeout(() => setCompactResult(null), 6000);
-    return () => clearTimeout(t);
+    const t = setTimeout(() => {
+      setCompactResult(null);
+    }, 6000);
+    return () => {
+      clearTimeout(t);
+    };
   }, [compactResult]);
 
   // Pause notice expiry while hovered or focused.
@@ -2809,7 +2828,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       const t = setTimeout(() => {
         dispatchNotice({ type: "remove", id: exiting.id });
       }, NOTICE_EXIT_ANIMATION_MS);
-      return () => clearTimeout(t);
+      return () => {
+        clearTimeout(t);
+      };
     }
     const oldest = noticeState.visible[0];
     if (!oldest) return;
@@ -2883,6 +2904,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     slashCommandsLoading,
     queuedMessages,
     notices: noticeState.visible,
+    reportActionError,
     extensionDialog,
     extensionCustomUi,
     extensionStatuses,

@@ -30,7 +30,9 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
         return (
           <div
             key={tab.id}
-            onClick={() => onSelectTab(tab.id)}
+            onClick={() => {
+              onSelectTab(tab.id);
+            }}
             onMouseDown={(e) => {
               if (e.button === 1) e.preventDefault();
             }}

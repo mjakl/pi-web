@@ -37,7 +37,9 @@ export function SafeMarkdownBody({
   if (!showRaw) {
     return (
       <button
-        onClick={() => setShowRaw(true)}
+        onClick={() => {
+          setShowRaw(true);
+        }}
         style={{
           display: "block",
           width: "100%",

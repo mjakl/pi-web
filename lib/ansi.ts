@@ -1,8 +1,12 @@
+// These patterns intentionally match ANSI escape/control bytes and Pi cursor markers.
+/* oxlint-disable no-control-regex */
 const ANSI_ESCAPE_RE =
   /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
 const ANSI_ESCAPE_AT_START_RE =
   /^\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/;
 const TUI_CURSOR_MARKER_RE = /\x1B_pi:c\x07/g;
+
+/* oxlint-enable no-control-regex */
 
 export function stripAnsi(text: string): string {
   return text.replace(TUI_CURSOR_MARKER_RE, "").replace(ANSI_ESCAPE_RE, "");

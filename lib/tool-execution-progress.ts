@@ -12,12 +12,12 @@ export function getToolExecutionProgress(
 
   const text = content
     .filter(
-      (block) =>
+      (block: unknown): block is { type: "text"; text: string } =>
         isRecord(block) &&
         block["type"] === "text" &&
         typeof block["text"] === "string",
     )
-    .map((block) => block.text as string)
+    .map((block) => block.text)
     .join("\n");
   const latest = text
     .split(/\r?\n/)

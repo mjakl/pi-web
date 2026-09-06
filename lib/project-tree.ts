@@ -87,8 +87,7 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
   const seen = new Set<T>();
   const stack = [...nodes];
 
-  while (stack.length > 0) {
-    const node = stack.pop()!;
+  for (let node = stack.pop(); node; node = stack.pop()) {
     if (seen.has(node)) continue;
     seen.add(node);
 
@@ -128,8 +127,8 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
     ];
     const flattenedSeen = new Set<T>();
 
-    while (pending.length > 0) {
-      const { node, compressedEntryIds, branchPreview } = pending.pop()!;
+    for (let item = pending.pop(); item; item = pending.pop()) {
+      const { node, compressedEntryIds, branchPreview } = item;
       if (flattenedSeen.has(node)) continue;
       flattenedSeen.add(node);
       const nextPreview = branchPreview ?? previewForEntry(node.entry);
@@ -152,8 +151,8 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
     }
   };
 
-  while (tasks.length > 0) {
-    const { source, projected, depth } = tasks.pop()!;
+  for (let task = tasks.pop(); task; task = tasks.pop()) {
+    const { source, projected, depth } = task;
 
     for (const sourceChild of source.children) {
       let child = sourceChild;

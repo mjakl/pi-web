@@ -18,6 +18,6 @@ export function skillExpansionToCommand(text: string): string | null {
   const match = text.match(SKILL_EXPANSION_RE);
   if (!match) return null;
 
-  const [, name, , , args] = match;
+  const [, name = "", , , args] = match;
   return args ? `/skill:${name} ${args}` : `/skill:${name}`;
 }

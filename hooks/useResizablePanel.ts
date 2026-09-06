@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
-  type MutableRefObject,
+  type RefObject,
   type PointerEvent,
 } from "react";
 import { clampPanelWidth } from "@/lib/panel-layout";
@@ -31,7 +31,7 @@ interface UseResizablePanelOptions {
   maxWidth: number;
   minWidth: number;
   storageKey: string;
-  widthRef: MutableRefObject<number>;
+  widthRef: RefObject<number>;
 }
 
 interface CommitOptions {
@@ -271,7 +271,9 @@ export function useResizablePanel(options: UseResizablePanelOptions) {
       commitWidth(widthRef.current);
     };
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+    };
   }, [commitWidth, widthRef]);
 
   useEffect(() => {

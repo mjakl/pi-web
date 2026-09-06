@@ -233,7 +233,9 @@ export function ConfigSwitch({
       title={label}
       disabled={inactive}
       className={`config-switch${loading ? " is-loading" : ""}`}
-      onClick={() => onChange(!checked)}
+      onClick={() => {
+        onChange(!checked);
+      }}
     >
       <span className="config-switch-knob" />
     </button>

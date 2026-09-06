@@ -37,9 +37,9 @@ export async function GET(
 
     const liveSessionManager = liveRpc?.inner.sessionManager;
     const filePath =
-      liveRpc?.sessionFile ||
-      liveSessionManager?.getSessionFile() ||
-      resolvedPath ||
+      (liveRpc?.sessionFile ?? "") ||
+      (liveSessionManager?.getSessionFile() ?? "") ||
+      (resolvedPath ?? "") ||
       "";
     const searchParams = new URL(req.url).searchParams;
     const deferThinking = searchParams.has("deferThinking");
@@ -53,7 +53,7 @@ export async function GET(
     const readSnapshot = async (
       fingerprint: SessionMetadataFingerprint | null,
     ) => {
-      const sm = liveSessionManager ?? SessionManager.open(resolvedPath!);
+      const sm = liveSessionManager ?? SessionManager.open(filePath);
       const entries = sm.getEntries();
       const leafId = sm.getLeafId();
       const tree = projectTreeForResponse(sm.getTree());

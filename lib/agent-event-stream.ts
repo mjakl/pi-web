@@ -119,17 +119,18 @@ export function createAgentEventStream(
       // route may already have started a shared cold-start promise.
       void publishSession();
 
-      abortHandler = () => cleanup(true);
+      abortHandler = () => {
+        cleanup(true);
+      };
       if (req.signal.aborted) {
         cleanup(true);
         return;
       }
       req.signal.addEventListener("abort", abortHandler, { once: true });
 
-      heartbeat = setInterval(
-        () => enqueueText(":\n\n"),
-        HEARTBEAT_INTERVAL_MS,
-      );
+      heartbeat = setInterval(() => {
+        enqueueText(":\n\n");
+      }, HEARTBEAT_INTERVAL_MS);
 
       // Force the response headers through without claiming that the agent is
       // ready. The client waits for the later `connected` data event.

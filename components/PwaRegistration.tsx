@@ -31,7 +31,9 @@ export function PwaRegistration() {
     }
 
     window.addEventListener("load", register, { once: true });
-    return () => window.removeEventListener("load", register);
+    return () => {
+      window.removeEventListener("load", register);
+    };
   }, []);
 
   return null;

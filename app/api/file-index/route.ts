@@ -44,7 +44,7 @@ declare global {
 }
 
 function getIndexCache(): Map<string, CacheEntry> {
-  if (!globalThis.__piFileIndexCache) globalThis.__piFileIndexCache = new Map();
+  globalThis.__piFileIndexCache ??= new Map();
   return globalThis.__piFileIndexCache;
 }
 
@@ -86,8 +86,8 @@ function listWithWalk(cwd: string): FileListing {
   const queue: Array<{ abs: string; rel: string; depth: number }> = [
     { abs: cwd, rel: "", depth: 0 },
   ];
-  while (queue.length > 0) {
-    const { abs, rel, depth } = queue.shift()!;
+  for (let item = queue.shift(); item; item = queue.shift()) {
+    const { abs, rel, depth } = item;
     let dirents: fs.Dirent[];
     try {
       dirents = fs.readdirSync(abs, { withFileTypes: true });

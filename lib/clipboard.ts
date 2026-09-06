@@ -1,6 +1,6 @@
 import { translateMessage } from "./i18n/format";
 
-export function copyText(text: string): Promise<void> {
+export async function copyText(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
     return navigator.clipboard.writeText(text);
   }
@@ -8,19 +8,18 @@ export function copyText(text: string): Promise<void> {
   // reached over plain http from another device has none, so fall back to
   // execCommand -- and report what it actually did, so callers do not show
   // "Copied" when the clipboard was left untouched.
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
   try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
     ta.select();
+    // Plain-HTTP LAN deployments have no Clipboard API; retain this fallback.
+    // oxlint-disable-next-line typescript/no-deprecated
     const copied = document.execCommand("copy");
+    if (!copied) throw new Error(translateMessage("chat.copyRefused"));
+  } finally {
     document.body.removeChild(ta);
-    return copied
-      ? Promise.resolve()
-      : Promise.reject(new Error(translateMessage("chat.copyRefused")));
-  } catch (error) {
-    return Promise.reject(error);
   }
 }

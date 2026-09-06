@@ -140,7 +140,7 @@ export async function resolveVisibleModels(
   const available = await modelRuntime.getAvailable();
   assertNoAmbiguousExactPatterns(cleaned, available);
   const snapshotRuntime = {
-    getAvailable: async () => available,
+    getAvailable: () => Promise.resolve(available),
   } as ModelRuntime;
   const { scopedModels, diagnostics } = await resolveModelScopeWithDiagnostics(
     cleaned,

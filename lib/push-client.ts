@@ -47,12 +47,10 @@ export async function setupPushSubscription(): Promise<boolean> {
       const registration = await navigator.serviceWorker.getRegistration();
       if (!registration?.active) return false;
       let subscription = await registration.pushManager.getSubscription();
-      if (!subscription) {
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
-        });
-      }
+      subscription ??= await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
 
       const response = await fetch("/api/push/subscribe", {
         method: "POST",

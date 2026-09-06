@@ -1,4 +1,3 @@
-import type { SkillInstallScope } from "@/lib/api-types";
 import { checkSkillUpdates } from "@/lib/skill-updates";
 import { loadSkillsWithInstallInfo } from "@/lib/skills-service";
 import { authorizeDirectory } from "@/lib/file-access";
@@ -24,7 +23,7 @@ export async function POST(req: Request) {
     const pkg = typeof body.package === "string" ? body.package : undefined;
     const scope =
       body.scope === "global" || body.scope === "project"
-        ? (body.scope as SkillInstallScope)
+        ? body.scope
         : undefined;
     if ((pkg && !scope) || (!pkg && scope)) {
       return Response.json(
@@ -52,7 +51,8 @@ export async function POST(req: Request) {
     }
 
     const updates = await checkSkillUpdates(installs, {
-      githubToken: process.env["GITHUB_TOKEN"] || process.env["GH_TOKEN"],
+      githubToken:
+        (process.env["GITHUB_TOKEN"] ?? "") || process.env["GH_TOKEN"],
     });
     return Response.json({ updates });
   } catch (error) {

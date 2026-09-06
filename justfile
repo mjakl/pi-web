@@ -4,7 +4,7 @@ set positional-arguments
 default:
     @just --list
 
-# Apply supported ESLint fixes and Oxfmt formatting. Never called by qa or ci.
+# Apply supported Oxlint/ESLint fixes, then Oxfmt. Never called by qa or ci.
 fix:
     npm run fix
 

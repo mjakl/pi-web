@@ -117,7 +117,9 @@ function SkillDetail({
                   ? t("skills.action.switchToModelVisible")
                   : t("skills.action.switchToManual")
               }
-              onChange={() => onToggle(skill)}
+              onChange={() => {
+                onToggle(skill);
+              }}
             />
           </ConfigDetailActions>
         </ConfigDetailHeader>
@@ -196,7 +198,7 @@ function SkillDetail({
                     ? t("i18n.upToDate")
                     : updateStatus?.state === "unsupported"
                       ? t("i18n.automaticChecksUnavailable")
-                      : updateStatus?.message || t("i18n.checkFailed")}
+                      : (updateStatus?.message ?? "") || t("i18n.checkFailed")}
               </span>
             )}
             {updateStatus?.state === "update-available" && (
@@ -337,9 +339,11 @@ function AddSkillPanel({
           <input
             ref={inputRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+            }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") search(query);
+              if (e.key === "Enter") void search(query);
             }}
             placeholder={t("i18n.skillSearchPlaceholder")}
             style={{
@@ -355,7 +359,9 @@ function AddSkillPanel({
           />
           <ConfigButton
             variant="primary"
-            onClick={() => search(query)}
+            onClick={() => {
+              void search(query);
+            }}
             disabled={searching || !query.trim()}
           >
             {searching ? t("i18n.searching") : t("i18n.search")}
@@ -482,9 +488,9 @@ function AddSkillPanel({
                 </div>
                 <ConfigButton
                   size="small"
-                  onClick={() =>
-                    !isInstalled && !isInstalling && install(r.package)
-                  }
+                  onClick={() => {
+                    if (!isInstalled && !isInstalling) void install(r.package);
+                  }}
                   disabled={isInstalled || isInstalling || installing !== null}
                   style={{
                     flexShrink: 0,
@@ -639,8 +645,9 @@ export function SkillsConfig({ cwd }: { cwd: string }) {
 
   const updateInstalledSkill = useCallback(
     async (skill: Skill) => {
-      if (!skill.install) return;
-      const key = updateKey(skill)!;
+      const install = skill.install;
+      if (!install) return;
+      const key = `${install.scope}\0${install.package}`;
       setUpdatingSkill(key);
       setUpdateError(null);
       try {
@@ -649,8 +656,8 @@ export function SkillsConfig({ cwd }: { cwd: string }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             cwd,
-            package: skill.install.package,
-            scope: skill.install.scope,
+            package: install.package,
+            scope: install.scope,
           }),
         });
         const data = (await res.json()) as {
@@ -666,8 +673,8 @@ export function SkillsConfig({ cwd }: { cwd: string }) {
         setUpdateStatuses((current) => ({
           ...current,
           [key]: {
-            package: skill.install!.package,
-            scope: skill.install!.scope,
+            package: install.package,
+            scope: install.scope,
             state: "up-to-date",
             currentVersion: versionHash,
             latestVersion: versionHash,
@@ -719,6 +726,7 @@ export function SkillsConfig({ cwd }: { cwd: string }) {
   }, []);
 
   const selectedSkill = skills.find((s) => s.filePath === selected) ?? null;
+  const selectedUpdateKey = selectedSkill ? updateKey(selectedSkill) : null;
 
   return (
     <ConfigPanelShell>
@@ -834,7 +842,12 @@ export function SkillsConfig({ cwd }: { cwd: string }) {
             )}
           </ConfigSidebarList>
           {/* Add skill button */}
-          <ConfigListAction onClick={() => setAddMode(true)} active={addMode}>
+          <ConfigListAction
+            onClick={() => {
+              setAddMode(true);
+            }}
+            active={addMode}
+          >
             {t("i18n.addSkill")}
           </ConfigListAction>
         </ConfigSidebar>
@@ -848,14 +861,18 @@ export function SkillsConfig({ cwd }: { cwd: string }) {
                 projectResourcesLoaded={projectResourcesLoaded}
                 installedPackages={{
                   global: new Set(
-                    skills
-                      .filter((skill) => skill.install?.scope === "global")
-                      .map((skill) => skill.install!.package),
+                    skills.flatMap((skill) =>
+                      skill.install?.scope === "global"
+                        ? [skill.install.package]
+                        : [],
+                    ),
                   ),
                   project: new Set(
-                    skills
-                      .filter((skill) => skill.install?.scope === "project")
-                      .map((skill) => skill.install!.package),
+                    skills.flatMap((skill) =>
+                      skill.install?.scope === "project"
+                        ? [skill.install.package]
+                        : [],
+                    ),
                   ),
                 }}
                 onInstalled={() => {
@@ -867,17 +884,19 @@ export function SkillsConfig({ cwd }: { cwd: string }) {
                 key={selectedSkill.filePath}
                 skill={selectedSkill}
                 cwd={cwd}
-                onToggle={toggle}
+                onToggle={(skill) => {
+                  void toggle(skill);
+                }}
                 toggling={toggling.has(selectedSkill.filePath)}
                 saveError={saveError}
                 updateStatus={
-                  updateKey(selectedSkill)
-                    ? updateStatuses[updateKey(selectedSkill)!]
+                  selectedUpdateKey
+                    ? updateStatuses[selectedUpdateKey]
                     : undefined
                 }
                 checkingUpdate={
-                  updateKey(selectedSkill)
-                    ? checkingUpdates.has(updateKey(selectedSkill)!)
+                  selectedUpdateKey
+                    ? checkingUpdates.has(selectedUpdateKey)
                     : false
                 }
                 updating={updatingSkill === updateKey(selectedSkill)}

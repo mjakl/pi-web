@@ -6,7 +6,7 @@ import remarkGfm from "remark-gfm";
 
 const markdownSanitizeSchema = {
   ...defaultSchema,
-  strip: [...(defaultSchema.strip || []), "iframe", "object", "style", "form"],
+  strip: [...(defaultSchema.strip ?? []), "iframe", "object", "style", "form"],
 };
 
 // Parse YAML frontmatter into a `yaml` node before the GFM plugin runs, so

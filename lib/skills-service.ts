@@ -2,7 +2,7 @@ import {
   DefaultResourceLoader,
   getAgentDir,
 } from "@earendil-works/pi-coding-agent";
-import type { SkillInfo, SkillsResponse } from "@/lib/api-types";
+import type { SkillsResponse } from "@/lib/api-types";
 import { annotateSkillsWithInstallInfo } from "@/lib/skill-lock";
 import {
   getProjectTrustStatus,
@@ -17,7 +17,7 @@ export async function loadSkillsWithInstallInfo(
   await loader.reload(projectTrustReloadOptions(cwd, agentDir));
   const { skills, diagnostics } = loader.getSkills();
   return {
-    skills: annotateSkillsWithInstallInfo(skills as SkillInfo[], {
+    skills: annotateSkillsWithInstallInfo(skills, {
       cwd,
       agentDir,
     }),

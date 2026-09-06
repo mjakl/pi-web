@@ -286,11 +286,11 @@ function AnchoredMenu({
       // it and state follows. Tracking both directions matters: a UA-driven
       // open that React never learned about would be closed again by the
       // effect above on the next render.
-      onToggle={(e) =>
+      onToggle={(e) => {
         onOpenChange(
           (e as unknown as { newState?: string }).newState === "open",
-        )
-      }
+        );
+      }}
       style={style}
     >
       {children}
@@ -554,10 +554,9 @@ export function SessionSidebar({
     setSessionRefreshDone(true);
     if (sessionRefreshTimerRef.current)
       clearTimeout(sessionRefreshTimerRef.current);
-    sessionRefreshTimerRef.current = setTimeout(
-      () => setSessionRefreshDone(false),
-      2000,
-    );
+    sessionRefreshTimerRef.current = setTimeout(() => {
+      setSessionRefreshDone(false);
+    }, 2000);
   }, []);
 
   const loadSessions = useCallback(
@@ -697,7 +696,7 @@ export function SessionSidebar({
   useEffect(() => {
     const isFirst = !initialLoadDone.current;
     initialLoadDone.current = true;
-    loadSessions(isFirst, !isFirst);
+    void loadSessions(isFirst, !isFirst);
   }, [loadSessions, refreshKey]);
 
   // Browser storage is unavailable during server rendering. Restore the panel
@@ -817,7 +816,7 @@ export function SessionSidebar({
       (id) => !allSessions.some((session) => session.id === id),
     );
     if (completedInBackground.length > 0 || hasUnlistedRunningSession) {
-      loadSessions(false, true);
+      void loadSessions(false, true);
     }
     if (completedInBackground.length > 0) {
       onBackgroundTaskDone?.();
@@ -1086,7 +1085,7 @@ export function SessionSidebar({
   const handleSessionDeleted = useCallback(
     (id: string) => {
       onSessionDeleted?.(id);
-      loadSessions();
+      void loadSessions();
     },
     [loadSessions, onSessionDeleted],
   );
@@ -1180,8 +1179,12 @@ export function SessionSidebar({
       event.preventDefault();
       handleSelectSessionFromList(session);
     };
-    const handleKeyUp = (event: KeyboardEvent) => updateModifier(event);
-    const clearModifier = () => setShortcutModifier(null);
+    const handleKeyUp = (event: KeyboardEvent) => {
+      updateModifier(event);
+    };
+    const clearModifier = () => {
+      setShortcutModifier(null);
+    };
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
     window.addEventListener("blur", clearModifier);
@@ -1226,7 +1229,9 @@ export function SessionSidebar({
     )) {
       observer.observe(row);
     }
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+    };
   }, [inventoryRevision, observedInventoryKey, queueSessionMetadata]);
 
   const selectedInventory = selectedSessionId
@@ -1486,7 +1491,9 @@ export function SessionSidebar({
               >
                 <input
                   value={projectFilter}
-                  onChange={(e) => setProjectFilter(e.target.value)}
+                  onChange={(e) => {
+                    setProjectFilter(e.target.value);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Escape") {
                       setProjectFilter("");
@@ -1567,7 +1574,7 @@ export function SessionSidebar({
         ref={sessionListRef}
         style={{
           flex:
-            explorerOpen && (selectedCwdProp || selectedCwd)
+            explorerOpen && ((selectedCwdProp ?? "") || selectedCwd)
               ? "1 1 0"
               : "1 1 auto",
           overflowY: "auto",
@@ -1623,7 +1630,9 @@ export function SessionSidebar({
             isUnread={unreadSessionIds.has(session.id)}
             actionsAvailable={actionsAvailable}
             onSelect={handleSelectSessionFromList}
-            onRenamed={loadSessions}
+            onRenamed={() => {
+              void loadSessions();
+            }}
             onActivated={handleSessionActivated}
             onActivationFailed={setError}
             onStopped={handleSessionStopped}
@@ -1633,7 +1642,7 @@ export function SessionSidebar({
       </div>
 
       {/* File Explorer section */}
-      {(selectedCwdProp || selectedCwd) && (
+      {((selectedCwdProp ?? "") || selectedCwd) && (
         <div
           style={{
             borderTop: "1px solid var(--border)",
@@ -1646,13 +1655,13 @@ export function SessionSidebar({
         >
           <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
             <button
-              onClick={() =>
+              onClick={() => {
                 setExplorerOpen((open) => {
                   const next = !open;
                   saveExplorerOpen(next);
                   return next;
-                })
-              }
+                });
+              }}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -1691,7 +1700,9 @@ export function SessionSidebar({
             </button>
             {explorerOpen && changesCount > 0 && (
               <ToolbarIconButton
-                onClick={() => setChangesCollapsed((v) => !v)}
+                onClick={() => {
+                  setChangesCollapsed((v) => !v);
+                }}
                 title={t("sidebar.changedFiles", { count: changesCount })}
                 ariaPressed={!changesCollapsed}
                 color={changesCollapsed ? "var(--text-dim)" : "var(--accent)"}
@@ -1771,10 +1782,9 @@ export function SessionSidebar({
                 setExplorerRefreshDone(true);
                 if (explorerRefreshTimerRef.current)
                   clearTimeout(explorerRefreshTimerRef.current);
-                explorerRefreshTimerRef.current = setTimeout(
-                  () => setExplorerRefreshDone(false),
-                  2000,
-                );
+                explorerRefreshTimerRef.current = setTimeout(() => {
+                  setExplorerRefreshDone(false);
+                }, 2000);
               }}
               title={t("sidebar.refreshExplorer")}
               skipHover={explorerRefreshDone}
@@ -1818,7 +1828,7 @@ export function SessionSidebar({
             <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
               <FileExplorer
                 ref={fileExplorerRef}
-                cwd={selectedCwd ?? selectedCwdProp!}
+                cwd={selectedCwd ?? selectedCwdProp ?? ""}
                 onOpenFile={onOpenFile ?? (() => {})}
                 refreshKey={explorerKey}
                 onAtMention={onAtMention}

@@ -283,6 +283,8 @@ export const enMessages: Record<string, string> = {
   "chat.agentRunning": "Agent running",
   "chat.send": "Send",
   "chat.attachImage": "Attach image",
+  "chat.attachFailed": "Could not attach images: {error}",
+  "chat.copyFailed": "Could not copy: {error}",
   "chat.previewImage": "Preview image",
   "chat.filterModels": "Filter models…",
   "chat.noMatchingModels": "No matching models",

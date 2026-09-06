@@ -1,5 +1,4 @@
 import { runNpx } from "@/lib/npx";
-import type { SkillInstallScope } from "@/lib/api-types";
 import { buildSkillUpdateArgs } from "@/lib/skill-updates";
 import { loadSkillsWithInstallInfo } from "@/lib/skills-service";
 import { authorizeDirectory } from "@/lib/file-access";
@@ -15,7 +14,7 @@ export async function POST(req: Request) {
     const pkg = typeof body.package === "string" ? body.package : "";
     const scope =
       body.scope === "global" || body.scope === "project"
-        ? (body.scope as SkillInstallScope)
+        ? body.scope
         : undefined;
     if (!cwd || !pkg || !scope) {
       return Response.json(
@@ -74,7 +73,7 @@ export async function POST(req: Request) {
     };
     const output = `${detail.stdout ?? ""}${detail.stderr ?? ""}`;
     return Response.json(
-      { error: output || detail.message || String(error) },
+      { error: output || (detail.message ?? "") || String(error) },
       { status: 500 },
     );
   }

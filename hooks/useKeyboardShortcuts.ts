@@ -96,6 +96,8 @@ export function useGlobalKeyboardShortcuts(
     };
 
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    return () => {
+      window.removeEventListener("keydown", handler);
+    };
   }, [activeCwd, onNewSession]);
 }

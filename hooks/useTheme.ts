@@ -26,7 +26,9 @@ let state: ThemeState | null = null;
 let systemListening = false;
 
 function emit(): void {
-  listeners.forEach((cb) => cb());
+  listeners.forEach((cb) => {
+    cb();
+  });
 }
 
 function getSystemTheme(): ResolvedTheme {

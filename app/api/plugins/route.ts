@@ -270,13 +270,13 @@ async function readPlugins(cwd: string): Promise<PluginsResponse> {
   const disabledByPackage = getDisabledPackages(settingsManager);
 
   try {
-    const resolved = await packageManager.resolve(async (source) => {
+    const resolved = await packageManager.resolve((source) => {
       diagnostics.push({
         type: "warning",
         source,
         message: "Package is configured but not installed yet.",
       });
-      return "skip";
+      return Promise.resolve("skip");
     });
     ({ countsByPackage, resourcesByPackage, totals } =
       collectResources(resolved));
@@ -417,7 +417,7 @@ export async function POST(req: Request) {
       await settingsManager.flush();
     } else {
       return Response.json(
-        { error: `Unsupported action: ${body.action}` },
+        { error: `Unsupported action: ${String(body.action)}` },
         { status: 400 },
       );
     }

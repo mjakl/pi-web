@@ -250,7 +250,9 @@ export function ChatMinimap({
     const el = scrollContainer.current;
     if (!el) return;
     el.addEventListener("scroll", updateScroll, { passive: true });
-    return () => el.removeEventListener("scroll", updateScroll);
+    return () => {
+      el.removeEventListener("scroll", updateScroll);
+    };
   }, [scrollContainer, updateScroll]);
 
   useEffect(() => {
@@ -279,7 +281,9 @@ export function ChatMinimap({
       measureNodes();
       updateScroll();
     }, 50);
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+    };
   }, [anchorIds, loadedAnchorIds, measureNodes, updateScroll]);
 
   const loadPendingNavigation = useCallback(async () => {
@@ -400,7 +404,9 @@ export function ChatMinimap({
         // unchanged, so a pointer sweep only re-renders when the dot changes.
         setHoveredIndex(node?.index ?? null);
       }}
-      onMouseLeave={() => setHoveredIndex(null)}
+      onMouseLeave={() => {
+        setHoveredIndex(null);
+      }}
       style={{
         width: MINIMAP_WIDTH,
         flexShrink: 0,

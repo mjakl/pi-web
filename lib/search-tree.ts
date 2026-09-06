@@ -43,7 +43,9 @@ export function buildSearchTree(paths: string[]): SearchTreeNode[] {
           : 1
         : a.name.localeCompare(b.name, "en"),
     );
-    nodes.forEach((n) => sort(n.children));
+    nodes.forEach((n) => {
+      sort(n.children);
+    });
   };
   sort(roots);
   return roots;

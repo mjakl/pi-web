@@ -1,6 +1,12 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type SyntheticEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { errorMessage } from "@/lib/error-message";
 import { useI18n } from "@/hooks/useI18n";
 
@@ -121,10 +127,10 @@ export function DirectoryPicker({
   }, []);
 
   useEffect(() => {
-    void navigateTo(initialPath || undefined);
+    void navigateTo((initialPath ?? "") || undefined);
   }, [initialPath, navigateTo]);
 
-  const handlePathSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handlePathSubmit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     const candidate = pathInput.trim();
     if (candidate) void navigateTo(candidate);
@@ -139,7 +145,9 @@ export function DirectoryPicker({
       ref={dialogRef}
       className="directory-picker-dialog"
       aria-label={t("directoryPicker.selectDirectory")}
-      onCancel={(event) => event.preventDefault()}
+      onCancel={(event) => {
+        event.preventDefault();
+      }}
       onKeyDown={(event) => {
         if (event.key !== "Escape") return;
         // Own the key so the global Esc shortcut cannot abort the turn
@@ -262,7 +270,7 @@ export function DirectoryPicker({
               padding: 0,
               margin: -1,
               overflow: "hidden",
-              clip: "rect(0, 0, 0, 0)",
+              clipPath: "inset(50%)",
               whiteSpace: "nowrap",
               border: 0,
             }}
@@ -411,7 +419,7 @@ export function DirectoryPicker({
               {t("directoryPicker.noSubdirectories")}
             </div>
           )}
-          {(loadError || error) && (
+          {((loadError ?? "") || error) && (
             <div
               style={{ padding: "8px", color: "var(--danger)", fontSize: 11 }}
             >
@@ -452,7 +460,9 @@ export function DirectoryPicker({
           <button
             className="directory-picker-action"
             type="button"
-            onClick={() => onSelect(currentPath)}
+            onClick={() => {
+              onSelect(currentPath);
+            }}
             disabled={!canSelect}
             title={
               hasUncommittedPath

@@ -226,14 +226,14 @@ use a shell supported by just, such as Git Bash.
 [`package.json`](./package.json) owns the commands; [`justfile`](./justfile) is
 a shorter entry point:
 
-| Command                              | What it does                                                                            |
-| ------------------------------------ | --------------------------------------------------------------------------------------- |
-| `just fix`                           | Apply supported ESLint automatic fixes and Oxfmt formatting; inspect the diff afterward |
-| `just lint`                          | Check Oxfmt formatting and ESLint rules without fixing source                           |
-| `just typecheck`                     | Run TypeScript with `--noEmit`                                                          |
-| `just test-one bin/host-pi.test.mjs` | Run selected native Node test files with the host Pi preload                            |
-| `just test`                          | Run the full native Node suite                                                          |
-| `just qa` / `just ci`                | Run lint, typecheck, and tests, stopping on failure                                     |
+| Command                              | What it does                                                                                  |
+| ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `just fix`                           | Apply supported Oxlint and ESLint fixes, then Oxfmt formatting; inspect the diff afterward    |
+| `just lint`                          | Check Oxfmt formatting, typed Oxlint correctness, and Next ESLint rules without fixing source |
+| `just typecheck`                     | Run TypeScript with `--noEmit`                                                                |
+| `just test-one bin/host-pi.test.mjs` | Run selected native Node test files with the host Pi preload                                  |
+| `just test`                          | Run the full native Node suite                                                                |
+| `just qa` / `just ci`                | Run lint, typecheck, and tests, stopping on failure                                           |
 
 TypeScript 5.9.3 remains the compiler resolved by the npm lockfile.
 [`tsconfig.json`](./tsconfig.json) enables strict checking, including unchecked
@@ -251,9 +251,30 @@ prose wraps to that target. Import sorting, package-field sorting, and
 embedded-code formatting are disabled. Generated files, dependency and skill
 locks, vendored icons, skill sources, and compatibility symlinks are excluded.
 
-For formatting alone, run `npm exec -- oxfmt .`; to check it without writing,
-run `npm exec -- oxfmt --check .`. `just fix` also applies ESLint fixes, so
-inspect the resulting diff before committing.
+Oxlint 1.81.0 and its type-aware companion `oxlint-tsgolint` 7.0.2001 are pinned
+as development dependencies. [`.oxlintrc.json`](./.oxlintrc.json) is a local
+adaptation of `@mjakl/core` 0.3.0's `oxlint.base.json`; importing that package
+would add unrelated dependencies and a Node 24 requirement. Native correctness
+and suspicious checks cover application code, CLI launchers, configuration, the
+service worker, and tests. Semantic rules apply only to TypeScript files, not
+the untyped JavaScript launchers and fixtures. Generated files, dependencies,
+vendored icons, and skill sources/compatibility links are excluded.
+
+The adaptation keeps promise, unsafe-value, assertion, coercion, and
+error-handling checks, plus the shared base's intentional exceptions. It omits
+interface/type, array-syntax, naming, console, template-style, and
+equivalent-loop preferences; permits numeric template interpolation and CSS
+side-effect imports; and leaves TypeScript unused declarations to the compiler
+while checking JavaScript unused variables natively. Type-aware linting is on,
+but Oxlint compiler checking is off: TypeScript 5.9.3 remains the only compiler
+gate. Next's core-web-vitals ESLint preset retains React, Hooks, accessibility,
+and Next checks; its redundant TypeScript preset is not loaded.
+
+`just lint` runs Oxfmt's check, Oxlint, then ESLint. `just fix` runs supported
+Oxlint fixes, ESLint fixes, then Oxfmt; it does not enable suggestion or
+dangerous fixes. Inspect the resulting diff. For formatting alone, run
+`npm exec -- oxfmt .`; to check it without writing, run
+`npm exec -- oxfmt --check .`.
 
 For a focused name filter, put Node options before file paths and quote
 patterns:

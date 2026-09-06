@@ -39,10 +39,12 @@ export function getSubagentCalls(
   if (!Array.isArray(calls) || calls.length === 0) return null;
   if (
     !calls.every(
-      (call) =>
+      (
+        call: unknown,
+      ): call is Record<string, unknown> & { agent: string; prompt: string } =>
         isRecord(call) &&
         typeof call["agent"] === "string" &&
-        call["agent"].trim() &&
+        call["agent"].trim().length > 0 &&
         typeof call["prompt"] === "string",
     )
   )
@@ -50,10 +52,10 @@ export function getSubagentCalls(
   return calls.map((call) => ({
     agent: call.agent,
     prompt: call.prompt,
-    model: text(call.model),
-    cwd: text(call.cwd),
-    initialContext: text(call.initialContext),
-    session: text(call.session),
+    model: text(call["model"]),
+    cwd: text(call["cwd"]),
+    initialContext: text(call["initialContext"]),
+    session: text(call["session"]),
   }));
 }
 
@@ -68,7 +70,7 @@ function finalAssistantText(messages: unknown[]): string {
       continue;
     const output = message["content"]
       .filter(
-        (part) =>
+        (part: unknown): part is { type: "text"; text: string } =>
           isRecord(part) &&
           part["type"] === "text" &&
           typeof part["text"] === "string" &&
@@ -94,7 +96,7 @@ export function getSubagentResults(
     details["results"].length !== calls.length
   )
     return null;
-  const rows: SubagentResult[] = new Array(calls.length);
+  const rows = new Array<SubagentResult>(calls.length);
   for (const [position, item] of details["results"].entries()) {
     if (!isRecord(item)) return null;
     const index = item["callIndex"] ?? position;
@@ -125,7 +127,7 @@ export function getSubagentResults(
       output: finalAssistantText(item["messages"]),
       error:
         status === "failed" || status === "cancelled"
-          ? text(item["errorMessage"]) || text(item["stderr"])
+          ? (text(item["errorMessage"]) ?? "") || text(item["stderr"])
           : undefined,
       model: text(item["model"]),
       cwd: text(session?.["cwd"]),

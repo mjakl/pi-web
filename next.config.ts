@@ -21,8 +21,8 @@ const nextConfig: NextConfig = {
   ],
   // Access control is owned by the external layer, including in development.
   allowedDevOrigins: ["**.*"],
-  async headers() {
-    return [
+  headers() {
+    return Promise.resolve([
       {
         source: "/",
         headers: [
@@ -45,7 +45,7 @@ const nextConfig: NextConfig = {
           { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
         ],
       },
-    ];
+    ]);
   },
   env: {
     NEXT_PUBLIC_APP_VERSION: version,

@@ -29,6 +29,8 @@ function formatValue(value: unknown): string {
   try {
     return JSON.stringify(value);
   } catch {
+    // JSON serialization failed; the fallback deliberately uses the object's display label.
+    // oxlint-disable-next-line typescript/no-base-to-string
     return String(value);
   }
 }
@@ -170,7 +172,9 @@ export function ToolDefinitionsPanel({ loading, tools, translate }: Props) {
                   type="button"
                   className={`tool-definitions-item${selected ? " selected" : ""}`}
                   aria-pressed={selected}
-                  onClick={() => setSelectedToolName(tool.name)}
+                  onClick={() => {
+                    setSelectedToolName(tool.name);
+                  }}
                 >
                   <code>{tool.name}</code>
                 </button>

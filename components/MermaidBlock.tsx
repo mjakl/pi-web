@@ -82,7 +82,9 @@ export function MermaidBlock({
     () => (
       <button
         type="button"
-        onClick={() => setShowPreview((v) => !v)}
+        onClick={() => {
+          setShowPreview((v) => !v);
+        }}
         disabled={isStreaming}
         title={
           isStreaming
@@ -130,14 +132,18 @@ export function MermaidBlock({
             className="mermaid-block mermaid-preview-button"
             title={t("i18n.openMermaidViewer")}
             aria-label={t("i18n.openMermaidViewer")}
-            onClick={() => setZoomOpen(true)}
+            onClick={() => {
+              setZoomOpen(true);
+            }}
             dangerouslySetInnerHTML={{ __html: renderState.svg }}
           />
         )}
         {zoomOpen && (
           <MermaidZoomDialog
             svg={renderState.svg}
-            onClose={() => setZoomOpen(false)}
+            onClose={() => {
+              setZoomOpen(false);
+            }}
           />
         )}
       </>
@@ -201,9 +207,9 @@ function MermaidZoomDialog({
             <div className="mermaid-zoom-stepper">
               <button
                 type="button"
-                onClick={() =>
-                  setZoom((value) => Math.max(ZOOM_MIN, value - ZOOM_STEP))
-                }
+                onClick={() => {
+                  setZoom((value) => Math.max(ZOOM_MIN, value - ZOOM_STEP));
+                }}
                 disabled={zoom <= ZOOM_MIN}
                 title={t("i18n.zoomOut")}
                 aria-label={t("i18n.zoomOut")}
@@ -226,9 +232,9 @@ function MermaidZoomDialog({
               </span>
               <button
                 type="button"
-                onClick={() =>
-                  setZoom((value) => Math.min(ZOOM_MAX, value + ZOOM_STEP))
-                }
+                onClick={() => {
+                  setZoom((value) => Math.min(ZOOM_MAX, value + ZOOM_STEP));
+                }}
                 disabled={zoom >= ZOOM_MAX}
                 title={t("i18n.zoomIn")}
                 aria-label={t("i18n.zoomIn")}
@@ -250,7 +256,9 @@ function MermaidZoomDialog({
             <button
               type="button"
               className="mermaid-zoom-icon-button"
-              onClick={() => setZoom(1)}
+              onClick={() => {
+                setZoom(1);
+              }}
               title={t("i18n.fitToWidth")}
               aria-label={t("i18n.fitToWidth")}
             >
@@ -335,10 +343,16 @@ export const CodeBlock = memo(function CodeBlock({
   const [copied, setCopied] = useState(false);
 
   const copy = () => {
-    copyText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    copyText(code)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => {
+          setCopied(false);
+        }, 1500);
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to copy code:", error);
+      });
   };
 
   return (

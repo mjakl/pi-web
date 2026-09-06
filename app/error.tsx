@@ -35,7 +35,9 @@ export default function Error({
           <button
             type="button"
             className="app-error-button is-primary"
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              window.location.reload();
+            }}
           >
             {t("error.reload")}
           </button>

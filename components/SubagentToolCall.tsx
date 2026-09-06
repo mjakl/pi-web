@@ -26,7 +26,9 @@ function Disclosure({
   return (
     <details
       className={className}
-      onToggle={(event) => setOpen(event.currentTarget.open)}
+      onToggle={(event) => {
+        setOpen(event.currentTarget.open);
+      }}
     >
       <summary>
         <span className="subagent-summary-label">{label}</span>
@@ -137,7 +139,7 @@ export function SubagentToolCall({
           {model && <span title={model}>{model}</span>}
           {agentCwd && (
             <span title={agentCwd}>
-              {agentCwd.split(/[\\/]/).filter(Boolean).pop() || agentCwd}
+              {agentCwd.split(/[\\/]/).filter(Boolean).pop() ?? agentCwd}
             </span>
           )}
         </div>

@@ -205,12 +205,12 @@ Start with these owners instead of a broad file inventory:
   server does; shims alone cover only the package root.
 - Regression tests exercise exported behavior or rendered output. Never read a
   source file and assert on its text.
-- Before implementation handoff, run `just ci` (or `npm run ci`): Oxfmt, ESLint,
-  `tsc --noEmit`, and the full native Node suite. If dependencies are not
-  installed or a check cannot run, report that explicitly rather than claiming
-  validation. `tsc` reads the host Pi shims rather than writing them; after a
-  host Pi change or an unresolved `@earendil-works` import, run
-  `npm run prepare` before typechecking.
+- Before implementation handoff, run `just ci` (or `npm run ci`): Oxfmt, typed
+  Oxlint, Next ESLint, `tsc --noEmit`, and the full native Node suite. If
+  dependencies are not installed or a check cannot run, report that explicitly
+  rather than claiming validation. `tsc` reads the host Pi shims rather than
+  writing them; after a host Pi change or an unresolved `@earendil-works`
+  import, run `npm run prepare` before typechecking.
 - Keep the stronger checks in `tsconfig.json` enabled. Use explicit dictionary
   access for index signatures and retain actual values when traversing arrays;
   do not add assertions or silently skip entries to satisfy indexed-access
@@ -219,9 +219,13 @@ Start with these owners instead of a broad file inventory:
   constants keep Next.js's static substitution.
 - Keep `qa` and `ci` non-mutating validation of source. Disposable generated
   outputs (host shims, TypeScript incremental state, test fixtures) are allowed;
-  `just lint` / `npm run lint` checks Oxfmt formatting before ESLint. Apply
-  formatting and supported ESLint fixes explicitly with `just fix` /
-  `npm run fix`, then inspect the diff. For formatting alone, use
+  `just lint` / `npm run lint` checks Oxfmt formatting, typed Oxlint, then Next
+  ESLint. Apply supported Oxlint and ESLint fixes followed by formatting
+  explicitly with `just fix` / `npm run fix`, then inspect the diff. Do not use
+  suggestion or dangerous fixes. Keep semantic lint rules scoped to TypeScript
+  in [`.oxlintrc.json`](.oxlintrc.json), with compiler checking off; `tsc` owns
+  compiler diagnostics. Preserve intentional empty-string/false defaults rather
+  than replacing `||` with `??` mechanically. For formatting alone, use
   `npm exec -- oxfmt .`; check it without writing with
   `npm exec -- oxfmt --check .`. Keep formatting policy and exclusions in
   [`.oxfmtrc.json`](.oxfmtrc.json), not per-command ignore lists.

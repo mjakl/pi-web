@@ -1,6 +1,5 @@
 "use strict";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { parseArgs } = require("util");
 
 const CLI_OPTIONS = {

@@ -345,6 +345,42 @@ test("compresses large images while preserving small images and GIFs", async () 
   }
 });
 
+test("releases the bitmap and reads the original only once when compression falls back and reading fails", async () => {
+  const originals = {
+    FileReader: globalThis.FileReader,
+    createImageBitmap: globalThis.createImageBitmap,
+    document: globalThis.document,
+  };
+  const failure = new Error("Image unreadable");
+  let reads = 0;
+  let closed = false;
+  globalThis.FileReader = class {
+    readAsDataURL() {
+      reads += 1;
+      this.error = failure;
+      queueMicrotask(() => this.onerror(failure));
+    }
+  };
+  globalThis.createImageBitmap = async () => ({
+    width: 2048,
+    height: 1024,
+    close() {
+      closed = true;
+    },
+  });
+  globalThis.document = { createElement: () => ({ getContext: () => null }) };
+  try {
+    await assert.rejects(
+      compressImageFile({ size: 2 * 1024 * 1024, type: "image/png" }),
+      (error) => error === failure,
+    );
+    assert.equal(reads, 1);
+    assert.equal(closed, true);
+  } finally {
+    Object.assign(globalThis, originals);
+  }
+});
+
 test("recognizes exact slash commands for one-Enter submission", () => {
   const builtin = { name: "copy", description: "", source: "builtin" };
   assert.equal(isExactSlashCommand("/copy", builtin), true);

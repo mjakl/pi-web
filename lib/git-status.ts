@@ -33,7 +33,7 @@ export function parseGitPorcelainV1(output: string): GitPorcelainEntry[] {
       worktreeStatus,
     };
     if (usesRenamePath(indexStatus, worktreeStatus)) {
-      entry.originalPath = records[++i] || undefined;
+      entry.originalPath = (records[++i] ?? "") || undefined;
     }
     entries.push(entry);
   }

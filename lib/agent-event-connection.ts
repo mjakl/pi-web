@@ -76,7 +76,7 @@ export class AgentEventConnection {
   maintain(sessionId: string): void {
     if (!this.options.shouldMaintain(sessionId)) return;
     const retryGeneration = this.retryGeneration;
-    void this.ensureConnected(sessionId).catch((error) => {
+    void this.ensureConnected(sessionId).catch((error: unknown) => {
       if (retryGeneration !== this.retryGeneration) return;
       if (error instanceof AgentEventConnectionError) {
         if (error.status === "startup_error") this.stopRetrying();
@@ -123,6 +123,8 @@ export class AgentEventConnection {
     }
 
     let settled = false;
+    // No-value promise resolver; void is the Promise type argument, not a stored value.
+    // oxlint-disable-next-line typescript/no-invalid-void-type
     const { promise, resolve, reject } = Promise.withResolvers<void>();
     const timeout = setTimeout(() => {
       this.fail(connection, new AgentEventConnectionError("ready_timeout"));

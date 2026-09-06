@@ -232,7 +232,7 @@ export const SessionItem = memo(function SessionItem({
   const actionsAvailableRef = useRef(actionsAvailable);
   const hasActionsRef = useRef(false);
   const menuId = useId();
-  const eligibleForActions = isActive || !session.transient;
+  const eligibleForActions = (isActive ?? false) || !session.transient;
   const hasActions = actionsAvailable && eligibleForActions;
   const actionPending = stopping || activating || deleting;
   const renderedSurface = actionsAvailable
@@ -371,13 +371,17 @@ export const SessionItem = memo(function SessionItem({
 
   const firstMessage = session.firstMessage ?? "";
   const title =
-    session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12);
+    (session.name ?? "") ||
+    firstMessage.slice(0, 50) ||
+    session.id.slice(0, 12);
   const actionsLabel = t("sidebar.sessionActions", { title });
 
   const startRename = useCallback(() => {
     if (session.transient) return;
     setRenameValue(
-      session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12),
+      (session.name ?? "") ||
+        firstMessage.slice(0, 50) ||
+        session.id.slice(0, 12),
     );
     transitionActionSurface({ kind: "rename" }, "surface");
   }, [
@@ -581,7 +585,9 @@ export const SessionItem = memo(function SessionItem({
       data-session-inventory-id={session.id}
       onClick={
         renderedSurface.kind === "idle" || renderedSurface.kind === "menu"
-          ? () => onSelect(session)
+          ? () => {
+              onSelect(session);
+            }
           : undefined
       }
       style={{
@@ -610,7 +616,9 @@ export const SessionItem = memo(function SessionItem({
           ref={inputRef}
           aria-label={t("sidebar.renameSession", { title })}
           value={renameValue}
-          onChange={(e) => setRenameValue(e.target.value)}
+          onChange={(e) => {
+            setRenameValue(e.target.value);
+          }}
           onBlur={(e) => {
             if (
               e.relatedTarget !== menuTriggerRef.current &&
@@ -865,7 +873,9 @@ export const SessionItem = memo(function SessionItem({
                 maxHeight: "calc(100vh - 16px)",
                 overflowY: "auto",
               }}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
               onFocusCapture={() => {
                 menuHadFocusRef.current = true;
               }}
@@ -874,7 +884,9 @@ export const SessionItem = memo(function SessionItem({
               {isActive && (
                 <button
                   type="button"
-                  onClick={(e) => chooseMenuAction(e, "stop")}
+                  onClick={(e) => {
+                    chooseMenuAction(e, "stop");
+                  }}
                   className="menu-item"
                 >
                   {t("sidebar.stop")}
@@ -883,7 +895,9 @@ export const SessionItem = memo(function SessionItem({
               {!isActive && !session.transient && (
                 <button
                   type="button"
-                  onClick={(e) => chooseMenuAction(e, "activate")}
+                  onClick={(e) => {
+                    chooseMenuAction(e, "activate");
+                  }}
                   className="menu-item"
                 >
                   {t("sidebar.activate")}
@@ -893,14 +907,18 @@ export const SessionItem = memo(function SessionItem({
                 <>
                   <button
                     type="button"
-                    onClick={(e) => chooseMenuAction(e, "rename")}
+                    onClick={(e) => {
+                      chooseMenuAction(e, "rename");
+                    }}
                     className="menu-item"
                   >
                     {t("sidebar.rename")}
                   </button>
                   <button
                     type="button"
-                    onClick={(e) => chooseMenuAction(e, "delete")}
+                    onClick={(e) => {
+                      chooseMenuAction(e, "delete");
+                    }}
                     className="menu-item menu-item-danger"
                   >
                     {t("sidebar.delete")}
