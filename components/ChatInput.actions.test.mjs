@@ -93,8 +93,9 @@ test("the action switches between Send, Stop, Steer, and transient keyboard Queu
       assert.equal(action().getAttribute("aria-label"), "Send");
       assert.equal(action().disabled, true);
       await type("First prompt");
-      await React.act(() => action().click());
+      await React.act(async () => action().click());
       assert.deepEqual(sent, ["First prompt"]);
+      assert.equal(input.value, "");
       await render({ isStreaming: true });
       assert.equal(action().getAttribute("aria-label"), "Stop agent");
       await type("Next prompt");
