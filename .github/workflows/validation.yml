@@ -1,0 +1,76 @@
+name: Validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # A matching host installation for CI, not a product dependency/support pin.
+  PI_FIXTURE_VERSION: 0.85.1
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  source:
+    name: Source validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.9.1
+      - name: Install host Pi fixture outside the checkout
+        run: |
+          npm install --prefix "$RUNNER_TEMP/host-pi" --ignore-scripts --no-audit --no-fund \
+            "@earendil-works/pi-coding-agent@$PI_FIXTURE_VERSION" \
+            "@earendil-works/pi-server@$PI_FIXTURE_VERSION"
+          echo "$RUNNER_TEMP/host-pi/node_modules/.bin" >> "$GITHUB_PATH"
+          mkdir -p "$RUNNER_TEMP/validation-home" "$RUNNER_TEMP/validation-agent"
+          echo "PI_CODING_AGENT_DIR=$RUNNER_TEMP/validation-agent" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: HOME="$RUNNER_TEMP/validation-home" just ci
+
+  runtime:
+    name: Node 22.19 runtime smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.9.1
+      - name: Install host Pi fixture outside the checkout
+        run: |
+          npm install --prefix "$RUNNER_TEMP/host-pi" --ignore-scripts --no-audit --no-fund \
+            "@earendil-works/pi-coding-agent@$PI_FIXTURE_VERSION" \
+            "@earendil-works/pi-server@$PI_FIXTURE_VERSION"
+          echo "$RUNNER_TEMP/host-pi/node_modules/.bin" >> "$GITHUB_PATH"
+          mkdir -p "$RUNNER_TEMP/build-home" "$RUNNER_TEMP/build-agent"
+          echo "PI_CODING_AGENT_DIR=$RUNNER_TEMP/build-agent" >> "$GITHUB_ENV"
+      - name: Build and pack a disposable copy on Node 24
+        run: |
+          build=$(mktemp -d "$RUNNER_TEMP/pi-web-build.XXXXXX")
+          git archive HEAD | tar -x -C "$build"
+          cd "$build"
+          HOME="$RUNNER_TEMP/build-home" npm ci
+          HOME="$RUNNER_TEMP/build-home" npm run build
+          npm pack --pack-destination "$RUNNER_TEMP"
+      - name: Install runtime-only artifact and exercise the minimum Node version
+        env:
+          PI_WEB_SMOKE_PACKAGE: ${{ runner.temp }}/consumer/node_modules/@mjakl/pi-web
+        run: |
+          mise install node@22.19.0
+          mise exec node@22.19.0 -- npm install --prefix "$RUNNER_TEMP/consumer" \
+            --omit=dev --ignore-scripts --no-audit --no-fund "$RUNNER_TEMP"/mjakl-pi-web-*.tgz
+          mise exec node@22.19.0 -- node --test scripts/runtime-smoke.test.mjs
+      - name: Remove disposable build and consumer artifacts
+        if: always()
+        run: rm -rf "$RUNNER_TEMP"/pi-web-build.* "$RUNNER_TEMP/consumer" "$RUNNER_TEMP"/mjakl-pi-web-*.tgz

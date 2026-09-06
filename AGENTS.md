@@ -7,7 +7,10 @@ live turns through in-process Pi SDK `AgentSession` instances.
 ## Working agreement
 
 - Use `npm`; requirements and available scripts are authoritative in
-  `package.json` and `package-lock.json`.
+  `package.json` and `package-lock.json`. Use the development tool pins in
+  `mise.toml` (`mise install`, then `mise exec -- <command>` unless mise is
+  active). Prepare a fresh checkout with `npm ci`, with `NODE_ENV` unset so
+  dev dependencies are installed. `justfile` delegates to the npm scripts.
 - Pi itself is not a dependency of this checkout. Development, build,
   type-check, and tests all need a host Pi on `PATH`; see
   [Host Pi runtime](#host-pi-runtime).
@@ -84,7 +87,8 @@ Start with these owners instead of a broad file inventory:
   resolution, and keep `next.config.ts` `serverExternalPackages` in step.
 - Pi Web supports whatever Pi version is installed. Do not pin Pi packages in
   `package.json`; a pinned copy would be what tests and builds validate while
-  the host runs something else.
+  the host runs something else. The matching host packages pinned outside the
+  checkout in `.github/workflows/validation.yml` are CI fixtures only.
 
 ### Session lifecycle and branching
 
@@ -196,17 +200,22 @@ Start with these owners instead of a broad file inventory:
 ## Validation and handoff
 
 - Add or update the nearest `*.test.mjs` regression test for changed behavior.
-  Use a focused
-  `node --require ./bin/host-pi-runtime.js --experimental-strip-types --test <file>`
-  command while iterating; the preload resolves Pi the way the server does,
-  which the `node_modules` shims cover only at the package root.
+  Use `just test-one <file>` (or `npm run test:one -- <file>`) while iterating.
+  Put Node runner options before paths, for example
+  `just test-one --test-name-pattern "first pi" bin/host-pi.test.mjs`.
+  These commands prepare shims and use the host preload, which resolves Pi
+  the way the server does; shims alone cover only the package root.
 - Regression tests exercise exported behavior or rendered output. Never read a
   source file and assert on its text.
-- Before implementation handoff, run `npm test`,
-  `node_modules/.bin/tsc --noEmit`, and `npm run lint`. If dependencies are not
+- Before implementation handoff, run `just ci` (or `npm run ci`): ESLint,
+  `tsc --noEmit`, and the full native Node suite. If dependencies are not
   installed or a check cannot run, report that explicitly rather than claiming
-  validation. `tsc` reads the host Pi shims rather than writing them; if it
-  cannot resolve an `@earendil-works` import, run `node bin/link-host-pi.js`.
+  validation. `tsc` reads the host Pi shims rather than writing them; after a
+  host Pi change or an unresolved `@earendil-works` import, run `npm run prepare`
+  before typechecking.
+- Keep `qa` and `ci` non-mutating validation of source. Disposable generated
+  outputs (host shims, TypeScript incremental state, test fixtures) are allowed;
+  source fixes belong only in the explicit `just fix` / `npm run fix` command.
 - For instruction-only or documentation-only changes, run `git diff --check`
   and validate every referenced path, link, and command; code checks are not
   required unless the change also affects code or configuration.
@@ -215,7 +224,11 @@ Start with these owners instead of a broad file inventory:
 - For a change to `dependencies`, the `build` script, or the `files` list,
   prove the published package still starts: in a scratch copy of the tree,
   run `npm run build`, then `npm pack`, install the tarball with
-  `--omit=dev`, and run its `pi-web` bin. `npm pack` has no build step and
+  `--omit=dev`, and run its `pi-web` bin. Use the disposable build/install steps
+  in `.github/workflows/validation.yml` and `scripts/runtime-smoke.test.mjs`
+  to verify Node 22.19 startup and a server-side host Pi session read with
+  isolated state on loopback. Keep this smoke separate from routine `just ci`.
+  `npm pack` has no build step and
   ships whatever `.next` exists. A consumer install never contains the
   packages bundled into `.next` and holds no Pi packages at all, so the started
   server must reach Pi through the preload, and the build keeps `--webpack` because a
