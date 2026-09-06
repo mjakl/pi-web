@@ -500,14 +500,19 @@ export function reparentChildSessions(filePath: string): void {
       if (!parentSession || pathIdentityKey(parentSession) !== targetPathKey)
         continue;
 
-      const lines = readFileSync(childPath, "utf8").split("\n");
-      if (hasLegacyBuiltInSubagentMetadata(lines)) continue;
+      const contents = readFileSync(childPath, "utf8");
+      if (hasLegacyBuiltInSubagentMetadata(contents.split("\n"))) continue;
 
       // Rewrite only the generic child header with the new parentSession.
-      const header = JSON.parse(lines[0]) as { parentSession?: string };
+      const newline = contents.indexOf("\n");
+      const headerLine = newline === -1 ? contents : contents.slice(0, newline);
+      const header = JSON.parse(headerLine) as { parentSession?: string };
       header.parentSession = newParentPath;
-      lines[0] = JSON.stringify(header);
-      writeFileSync(childPath, lines.join("\n"));
+      writeFileSync(
+        childPath,
+        JSON.stringify(header) +
+          (newline === -1 ? "" : contents.slice(newline)),
+      );
     } catch {
       /* skip malformed */
     }
@@ -698,22 +703,23 @@ function parseEntryTimestamp(timestamp: string): number | undefined {
 function base64ImageInfo(
   block: unknown,
 ): { bytes: number; mime?: string } | null {
-  if (!isRecord(block) || block.type !== "image") return null;
+  if (!isRecord(block) || block["type"] !== "image") return null;
 
   let data: string | undefined;
   let mime: string | undefined;
-  if (typeof block.data === "string") {
-    data = block.data;
-    mime = typeof block.mimeType === "string" ? block.mimeType : undefined;
-  } else if (
-    isRecord(block.source) &&
-    block.source.type === "base64" &&
-    typeof block.source.data === "string"
-  ) {
-    data = block.source.data;
+  if (typeof block["data"] === "string") {
+    data = block["data"];
     mime =
-      typeof block.source.media_type === "string"
-        ? block.source.media_type
+      typeof block["mimeType"] === "string" ? block["mimeType"] : undefined;
+  } else if (
+    isRecord(block["source"]) &&
+    block["source"]["type"] === "base64" &&
+    typeof block["source"]["data"] === "string"
+  ) {
+    data = block["source"]["data"];
+    mime =
+      typeof block["source"]["media_type"] === "string"
+        ? block["source"]["media_type"]
         : undefined;
   }
   if (!data) return null;

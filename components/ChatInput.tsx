@@ -1696,7 +1696,7 @@ export function ChatInput({
       )
     : 0;
   const compactResultText = compactResult
-    ? `${compactResult.reason && compactResult.reason !== "manual" ? `${compactResult.reason[0].toUpperCase()}${compactResult.reason.slice(1)} ` : t("chat.compacted")} ${formatCompactCount(compactResult.tokensBefore)} -> ${formatCompactCount(compactResult.estimatedTokensAfter)} tokens (${t("chat.tokensSaved", { saved: formatCompactCount(compactSavedTokens) })})`
+    ? `${compactResult.reason && compactResult.reason !== "manual" ? `${compactResult.reason.charAt(0).toUpperCase()}${compactResult.reason.slice(1)} ` : t("chat.compacted")} ${formatCompactCount(compactResult.tokensBefore)} -> ${formatCompactCount(compactResult.estimatedTokensAfter)} tokens (${t("chat.tokensSaved", { saved: formatCompactCount(compactSavedTokens) })})`
     : null;
   const thinkingDisplayLabel = (() => {
     const lvl = thinkingLevel ?? "auto";

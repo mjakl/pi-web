@@ -944,9 +944,11 @@ function AssistantMessageView({
       setStreamingDurations((prev: Map<number, number>) => {
         let changed = false;
         const next = new Map(prev);
-        for (let i = 0; i < items.length - 1; i++) {
-          const originalIndex = items[i].originalIndex;
-          const nextOriginalIndex = items[i + 1].originalIndex;
+        let previousIndex: number | undefined;
+        for (const { originalIndex: nextOriginalIndex } of items) {
+          const originalIndex = previousIndex;
+          previousIndex = nextOriginalIndex;
+          if (originalIndex === undefined) continue;
           if (
             !next.has(originalIndex) &&
             blockStartTimesRef.current.has(originalIndex)
@@ -1857,10 +1859,10 @@ function getResultDiff(result: ToolResultMessage): ResultDiff | null {
   const details = (result as ToolResultMessage & { details?: unknown }).details;
   if (!isRecord(details)) return null;
 
-  const patch = typeof details.patch === "string" ? details.patch : null;
+  const patch = typeof details["patch"] === "string" ? details["patch"] : null;
   if (patch) return { text: patch };
 
-  const diff = typeof details.diff === "string" ? details.diff : null;
+  const diff = typeof details["diff"] === "string" ? details["diff"] : null;
   if (diff) return { text: diff };
 
   return null;
@@ -1964,16 +1966,16 @@ function CompactionMessageView({ message }: { message: CustomMessage }) {
   const time = formatTime(message.timestamp);
   const details = isRecord(message.details) ? message.details : {};
   const before =
-    typeof details.tokensBefore === "number" &&
-    Number.isFinite(details.tokensBefore) &&
-    details.tokensBefore >= 0
-      ? formatCompactCount(details.tokensBefore)
+    typeof details["tokensBefore"] === "number" &&
+    Number.isFinite(details["tokensBefore"]) &&
+    details["tokensBefore"] >= 0
+      ? formatCompactCount(details["tokensBefore"])
       : null;
   const after =
-    typeof details.estimatedTokensAfter === "number" &&
-    Number.isFinite(details.estimatedTokensAfter) &&
-    details.estimatedTokensAfter >= 0
-      ? formatCompactCount(details.estimatedTokensAfter)
+    typeof details["estimatedTokensAfter"] === "number" &&
+    Number.isFinite(details["estimatedTokensAfter"]) &&
+    details["estimatedTokensAfter"] >= 0
+      ? formatCompactCount(details["estimatedTokensAfter"])
       : null;
   const tokens =
     before !== null && after !== null
@@ -2408,8 +2410,8 @@ function previewText(text: string): string {
 function getToolPreview(block: ToolCallContent): string {
   const input = block.input;
   if (!input || typeof input !== "object") return "";
-  const keys = Object.keys(input);
-  if (keys.length === 0) return "";
+  const [firstKey] = Object.keys(input);
+  if (firstKey === undefined) return "";
 
   const preview = (value: unknown) =>
     (typeof value === "object"
@@ -2418,13 +2420,13 @@ function getToolPreview(block: ToolCallContent): string {
     ).slice(0, 120);
 
   // Common tool input patterns
-  if ("command" in input) return preview(input.command);
-  if ("path" in input) return preview(input.path);
-  if ("file_path" in input) return preview(input.file_path);
-  if ("pattern" in input) return preview(input.pattern);
-  if ("query" in input) return preview(input.query);
+  if ("command" in input) return preview(input["command"]);
+  if ("path" in input) return preview(input["path"]);
+  if ("file_path" in input) return preview(input["file_path"]);
+  if ("pattern" in input) return preview(input["pattern"]);
+  if ("query" in input) return preview(input["query"]);
 
-  const first = input[keys[0]];
+  const first = input[firstKey];
   return preview(first);
 }
 

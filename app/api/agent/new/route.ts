@@ -15,7 +15,8 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as { cwd?: string; [key: string]: unknown };
     const { cwd, ...command } = body;
-    commandType = typeof command.type === "string" ? command.type : undefined;
+    commandType =
+      typeof command["type"] === "string" ? command["type"] : undefined;
 
     if (!cwd || typeof cwd !== "string") {
       return Response.json(
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
       thinkingLevel?: string;
     };
 
-    if (promptCommand.type === "ensure_session") {
+    if (promptCommand["type"] === "ensure_session") {
       return Response.json({
         success: true,
         sessionId: realSessionId,
@@ -94,7 +95,7 @@ export async function POST(req: Request) {
     }
 
     const result = await session.send(promptCommand);
-    promptAccepted = promptCommand.type === "prompt";
+    promptAccepted = promptCommand["type"] === "prompt";
 
     return Response.json({
       success: true,

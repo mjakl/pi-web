@@ -10,7 +10,7 @@ function isPathChar(ch: string): boolean {
 
 function hasReferenceBoundaryAfter(text: string, index: number): boolean {
   if (index >= text.length) return true;
-  const ch = text[index];
+  const ch = text.charAt(index);
   if (ch === ":") return /\d/.test(text[index + 1] ?? "");
   return !isPathChar(ch);
 }
@@ -26,7 +26,7 @@ function containsExactPathReference(text: string, filePath: string): boolean {
     for (const t of targets) {
       let index = haystack.indexOf(t);
       while (index !== -1) {
-        const before = index === 0 ? "" : haystack[index - 1];
+        const before = haystack.charAt(index - 1);
         const afterIndex = index + t.length;
         if (
           (index === 0 || !isPathChar(before)) &&

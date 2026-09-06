@@ -30,14 +30,14 @@ function parseToolSelectionData(data: unknown): string[] | undefined {
 export function readSessionToolSelection(
   entries: readonly SessionEntry[],
 ): string[] | undefined {
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const entry = entries[index];
+  let tools: string[] | undefined;
+  entries.findLast((entry) => {
     if (entry.type !== "custom" || entry.customType !== TOOL_SELECTION_TYPE)
-      continue;
-    const tools = parseToolSelectionData(entry.data);
-    if (tools !== undefined) return tools;
-  }
-  return undefined;
+      return false;
+    tools = parseToolSelectionData(entry.data);
+    return tools !== undefined;
+  });
+  return tools;
 }
 
 export function validateSessionToolSelection(tools: unknown): string[] {

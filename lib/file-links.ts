@@ -74,7 +74,8 @@ export function resolveLocalFileHref(
 ): string | null {
   if (!href) return null;
 
-  const cleanHref = href.split("#", 1)[0].split("?", 1)[0].trim();
+  const suffix = href.search(/[?#]/);
+  const cleanHref = (suffix === -1 ? href : href.slice(0, suffix)).trim();
   if (!cleanHref) return null;
 
   let candidate: string | null = null;

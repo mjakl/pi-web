@@ -211,6 +211,12 @@ Start with these owners instead of a broad file inventory:
   validation. `tsc` reads the host Pi shims rather than writing them; after a
   host Pi change or an unresolved `@earendil-works` import, run
   `npm run prepare` before typechecking.
+- Keep the stronger checks in `tsconfig.json` enabled. Use explicit dictionary
+  access for index signatures and retain actual values when traversing arrays;
+  do not add assertions or silently skip entries to satisfy indexed-access
+  checking. Preserve message/entry-id alignment and existing empty-state
+  behavior. Declare known build-time environment fields in `env.d.ts` so client
+  constants keep Next.js's static substitution.
 - Keep `qa` and `ci` non-mutating validation of source. Disposable generated
   outputs (host shims, TypeScript incremental state, test fixtures) are allowed;
   `just lint` / `npm run lint` checks Oxfmt formatting before ESLint. Apply

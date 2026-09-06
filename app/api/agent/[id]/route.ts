@@ -22,7 +22,7 @@ export async function POST(
   try {
     const body = (await req.json()) as { type: string; [key: string]: unknown };
     commandType = typeof body.type === "string" ? body.type : undefined;
-    const requestedToolNames = body.toolNames;
+    const requestedToolNames = body["toolNames"];
     if (
       requestedToolNames !== undefined &&
       (!Array.isArray(requestedToolNames) ||

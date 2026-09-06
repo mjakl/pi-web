@@ -34,7 +34,7 @@ export function FrontmatterCard({ data }: FrontmatterCardProps) {
   const entries = Object.entries(data);
   if (entries.length === 0) return null;
 
-  const title = getFrontmatterTitle(data.title);
+  const title = getFrontmatterTitle(data["title"]);
 
   const tagKey = TAG_KEYS.find((key) => Array.isArray(data[key]));
   const tags = tagKey

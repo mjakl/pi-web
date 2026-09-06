@@ -139,6 +139,8 @@ export async function resolveProject(
       "--git-dir",
     ]);
     const [commonDir, gitDir] = out.split("\n").map(toNativePath);
+    if (commonDir === undefined || gitDir === undefined)
+      throw new Error("Git did not return both directory paths");
     const bare =
       (await git(commonDir, ["rev-parse", "--is-bare-repository"])) === "true";
     const root = realPathOrSelf(bare ? commonDir : dirname(commonDir));

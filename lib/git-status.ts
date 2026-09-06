@@ -25,8 +25,8 @@ export function parseGitPorcelainV1(output: string): GitPorcelainEntry[] {
   for (let i = 0; i < records.length; i++) {
     const record = records[i];
     if (!record || record.length < 4 || record[2] !== " ") continue;
-    const indexStatus = record[0];
-    const worktreeStatus = record[1];
+    const indexStatus = record.charAt(0);
+    const worktreeStatus = record.charAt(1);
     const entry: GitPorcelainEntry = {
       path: record.slice(3),
       indexStatus,

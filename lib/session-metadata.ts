@@ -156,18 +156,18 @@ export async function readSessionRowMetadata(
             continue;
           }
 
-          if (entry.type === "session_info") {
+          if (entry["type"] === "session_info") {
             name =
-              typeof entry.name === "string" && entry.name.trim()
-                ? entry.name.trim()
+              typeof entry["name"] === "string" && entry["name"].trim()
+                ? entry["name"].trim()
                 : undefined;
             continue;
           }
-          if (entry.type !== "message") continue;
+          if (entry["type"] !== "message") continue;
 
           messageCount += 1;
           if (firstMessage) continue;
-          const message = entry.message;
+          const message = entry["message"];
           if (
             !message ||
             typeof message !== "object" ||

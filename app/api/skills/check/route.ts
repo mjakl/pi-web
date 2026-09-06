@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     }
 
     const updates = await checkSkillUpdates(installs, {
-      githubToken: process.env.GITHUB_TOKEN || process.env.GH_TOKEN,
+      githubToken: process.env["GITHUB_TOKEN"] || process.env["GH_TOKEN"],
     });
     return Response.json({ updates });
   } catch (error) {

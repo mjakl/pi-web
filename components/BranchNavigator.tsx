@@ -70,8 +70,10 @@ export function compressChain(node: SessionTreeNode): {
     ? current.entry
     : null;
   let skipped = current.compressedEntryIds?.length ?? 0;
-  while (current.children.length === 1) {
-    current = current.children[0];
+  let [onlyChild] = current.children;
+  while (current.children.length === 1 && onlyChild) {
+    current = onlyChild;
+    [onlyChild] = current.children;
     branchPreview ??= current.branchPreview;
     if (!labelEntry && isMessageEntry(current.entry))
       labelEntry = current.entry;
@@ -92,8 +94,9 @@ export function selectTopLevelBranches(
   tree: SessionTreeNode[],
 ): SessionTreeNode[] {
   if (tree.length > 1) return tree;
-  if (tree.length === 0) return [];
-  const first = compressChain(tree[0]).node;
+  const [root] = tree;
+  if (!root) return [];
+  const first = compressChain(root).node;
   return first.children.length > 1 ? first.children : [];
 }
 

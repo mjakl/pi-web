@@ -52,7 +52,10 @@ function layoutNodes(allNodes: NodeInfo[], minimapHeight: number): NodeLayout {
   const usableHeight = Math.max(0, height - MINIMAP_PADDING * 2);
   if (allNodes.length === 1) {
     return {
-      nodes: [{ ...allNodes[0], topRatio: MINIMAP_PADDING / height }],
+      nodes: allNodes.map((node) => ({
+        ...node,
+        topRatio: MINIMAP_PADDING / height,
+      })),
       gap: MAX_NODE_GAP,
       fillsHeight: false,
     };
@@ -164,7 +167,8 @@ export function ChatMinimap({
       activeNodeLockRef.current = null;
 
       const measuredNodes = nextNodes.filter((node) => node.scrollTop !== null);
-      if (measuredNodes.length === 0) {
+      const [firstMeasuredNode] = measuredNodes;
+      if (!firstMeasuredNode) {
         setActiveIndex(null);
         return;
       }
@@ -175,7 +179,7 @@ export function ChatMinimap({
           Math.abs((bestNode.scrollTop ?? 0) - focusTop)
             ? node
             : bestNode,
-        measuredNodes[0],
+        firstMeasuredNode,
       );
       setActiveIndex(nextActiveNode.index);
     },
@@ -318,20 +322,21 @@ export function ChatMinimap({
   const findNearestNode = useCallback((ratio: number): NodeInfo | null => {
     const { nodes, gap, fillsHeight } = nodeLayoutRef.current;
     const height = containerRef.current?.clientHeight ?? 0;
-    if (nodes.length === 0 || height <= 0) return null;
+    const [firstNode] = nodes;
+    if (!firstNode || height <= 0) return null;
 
     const pointerY = Math.max(0, Math.min(height, ratio * height));
-    const firstNodeY = nodes[0].topRatio * height;
+    const firstNodeY = firstNode.topRatio * height;
     const rawIndex = gap > 0 ? Math.round((pointerY - firstNodeY) / gap) : 0;
     const nodeIndex = Math.max(0, Math.min(nodes.length - 1, rawIndex));
     const nearestNode = nodes[nodeIndex];
 
-    if (!fillsHeight) {
+    if (!fillsHeight && nearestNode) {
       const nodeY = nearestNode.topRatio * height;
       const hitRadius = Math.max(10, gap / 2);
       if (Math.abs(pointerY - nodeY) > hitRadius) return null;
     }
-    return nearestNode;
+    return nearestNode ?? null;
   }, []);
 
   const handleMouseDown = useCallback(
@@ -367,15 +372,16 @@ export function ChatMinimap({
 
   if (!visible) return null;
 
-  const lastNodeTop =
-    positionedNodes.length > 0
-      ? positionedNodes[positionedNodes.length - 1].topRatio * minimapHeight
-      : MINIMAP_PADDING;
+  const lastNode = positionedNodes.at(-1);
+  const lastNodeTop = lastNode
+    ? lastNode.topRatio * minimapHeight
+    : MINIMAP_PADDING;
   const railHeight = Math.max(1, lastNodeTop - MINIMAP_PADDING);
-  const hoveredTimestamp =
-    hoveredIndex === null
-      ? undefined
-      : timestamps.get(positionedNodes[hoveredIndex]?.id);
+  const hoveredNode =
+    hoveredIndex === null ? undefined : positionedNodes[hoveredIndex];
+  const hoveredTimestamp = hoveredNode
+    ? timestamps.get(hoveredNode.id)
+    : undefined;
 
   return (
     <div

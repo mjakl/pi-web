@@ -36,12 +36,12 @@ function previewForEntry(entry: ProjectableEntry): BranchPreview | undefined {
   if (
     entry.type !== "message" ||
     !isRecord(entry.message) ||
-    typeof entry.message.role !== "string"
+    typeof entry.message["role"] !== "string"
   ) {
     return undefined;
   }
 
-  const content = entry.message.content;
+  const content = entry.message["content"];
   let text = "";
   let hasImage = false;
   if (typeof content === "string") {
@@ -49,8 +49,9 @@ function previewForEntry(entry: ProjectableEntry): BranchPreview | undefined {
   } else if (Array.isArray(content)) {
     for (const block of content) {
       if (!isRecord(block)) continue;
-      if (block.type === "image") hasImage = true;
-      if (block.type === "text") text = appendPreviewText(text, block.text);
+      if (block["type"] === "image") hasImage = true;
+      if (block["type"] === "text")
+        text = appendPreviewText(text, block["text"]);
       if (text.length > MAX_BRANCH_PREVIEW_LENGTH) break;
     }
   }
@@ -60,14 +61,14 @@ function previewForEntry(entry: ProjectableEntry): BranchPreview | undefined {
   } else if (!text) {
     text = hasImage
       ? "[image]"
-      : entry.message.role === "assistant"
+      : entry.message["role"] === "assistant"
         ? "[assistant]"
         : "message";
   }
 
   const role =
-    entry.message.role === "user" || entry.message.role === "assistant"
-      ? entry.message.role
+    entry.message["role"] === "user" || entry.message["role"] === "assistant"
+      ? entry.message["role"]
       : undefined;
   return { ...(role ? { role } : {}), text };
 }
@@ -110,14 +111,12 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
     ...(compressedEntryIds?.length ? { compressedEntryIds } : {}),
     ...(branchPreview ? { branchPreview } : {}),
   });
-  const projectedRoots = nodes.map((node) =>
-    cloneNode(node, undefined, previewForEntry(node.entry)),
-  );
-  const tasks = nodes.map((source, index) => ({
+  const tasks = nodes.map((source) => ({
     source,
-    projected: projectedRoots[index],
+    projected: cloneNode(source, undefined, previewForEntry(source.entry)),
     depth: 1,
   }));
+  const projectedRoots = tasks.map(({ projected }) => projected);
 
   const appendFlattenedKeptDescendants = (source: T, projectedParent: T) => {
     const pending = [
@@ -141,9 +140,9 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
         );
       }
 
-      for (let i = node.children.length - 1; i >= 0; i--) {
+      for (const child of node.children.toReversed()) {
         pending.push({
-          node: node.children[i],
+          node: child,
           compressedEntryIds: keep.has(node)
             ? []
             : [...compressedEntryIds, node.entry.id],
@@ -166,9 +165,11 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
 
       const compressedEntryIds: string[] = [];
       let branchPreview = previewForEntry(child.entry);
-      while (!keep.has(child) && child.children.length === 1) {
+      let [onlyChild] = child.children;
+      while (!keep.has(child) && child.children.length === 1 && onlyChild) {
         compressedEntryIds.push(child.entry.id);
-        child = child.children[0];
+        child = onlyChild;
+        [onlyChild] = child.children;
         branchPreview ??= previewForEntry(child.entry);
       }
 

@@ -34,7 +34,7 @@ interface AnnotateSkillOptions {
 
 export function getGlobalSkillsLockPath({
   homeDir = homedir(),
-  xdgStateHome = process.env.XDG_STATE_HOME,
+  xdgStateHome = process.env["XDG_STATE_HOME"],
 }: GlobalLockPathOptions = {}): string {
   return xdgStateHome
     ? join(xdgStateHome, "skills", ".skill-lock.json")

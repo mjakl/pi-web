@@ -78,10 +78,10 @@ export function saveFileViewerState(
   viewerState: FileViewerState,
 ): Tab[] {
   const index = tabs.findIndex((tab) => tab.id === tabId);
-  if (index === -1 || (tabs[index].viewerRevision ?? 0) !== viewerRevision)
-    return tabs;
+  const tab = tabs[index];
+  if (!tab || (tab.viewerRevision ?? 0) !== viewerRevision) return tabs;
 
   const next = [...tabs];
-  next[index] = { ...next[index], viewerState };
+  next[index] = { ...tab, viewerState };
   return next;
 }

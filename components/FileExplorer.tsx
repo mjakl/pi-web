@@ -757,8 +757,8 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
       for (const relative of searchPaths) {
         const parts = relative.split("/");
         let path = "";
-        for (let i = 0; i < parts.length - 1; i++) {
-          path = path ? `${path}/${parts[i]}` : parts[i];
+        for (const part of parts.slice(0, -1)) {
+          path = path ? `${path}/${part}` : part;
           dirs.add(joinFilePath(cwd, path));
         }
       }

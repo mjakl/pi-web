@@ -49,17 +49,19 @@ export function parseUnifiedPatch(text: string): SplitDiffFile[] | null {
     }
     const count = Math.max(removed.length, added.length);
     for (let i = 0; i < count; i++) {
-      const left = removed[i]
+      const removedLine = removed[i];
+      const addedLine = added[i];
+      const left = removedLine
         ? {
-            lineNo: removed[i].lineNo,
-            text: removed[i].text,
+            lineNo: removedLine.lineNo,
+            text: removedLine.text,
             type: "removed" as const,
           }
         : emptyCell();
-      const right = added[i]
+      const right = addedLine
         ? {
-            lineNo: added[i].lineNo,
-            text: added[i].text,
+            lineNo: addedLine.lineNo,
+            text: addedLine.text,
             type: "added" as const,
           }
         : emptyCell();
@@ -148,5 +150,6 @@ export function parseUnifiedPatch(text: string): SplitDiffFile[] | null {
 }
 
 function cleanPatchPath(path: string): string {
-  return path.split("\t")[0].trim();
+  const timestamp = path.indexOf("\t");
+  return (timestamp === -1 ? path : path.slice(0, timestamp)).trim();
 }

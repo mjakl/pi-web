@@ -35,15 +35,15 @@ export function getSubagentCalls(
 ): SubagentCall[] | null {
   if (block.toolName !== "subagent" || block.rawInput !== undefined)
     return null;
-  const calls = block.input?.calls;
+  const calls = block.input?.["calls"];
   if (!Array.isArray(calls) || calls.length === 0) return null;
   if (
     !calls.every(
       (call) =>
         isRecord(call) &&
-        typeof call.agent === "string" &&
-        call.agent.trim() &&
-        typeof call.prompt === "string",
+        typeof call["agent"] === "string" &&
+        call["agent"].trim() &&
+        typeof call["prompt"] === "string",
     )
   )
     return null;
@@ -62,17 +62,17 @@ function finalAssistantText(messages: unknown[]): string {
     const message = messages[index];
     if (
       !isRecord(message) ||
-      message.role !== "assistant" ||
-      !Array.isArray(message.content)
+      message["role"] !== "assistant" ||
+      !Array.isArray(message["content"])
     )
       continue;
-    const output = message.content
+    const output = message["content"]
       .filter(
         (part) =>
           isRecord(part) &&
-          part.type === "text" &&
-          typeof part.text === "string" &&
-          part.text.length > 0,
+          part["type"] === "text" &&
+          typeof part["text"] === "string" &&
+          part["text"].length > 0,
       )
       .map((part) => part.text)
       .join("\n\n");
@@ -89,48 +89,48 @@ export function getSubagentResults(
   const details = result?.details;
   if (
     !isRecord(details) ||
-    details.kind !== "pi-subagent" ||
-    !Array.isArray(details.results) ||
-    details.results.length !== calls.length
+    details["kind"] !== "pi-subagent" ||
+    !Array.isArray(details["results"]) ||
+    details["results"].length !== calls.length
   )
     return null;
   const rows: SubagentResult[] = new Array(calls.length);
-  for (const [position, item] of details.results.entries()) {
+  for (const [position, item] of details["results"].entries()) {
     if (!isRecord(item)) return null;
-    const index = item.callIndex ?? position;
+    const index = item["callIndex"] ?? position;
     if (
       typeof index !== "number" ||
       !Number.isInteger(index) ||
       index < 0 ||
       index >= calls.length ||
       rows[index] ||
-      item.agent !== calls[index].agent ||
-      !Array.isArray(item.messages) ||
-      typeof item.exitCode !== "number" ||
-      !Number.isFinite(item.exitCode)
+      item["agent"] !== calls[index]?.agent ||
+      !Array.isArray(item["messages"]) ||
+      typeof item["exitCode"] !== "number" ||
+      !Number.isFinite(item["exitCode"])
     )
       return null;
     // The extension normalizes terminal exit codes before returning its result.
     const status: SubagentStatus =
-      item.stopReason === "aborted"
+      item["stopReason"] === "aborted"
         ? "cancelled"
-        : item.processError === true || item.exitCode > 0
+        : item["processError"] === true || item["exitCode"] > 0
           ? "failed"
-          : item.exitCode === 0
+          : item["exitCode"] === 0
             ? "completed"
             : "unknown";
-    const session = isRecord(item.session) ? item.session : undefined;
+    const session = isRecord(item["session"]) ? item["session"] : undefined;
     rows[index] = {
       status,
-      output: finalAssistantText(item.messages),
+      output: finalAssistantText(item["messages"]),
       error:
         status === "failed" || status === "cancelled"
-          ? text(item.errorMessage) || text(item.stderr)
+          ? text(item["errorMessage"]) || text(item["stderr"])
           : undefined,
-      model: text(item.model),
-      cwd: text(session?.cwd),
-      captureTruncated: item.captureTruncated === true,
-      handledWithoutAgent: item.handledWithoutAgent === true,
+      model: text(item["model"]),
+      cwd: text(session?.["cwd"]),
+      captureTruncated: item["captureTruncated"] === true,
+      handledWithoutAgent: item["handledWithoutAgent"] === true,
     };
   }
   return rows;
@@ -140,7 +140,7 @@ export function subagentResultFailed(result?: ToolResultMessage): boolean {
   return (
     result?.isError === true ||
     (isRecord(result?.details) &&
-      result.details.kind === "pi-subagent" &&
-      result.details.failed === true)
+      result.details["kind"] === "pi-subagent" &&
+      result.details["failed"] === true)
   );
 }
