@@ -11,6 +11,7 @@ import { copyText } from "@/lib/clipboard";
 import { useI18n } from "@/hooks/useI18n";
 import { formatCompactCount, formatTimestamp } from "@/lib/i18n/format";
 import { parseCompactionSummary } from "@/lib/compaction-summary";
+import { CompactIcon } from "./CompactIcon";
 import { getAssistantErrorMessage, isEmptyAssistantBlock } from "@/lib/message-display";
 import { parseUnifiedPatch, type SplitDiffCell } from "@/lib/patch";
 import { isEditToolName } from "@/lib/tool-names";
@@ -1373,25 +1374,19 @@ function CompactionMessageView({ message }: { message: CustomMessage }) {
         className="compaction-header"
         aria-expanded={expanded}
         aria-controls={summaryId}
-        title={t(expanded ? "i18n.collapse" : "i18n.expand")}
+        aria-label={tokens ? t("chat.compaction.labelWithTokens", { tokens }) : t("i18n.conversationCompacted")}
+        aria-describedby={time ? `${summaryId}-time` : undefined}
+        title={t(expanded ? "chat.compaction.collapseSummary" : "chat.compaction.expandSummary")}
         onClick={() => setExpanded((value) => !value)}
       >
         <span className="compaction-rule" aria-hidden="true" />
         <span className="compaction-header-core">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <rect x="3" y="3" width="18" height="4" rx="1" />
-            <path d="M5 7v13h14V7M10 11h4" />
-          </svg>
-          <span className="compaction-header-main">
-            <span className="compaction-label">{t("i18n.conversationCompacted")}</span>
-            {tokens && <span className="compaction-token-count" title={after !== null ? t("chat.compaction.tokenEstimate") : undefined}>{tokens}</span>}
-          </span>
-          <svg className="compaction-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <polyline points="2 3.5 5 6.5 8 3.5" />
-          </svg>
+          <CompactIcon />
+          {tokens && <span className="compaction-token-count" title={after !== null ? t("chat.compaction.tokenEstimate") : undefined}>{tokens}</span>}
+          {tokens && time && <span aria-hidden="true">·</span>}
+          {time && <span id={`${summaryId}-time`} className="compaction-time">{time}</span>}
         </span>
         <span className="compaction-rule" aria-hidden="true" />
-        {time && <span className="compaction-time">{time}</span>}
       </button>
 
       {expanded && <div id={summaryId} className="compaction-body">

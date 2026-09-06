@@ -598,24 +598,14 @@ pre, code {
   min-width: 0;
 }
 .compaction-header-core > svg { flex-shrink: 0; }
-.compaction-header-main {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 12px;
-  min-width: 0;
-}
-.compaction-label { font-weight: 500; overflow-wrap: anywhere; }
-.compaction-token-count { font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.compaction-time { flex-shrink: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
-.compaction-header[aria-expanded="true"] .compaction-chevron { transform: rotate(180deg); }
-.compaction-header:hover .compaction-label { text-decoration: underline; text-underline-offset: 3px; }
+.compaction-token-count,
+.compaction-time { font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.compaction-header:hover .compaction-token-count { text-decoration: underline; text-underline-offset: 3px; }
 .compaction-header:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 2px; }
 .compaction-body { padding: 14px 0 20px; border-bottom: 1px solid var(--compaction-border); }
 @media (max-width: 520px) {
   .compaction-header { gap: 8px; }
   .compaction-header-core { gap: 6px; }
-  .compaction-header-main { flex-direction: column; align-items: flex-start; }
   .compaction-rule { min-width: 8px; }
 }
 

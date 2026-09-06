@@ -101,16 +101,19 @@ test("compaction starts collapsed with context counts and reveals its summary an
   try {
     const header = view.container.querySelector("button");
     assert.equal(header.getAttribute("aria-expanded"), "false");
-    assert.match(header.textContent, /Conversation compacted/);
-    assert.match(header.textContent, /120k → ~18k tokens/);
-    const time = header.querySelector(".compaction-time").textContent;
-    assert.match(time, /\d{2}:\d{2}$/);
+    assert.equal(header.querySelector(".compaction-token-count").textContent, "120k → ~18k tokens");
+    assert.doesNotMatch(header.textContent, /Conversation compacted/);
+    const time = header.querySelector(".compaction-time");
+    assert.match(time.textContent, /1970.*\d{2}:\d{2}$/);
+    assert.equal(header.getAttribute("aria-describedby"), time.id);
+    assert.equal(header.getAttribute("aria-label"), "Conversation compacted: 120k → ~18k tokens");
+    assert.equal(header.title, "Expand compaction summary");
     assert.equal(view.container.querySelector(".markdown-compaction-message"), null);
     assert.doesNotMatch(view.container.textContent, /existing controls|File context/);
     await act(async () => header.click());
     assert.equal(header.getAttribute("aria-expanded"), "true");
     assert.equal(view.container.querySelector(".compaction-body").id, header.getAttribute("aria-controls"));
-    assert.equal(header.querySelector(".compaction-time").textContent, time);
+    assert.equal(header.title, "Collapse compaction summary");
     assert.equal(view.container.querySelector("h2").textContent, "Retained context");
     assert.equal(view.container.querySelector("strong").textContent, "existing controls");
     assert.match(view.container.querySelector(".compaction-file-details").textContent, /1 read, 1 modified/);
@@ -136,6 +139,8 @@ test("compaction counts handle legacy, missing, invalid, and zero values without
     try {
       assert.equal(view.container.querySelector(".compaction-token-count")?.textContent ?? null, expected);
       const header = view.container.querySelector("button");
+      assert.equal(header.textContent, expected ?? "");
+      assert.equal(header.getAttribute("aria-label"), expected ? `Conversation compacted: ${expected}` : "Conversation compacted");
       await act(async () => header.click());
       assert.match(view.container.textContent, /\(no summary\)/);
     } finally { await view.close(); }
