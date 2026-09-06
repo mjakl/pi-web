@@ -9,7 +9,6 @@ const jiti = createJiti(import.meta.url, {
   tsconfigPaths: true,
 });
 const { MarkdownBody } = await jiti.import("./MarkdownBody.tsx");
-const { normalizeDisplayMath } = await jiti.import("../lib/markdown.ts");
 
 function renderMarkdown(markdown) {
   return renderToStaticMarkup(
@@ -19,6 +18,14 @@ function renderMarkdown(markdown) {
     }, markdown),
   );
 }
+
+test("preserves currency, prose spacing, and bold text between dollar signs", () => {
+  const html = renderMarkdown("- **Amigo Europe mobile:** the adjusted total **increases by $0.570**. Its final curator call was retained as token usage but left **unpriced**. Adding its estimated **$2.763** charge outweighs the **$2.193** Flex saving on the draft-curator calls.");
+
+  assert.match(html, /<strong>increases by \$0\.570<\/strong>\. Its final curator call was retained as token usage but left <strong>unpriced<\/strong>\./);
+  assert.match(html, /<strong>\$2\.763<\/strong> charge outweighs the <strong>\$2\.193<\/strong>/);
+  assert.doesNotMatch(html, /katex|<math/);
+});
 
 test("opens non-file markdown links in a safe new tab", () => {
   const html = renderMarkdown("[docs](https://example.com/docs)");
@@ -51,60 +58,23 @@ test("still renders double-tilde strikethrough", () => {
   assert.match(html, /<del>gone<\/del>/);
 });
 
-test("renders LaTeX parenthesis delimiters as inline math", () => {
-  const html = renderMarkdown(String.raw`射线为 \(r_c = K^{-1}p\)。`);
-
-  assert.match(html, /class="katex"/);
-  assert.match(html, /r_c/);
+test("leaves inline and display formula notation as ordinary Markdown", () => {
+  for (const [source, expected] of [
+    ["Formula: $x^2$.", "Formula: $x^2$."],
+    ["Formula: $$x^2$$.", "Formula: $$x^2$$."],
+    [String.raw`Formula: \(x^2\).`, "Formula: (x^2)."],
+    ["$$\n\\frac{a}{b}\n$$", "$$\n\\frac{a}{b}\n$$"],
+    [String.raw`\[\frac{a}{b}\]`, String.raw`[\frac{a}{b}]`],
+    [String.raw`[ \frac{a}{b} ]`, String.raw`[ \frac{a}{b} ]`],
+  ]) {
+    assert.equal(renderMarkdown(source), `<div class="markdown-body"><p>${expected}</p></div>`);
+  }
 });
 
-test("renders paired LaTeX bracket delimiters as display math", () => {
-  const html = renderMarkdown(String.raw`\[
-P(\lambda)=o_b+\lambda r_b
-\]`);
-  const oneLineHtml = renderMarkdown(String.raw`\[P(\lambda)=o_b+\lambda r_b\]`);
-
-  assert.match(html, /class="katex-display"/);
-  assert.match(html, /lambda/);
-  assert.match(oneLineHtml, /class="katex-display"/);
-});
-
-test("renders model-emitted bracket-only formula lines as display math", () => {
-  const html = renderMarkdown(String.raw`平均一致性：
-
-[ C(x) = \frac{2}{T(T-1)} \sum_{i<j} S(\hat{y}^{(i)}, \hat{y}^{(j)}) ]`);
-
-  assert.match(html, /class="katex-display"/);
-  assert.match(html, /\\sum/);
-});
-
-test("leaves an unmatched LaTeX bracket delimiter unchanged", () => {
-  const markdown = String.raw`before
-\[
-x + y
-after`;
-
-  assert.equal(normalizeDisplayMath(markdown), markdown);
-});
-
-test("does not normalize LaTeX delimiters inside Markdown code", () => {
-  const markdown = "    \\(indented\\)\n\n`code\n\\(inline\\)`\n\n```text\n\\[\nfenced\n\\]\n```";
-
-  assert.equal(normalizeDisplayMath(markdown), markdown);
-});
-
-test("does not normalize LaTeX delimiters inside raw HTML code", () => {
-  const markdown = "<code>\\(inline\\)</code>\n\n<pre>\n\\(block\\)\n</pre>";
-
-  assert.equal(normalizeDisplayMath(markdown), markdown);
-});
-
-test("does not normalize escaped delimiters or link destinations", () => {
-  const escaped = String.raw`Literal: \\(x+y\\).`;
-  const link = String.raw`[docs](https://example.com/\(manual\))`;
-
-  assert.equal(normalizeDisplayMath(escaped), escaped);
-  assert.equal(normalizeDisplayMath(link), link);
+test("keeps shell variables and LaTeX inside inline code literal", () => {
+  const html = renderMarkdown("Use `$HOME` and `\\frac{a}{b}`");
+  assert.match(html, /<code class="markdown-inline-code">\$HOME<\/code>/);
+  assert.match(html, /<code class="markdown-inline-code">\\frac\{a\}\{b\}<\/code>/);
 });
 
 test("does not print undefined while a code fence is still opening", () => {

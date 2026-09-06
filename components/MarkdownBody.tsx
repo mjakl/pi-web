@@ -4,7 +4,7 @@ import { useMemo, type MouseEvent } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { resolveLocalFileHref } from "@/lib/file-links";
 import { getFileApiUrl } from "@/lib/file-paths";
-import { markdownRehypePlugins, markdownRemarkPlugins, normalizeDisplayMath } from "@/lib/markdown";
+import { markdownRehypePlugins, markdownRemarkPlugins } from "@/lib/markdown";
 import { ImagePreview } from "./ImagePreview";
 import { MermaidBlock, CodeBlock } from "./MermaidBlock";
 
@@ -23,7 +23,6 @@ interface MarkdownBodyProps {
 
 export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile, sessionId, baseDir, mermaidDefaultPreview }: MarkdownBodyProps) {
   const linkBase = baseDir ?? cwd;
-  const normalizedMarkdown = useMemo(() => normalizeDisplayMath(children), [children]);
   // Stable renderer identities keep stateful blocks mounted across message hover updates.
   const components = useMemo<Components>(() => ({
     code({ className, children, ...props }) {
@@ -118,7 +117,7 @@ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile
         rehypePlugins={markdownRehypePlugins}
         components={components}
       >
-        {normalizedMarkdown}
+        {children}
       </ReactMarkdown>
     </div>
   );

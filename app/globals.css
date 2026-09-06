@@ -493,15 +493,6 @@ pre, code {
   margin: 12px 0;
   background: linear-gradient(90deg, transparent, var(--border), transparent);
 }
-.markdown-body .katex-display {
-  margin: 0.6em 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 2px 0;
-}
-.markdown-body .katex {
-  font-size: 1.05em;
-}
 .markdown-user-message,
 .markdown-assistant-message {
   font-size: 13px;
