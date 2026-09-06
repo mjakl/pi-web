@@ -109,6 +109,33 @@ test("touch steers, composition and Shift+Enter do not submit, and non-steerable
   });
 });
 
+test("clicking composer background focuses the editor without moving its selection", async () => {
+  await withComposer({ isStreaming: false, onSend() {}, onAbort() {} }, async ({ container, input, type }) => {
+    await type("Keep editing this draft");
+    input.setSelectionRange(5, 12);
+    for (const selector of [".composer-surface", ".composer-toolbar"]) {
+      input.blur();
+      await React.act(() => container.querySelector(selector).click());
+      assert.ok(document.activeElement === input, `${selector} should focus the editor`);
+      assert.equal(input.selectionStart, 5);
+      assert.equal(input.selectionEnd, 12);
+    }
+  });
+});
+
+test("clicking a composer control icon does not redirect focus to the editor", async () => {
+  await withComposer({ isStreaming: false, onSend() {}, onAbort() {} }, async ({ container }) => {
+    const attach = container.querySelector(".composer-attach");
+    const fileInput = container.querySelector('input[type="file"]');
+    let pickerOpened = false;
+    fileInput.addEventListener("click", () => { pickerOpened = true; });
+    attach.focus();
+    await React.act(() => attach.querySelector("path").dispatchEvent(new window.MouseEvent("click", { bubbles: true })));
+    assert.equal(pickerOpened, true);
+    assert.ok(document.activeElement === attach, "the attachment control should retain focus");
+  });
+});
+
 test("pointer submission keeps keyboard focus in the editor", async () => {
   await withComposer({ isStreaming: true, onSend() {}, onSteer() {}, onAbort() {} }, async ({ action, type, input }) => {
     await type("Steer this run");

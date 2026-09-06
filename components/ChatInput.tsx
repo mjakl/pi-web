@@ -477,6 +477,9 @@ export function ChatInput({
     : {};
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const focusEditorOnBackgroundClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) textareaRef.current?.focus();
+  };
   const controlsMenuId = useId();
   const controlsMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1648,7 +1651,7 @@ export function ChatInput({
               </div>
             );
           })()}
-          <div className="composer-surface">
+          <div className="composer-surface" onClick={focusEditorOnBackgroundClick}>
             {/* Image previews */}
             {attachedImages.length > 0 && (
               <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
@@ -1709,7 +1712,7 @@ export function ChatInput({
               placeholder={t("chat.mobileMessagePlaceholder")}
               rows={1}
             />
-            <div className="composer-toolbar">
+            <div className="composer-toolbar" onClick={focusEditorOnBackgroundClick}>
               <button type="button" className="composer-attach" onClick={() => fileInputRef.current?.click()} title={t("chat.attachImage")} aria-label={t("chat.attachImage")}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
               </button>
