@@ -122,6 +122,78 @@ Project resources can run local code. Pi Web leaves project extensions, skills, 
 
 This repository is not seeking outside contributions. If Pi Web suits you, fork it and adapt your copy. Architecture notes, module ownership, maintenance checks, and development constraints are in [`AGENTS.md`](./AGENTS.md).
 
+### Development setup and checks
+
+Use [mise](https://mise.jdx.dev/) for the development tool versions in
+[`mise.toml`](./mise.toml): Node 24, npm, and just. These development pins do not
+change the Node 22.19.0 minimum for running Pi Web.
+
+After cloning, install the pinned development tools:
+
+```bash
+mise trust
+mise install
+```
+
+With that toolchain active, make sure the separate host Pi described in
+[Get started](#get-started) is on `PATH`, then prepare the checkout:
+
+```bash
+mise exec -- npm ci
+mise exec -- just ci
+```
+
+Leave `NODE_ENV` unset during development setup so `npm ci` installs dev
+dependencies. With mise active in your shell, omit `mise exec --`. On Windows,
+use a shell supported by just, such as Git Bash.
+
+[`package.json`](./package.json) owns the commands; [`justfile`](./justfile) is a
+shorter entry point:
+
+| Command | What it does |
+| --- | --- |
+| `just fix` | Apply supported ESLint automatic fixes; inspect the diff afterward |
+| `just lint` | Check ESLint rules without fixing source |
+| `just typecheck` | Run TypeScript with `--noEmit` |
+| `just test-one bin/host-pi.test.mjs` | Run selected native Node test files with the host Pi preload |
+| `just test` | Run the full native Node suite |
+| `just qa` / `just ci` | Run lint, typecheck, and tests, stopping on failure |
+
+For a focused name filter, put Node options before file paths and quote patterns:
+
+```bash
+just test-one --test-name-pattern "first pi" bin/host-pi.test.mjs
+# Equivalent npm command:
+npm run test:one -- --test-name-pattern "first pi" bin/host-pi.test.mjs
+```
+
+QA and CI are **non-mutating validation of source**, not zero-write commands.
+`npm ci` prepares host-package shims in `node_modules`; full and focused tests
+refresh them. TypeScript may write `tsconfig.tsbuildinfo`, and tests create
+temporary fixtures. None of these commands invokes `fix`. After changing your
+host Pi installation, run `npm run prepare` before a standalone typecheck.
+
+[GitHub Actions](./.github/workflows/validation.yml) runs two checks on pull
+requests and pushes to `main`:
+
+- **Source validation:** clean `npm ci`, then `just ci` with the mise pins.
+- **Node 22.19 runtime smoke:** build and pack a disposable copy on Node 24,
+  install the tarball with runtime dependencies only, and start its `pi-web` bin
+  on Node 22.19.0. The smoke requests the page and a saved session through the Pi
+  SDK, with temporary HOME/Pi state and a loopback-only listener. It never starts
+  an agent turn or invokes a provider.
+
+Both jobs install matching Pi coding-agent/server packages outside the checkout.
+Their version is a CI fixture, not a supported-version restriction. The runtime
+smoke is separate from `just ci` so routine checks do not build into `.next` or
+start a service. To repeat it locally, follow the disposable build/install steps
+in the workflow, then run:
+
+```bash
+PI_WEB_SMOKE_PACKAGE=/path/to/consumer/node_modules/@mjakl/pi-web \
+  mise exec node@22.19.0 -- node --test scripts/runtime-smoke.test.mjs
+```
+
 ## License
 
 [MIT](./LICENSE)

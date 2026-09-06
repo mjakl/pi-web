@@ -49,9 +49,14 @@
     "build": "node bin/run-next.js build --webpack",
     "start": "node bin/run-next.js start -H 127.0.0.1 -p 30141",
     "start:lan": "node bin/run-next.js start -H 0.0.0.0 -p 30141",
+    "fix": "npm run lint -- --fix",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "qa": "npm run lint && npm run typecheck && npm test",
+    "ci": "npm run qa",
+    "test:one": "node bin/link-host-pi.js && node --require ./bin/host-pi-runtime.js --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test",
     "prepare": "node bin/link-host-pi.js",
-    "test": "node bin/link-host-pi.js && node --require ./bin/host-pi-runtime.js --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"*.test.mjs\" \"app/**/*.test.mjs\" \"bin/**/*.test.mjs\" \"components/**/*.test.mjs\" \"hooks/**/*.test.mjs\" \"lib/**/*.test.mjs\" \"public/**/*.test.mjs\""
+    "test": "npm run test:one -- \"*.test.mjs\" \"app/**/*.test.mjs\" \"bin/**/*.test.mjs\" \"components/**/*.test.mjs\" \"hooks/**/*.test.mjs\" \"lib/**/*.test.mjs\" \"public/**/*.test.mjs\""
   },
   "dependencies": {
     "next": "16.3.1",
