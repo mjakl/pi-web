@@ -22,7 +22,9 @@ const THINKING_LEVELS = new Set<ThinkingLevel>([
  * so the three of them cannot drift when the SDK adds a level.
  */
 export function isThinkingLevel(value: unknown): value is ThinkingLevel {
-  return typeof value === "string" && THINKING_LEVELS.has(value as ThinkingLevel);
+  return (
+    typeof value === "string" && THINKING_LEVELS.has(value as ThinkingLevel)
+  );
 }
 
 /**
@@ -67,10 +69,15 @@ function matchesModel(
 }
 
 function hasGlob(pattern: string): boolean {
-  return pattern.includes("*") || pattern.includes("?") || pattern.includes("[");
+  return (
+    pattern.includes("*") || pattern.includes("?") || pattern.includes("[")
+  );
 }
 
-function exactReferenceMatches(pattern: string, models: readonly Model<Api>[]): Model<Api>[] {
+function exactReferenceMatches(
+  pattern: string,
+  models: readonly Model<Api>[],
+): Model<Api>[] {
   const normalized = pattern.toLowerCase();
   const canonical = models.filter(
     (model) => `${model.provider}/${model.id}`.toLowerCase() === normalized,
@@ -118,7 +125,9 @@ export async function resolveVisibleModels(
   modelRuntime: ModelRuntime,
   patterns: string[] | undefined,
 ): Promise<ModelScopeResult> {
-  const cleaned = (patterns ?? []).map((pattern) => pattern.trim()).filter(Boolean);
+  const cleaned = (patterns ?? [])
+    .map((pattern) => pattern.trim())
+    .filter(Boolean);
   if (cleaned.length === 0) {
     return {
       visible: await modelRuntime.getAvailable(),
@@ -133,7 +142,10 @@ export async function resolveVisibleModels(
   const snapshotRuntime = {
     getAvailable: async () => available,
   } as ModelRuntime;
-  const { scopedModels, diagnostics } = await resolveModelScopeWithDiagnostics(cleaned, snapshotRuntime);
+  const { scopedModels, diagnostics } = await resolveModelScopeWithDiagnostics(
+    cleaned,
+    snapshotRuntime,
+  );
   const warnings = diagnostics.map((diagnostic) => diagnostic.message);
   if (scopedModels.length === 0) {
     return {
@@ -150,7 +162,8 @@ export async function resolveVisibleModels(
   const thinkingLevelPins: Record<string, string> = {};
   for (const scoped of scopedModels) {
     if (scoped.thinkingLevel) {
-      thinkingLevelPins[`${scoped.model.provider}/${scoped.model.id}`] = scoped.thinkingLevel;
+      thinkingLevelPins[`${scoped.model.provider}/${scoped.model.id}`] =
+        scoped.thinkingLevel;
     }
   }
   return {
@@ -185,16 +198,28 @@ export function selectInitialModelScope(
   }
 
   const requestedScoped = requested
-    ? scope.scopedModels.find((scoped) => scoped.model === requested
-      || matchesModel(scoped.model, { provider: requested.provider, modelId: requested.id }))
+    ? scope.scopedModels.find(
+        (scoped) =>
+          scoped.model === requested ||
+          matchesModel(scoped.model, {
+            provider: requested.provider,
+            modelId: requested.id,
+          }),
+      )
     : undefined;
-  const defaultScoped = !requested && defaultRef
-    ? scope.scopedModels.find((scoped) => matchesModel(scoped.model, defaultRef))
+  const defaultScoped =
+    !requested && defaultRef
+      ? scope.scopedModels.find((scoped) =>
+          matchesModel(scoped.model, defaultRef),
+        )
+      : undefined;
+  const fallbackScoped = !requested
+    ? (defaultScoped ?? scope.scopedModels[0])
     : undefined;
-  const fallbackScoped = !requested ? (defaultScoped ?? scope.scopedModels[0]) : undefined;
-  const defaultVisible = !requested && !fallbackScoped && defaultRef
-    ? scope.visible.find((model) => matchesModel(model, defaultRef))
-    : undefined;
+  const defaultVisible =
+    !requested && !fallbackScoped && defaultRef
+      ? scope.visible.find((model) => matchesModel(model, defaultRef))
+      : undefined;
   const selectedModel = requested ?? fallbackScoped?.model ?? defaultVisible;
   const scopedSelection = requestedScoped ?? fallbackScoped;
   const thinkingLevel = options.thinkingLevel ?? scopedSelection?.thinkingLevel;

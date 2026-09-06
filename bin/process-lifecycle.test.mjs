@@ -92,8 +92,15 @@ test("reports a spawn failure instead of crashing on an unhandled error event", 
 
   assert.deepEqual(exitCodes, [1]);
   assert.equal(logged.length, 1);
-  assert.match(logged[0], /could not run the Next\.js process: spawn node ENOENT/);
-  assert.equal(parent.listenerCount("SIGINT"), 0, "the signal wiring must be torn down");
+  assert.match(
+    logged[0],
+    /could not run the Next\.js process: spawn node ENOENT/,
+  );
+  assert.equal(
+    parent.listenerCount("SIGINT"),
+    0,
+    "the signal wiring must be torn down",
+  );
 });
 
 test("names the reason when the child stops on its own", () => {
@@ -107,7 +114,9 @@ test("names the reason when the child stops on its own", () => {
     wireChildProcessLifecycle(child, parent, 10, (line) => logged.push(line));
     child.emit("exit", code, signal);
 
-    assert.deepEqual(logged, [`[pi-web] Next.js exited unexpectedly (${expectedReason})`]);
+    assert.deepEqual(logged, [
+      `[pi-web] Next.js exited unexpectedly (${expectedReason})`,
+    ]);
     assert.deepEqual(exitCodes, [expectedExitCode]);
   }
 });

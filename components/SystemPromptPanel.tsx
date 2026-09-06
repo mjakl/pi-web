@@ -1,4 +1,7 @@
-type Translate = (key: string, params?: Record<string, string | number>) => string;
+type Translate = (
+  key: string,
+  params?: Record<string, string | number>,
+) => string;
 
 interface Props {
   loading: boolean;
@@ -8,7 +11,10 @@ interface Props {
 
 export function SystemPromptPanel({ loading, prompt, translate }: Props) {
   return (
-    <section className="system-prompt-panel menu-surface menu-panel" aria-label={translate("system.prompt")}>
+    <section
+      className="system-prompt-panel menu-surface menu-panel"
+      aria-label={translate("system.prompt")}
+    >
       <div className="system-prompt-scroll">
         {prompt ? (
           <div className="system-prompt-text">{prompt}</div>

@@ -6,8 +6,8 @@ an AgentSession whose active tool array happens to be empty.
 For a normal session, Chat only loads no extensions, skills, prompt templates,
 themes, or Pi base system prompt. Its exact system prompt is the ordered content
 of the context files discovered by Pi's default loader, including global and
-project `AGENTS.md`, `AGENTS.override.md`, and `CLAUDE.md` files. Pi Web does not
-add its own prefix, suffix, or current-working-directory text.
+project `AGENTS.md`, `AGENTS.override.md`, and `CLAUDE.md` files. Pi Web does
+not add its own prefix, suffix, or current-working-directory text.
 
 Pi's native session format does not persist the active tool selection. Normal
 sessions therefore append versioned `pi-web:tool-selection` custom entries:
@@ -21,9 +21,9 @@ sessions therefore append versioned `pi-web:tool-selection` custom entries:
 ```
 
 The latest valid entry is authoritative. No entry means a legacy session and
-retains Pi's default behavior; an empty `tools` array means Chat only; a nonempty
-array restores the selected built-in tools. The stored array is the user's
-selection before extension tools are added.
+retains Pi's default behavior; an empty `tools` array means Chat only; a
+nonempty array restores the selected built-in tools. The stored array is the
+user's selection before extension tools are added.
 
 The persisted selection must be resolved before `createAgentSessionServices()`
 so Chat only never imports or executes session extensions. The exact system

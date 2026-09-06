@@ -11,23 +11,25 @@ const { renderToStaticMarkup } = await jiti.import("react-dom/server");
 const { SettingsPanel } = await jiti.import("./SettingsPanel.tsx");
 
 function renderGeneral(overrides = {}) {
-  return renderToStaticMarkup(React.createElement(SettingsPanel, {
-    cwd: "/tmp/project",
-    sessionId: "session-1",
-    initialSection: "general",
-    toolPresetControl: {
-      preset: "read-only",
-      disabled: false,
-      onChange() {},
-    },
-    soundEnabled: true,
-    onSoundToggle() {},
-    dumbZoneTokens: 100_000,
-    onDumbZoneTokensChange() {},
-    onClose() {},
-    onSessionReloaded() {},
-    ...overrides,
-  }));
+  return renderToStaticMarkup(
+    React.createElement(SettingsPanel, {
+      cwd: "/tmp/project",
+      sessionId: "session-1",
+      initialSection: "general",
+      toolPresetControl: {
+        preset: "read-only",
+        disabled: false,
+        onChange() {},
+      },
+      soundEnabled: true,
+      onSoundToggle() {},
+      dumbZoneTokens: 100_000,
+      onDumbZoneTokensChange() {},
+      onClose() {},
+      onSessionReloaded() {},
+      ...overrides,
+    }),
+  );
 }
 
 test("renders all tool presets and completion sound in General settings", () => {
@@ -35,9 +37,15 @@ test("renders all tool presets and completion sound in General settings", () => 
 
   assert.match(html, /aria-label="Change tool preset"/);
   assert.equal((html.match(/role="radio"/g) ?? []).length, 7);
-  assert.match(html, /role="radio" aria-checked="true"[^>]*><span[^>]*>Read only<\/span>/);
+  assert.match(
+    html,
+    /role="radio" aria-checked="true"[^>]*><span[^>]*>Read only<\/span>/,
+  );
   assert.match(html, /Completion sound/);
-  assert.match(html, /role="switch" aria-checked="true" aria-label="Disable completion sound"/);
+  assert.match(
+    html,
+    /role="switch" aria-checked="true" aria-label="Disable completion sound"/,
+  );
 });
 
 test("renders the dumb-zone token threshold in General settings", () => {

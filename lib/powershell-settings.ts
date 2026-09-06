@@ -1,4 +1,10 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import lockfile from "proper-lockfile";
@@ -11,9 +17,11 @@ export function isPowerShellToolEnabled(
   defaultTools: readonly string[] | undefined,
   platform: NodeJS.Platform = process.platform,
 ): boolean {
-  return platform === "win32"
-    && defaultTools?.includes("powershell") === true
-    && !defaultTools.includes("bash");
+  return (
+    platform === "win32" &&
+    defaultTools?.includes("powershell") === true &&
+    !defaultTools.includes("bash")
+  );
 }
 
 function replaceShellTool(
@@ -21,7 +29,9 @@ function replaceShellTool(
   usePowerShell: boolean,
 ): string[] {
   const shell = usePowerShell ? "powershell" : "bash";
-  return [...new Set(toolNames.map((name) => (SHELL_TOOLS.has(name) ? shell : name)))];
+  return [
+    ...new Set(toolNames.map((name) => (SHELL_TOOLS.has(name) ? shell : name))),
+  ];
 }
 
 export function resolveShellTools(
@@ -29,7 +39,10 @@ export function resolveShellTools(
   defaultTools: readonly string[] | undefined,
   platform: NodeJS.Platform = process.platform,
 ): string[] {
-  return replaceShellTool(toolNames, isPowerShellToolEnabled(defaultTools, platform));
+  return replaceShellTool(
+    toolNames,
+    isPowerShellToolEnabled(defaultTools, platform),
+  );
 }
 
 function getPowerShellSettingsPath(agentDir = getAgentDir()): string {
@@ -39,17 +52,22 @@ function getPowerShellSettingsPath(agentDir = getAgentDir()): string {
 function parseSettings(path: string): Record<string, unknown> {
   if (!existsSync(path)) return {};
   const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-  if (!isRecord(parsed)) throw new Error("Invalid settings.json: expected an object");
+  if (!isRecord(parsed))
+    throw new Error("Invalid settings.json: expected an object");
   return parsed;
 }
 
-function configuredTools(settings: Record<string, unknown>): string[] | undefined {
+function configuredTools(
+  settings: Record<string, unknown>,
+): string[] | undefined {
   if (settings.defaultTools === undefined) return undefined;
   if (
-    !Array.isArray(settings.defaultTools)
-    || settings.defaultTools.some((name) => typeof name !== "string")
+    !Array.isArray(settings.defaultTools) ||
+    settings.defaultTools.some((name) => typeof name !== "string")
   ) {
-    throw new Error("Invalid settings.json: defaultTools must be an array of strings");
+    throw new Error(
+      "Invalid settings.json: defaultTools must be an array of strings",
+    );
   }
   return settings.defaultTools as string[];
 }
@@ -59,9 +77,15 @@ export async function readPowerShellToolEnabled(
   platform: NodeJS.Platform = process.platform,
 ): Promise<boolean> {
   if (!existsSync(settingsPath)) return false;
-  const release = await lockfile.lock(settingsPath, { realpath: false, retries: 10 });
+  const release = await lockfile.lock(settingsPath, {
+    realpath: false,
+    retries: 10,
+  });
   try {
-    return isPowerShellToolEnabled(configuredTools(parseSettings(settingsPath)), platform);
+    return isPowerShellToolEnabled(
+      configuredTools(parseSettings(settingsPath)),
+      platform,
+    );
   } finally {
     await release();
   }
@@ -72,7 +96,8 @@ export async function writePowerShellToolEnabled(
   settingsPath = getPowerShellSettingsPath(),
   platform: NodeJS.Platform = process.platform,
 ): Promise<boolean> {
-  if (platform !== "win32") throw new Error("PowerShell tool settings are only available on Windows");
+  if (platform !== "win32")
+    throw new Error("PowerShell tool settings are only available on Windows");
 
   mkdirSync(dirname(settingsPath), { recursive: true });
   try {
@@ -80,7 +105,10 @@ export async function writePowerShellToolEnabled(
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
   }
-  const release = await lockfile.lock(settingsPath, { realpath: false, retries: 10 });
+  const release = await lockfile.lock(settingsPath, {
+    realpath: false,
+    retries: 10,
+  });
   try {
     const settings = parseSettings(settingsPath);
     const currentTools = configuredTools(settings) ?? DEFAULT_TOOLS;

@@ -24,7 +24,8 @@ declare global {
 const MODELS_CACHE_TTL_MS = 60_000;
 const MAX_MODELS_CACHE_ENTRIES = 32;
 // Never interpolate the caught error here; SDK errors can contain paths and provider details.
-const SAFE_MODEL_LOAD_FAILURE_MESSAGE = "Model list is temporarily unavailable. Check your configuration and try again.";
+const SAFE_MODEL_LOAD_FAILURE_MESSAGE =
+  "Model list is temporarily unavailable. Check your configuration and try again.";
 
 function getModelsCacheState(): ModelsCacheState {
   if (!globalThis.__piModelsCacheState) {
@@ -44,7 +45,10 @@ export function invalidateModelsCache(): void {
   state.inFlight.clear();
 }
 
-export function withModelRuntimeError(data: ModelsData, modelError: string | undefined): ModelsData {
+export function withModelRuntimeError(
+  data: ModelsData,
+  modelError: string | undefined,
+): ModelsData {
   return modelError ? { ...data, modelError } : data;
 }
 
@@ -66,7 +70,8 @@ export function loadModelsWithCache(
   const state = getModelsCacheState();
   const cached = state.entries.get(cwd);
   if (cached) {
-    if (cached.expiresAt > Date.now() && cached.stamp === stamp) return Promise.resolve(cached.data);
+    if (cached.expiresAt > Date.now() && cached.stamp === stamp)
+      return Promise.resolve(cached.data);
     state.entries.delete(cwd);
   }
 
@@ -77,7 +82,10 @@ export function loadModelsWithCache(
   const loadPromise: Promise<ModelsData> = Promise.resolve()
     .then(loader)
     .then((data) => {
-      if (state.generation === generation && state.inFlight.get(cwd) === loadPromise) {
+      if (
+        state.generation === generation &&
+        state.inFlight.get(cwd) === loadPromise
+      ) {
         const now = Date.now();
         for (const [key, entry] of state.entries) {
           if (entry.expiresAt <= now) state.entries.delete(key);
@@ -87,7 +95,11 @@ export function loadModelsWithCache(
           if (oldestKey === undefined) break;
           state.entries.delete(oldestKey);
         }
-        state.entries.set(cwd, { data, expiresAt: now + MODELS_CACHE_TTL_MS, stamp });
+        state.entries.set(cwd, {
+          data,
+          expiresAt: now + MODELS_CACHE_TTL_MS,
+          stamp,
+        });
       }
       return data;
     })

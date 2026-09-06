@@ -1,10 +1,28 @@
 "use client";
 
-import React, { useRef, useState, useCallback, useEffect, useId, useLayoutEffect, useImperativeHandle, KeyboardEvent } from "react";
-import type { BuiltinSlashCommandResult, CompactResultInfo, QueuedMessages, SlashCommandInfo } from "@/hooks/useAgentSession";
+import React, {
+  useRef,
+  useState,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useImperativeHandle,
+  KeyboardEvent,
+} from "react";
+import type {
+  BuiltinSlashCommandResult,
+  CompactResultInfo,
+  QueuedMessages,
+  SlashCommandInfo,
+} from "@/hooks/useAgentSession";
 import { formatCompactCount } from "@/lib/i18n/format";
 import type { SkillsResponse } from "@/lib/api-types";
-import type { ExtensionStatusItem, TextContent, UserMessage } from "@/lib/types";
+import type {
+  ExtensionStatusItem,
+  TextContent,
+  UserMessage,
+} from "@/lib/types";
 import {
   clearDraft,
   getDraft,
@@ -20,8 +38,13 @@ import {
   isBase64ImageWithinLimits,
 } from "@/lib/image-attachments";
 import {
-  buildEntriesFromFiles, buildAtInsertText, extractAtQuery, filterFileEntries, isFilePathQuery,
-  type AtQueryMatch, type FileIndexEntry,
+  buildEntriesFromFiles,
+  buildAtInsertText,
+  extractAtQuery,
+  filterFileEntries,
+  isFilePathQuery,
+  type AtQueryMatch,
+  type FileIndexEntry,
 } from "@/lib/file-fuzzy";
 import { FolderIcon, getFileIcon } from "./FileIcons";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -32,7 +55,7 @@ import { ExtensionStatusBar } from "./ExtensionStatusBar";
 export { filterModelOptions } from "./ModelSelector";
 
 export interface AttachedImage {
-  data: string;   // base64, no prefix
+  data: string; // base64, no prefix
   mimeType: string;
   previewUrl: string; // object URL for display
 }
@@ -42,7 +65,11 @@ interface Props {
   onAbort: () => void;
   onSteer?: (message: string, images?: AttachedImage[]) => void;
   onFollowUp?: (message: string, images?: AttachedImage[]) => void;
-  onPromptWithStreamingBehavior?: (message: string, behavior: "steer" | "followUp", images?: AttachedImage[]) => void;
+  onPromptWithStreamingBehavior?: (
+    message: string,
+    behavior: "steer" | "followUp",
+    images?: AttachedImage[],
+  ) => void;
   isStreaming: boolean;
   model?: { provider: string; modelId: string } | null;
   isAutoModelSelection?: boolean;
@@ -56,12 +83,34 @@ interface Props {
   isCompacting?: boolean;
   compactError?: string | null;
   compactResult?: CompactResultInfo | null;
-  thinkingLevel?: "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-  onThinkingLevelChange?: (level: "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max") => void;
+  thinkingLevel?:
+    | "auto"
+    | "off"
+    | "minimal"
+    | "low"
+    | "medium"
+    | "high"
+    | "xhigh"
+    | "max";
+  onThinkingLevelChange?: (
+    level:
+      | "auto"
+      | "off"
+      | "minimal"
+      | "low"
+      | "medium"
+      | "high"
+      | "xhigh"
+      | "max",
+  ) => void;
   availableThinkingLevels?: string[] | null;
   thinkingLevelMap?: Record<string, string | null> | null;
   extensionStatuses?: ExtensionStatusItem[];
-  retryInfo?: { attempt: number; maxAttempts: number; errorMessage?: string } | null;
+  retryInfo?: {
+    attempt: number;
+    maxAttempts: number;
+    errorMessage?: string;
+  } | null;
   queuedMessages?: QueuedMessages | null;
   inputHistory?: string[];
   onRecallQueue?: () => void;
@@ -83,11 +132,18 @@ export interface ChatInputHandle {
   prependText: (text: string) => void;
   addImages: (files: File[]) => void;
   rekeyDraft: (previousKey: string, nextKey: string) => void;
-  restoreSubmission: (text: string, images?: ChatDraftImage[], targetDraftKey?: string) => void;
+  restoreSubmission: (
+    text: string,
+    images?: ChatDraftImage[],
+    targetDraftKey?: string,
+  ) => void;
 }
 
 const COMPOSITION_END_ENTER_GRACE_MS = 100;
-const TEXT_COLLATOR = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+const TEXT_COLLATOR = new Intl.Collator("en", {
+  numeric: true,
+  sensitivity: "base",
+});
 type StreamingAction = "steer" | "followup";
 
 /**
@@ -116,22 +172,47 @@ export function cycleInputHistory(
  * vh can render their top -- including the sticky header -- above the
  * container's edge, where scrolling cannot reach it.
  */
-export function getAnchoredMenuMaxHeight(menuBottom: number, visibleTop: number, gap = 8): number {
+export function getAnchoredMenuMaxHeight(
+  menuBottom: number,
+  visibleTop: number,
+  gap = 8,
+): number {
   return Math.max(0, Math.floor(menuBottom - visibleTop - gap));
 }
 
 function getVisibleTopBoundary(element: HTMLElement): number {
   let visibleTop = window.visualViewport?.offsetTop ?? 0;
-  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+  for (
+    let parent = element.parentElement;
+    parent;
+    parent = parent.parentElement
+  ) {
     const overflowY = window.getComputedStyle(parent).overflowY;
-    if (overflowY === "auto" || overflowY === "scroll" || overflowY === "hidden" || overflowY === "clip") {
-      visibleTop = Math.max(visibleTop, parent.getBoundingClientRect().top + parent.clientTop);
+    if (
+      overflowY === "auto" ||
+      overflowY === "scroll" ||
+      overflowY === "hidden" ||
+      overflowY === "clip"
+    ) {
+      visibleTop = Math.max(
+        visibleTop,
+        parent.getBoundingClientRect().top + parent.clientTop,
+      );
     }
   }
   return visibleTop;
 }
 
-const THINKING_LEVELS = ["auto", "off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+const THINKING_LEVELS = [
+  "auto",
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
 type BuiltinSlashCommand = {
   name: string;
   description: string;
@@ -147,30 +228,56 @@ const BUILTIN_SLASH_COMMANDS: BuiltinSlashCommand[] = [
   { name: "compact", description: "chat.commandCompact", source: "builtin" },
   { name: "reload", description: "chat.commandReload", source: "builtin" },
   { name: "name", description: "chat.commandName", source: "builtin" },
-  { name: "session", description: "chat.commandSession", source: "builtin", availableWhileStreaming: true },
-  { name: "copy", description: "chat.commandCopy", source: "builtin", availableWhileStreaming: true },
+  {
+    name: "session",
+    description: "chat.commandSession",
+    source: "builtin",
+    availableWhileStreaming: true,
+  },
+  {
+    name: "copy",
+    description: "chat.commandCopy",
+    source: "builtin",
+    availableWhileStreaming: true,
+  },
   { name: "clone", description: "chat.commandClone", source: "builtin" },
 ];
 
-function getBuiltinSlashCommand(message: string): BuiltinSlashCommand | undefined {
+function getBuiltinSlashCommand(
+  message: string,
+): BuiltinSlashCommand | undefined {
   const match = message.trim().match(/^\/([^\s]+)(?:\s|$)/);
   if (!match) return undefined;
   return BUILTIN_SLASH_COMMANDS.find((command) => command.name === match[1]);
 }
 
-export function canRunBuiltinSlashCommandWhileStreaming(message: string): boolean {
+export function canRunBuiltinSlashCommandWhileStreaming(
+  message: string,
+): boolean {
   return getBuiltinSlashCommand(message)?.availableWhileStreaming === true;
 }
 
-export function isExactSlashCommand(message: string, command: SlashCommandPaletteItem): boolean {
+export function isExactSlashCommand(
+  message: string,
+  command: SlashCommandPaletteItem,
+): boolean {
   return command.source === "builtin" && message.trim() === `/${command.name}`;
 }
 
-export function canClearBuiltinCommandInput(message: string, imageCount: number, submittedMessage: string): boolean {
+export function canClearBuiltinCommandInput(
+  message: string,
+  imageCount: number,
+  submittedMessage: string,
+): boolean {
   return imageCount === 0 && message.trim() === submittedMessage;
 }
 
-const SLASH_SOURCES: SlashCommandSource[] = ["builtin", "extension", "prompt", "skill"];
+const SLASH_SOURCES: SlashCommandSource[] = [
+  "builtin",
+  "extension",
+  "prompt",
+  "skill",
+];
 
 const SLASH_SOURCE_GROUP_LABEL_KEYS: Record<SlashCommandSource, string> = {
   builtin: "chat.builtIn",
@@ -186,7 +293,11 @@ const SLASH_SOURCE_ORDER: Record<SlashCommandSource, number> = {
   skill: 3,
 };
 
-function slashMatchRank(command: SlashCommandPaletteItem, query: string, t: (key: string) => string): number {
+function slashMatchRank(
+  command: SlashCommandPaletteItem,
+  query: string,
+  t: (key: string) => string,
+): number {
   const name = command.name.toLowerCase();
   const description = getSlashDescription(command, t).toLowerCase();
   if (name === query) return 0;
@@ -196,30 +307,39 @@ function slashMatchRank(command: SlashCommandPaletteItem, query: string, t: (key
   return 4;
 }
 
-function getSlashDescription(command: SlashCommandPaletteItem, t: (key: string) => string): string {
-  return command.source === "builtin" ? t(command.description) : command.description ?? "";
+function getSlashDescription(
+  command: SlashCommandPaletteItem,
+  t: (key: string) => string,
+): string {
+  return command.source === "builtin"
+    ? t(command.description)
+    : (command.description ?? "");
 }
 
 // Skill slash commands are named "skill:<skillName>"; look the skill up in the
 // mode map fetched from /api/skills. Unknown skills remain unannotated.
-function isManualSkillCommand(command: SlashCommandPaletteItem, skillModes: Record<string, boolean>): boolean {
-  if (command.source !== "skill" || !command.name.startsWith("skill:")) return false;
+function isManualSkillCommand(
+  command: SlashCommandPaletteItem,
+  skillModes: Record<string, boolean>,
+): boolean {
+  if (command.source !== "skill" || !command.name.startsWith("skill:"))
+    return false;
   return skillModes[command.name.slice("skill:".length)] === true;
 }
 
 export function buildSlashCommandLayout(commands: SlashCommandPaletteItem[]) {
   let index = 0;
-  const groups = SLASH_SOURCES
-    .map((source) => ({
-      source,
-      items: commands
-        .filter((command) => command.source === source)
-        .map((command) => ({ command, index: index++ })),
-    }))
-    .filter((group) => group.items.length > 0);
+  const groups = SLASH_SOURCES.map((source) => ({
+    source,
+    items: commands
+      .filter((command) => command.source === source)
+      .map((command) => ({ command, index: index++ })),
+  })).filter((group) => group.items.length > 0);
 
   return {
-    commands: groups.flatMap((group) => group.items.map(({ command }) => command)),
+    commands: groups.flatMap((group) =>
+      group.items.map(({ command }) => command),
+    ),
     groups,
   };
 }
@@ -228,15 +348,26 @@ const CLIENT_IMAGE_COMPRESSION_THRESHOLD_BYTES = 1024 * 1024;
 const CLIENT_MAX_IMAGE_SIDE = 1024;
 const CLIENT_JPEG_QUALITY = 0.85;
 
-export function shouldCompressImageFile(file: Pick<File, "size" | "type">): boolean {
-  return file.size > CLIENT_IMAGE_COMPRESSION_THRESHOLD_BYTES && file.type !== "image/gif";
+export function shouldCompressImageFile(
+  file: Pick<File, "size" | "type">,
+): boolean {
+  return (
+    file.size > CLIENT_IMAGE_COMPRESSION_THRESHOLD_BYTES &&
+    file.type !== "image/gif"
+  );
 }
 
-function readImageFile(file: Blob, mimeType: string): Promise<{ data: string; mimeType: string }> {
+function readImageFile(
+  file: Blob,
+  mimeType: string,
+): Promise<{ data: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
-      const data = typeof reader.result === "string" ? reader.result.split(",")[1] : undefined;
+      const data =
+        typeof reader.result === "string"
+          ? reader.result.split(",")[1]
+          : undefined;
       if (!data) {
         reject(new Error("Failed to read image"));
         return;
@@ -248,15 +379,21 @@ function readImageFile(file: Blob, mimeType: string): Promise<{ data: string; mi
   });
 }
 
-export async function compressImageFile(file: File): Promise<{ data: string; mimeType: string }> {
+export async function compressImageFile(
+  file: File,
+): Promise<{ data: string; mimeType: string }> {
   const original = () => readImageFile(file, file.type);
-  if (!shouldCompressImageFile(file) || typeof createImageBitmap !== "function") return original();
+  if (!shouldCompressImageFile(file) || typeof createImageBitmap !== "function")
+    return original();
 
   const bitmap = await createImageBitmap(file).catch(() => null);
   if (!bitmap) return original();
 
   try {
-    const scale = Math.min(1, CLIENT_MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+    const scale = Math.min(
+      1,
+      CLIENT_MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height),
+    );
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(bitmap.width * scale));
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));
@@ -265,7 +402,9 @@ export async function compressImageFile(file: File): Promise<{ data: string; mim
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const data = canvas.toDataURL("image/jpeg", CLIENT_JPEG_QUALITY).split(",")[1];
+    const data = canvas
+      .toDataURL("image/jpeg", CLIENT_JPEG_QUALITY)
+      .split(",")[1];
     return data && data.length < Math.ceil(file.size / 3) * 4
       ? { data, mimeType: "image/jpeg" }
       : original();
@@ -287,7 +426,9 @@ function draftImageToAttachedImage(image: ChatDraftImage): AttachedImage {
   };
 }
 
-function draftImagesToAttachedImages(images: ChatDraftImage[] | undefined): AttachedImage[] {
+function draftImagesToAttachedImages(
+  images: ChatDraftImage[] | undefined,
+): AttachedImage[] {
   return (images ?? [])
     .filter(isBase64ImageWithinLimits)
     .slice(0, MAX_ATTACHED_IMAGES)
@@ -310,15 +451,19 @@ export function getUserMessageText(message: UserMessage): string {
     .join("\n");
 }
 
-export function getUserMessageDraftImages(message: UserMessage): ChatDraftImage[] {
+export function getUserMessageDraftImages(
+  message: UserMessage,
+): ChatDraftImage[] {
   if (typeof message.content === "string") return [];
   return message.content.flatMap((block) => {
     if (block.type !== "image") return [];
 
     // Support both the current nested image format and older flat pi-ai entries.
     const flat = block as unknown as { data?: unknown; mimeType?: unknown };
-    const data = block.source?.type === "base64" ? block.source.data : flat.data;
-    const mimeType = block.source?.type === "base64" ? block.source.media_type : flat.mimeType;
+    const data =
+      block.source?.type === "base64" ? block.source.data : flat.data;
+    const mimeType =
+      block.source?.type === "base64" ? block.source.media_type : flat.mimeType;
     if (typeof data !== "string" || typeof mimeType !== "string") return [];
 
     const image = { data, mimeType };
@@ -332,7 +477,13 @@ function revokeImagePreview(image: AttachedImage): void {
   }
 }
 
-function QueuedMessageRow({ kind, text }: { kind: "steer" | "follow-up"; text: string }) {
+function QueuedMessageRow({
+  kind,
+  text,
+}: {
+  kind: "steer" | "follow-up";
+  text: string;
+}) {
   return (
     <div
       title={text}
@@ -359,12 +510,29 @@ function QueuedMessageRow({ kind, text }: { kind: "steer" | "follow-up"; text: s
       >
         {kind}
       </span>
-      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>
+      <span
+        style={{
+          minWidth: 0,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {text}
+      </span>
     </div>
   );
 }
 
-function ModelNoticeBanner({ tone, title, body }: { tone: "error" | "warning"; title: string; body: string }) {
+function ModelNoticeBanner({
+  tone,
+  title,
+  body,
+}: {
+  tone: "error" | "warning";
+  title: string;
+  body: string;
+}) {
   const color = tone === "error" ? "239,68,68" : "234,179,8";
   return (
     <div
@@ -403,7 +571,9 @@ function ModelNoticeBanner({ tone, title, body }: { tone: "error" | "warning"; t
       </svg>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontWeight: 600 }}>{title}</div>
-        <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{body}</div>
+        <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+          {body}
+        </div>
       </div>
     </div>
   );
@@ -412,7 +582,9 @@ function ModelNoticeBanner({ tone, title, body }: { tone: "error" | "warning"; t
 export function ModelErrorBanner({ error }: { error?: string | null }) {
   const { t } = useI18n();
   if (!error) return null;
-  return <ModelNoticeBanner tone="error" title={t("chat.modelError")} body={error} />;
+  return (
+    <ModelNoticeBanner tone="error" title={t("chat.modelError")} body={error} />
+  );
 }
 
 /** Surfaces `enabledModels` patterns that matched nothing, so a typo is visible (#307). */
@@ -422,18 +594,45 @@ export function ModelScopeWarningBanner({ warnings }: { warnings?: string[] }) {
   return (
     <ModelNoticeBanner
       tone="warning"
-      title={t(warnings.length > 1 ? "chat.modelScopeWarnings" : "chat.modelScopeWarning")}
+      title={t(
+        warnings.length > 1
+          ? "chat.modelScopeWarnings"
+          : "chat.modelScopeWarning",
+      )}
       body={warnings.join("\n")}
     />
   );
 }
 
 export function ChatInput({
-  onSend, onAbort, onSteer, onFollowUp, isStreaming, model, isAutoModelSelection, modelNames, modelList, modelError, modelScopeWarnings, onModelChange, modelSwitching,
-  isCompacting, compactError, compactResult,
-  thinkingLevel, onThinkingLevelChange, availableThinkingLevels, thinkingLevelMap, extensionStatuses = [],
-  retryInfo, queuedMessages, inputHistory = [], onRecallQueue,
-  slashCommands, slashCommandsLoading, onLoadSlashCommands,
+  onSend,
+  onAbort,
+  onSteer,
+  onFollowUp,
+  isStreaming,
+  model,
+  isAutoModelSelection,
+  modelNames,
+  modelList,
+  modelError,
+  modelScopeWarnings,
+  onModelChange,
+  modelSwitching,
+  isCompacting,
+  compactError,
+  compactResult,
+  thinkingLevel,
+  onThinkingLevelChange,
+  availableThinkingLevels,
+  thinkingLevelMap,
+  extensionStatuses = [],
+  retryInfo,
+  queuedMessages,
+  inputHistory = [],
+  onRecallQueue,
+  slashCommands,
+  slashCommandsLoading,
+  onLoadSlashCommands,
   onBuiltinCommand,
   onAudioUnlock,
   onPromptWithStreamingBehavior,
@@ -443,21 +642,26 @@ export function ChatInput({
 }: Props) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
-  const [value, setValue] = useState(() => (draftKey ? getDraft(draftKey)?.value ?? "" : ""));
+  const [value, setValue] = useState(() =>
+    draftKey ? (getDraft(draftKey)?.value ?? "") : "",
+  );
   const [controlsOpen, setControlsOpen] = useState(false);
-  const showControls = isMobile && (isStreaming || extensionStatuses.length > 0 || !onModelChange);
+  const showControls =
+    isMobile && (isStreaming || extensionStatuses.length > 0 || !onModelChange);
   if (controlsOpen && !showControls) setControlsOpen(false);
   const [queueModifier, setQueueModifier] = useState(false);
   const touchSubmissionRef = useRef(false);
-  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>(() => (
-    draftKey ? draftImagesToAttachedImages(getDraft(draftKey)?.images) : []
-  ));
+  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>(() =>
+    draftKey ? draftImagesToAttachedImages(getDraft(draftKey)?.images) : [],
+  );
   const trimmedValue = value.trimStart();
   const bashMode = attachedImages.length === 0 && trimmedValue.startsWith("!");
   const bashExcluded = bashMode && trimmedValue.startsWith("!!");
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashActiveIndex, setSlashActiveIndex] = useState(0);
-  const [anchoredMenuMaxHeight, setAnchoredMenuMaxHeight] = useState<number | null>(null);
+  const [anchoredMenuMaxHeight, setAnchoredMenuMaxHeight] = useState<
+    number | null
+  >(null);
   const anchoredMenuRef = useRef<HTMLDivElement>(null);
   const [atQuery, setAtQuery] = useState<AtQueryMatch | null>(null);
   const [atMenuOpen, setAtMenuOpen] = useState(false);
@@ -465,19 +669,29 @@ export function ChatInput({
   // Shell-style history cycling: null when not cycling, otherwise how many
   // prompts back from the newest we are showing.
   const [historyCycle, setHistoryCycle] = useState<number | null>(null);
-  const [fileIndex, setFileIndex] = useState<{ cwd: string; entries: FileIndexEntry[]; truncated: boolean } | null>(null);
+  const [fileIndex, setFileIndex] = useState<{
+    cwd: string;
+    entries: FileIndexEntry[];
+    truncated: boolean;
+  } | null>(null);
   const [fileIndexLoading, setFileIndexLoading] = useState(false);
-  const [atServerResult, setAtServerResult] = useState<{ cwd: string; query: string; matches: FileIndexEntry[]; failed?: boolean } | null>(null);
+  const [atServerResult, setAtServerResult] = useState<{
+    cwd: string;
+    query: string;
+    matches: FileIndexEntry[];
+    failed?: boolean;
+  } | null>(null);
   const [skillModeState, setSkillModeState] = useState<{
     cwd: string;
     values: Record<string, boolean>;
   } | null>(null);
-  const skillModes = cwd && skillModeState?.cwd === cwd
-    ? skillModeState.values
-    : {};
+  const skillModes =
+    cwd && skillModeState?.cwd === cwd ? skillModeState.values : {};
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const focusEditorOnBackgroundClick = (event: React.MouseEvent<HTMLDivElement>) => {
+  const focusEditorOnBackgroundClick = (
+    event: React.MouseEvent<HTMLDivElement>,
+  ) => {
     if (event.target === event.currentTarget) textareaRef.current?.focus();
   };
   const controlsMenuId = useId();
@@ -488,7 +702,9 @@ export function ChatInput({
   const slashCommandsRequestedRef = useRef(false);
   const slashItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const atItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const fileIndexMetaRef = useRef<{ cwd: string; fetchedAt: number } | null>(null);
+  const fileIndexMetaRef = useRef<{ cwd: string; fetchedAt: number } | null>(
+    null,
+  );
   const fileIndexFetchingRef = useRef<string | null>(null);
   const draftKeyRef = useRef(draftKey);
   const valueRef = useRef(value);
@@ -513,10 +729,19 @@ export function ChatInput({
     replaceMessage(message: UserMessage) {
       const ta = textareaRef.current;
       const current = ta ? ta.value : value;
-      if (!canRestoreUserMessage(current, attachedImagesRef.current.length, pendingImageCountRef.current)) return;
+      if (
+        !canRestoreUserMessage(
+          current,
+          attachedImagesRef.current.length,
+          pendingImageCountRef.current,
+        )
+      )
+        return;
 
       const restoredText = getUserMessageText(message);
-      const restoredImages = draftImagesToAttachedImages(getUserMessageDraftImages(message));
+      const restoredImages = draftImagesToAttachedImages(
+        getUserMessageDraftImages(message),
+      );
       valueRef.current = restoredText;
       attachedImagesRef.current = restoredImages;
       setValue(restoredText);
@@ -558,13 +783,18 @@ export function ChatInput({
         value: valueRef.current,
         images: attachedImagesRef.current.map(imageToDraftImage),
       };
-      const moved = rekeyStoredDraft(previousKey, nextKey, currentDraft) ?? { value: "", images: [] };
-      const unchanged = moved.value === currentDraft.value
-        && moved.images.length === currentDraft.images.length
-        && moved.images.every((image, index) => (
-          image.data === currentDraft.images[index]?.data
-          && image.mimeType === currentDraft.images[index]?.mimeType
-        ));
+      const moved = rekeyStoredDraft(previousKey, nextKey, currentDraft) ?? {
+        value: "",
+        images: [],
+      };
+      const unchanged =
+        moved.value === currentDraft.value &&
+        moved.images.length === currentDraft.images.length &&
+        moved.images.every(
+          (image, index) =>
+            image.data === currentDraft.images[index]?.data &&
+            image.mimeType === currentDraft.images[index]?.mimeType,
+        );
       draftKeyRef.current = nextKey;
       if (unchanged) return;
 
@@ -579,7 +809,11 @@ export function ChatInput({
       setAtQuery(null);
       setHistoryCycle(null);
     },
-    restoreSubmission(text: string, images?: ChatDraftImage[], targetDraftKey?: string) {
+    restoreSubmission(
+      text: string,
+      images?: ChatDraftImage[],
+      targetDraftKey?: string,
+    ) {
       if (!text.trim() && !images?.length) return;
 
       // clearInput is queued before the submission handler runs. Compose with
@@ -588,9 +822,10 @@ export function ChatInput({
       const currentDraftKey = draftKeyRef.current;
       const destinationDraftKey = targetDraftKey ?? currentDraftKey;
       const targetsCurrentComposer = destinationDraftKey === currentDraftKey;
-      const storedDraft = !targetsCurrentComposer && destinationDraftKey
-        ? getDraft(destinationDraftKey)
-        : null;
+      const storedDraft =
+        !targetsCurrentComposer && destinationDraftKey
+          ? getDraft(destinationDraftKey)
+          : null;
       const restoredDraft = mergeRestoredSubmissionDraft(
         text,
         images,
@@ -607,7 +842,10 @@ export function ChatInput({
         ? [
             ...draftImagesToAttachedImages(images).slice(
               0,
-              Math.max(0, MAX_ATTACHED_IMAGES - attachedImagesRef.current.length),
+              Math.max(
+                0,
+                MAX_ATTACHED_IMAGES - attachedImagesRef.current.length,
+              ),
             ),
             ...attachedImagesRef.current,
           ].slice(0, MAX_ATTACHED_IMAGES)
@@ -626,9 +864,12 @@ export function ChatInput({
       if (images?.length) {
         setAttachedImages((current) => {
           const available = Math.max(0, MAX_ATTACHED_IMAGES - current.length);
-          const restored = draftImagesToAttachedImages(images)
-            .slice(0, available);
-          const next = restored.length > 0 ? [...restored, ...current] : current;
+          const restored = draftImagesToAttachedImages(images).slice(
+            0,
+            available,
+          );
+          const next =
+            restored.length > 0 ? [...restored, ...current] : current;
           attachedImagesRef.current = next;
           return next;
         });
@@ -670,22 +911,30 @@ export function ChatInput({
   const processImageFiles = useCallback(async (files: File[]) => {
     const remaining = Math.max(
       0,
-      MAX_ATTACHED_IMAGES - attachedImagesRef.current.length - pendingImageCountRef.current,
+      MAX_ATTACHED_IMAGES -
+        attachedImagesRef.current.length -
+        pendingImageCountRef.current,
     );
     const imageFiles = files
-      .filter((f) => f.type.startsWith("image/") && f.size <= MAX_ATTACHED_IMAGE_BYTES)
+      .filter(
+        (f) =>
+          f.type.startsWith("image/") && f.size <= MAX_ATTACHED_IMAGE_BYTES,
+      )
       .slice(0, remaining);
     if (!imageFiles.length) return;
     pendingImageCountRef.current += imageFiles.length;
     try {
       const newImages = await Promise.all(
         imageFiles.map(async (file) => ({
-          ...await compressImageFile(file),
+          ...(await compressImageFile(file)),
           previewUrl: URL.createObjectURL(file),
-        }))
+        })),
       );
       setAttachedImages((prev) => {
-        const accepted = newImages.slice(0, Math.max(0, MAX_ATTACHED_IMAGES - prev.length));
+        const accepted = newImages.slice(
+          0,
+          Math.max(0, MAX_ATTACHED_IMAGES - prev.length),
+        );
         newImages.slice(accepted.length).forEach(revokeImagePreview);
         const next = [...prev, ...accepted];
         attachedImagesRef.current = next;
@@ -720,7 +969,8 @@ export function ChatInput({
     setAtQuery(null);
     setHistoryCycle(null);
     if (draftKey) clearDraft(draftKey);
-    if (draftKeyRef.current && draftKeyRef.current !== draftKey) clearDraft(draftKeyRef.current);
+    if (draftKeyRef.current && draftKeyRef.current !== draftKey)
+      clearDraft(draftKeyRef.current);
     clearImages();
   }, [clearImages, draftKey]);
 
@@ -764,33 +1014,57 @@ export function ChatInput({
     };
   }, []);
 
-  const runBuiltinCommand = useCallback(async (msg: string): Promise<boolean> => {
-    if (attachedImages.length || !msg.startsWith("/") || !onBuiltinCommand) return false;
-    const result = await onBuiltinCommand(msg);
-    if (!result.handled) return false;
-    if (!result.error && canClearBuiltinCommandInput(valueRef.current, attachedImagesRef.current.length, msg)) clearInput();
-    return true;
-  }, [attachedImages.length, clearInput, onBuiltinCommand]);
+  const runBuiltinCommand = useCallback(
+    async (msg: string): Promise<boolean> => {
+      if (attachedImages.length || !msg.startsWith("/") || !onBuiltinCommand)
+        return false;
+      const result = await onBuiltinCommand(msg);
+      if (!result.handled) return false;
+      if (
+        !result.error &&
+        canClearBuiltinCommandInput(
+          valueRef.current,
+          attachedImagesRef.current.length,
+          msg,
+        )
+      )
+        clearInput();
+      return true;
+    },
+    [attachedImages.length, clearInput, onBuiltinCommand],
+  );
 
   const handleSend = useCallback(async () => {
     const msg = value.trim();
     if (!msg && !attachedImages.length) return;
     onAudioUnlock?.();
-    const builtinAllowed = !isStreaming || canRunBuiltinSlashCommandWhileStreaming(msg);
-    if (builtinAllowed && await runBuiltinCommand(msg)) return;
+    const builtinAllowed =
+      !isStreaming || canRunBuiltinSlashCommandWhileStreaming(msg);
+    if (builtinAllowed && (await runBuiltinCommand(msg))) return;
     if (isStreaming) return;
     clearInput();
     onSend(msg, attachedImages.length ? attachedImages : undefined);
-  }, [value, attachedImages, isStreaming, runBuiltinCommand, onSend, clearInput, onAudioUnlock]);
+  }, [
+    value,
+    attachedImages,
+    isStreaming,
+    runBuiltinCommand,
+    onSend,
+    clearInput,
+    onAudioUnlock,
+  ]);
 
-  const slashQuery = value.startsWith("/") && !/\s/.test(value.slice(1))
-    ? value.slice(1).toLowerCase()
-    : null;
+  const slashQuery =
+    value.startsWith("/") && !/\s/.test(value.slice(1))
+      ? value.slice(1).toLowerCase()
+      : null;
 
   const filteredSlashCommands = (() => {
     if (slashQuery === null) return [];
     const builtinCommands = isStreaming
-      ? BUILTIN_SLASH_COMMANDS.filter((command) => command.availableWhileStreaming)
+      ? BUILTIN_SLASH_COMMANDS.filter(
+          (command) => command.availableWhileStreaming,
+        )
       : BUILTIN_SLASH_COMMANDS;
     const commands = [...builtinCommands, ...(slashCommands ?? [])];
     return [...commands]
@@ -800,33 +1074,46 @@ export function ChatInput({
         return name.includes(slashQuery) || description.includes(slashQuery);
       })
       .sort((a, b) => {
-        const rankDelta = slashMatchRank(a, slashQuery, t) - slashMatchRank(b, slashQuery, t);
+        const rankDelta =
+          slashMatchRank(a, slashQuery, t) - slashMatchRank(b, slashQuery, t);
         if (rankDelta !== 0) return rankDelta;
-        return SLASH_SOURCE_ORDER[a.source] - SLASH_SOURCE_ORDER[b.source]
-          || TEXT_COLLATOR.compare(a.name, b.name);
+        return (
+          SLASH_SOURCE_ORDER[a.source] - SLASH_SOURCE_ORDER[b.source] ||
+          TEXT_COLLATOR.compare(a.name, b.name)
+        );
       });
   })();
 
-  const {
-    commands: displayedSlashCommands,
-    groups: groupedSlashCommands,
-  } = buildSlashCommandLayout(filteredSlashCommands);
+  const { commands: displayedSlashCommands, groups: groupedSlashCommands } =
+    buildSlashCommandLayout(filteredSlashCommands);
 
-  const slashCommandCountLabel = filteredSlashCommands.length === 1
-    ? t(slashQuery ? "chat.match" : "chat.command")
-    : t(slashQuery ? "chat.matches" : "chat.commands", { count: filteredSlashCommands.length });
+  const slashCommandCountLabel =
+    filteredSlashCommands.length === 1
+      ? t(slashQuery ? "chat.match" : "chat.command")
+      : t(slashQuery ? "chat.matches" : "chat.commands", {
+          count: filteredSlashCommands.length,
+        });
   const hasInputText = Boolean(value.trim());
   const canQueueStreamingMessage = hasInputText || attachedImages.length > 0;
   const hasStreamingActions = isStreaming && Boolean(onSteer);
-  const showStop = isStreaming && (!canQueueStreamingMessage || !hasStreamingActions);
-  const streamingSubmissionAction: StreamingAction = queueModifier && onFollowUp ? "followup" : "steer";
+  const showStop =
+    isStreaming && (!canQueueStreamingMessage || !hasStreamingActions);
+  const streamingSubmissionAction: StreamingAction =
+    queueModifier && onFollowUp ? "followup" : "steer";
 
   useEffect(() => {
     const updateModifier = (event: globalThis.KeyboardEvent) => {
-      setQueueModifier(event.altKey && !event.getModifierState("AltGraph") && !event.isComposing && !isComposingRef.current);
+      setQueueModifier(
+        event.altKey &&
+          !event.getModifierState("AltGraph") &&
+          !event.isComposing &&
+          !isComposingRef.current,
+      );
     };
     const clearModifier = () => setQueueModifier(false);
-    const onVisibility = () => { if (document.hidden) clearModifier(); };
+    const onVisibility = () => {
+      if (document.hidden) clearModifier();
+    };
     window.addEventListener("keydown", updateModifier);
     window.addEventListener("keyup", updateModifier);
     window.addEventListener("blur", clearModifier);
@@ -846,22 +1133,29 @@ export function ChatInput({
 
   // ── @ file autocomplete ──────────────────────────────────────────────────
   // Recomputed from the text before the caret on every change/caret move.
-  const updateAtQuery = useCallback((text: string, cursor: number | null) => {
-    const pos = cursor ?? text.length;
-    const query = extractAtQuery(text.slice(0, pos));
-    setAtQuery(cwd || (query && isFilePathQuery(query.query)) ? query : null);
-  }, [cwd]);
+  const updateAtQuery = useCallback(
+    (text: string, cursor: number | null) => {
+      const pos = cursor ?? text.length;
+      const query = extractAtQuery(text.slice(0, pos));
+      setAtQuery(cwd || (query && isFilePathQuery(query.query)) ? query : null);
+    },
+    [cwd],
+  );
 
   const atQueryText = atQuery?.query ?? null;
   const atPathMode = atQueryText !== null && isFilePathQuery(atQueryText);
-  const atLocalMatches: FileIndexEntry[] = React.useMemo(() => (
-    !atPathMode && atQueryText !== null && fileIndex && fileIndex.cwd === cwd
-      ? filterFileEntries(fileIndex.entries, atQueryText)
-      : []
-  ), [atPathMode, atQueryText, fileIndex, cwd]);
+  const atLocalMatches: FileIndexEntry[] = React.useMemo(
+    () =>
+      !atPathMode && atQueryText !== null && fileIndex && fileIndex.cwd === cwd
+        ? filterFileEntries(fileIndex.entries, atQueryText)
+        : [],
+    [atPathMode, atQueryText, fileIndex, cwd],
+  );
 
   // Explicit paths list one directory; large projects search their full index.
-  const needsServerSearch = atPathMode || Boolean(atQueryText && fileIndex?.truncated && fileIndex.cwd === cwd);
+  const needsServerSearch =
+    atPathMode ||
+    Boolean(atQueryText && fileIndex?.truncated && fileIndex.cwd === cwd);
   useEffect(() => {
     if (!needsServerSearch || atQueryText === null) return;
     const fetchCwd = cwd ?? "";
@@ -870,16 +1164,29 @@ export function ChatInput({
     let active = true;
     const timer = setTimeout(() => {
       const params = new URLSearchParams({ cwd: fetchCwd, q: query });
-      fetch(`/api/${atPathMode ? "file-completion" : "file-index"}?${params}`, { signal: controller.signal })
+      fetch(`/api/${atPathMode ? "file-completion" : "file-index"}?${params}`, {
+        signal: controller.signal,
+      })
         .then((res) => {
           if (!res.ok) throw new Error(`file search failed: ${res.status}`);
           return res.json() as Promise<{ matches?: FileIndexEntry[] }>;
         })
         .then((data) => {
-          if (active) setAtServerResult({ cwd: fetchCwd, query, matches: data.matches ?? [] });
+          if (active)
+            setAtServerResult({
+              cwd: fetchCwd,
+              query,
+              matches: data.matches ?? [],
+            });
         })
         .catch(() => {
-          if (active) setAtServerResult({ cwd: fetchCwd, query, matches: [], failed: true });
+          if (active)
+            setAtServerResult({
+              cwd: fetchCwd,
+              query,
+              matches: [],
+              failed: true,
+            });
         });
     }, 150);
     return () => {
@@ -889,16 +1196,22 @@ export function ChatInput({
     };
   }, [needsServerSearch, atPathMode, atQueryText, cwd]);
 
-  const serverResultInUse = needsServerSearch
-    && atServerResult !== null
-    && atServerResult.cwd === (cwd ?? "")
-    && atServerResult.query === atQueryText
-    && (atPathMode || !atServerResult.failed);
-  const atMatches: FileIndexEntry[] = serverResultInUse ? atServerResult.matches : atLocalMatches;
+  const serverResultInUse =
+    needsServerSearch &&
+    atServerResult !== null &&
+    atServerResult.cwd === (cwd ?? "") &&
+    atServerResult.query === atQueryText &&
+    (atPathMode || !atServerResult.failed);
+  const atMatches: FileIndexEntry[] = serverResultInUse
+    ? atServerResult.matches
+    : atLocalMatches;
 
   // Open/reset the menu whenever the @token appears or changes (mirrors the
   // slash menu: Escape closes it, the next keystroke re-opens it).
-  const atTokenKey = atQuery === null ? null : `${atQuery.start}:${atQuery.quoted ? 1 : 0}:${atQuery.query}`;
+  const atTokenKey =
+    atQuery === null
+      ? null
+      : `${atQuery.start}:${atQuery.quoted ? 1 : 0}:${atQuery.query}`;
   useEffect(() => {
     if (atTokenKey === null) {
       setAtMenuOpen(false);
@@ -915,7 +1228,8 @@ export function ChatInput({
   useEffect(() => {
     if (!atTokenActive || atPathMode || !cwd) return;
     const meta = fileIndexMetaRef.current;
-    if (meta && meta.cwd === cwd && Date.now() - meta.fetchedAt < 10_000) return;
+    if (meta && meta.cwd === cwd && Date.now() - meta.fetchedAt < 10_000)
+      return;
     if (fileIndexFetchingRef.current === cwd) return;
     fileIndexFetchingRef.current = cwd;
     const fetchCwd = cwd;
@@ -926,7 +1240,11 @@ export function ChatInput({
         return res.json() as Promise<{ files?: string[]; truncated?: boolean }>;
       })
       .then((data) => {
-        setFileIndex({ cwd: fetchCwd, entries: buildEntriesFromFiles(data.files ?? []), truncated: !!data.truncated });
+        setFileIndex({
+          cwd: fetchCwd,
+          entries: buildEntriesFromFiles(data.files ?? []),
+          truncated: !!data.truncated,
+        });
         fileIndexMetaRef.current = { cwd: fetchCwd, fetchedAt: Date.now() };
       })
       .catch(() => {
@@ -939,33 +1257,36 @@ export function ChatInput({
       });
   }, [atTokenActive, atPathMode, cwd]);
 
-  const applyAtCompletion = useCallback((entry: FileIndexEntry) => {
-    if (!atQuery) return;
-    const ta = textareaRef.current;
-    const cursor = ta?.selectionStart ?? value.length;
-    const before = value.slice(0, atQuery.start);
-    let after = value.slice(cursor);
-    // Completing inside a quoted token (@"my dir/… with the caret before the
-    // closing quote): the replacement carries its own closing quote, so drop
-    // the old one right after the caret (mirrors the TUI's applyCompletion).
-    if (atQuery.quoted && after.startsWith('"')) {
-      after = after.slice(1);
-    }
-    const insert = buildAtInsertText(entry.path, entry.isDir, atQuery.quoted);
-    const newValue = before + insert.text + after;
-    const newPos = before.length + insert.cursorOffset;
-    setValue(newValue);
-    // setValue alone does not fire onChange — re-derive the token here. Files
-    // end with a space (token closes, menu hides); directories end with "/"
-    // before the caret (token stays open for drill-down into the directory).
-    setAtQuery(extractAtQuery(newValue.slice(0, newPos)));
-    requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(newPos, newPos);
-    });
-  }, [atQuery, value]);
+  const applyAtCompletion = useCallback(
+    (entry: FileIndexEntry) => {
+      if (!atQuery) return;
+      const ta = textareaRef.current;
+      const cursor = ta?.selectionStart ?? value.length;
+      const before = value.slice(0, atQuery.start);
+      let after = value.slice(cursor);
+      // Completing inside a quoted token (@"my dir/… with the caret before the
+      // closing quote): the replacement carries its own closing quote, so drop
+      // the old one right after the caret (mirrors the TUI's applyCompletion).
+      if (atQuery.quoted && after.startsWith('"')) {
+        after = after.slice(1);
+      }
+      const insert = buildAtInsertText(entry.path, entry.isDir, atQuery.quoted);
+      const newValue = before + insert.text + after;
+      const newPos = before.length + insert.cursorOffset;
+      setValue(newValue);
+      // setValue alone does not fire onChange — re-derive the token here. Files
+      // end with a space (token closes, menu hides); directories end with "/"
+      // before the caret (token stays open for drill-down into the directory).
+      setAtQuery(extractAtQuery(newValue.slice(0, newPos)));
+      requestAnimationFrame(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(newPos, newPos);
+      });
+    },
+    [atQuery, value],
+  );
 
   useEffect(() => {
     if (atActiveIndex >= atMatches.length) {
@@ -979,7 +1300,10 @@ export function ChatInput({
 
   useEffect(() => {
     if (!atMenuOpen) return;
-    atItemRefs.current[atActiveIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    atItemRefs.current[atActiveIndex]?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
   }, [atActiveIndex, atMenuOpen]);
 
   const applyHistoryInput = useCallback((text: string) => {
@@ -1006,29 +1330,51 @@ export function ChatInput({
     });
   }, []);
 
-  const sendQueued = useCallback((mode: StreamingAction) => {
-    const msg = value.trim();
-    if (!msg && !attachedImages.length) return;
-    onAudioUnlock?.();
-    if (!attachedImages.length && onBuiltinCommand && canRunBuiltinSlashCommandWhileStreaming(msg)) {
-      void runBuiltinCommand(msg);
-      return;
-    }
-    const streamingBehavior = mode === "steer" ? "steer" : "followUp";
-    if (msg.startsWith("/") && onPromptWithStreamingBehavior) {
+  const sendQueued = useCallback(
+    (mode: StreamingAction) => {
+      const msg = value.trim();
+      if (!msg && !attachedImages.length) return;
+      onAudioUnlock?.();
+      if (
+        !attachedImages.length &&
+        onBuiltinCommand &&
+        canRunBuiltinSlashCommandWhileStreaming(msg)
+      ) {
+        void runBuiltinCommand(msg);
+        return;
+      }
+      const streamingBehavior = mode === "steer" ? "steer" : "followUp";
+      if (msg.startsWith("/") && onPromptWithStreamingBehavior) {
+        clearInput();
+        setQueueModifier(false);
+        onPromptWithStreamingBehavior(
+          msg,
+          streamingBehavior,
+          attachedImages.length ? attachedImages : undefined,
+        );
+        return;
+      }
+      const submit = mode === "steer" ? onSteer : onFollowUp;
+      if (!submit) return;
       clearInput();
       setQueueModifier(false);
-      onPromptWithStreamingBehavior(msg, streamingBehavior, attachedImages.length ? attachedImages : undefined);
-      return;
-    }
-    const submit = mode === "steer" ? onSteer : onFollowUp;
-    if (!submit) return;
-    clearInput();
-    setQueueModifier(false);
-    submit(msg, attachedImages.length ? attachedImages : undefined);
-  }, [value, attachedImages, onBuiltinCommand, onPromptWithStreamingBehavior, onSteer, onFollowUp, clearInput, onAudioUnlock, runBuiltinCommand]);
+      submit(msg, attachedImages.length ? attachedImages : undefined);
+    },
+    [
+      value,
+      attachedImages,
+      onBuiltinCommand,
+      onPromptWithStreamingBehavior,
+      onSteer,
+      onFollowUp,
+      clearInput,
+      onAudioUnlock,
+      runBuiltinCommand,
+    ],
+  );
 
-  const anchoredMenuOpen = (slashMenuOpen && slashQuery !== null) || (atMenuOpen && atQuery !== null);
+  const anchoredMenuOpen =
+    (slashMenuOpen && slashQuery !== null) || (atMenuOpen && atQuery !== null);
   useLayoutEffect(() => {
     if (!anchoredMenuOpen) {
       setAnchoredMenuMaxHeight(null);
@@ -1044,7 +1390,9 @@ export function ChatInput({
         menu.getBoundingClientRect().bottom,
         getVisibleTopBoundary(menu),
       );
-      setAnchoredMenuMaxHeight((current) => (current === next ? current : next));
+      setAnchoredMenuMaxHeight((current) =>
+        current === next ? current : next,
+      );
     };
     const schedule = () => {
       if (frameId !== null) cancelAnimationFrame(frameId);
@@ -1067,8 +1415,16 @@ export function ChatInput({
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       const nativeEvent = e.nativeEvent;
-      const sendShortcut = e.key === "Enter" && !e.shiftKey && (!isMobile || e.ctrlKey || e.metaKey || (e.altKey && !e.getModifierState("AltGraph")));
-      const recentlyComposed = Date.now() - lastCompositionEndAtRef.current < COMPOSITION_END_ENTER_GRACE_MS;
+      const sendShortcut =
+        e.key === "Enter" &&
+        !e.shiftKey &&
+        (!isMobile ||
+          e.ctrlKey ||
+          e.metaKey ||
+          (e.altKey && !e.getModifierState("AltGraph")));
+      const recentlyComposed =
+        Date.now() - lastCompositionEndAtRef.current <
+        COMPOSITION_END_ENTER_GRACE_MS;
       const isComposing =
         isComposingRef.current ||
         nativeEvent.isComposing ||
@@ -1083,9 +1439,17 @@ export function ChatInput({
       // bare "/command" re-derives slashQuery and reopens the palette, which
       // would otherwise swallow the next ArrowUp and strand the rest of the
       // history behind an Escape.
-      if (historyCycle !== null && !isComposing && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      if (
+        historyCycle !== null &&
+        !isComposing &&
+        (e.key === "ArrowUp" || e.key === "ArrowDown")
+      ) {
         e.preventDefault();
-        const next = cycleInputHistory(inputHistory, historyCycle, e.key === "ArrowUp" ? "up" : "down");
+        const next = cycleInputHistory(
+          inputHistory,
+          historyCycle,
+          e.key === "ArrowUp" ? "up" : "down",
+        );
         setHistoryCycle(next.cycle);
         applyHistoryInput(next.text);
         return;
@@ -1097,7 +1461,9 @@ export function ChatInput({
       if (slashMenuOpen && slashQuery !== null && !isComposing) {
         if (e.key === "ArrowDown") {
           e.preventDefault();
-          setSlashActiveIndex((i) => Math.min(Math.max(0, displayedSlashCommands.length - 1), i + 1));
+          setSlashActiveIndex((i) =>
+            Math.min(Math.max(0, displayedSlashCommands.length - 1), i + 1),
+          );
           return;
         }
         if (e.key === "ArrowUp") {
@@ -1118,8 +1484,10 @@ export function ChatInput({
         }
         if (sendShortcut && selectedCommand) {
           e.preventDefault();
-          const canSubmitNow = !isStreaming
-            || (selectedCommand.source === "builtin" && selectedCommand.availableWhileStreaming === true);
+          const canSubmitNow =
+            !isStreaming ||
+            (selectedCommand.source === "builtin" &&
+              selectedCommand.availableWhileStreaming === true);
           if (canSubmitNow && isExactSlashCommand(value, selectedCommand)) {
             setSlashMenuOpen(false);
             void handleSend();
@@ -1135,7 +1503,9 @@ export function ChatInput({
       if (atMenuOpen && atQuery !== null && !isComposing) {
         if (e.key === "ArrowDown") {
           e.preventDefault();
-          setAtActiveIndex((i) => Math.min(Math.max(0, atMatches.length - 1), i + 1));
+          setAtActiveIndex((i) =>
+            Math.min(Math.max(0, atMatches.length - 1), i + 1),
+          );
           return;
         }
         if (e.key === "ArrowUp") {
@@ -1163,8 +1533,14 @@ export function ChatInput({
 
       // Start a cycle from an empty composer. Continuing one is handled higher
       // up, before the slash and @ menus.
-      if (e.key === "ArrowUp" && !isComposing && !isStreaming && historyCycle === null
-        && inputHistory.length > 0 && value.trim().length === 0) {
+      if (
+        e.key === "ArrowUp" &&
+        !isComposing &&
+        !isStreaming &&
+        historyCycle === null &&
+        inputHistory.length > 0 &&
+        value.trim().length === 0
+      ) {
         e.preventDefault();
         setSlashMenuOpen(false);
         setAtMenuOpen(false);
@@ -1184,23 +1560,55 @@ export function ChatInput({
       if (sendShortcut) {
         e.preventDefault();
         if (hasStreamingActions) {
-          sendQueued(e.altKey && !e.getModifierState("AltGraph") && onFollowUp ? "followup" : "steer");
+          sendQueued(
+            e.altKey && !e.getModifierState("AltGraph") && onFollowUp
+              ? "followup"
+              : "steer",
+          );
         } else {
           handleSend();
         }
       }
     },
-    [historyCycle, isMobile, isStreaming, hasStreamingActions, onFollowUp, controlsOpen, onAbort, slashMenuOpen, slashQuery, displayedSlashCommands, slashActiveIndex, applySlashCommand, sendQueued, handleSend, atMenuOpen, atQuery, atMatches, atActiveIndex, applyAtCompletion, inputHistory, applyHistoryInput, value]
+    [
+      historyCycle,
+      isMobile,
+      isStreaming,
+      hasStreamingActions,
+      onFollowUp,
+      controlsOpen,
+      onAbort,
+      slashMenuOpen,
+      slashQuery,
+      displayedSlashCommands,
+      slashActiveIndex,
+      applySlashCommand,
+      sendQueued,
+      handleSend,
+      atMenuOpen,
+      atQuery,
+      atMatches,
+      atActiveIndex,
+      applyAtCompletion,
+      inputHistory,
+      applyHistoryInput,
+      value,
+    ],
   );
 
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const items = Array.from(e.clipboardData?.items ?? []);
-    const imageItems = items.filter((item) => item.type.startsWith("image/"));
-    if (!imageItems.length) return;
-    e.preventDefault();
-    const files = imageItems.map((item) => item.getAsFile()).filter((f): f is File => f !== null);
-    processImageFiles(files);
-  }, [processImageFiles]);
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = Array.from(e.clipboardData?.items ?? []);
+      const imageItems = items.filter((item) => item.type.startsWith("image/"));
+      if (!imageItems.length) return;
+      e.preventDefault();
+      const files = imageItems
+        .map((item) => item.getAsFile())
+        .filter((f): f is File => f !== null);
+      processImageFiles(files);
+    },
+    [processImageFiles],
+  );
 
   useEffect(() => {
     if (slashQuery === null) {
@@ -1235,7 +1643,8 @@ export function ChatInput({
       .then((data) => {
         if (cancelled) return;
         const modes: Record<string, boolean> = {};
-        for (const skill of data.skills ?? []) modes[skill.name] = skill.disableModelInvocation;
+        for (const skill of data.skills ?? [])
+          modes[skill.name] = skill.disableModelInvocation;
         setSkillModeState({ cwd: requestCwd, values: modes });
       })
       .catch(() => {
@@ -1258,13 +1667,20 @@ export function ChatInput({
 
   useEffect(() => {
     if (!slashMenuOpen) return;
-    slashItemRefs.current[slashActiveIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    slashItemRefs.current[slashActiveIndex]?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
   }, [slashActiveIndex, slashMenuOpen]);
 
   // Build model options: prefer modelList (has provider info), fallback to modelNames
   const modelOptions: ModelSelectorOption[] = (() => {
     if (modelList && modelList.length > 0) {
-      return modelList.map((m) => ({ provider: m.provider, modelId: m.id, name: m.name }));
+      return modelList.map((m) => ({
+        provider: m.provider,
+        modelId: m.id,
+        name: m.name,
+      }));
     }
     return Object.entries(modelNames ?? {}).map(([modelId, name]) => ({
       provider: model?.provider ?? "unknown",
@@ -1274,7 +1690,10 @@ export function ChatInput({
   })();
 
   const compactSavedTokens = compactResult
-    ? Math.max(0, compactResult.tokensBefore - compactResult.estimatedTokensAfter)
+    ? Math.max(
+        0,
+        compactResult.tokensBefore - compactResult.estimatedTokensAfter,
+      )
     : 0;
   const compactResultText = compactResult
     ? `${compactResult.reason && compactResult.reason !== "manual" ? `${compactResult.reason[0].toUpperCase()}${compactResult.reason.slice(1)} ` : t("chat.compacted")} ${formatCompactCount(compactResult.tokensBefore)} -> ${formatCompactCount(compactResult.estimatedTokensAfter)} tokens (${t("chat.tokensSaved", { saved: formatCompactCount(compactSavedTokens) })})`
@@ -1287,8 +1706,9 @@ export function ChatInput({
   useEffect(() => {
     const el = controlsMenuRef.current;
     if (!el || typeof el.showPopover !== "function") return;
-    if (controlsOpen) { if (!el.matches(":popover-open")) el.showPopover(); }
-    else if (el.matches(":popover-open")) el.hidePopover();
+    if (controlsOpen) {
+      if (!el.matches(":popover-open")) el.showPopover();
+    } else if (el.matches(":popover-open")) el.hidePopover();
   }, [controlsOpen]);
 
   const reasoningControl = onThinkingLevelChange && (
@@ -1297,18 +1717,43 @@ export function ChatInput({
       <select
         value={thinkingLevel ?? "auto"}
         disabled={isStreaming || isCompacting}
-        onChange={(event) => onThinkingLevelChange(event.target.value as NonNullable<Props["thinkingLevel"]>)}
+        onChange={(event) =>
+          onThinkingLevelChange(
+            event.target.value as NonNullable<Props["thinkingLevel"]>,
+          )
+        }
       >
-        {THINKING_LEVELS.filter((level) => !availableThinkingLevels || level === "auto" || availableThinkingLevels.includes(level)).map((level) => (
-          <option key={level} value={level}>{thinkingLevelMap?.[level] ?? level}</option>
+        {THINKING_LEVELS.filter(
+          (level) =>
+            !availableThinkingLevels ||
+            level === "auto" ||
+            availableThinkingLevels.includes(level),
+        ).map((level) => (
+          <option key={level} value={level}>
+            {thinkingLevelMap?.[level] ?? level}
+          </option>
         ))}
       </select>
     </label>
   );
-  const actionLabel = showStop ? t("chat.stopAgent") : !isStreaming ? t("chat.send")
-    : t(streamingSubmissionAction === "followup" ? "chat.queue" : "chat.steer");
-  const actionTitle = showStop ? t("chat.stopAgent") : !isStreaming ? t("chat.send")
-    : t(streamingSubmissionAction === "followup" ? "chat.queueTitle" : "chat.steerTitle");
+  const actionLabel = showStop
+    ? t("chat.stopAgent")
+    : !isStreaming
+      ? t("chat.send")
+      : t(
+          streamingSubmissionAction === "followup"
+            ? "chat.queue"
+            : "chat.steer",
+        );
+  const actionTitle = showStop
+    ? t("chat.stopAgent")
+    : !isStreaming
+      ? t("chat.send")
+      : t(
+          streamingSubmissionAction === "followup"
+            ? "chat.queueTitle"
+            : "chat.steerTitle",
+        );
 
   return (
     <div className="chat-input">
@@ -1329,34 +1774,46 @@ export function ChatInput({
         <ModelErrorBanner error={modelError} />
         <ModelScopeWarningBanner warnings={modelScopeWarnings} />
         {/* Queued steering / follow-up messages (delivered by pi on upcoming turns) */}
-        {((queuedMessages?.steering.length ?? 0) + (queuedMessages?.followUp.length ?? 0)) > 0 && (
-          <div style={{
-            marginBottom: 8,
-            border: "1px solid var(--border)",
-            borderRadius: 6,
-            background: "var(--bg-panel)",
-            padding: "5px 0",
-          }}>
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 8,
-              padding: "2px 8px 4px 10px",
-            }}>
-              <span style={{
-                fontSize: 10,
-                fontFamily: "var(--font-mono)",
-                color: "var(--text-dim)",
-                textTransform: "uppercase",
-                letterSpacing: 0.4,
-              }}>
-                {t("chat.queued", { count: (queuedMessages?.steering.length ?? 0) + (queuedMessages?.followUp.length ?? 0) })}
+        {(queuedMessages?.steering.length ?? 0) +
+          (queuedMessages?.followUp.length ?? 0) >
+          0 && (
+          <div
+            style={{
+              marginBottom: 8,
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              background: "var(--bg-panel)",
+              padding: "5px 0",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                padding: "2px 8px 4px 10px",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--text-dim)",
+                  textTransform: "uppercase",
+                  letterSpacing: 0.4,
+                }}
+              >
+                {t("chat.queued", {
+                  count:
+                    (queuedMessages?.steering.length ?? 0) +
+                    (queuedMessages?.followUp.length ?? 0),
+                })}
               </span>
               {onRecallQueue && (
                 <button
                   onClick={onRecallQueue}
-                   title={t("chat.recallTitle")}
+                  title={t("chat.recallTitle")}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -1373,18 +1830,28 @@ export function ChatInput({
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = "var(--bg-hover)";
-                    e.currentTarget.style.borderColor = "color-mix(in srgb, var(--accent) 45%, var(--border))";
+                    e.currentTarget.style.borderColor =
+                      "color-mix(in srgb, var(--accent) 45%, var(--border))";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.background = "transparent";
                     e.currentTarget.style.borderColor = "var(--border)";
                   }}
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <polyline points="9 14 4 9 9 4" />
                     <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
                   </svg>
-                   {t("chat.recall")}
+                  {t("chat.recall")}
                 </button>
               )}
             </div>
@@ -1392,33 +1859,81 @@ export function ChatInput({
               <QueuedMessageRow key={`steer-${i}`} kind="steer" text={text} />
             ))}
             {queuedMessages?.followUp.map((text, i) => (
-              <QueuedMessageRow key={`followup-${i}`} kind="follow-up" text={text} />
+              <QueuedMessageRow
+                key={`followup-${i}`}
+                kind="follow-up"
+                text={text}
+              />
             ))}
           </div>
         )}
         {/* Retry banner */}
         {retryInfo && (
-          <div style={{
-            marginBottom: 8, padding: "5px 10px",
-            background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.25)",
-            borderRadius: 6, fontSize: 12, color: "rgba(180,130,0,0.9)",
-            display: "flex", alignItems: "center", gap: 6,
-          }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <div
+            style={{
+              marginBottom: 8,
+              padding: "5px 10px",
+              background: "rgba(234,179,8,0.08)",
+              border: "1px solid rgba(234,179,8,0.25)",
+              borderRadius: 6,
+              fontSize: 12,
+              color: "rgba(180,130,0,0.9)",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ flexShrink: 0 }}
+            >
               <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
               <path d="M3 3v5h5" />
             </svg>
-             {t("chat.retrying", { attempt: retryInfo.attempt, max: retryInfo.maxAttempts })}{retryInfo.errorMessage && <span style={{ opacity: 0.7, marginLeft: 4 }}>— {retryInfo.errorMessage}</span>}
+            {t("chat.retrying", {
+              attempt: retryInfo.attempt,
+              max: retryInfo.maxAttempts,
+            })}
+            {retryInfo.errorMessage && (
+              <span style={{ opacity: 0.7, marginLeft: 4 }}>
+                — {retryInfo.errorMessage}
+              </span>
+            )}
           </div>
         )}
         {compactResultText && (
-          <div style={{
-            marginBottom: 8, padding: "5px 10px",
-            background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.24)",
-            borderRadius: 6, fontSize: 12, color: "rgba(5,150,105,0.95)",
-            display: "flex", alignItems: "center", gap: 6,
-          }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <div
+            style={{
+              marginBottom: 8,
+              padding: "5px 10px",
+              background: "rgba(16,185,129,0.08)",
+              border: "1px solid rgba(16,185,129,0.24)",
+              borderRadius: 6,
+              fontSize: 12,
+              color: "rgba(5,150,105,0.95)",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ flexShrink: 0 }}
+            >
               <polyline points="20 6 9 17 4 12" />
             </svg>
             {compactResultText}
@@ -1460,7 +1975,10 @@ export function ChatInput({
                 boxSizing: "border-box",
                 display: "flex",
                 flexDirection: "column",
-                maxHeight: anchoredMenuMaxHeight === null ? "min(48vh, 400px)" : `min(48vh, 400px, ${anchoredMenuMaxHeight}px)`,
+                maxHeight:
+                  anchoredMenuMaxHeight === null
+                    ? "min(48vh, 400px)"
+                    : `min(48vh, 400px, ${anchoredMenuMaxHeight}px)`,
               }}
             >
               <div
@@ -1476,13 +1994,34 @@ export function ChatInput({
                   flexShrink: 0,
                 }}
               >
-                 <span>{slashCommandsLoading ? t("chat.loadingCommands") : t("chat.slashCommands", { label: slashCommandCountLabel })}</span>
-                 <span style={{ fontFamily: "var(--font-mono)" }}>{t("chat.tabEnter")}</span>
+                <span>
+                  {slashCommandsLoading
+                    ? t("chat.loadingCommands")
+                    : t("chat.slashCommands", {
+                        label: slashCommandCountLabel,
+                      })}
+                </span>
+                <span style={{ fontFamily: "var(--font-mono)" }}>
+                  {t("chat.tabEnter")}
+                </span>
               </div>
-              <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: 4 }}>
+              <div
+                style={{
+                  flex: "1 1 auto",
+                  minHeight: 0,
+                  overflowY: "auto",
+                  padding: 4,
+                }}
+              >
                 {!slashCommandsLoading && filteredSlashCommands.length === 0 ? (
-                  <div style={{ padding: "2px 2px 4px", fontSize: 12, color: "var(--text-dim)" }}>
-                     {t("chat.noCommands")}
+                  <div
+                    style={{
+                      padding: "2px 2px 4px",
+                      fontSize: 12,
+                      color: "var(--text-dim)",
+                    }}
+                  >
+                    {t("chat.noCommands")}
                   </div>
                 ) : (
                   groupedSlashCommands.map((group) => (
@@ -1500,13 +2039,25 @@ export function ChatInput({
                           background: "var(--bg)",
                         }}
                       >
-                           <span>{t(SLASH_SOURCE_GROUP_LABEL_KEYS[group.source])}</span>
-                        <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{group.items.length}</span>
+                        <span>
+                          {t(SLASH_SOURCE_GROUP_LABEL_KEYS[group.source])}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: "var(--font-mono)",
+                            fontWeight: 500,
+                          }}
+                        >
+                          {group.items.length}
+                        </span>
                       </div>
                       <div>
                         {group.items.map(({ command, index }) => {
                           const active = index === slashActiveIndex;
-                          const manual = isManualSkillCommand(command, skillModes);
+                          const manual = isManualSkillCommand(
+                            command,
+                            skillModes,
+                          );
                           return (
                             <button
                               key={`${command.source}:${command.name}`}
@@ -1523,38 +2074,44 @@ export function ChatInput({
                               data-active={active}
                               style={{ alignItems: "baseline" }}
                             >
-                              <span style={{
-                                flexShrink: 0,
-                                fontSize: 12.5,
-                                fontFamily: "var(--font-mono)",
-                                overflowWrap: "anywhere",
-                              }}>
+                              <span
+                                style={{
+                                  flexShrink: 0,
+                                  fontSize: 12.5,
+                                  fontFamily: "var(--font-mono)",
+                                  overflowWrap: "anywhere",
+                                }}
+                              >
                                 /{command.name}
                                 {manual && (
-                                  <span style={{
-                                    marginLeft: 6,
-                                    padding: "0 4px",
-                                    border: "1px solid var(--border)",
-                                    borderRadius: 3,
-                                    fontSize: 9,
-                                    color: "var(--text-muted)",
-                                    whiteSpace: "nowrap",
-                                  }}>
+                                  <span
+                                    style={{
+                                      marginLeft: 6,
+                                      padding: "0 4px",
+                                      border: "1px solid var(--border)",
+                                      borderRadius: 3,
+                                      fontSize: 9,
+                                      color: "var(--text-muted)",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
                                     {t("skills.mode.manual")}
                                   </span>
                                 )}
                               </span>
-                               {command.description && (
-                                <span style={{
-                                  minWidth: 0,
-                                  flex: "1 1 auto",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                  fontSize: 11,
-                                  color: "var(--text-dim)",
-                                }}>
-                                   {getSlashDescription(command, t)}
+                              {command.description && (
+                                <span
+                                  style={{
+                                    minWidth: 0,
+                                    flex: "1 1 auto",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    fontSize: 11,
+                                    color: "var(--text-dim)",
+                                  }}
+                                >
+                                  {getSlashDescription(command, t)}
                                 </span>
                               )}
                             </button>
@@ -1567,115 +2124,214 @@ export function ChatInput({
               </div>
             </div>
           )}
-          {atMenuOpen && atQuery !== null && (() => {
-            const indexLoading = atPathMode ? !serverResultInUse : fileIndexLoading && (!fileIndex || fileIndex.cwd !== cwd);
-             const matchCountLabel = atMatches.length === 1 ? t("chat.match") : t("chat.matches", { count: atMatches.length });
-            // With a truncated index, local results are provisional — the
-            // debounced server search over the full listing replaces them.
-            const truncatedHint = !atPathMode && fileIndex?.truncated && !serverResultInUse
-               ? (atQuery.query ? t("chat.searchingAll") : t("chat.indexTruncated"))
-              : "";
-            return (
-              <div
-                ref={anchoredMenuRef}
-                className="menu-surface menu-panel"
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  right: 0,
-                  bottom: "calc(100% + 8px)",
-                  zIndex: 120,
-                  overflow: "hidden",
-                  maxHeight: anchoredMenuMaxHeight === null ? "min(48vh, 400px)" : `min(48vh, 400px, ${anchoredMenuMaxHeight}px)`,
-                }}
-              >
+          {atMenuOpen &&
+            atQuery !== null &&
+            (() => {
+              const indexLoading = atPathMode
+                ? !serverResultInUse
+                : fileIndexLoading && (!fileIndex || fileIndex.cwd !== cwd);
+              const matchCountLabel =
+                atMatches.length === 1
+                  ? t("chat.match")
+                  : t("chat.matches", { count: atMatches.length });
+              // With a truncated index, local results are provisional — the
+              // debounced server search over the full listing replaces them.
+              const truncatedHint =
+                !atPathMode && fileIndex?.truncated && !serverResultInUse
+                  ? atQuery.query
+                    ? t("chat.searchingAll")
+                    : t("chat.indexTruncated")
+                  : "";
+              return (
                 <div
+                  ref={anchoredMenuRef}
+                  className="menu-surface menu-panel"
                   style={{
-                    padding: "8px 10px",
-                    borderBottom: "1px solid var(--border)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    fontSize: 11,
-                    color: "var(--text-dim)",
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    bottom: "calc(100% + 8px)",
+                    zIndex: 120,
+                    overflow: "hidden",
+                    maxHeight:
+                      anchoredMenuMaxHeight === null
+                        ? "min(48vh, 400px)"
+                        : `min(48vh, 400px, ${anchoredMenuMaxHeight}px)`,
                   }}
                 >
-                  <span>
-                    {indexLoading
-                       ? t("chat.loadingFiles")
-                       : t("chat.files", { label: matchCountLabel, hint: truncatedHint })}
-                  </span>
-                   <span style={{ fontFamily: "var(--font-mono)" }}>{t("chat.tabEnter")}</span>
+                  <div
+                    style={{
+                      padding: "8px 10px",
+                      borderBottom: "1px solid var(--border)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      fontSize: 11,
+                      color: "var(--text-dim)",
+                    }}
+                  >
+                    <span>
+                      {indexLoading
+                        ? t("chat.loadingFiles")
+                        : t("chat.files", {
+                            label: matchCountLabel,
+                            hint: truncatedHint,
+                          })}
+                    </span>
+                    <span style={{ fontFamily: "var(--font-mono)" }}>
+                      {t("chat.tabEnter")}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      maxHeight: "calc(min(48vh, 400px) - 34px)",
+                      overflowY: "auto",
+                      padding: 4,
+                    }}
+                  >
+                    {!indexLoading && atMatches.length === 0 ? (
+                      <div
+                        style={{
+                          padding: "6px 8px",
+                          fontSize: 12,
+                          color: "var(--text-dim)",
+                        }}
+                      >
+                        {atPathMode &&
+                        serverResultInUse &&
+                        atServerResult.failed
+                          ? t("chat.cannotListFiles")
+                          : needsServerSearch && !serverResultInUse
+                            ? t("chat.searching")
+                            : t("chat.noMatchingFiles")}
+                      </div>
+                    ) : (
+                      atMatches.map((entry, index) => {
+                        const active = index === atActiveIndex;
+                        const name =
+                          entry.path.split(/[\\/]/).pop() ?? entry.path;
+                        const dirPrefix = entry.path.slice(
+                          0,
+                          entry.path.length - name.length,
+                        );
+                        return (
+                          <button
+                            key={`${entry.isDir ? "d" : "f"}:${entry.path}`}
+                            ref={(node) => {
+                              atItemRefs.current[index] = node;
+                            }}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              applyAtCompletion(entry);
+                            }}
+                            onMouseEnter={() => setAtActiveIndex(index)}
+                            className="menu-item"
+                            data-active={active}
+                            style={{ fontFamily: "var(--font-mono)" }}
+                          >
+                            <span
+                              style={{
+                                flexShrink: 0,
+                                display: "flex",
+                                alignItems: "center",
+                              }}
+                            >
+                              {entry.isDir ? (
+                                <FolderIcon size={14} />
+                              ) : (
+                                getFileIcon(name, 14)
+                              )}
+                            </span>
+                            <span
+                              style={{
+                                minWidth: 0,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {dirPrefix && (
+                                <span style={{ color: "var(--text-dim)" }}>
+                                  {dirPrefix}
+                                </span>
+                              )}
+                              {name}
+                              {entry.isDir && (
+                                <span style={{ color: "var(--text-dim)" }}>
+                                  /
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-                <div style={{ maxHeight: "calc(min(48vh, 400px) - 34px)", overflowY: "auto", padding: 4 }}>
-                  {!indexLoading && atMatches.length === 0 ? (
-                    <div style={{ padding: "6px 8px", fontSize: 12, color: "var(--text-dim)" }}>
-                       {atPathMode && serverResultInUse && atServerResult.failed ? t("chat.cannotListFiles")
-                         : needsServerSearch && !serverResultInUse ? t("chat.searching") : t("chat.noMatchingFiles")}
-                    </div>
-                  ) : (
-                    atMatches.map((entry, index) => {
-                      const active = index === atActiveIndex;
-                      const name = entry.path.split(/[\\/]/).pop() ?? entry.path;
-                      const dirPrefix = entry.path.slice(0, entry.path.length - name.length);
-                      return (
-                        <button
-                          key={`${entry.isDir ? "d" : "f"}:${entry.path}`}
-                          ref={(node) => {
-                            atItemRefs.current[index] = node;
-                          }}
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            applyAtCompletion(entry);
-                          }}
-                          onMouseEnter={() => setAtActiveIndex(index)}
-                          className="menu-item"
-                          data-active={active}
-                          style={{ fontFamily: "var(--font-mono)" }}
-                        >
-                          <span style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
-                            {entry.isDir ? <FolderIcon size={14} /> : getFileIcon(name, 14)}
-                          </span>
-                          <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {dirPrefix && <span style={{ color: "var(--text-dim)" }}>{dirPrefix}</span>}
-                            {name}
-                            {entry.isDir && <span style={{ color: "var(--text-dim)" }}>/</span>}
-                          </span>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            );
-          })()}
-          <div className="composer-surface" onClick={focusEditorOnBackgroundClick}>
+              );
+            })()}
+          <div
+            className="composer-surface"
+            onClick={focusEditorOnBackgroundClick}
+          >
             {/* Image previews */}
             {attachedImages.length > 0 && (
-              <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 6,
+                  marginBottom: 6,
+                  flexWrap: "wrap",
+                }}
+              >
                 {attachedImages.map((img, i) => (
                   <div key={i} style={{ position: "relative", flexShrink: 0 }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={img.previewUrl}
                       alt=""
-                      style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)", display: "block" }}
+                      style={{
+                        width: 56,
+                        height: 56,
+                        objectFit: "cover",
+                        borderRadius: 6,
+                        border: "1px solid var(--border)",
+                        display: "block",
+                      }}
                     />
                     <button
                       aria-label={t("chat.removeImage")}
                       onClick={() => removeImage(i)}
                       style={{
-                        position: "absolute", top: -4, right: -4,
-                        width: 16, height: 16, borderRadius: "50%",
-                        background: "var(--bg-panel)", border: "1px solid var(--border)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        cursor: "pointer", padding: 0, color: "var(--text-muted)",
+                        position: "absolute",
+                        top: -4,
+                        right: -4,
+                        width: 16,
+                        height: 16,
+                        borderRadius: "50%",
+                        background: "var(--bg-panel)",
+                        border: "1px solid var(--border)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                        padding: 0,
+                        color: "var(--text-muted)",
                       }}
                     >
-                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                        <line x1="1" y1="1" x2="7" y2="7" /><line x1="7" y1="1" x2="1" y2="7" />
+                      <svg
+                        width="8"
+                        height="8"
+                        viewBox="0 0 8 8"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      >
+                        <line x1="1" y1="1" x2="7" y2="7" />
+                        <line x1="7" y1="1" x2="1" y2="7" />
                       </svg>
                     </button>
                   </div>
@@ -1712,9 +2368,29 @@ export function ChatInput({
               placeholder={t("chat.mobileMessagePlaceholder")}
               rows={1}
             />
-            <div className="composer-toolbar" onClick={focusEditorOnBackgroundClick}>
-              <button type="button" className="composer-attach" onClick={() => fileInputRef.current?.click()} title={t("chat.attachImage")} aria-label={t("chat.attachImage")}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            <div
+              className="composer-toolbar"
+              onClick={focusEditorOnBackgroundClick}
+            >
+              <button
+                type="button"
+                className="composer-attach"
+                onClick={() => fileInputRef.current?.click()}
+                title={t("chat.attachImage")}
+                aria-label={t("chat.attachImage")}
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
               </button>
               {showControls && (
                 <>
@@ -1726,14 +2402,29 @@ export function ChatInput({
                     aria-label={t("chat.composerSettings")}
                     aria-expanded={controlsOpen}
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg>
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <circle cx="5" cy="12" r="1.5" />
+                      <circle cx="12" cy="12" r="1.5" />
+                      <circle cx="19" cy="12" r="1.5" />
+                    </svg>
                   </button>
                   <div
                     ref={controlsMenuRef}
                     id={controlsMenuId}
                     popover="auto"
                     className="anchored-menu menu-surface opens-up menu-composer-controls"
-                    onToggle={(event) => setControlsOpen((event as unknown as { newState?: string }).newState === "open")}
+                    onToggle={(event) =>
+                      setControlsOpen(
+                        (event as unknown as { newState?: string }).newState ===
+                          "open",
+                      )
+                    }
                     onKeyDown={(event) => {
                       if (event.key !== "Escape") return;
                       event.preventDefault();
@@ -1742,9 +2433,30 @@ export function ChatInput({
                       textareaRef.current?.focus();
                     }}
                   >
-                    {isStreaming && <button type="button" className="menu-item" onClick={() => { setControlsOpen(false); onAbort(); }}>{t("chat.stopAgent")}</button>}
+                    {isStreaming && (
+                      <button
+                        type="button"
+                        className="menu-item"
+                        onClick={() => {
+                          setControlsOpen(false);
+                          onAbort();
+                        }}
+                      >
+                        {t("chat.stopAgent")}
+                      </button>
+                    )}
                     {!onModelChange && reasoningControl}
-                    {isMobile && extensionStatuses.length > 0 && <section aria-label={t("chat.extensionStatus")}><div className="menu-section-label">{t("chat.extensionStatus")}</div><ExtensionStatusBar statuses={extensionStatuses} announce={false} /></section>}
+                    {isMobile && extensionStatuses.length > 0 && (
+                      <section aria-label={t("chat.extensionStatus")}>
+                        <div className="menu-section-label">
+                          {t("chat.extensionStatus")}
+                        </div>
+                        <ExtensionStatusBar
+                          statuses={extensionStatuses}
+                          announce={false}
+                        />
+                      </section>
+                    )}
                   </div>
                 </>
               )}
@@ -1759,7 +2471,9 @@ export function ChatInput({
                   isAutoSelection={isAutoModelSelection}
                   variant="composer"
                   ariaLabel={t("chat.modelAndReasoning")}
-                  detail={onThinkingLevelChange ? thinkingDisplayLabel : undefined}
+                  detail={
+                    onThinkingLevelChange ? thinkingDisplayLabel : undefined
+                  }
                 >
                   {reasoningControl}
                 </ModelSelector>
@@ -1767,7 +2481,13 @@ export function ChatInput({
               <button
                 type="button"
                 className="composer-action-primary"
-                data-action={showStop ? "stop" : !isStreaming ? "send" : streamingSubmissionAction}
+                data-action={
+                  showStop
+                    ? "stop"
+                    : !isStreaming
+                      ? "send"
+                      : streamingSubmissionAction
+                }
                 aria-label={actionLabel}
                 title={actionTitle}
                 disabled={!isStreaming && !canQueueStreamingMessage}
@@ -1778,23 +2498,60 @@ export function ChatInput({
                 }}
                 onClick={(event) => {
                   if (showStop) onAbort();
-                  else if (hasStreamingActions) sendQueued(!touchSubmissionRef.current && event.altKey && !event.getModifierState("AltGraph") && onFollowUp ? "followup" : "steer");
+                  else if (hasStreamingActions)
+                    sendQueued(
+                      !touchSubmissionRef.current &&
+                        event.altKey &&
+                        !event.getModifierState("AltGraph") &&
+                        onFollowUp
+                        ? "followup"
+                        : "steer",
+                    );
                   else void handleSend();
                   touchSubmissionRef.current = false;
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  {showStop ? <rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor" />
-                    : !isStreaming ? <path d="M12 19V5m-7 7 7-7 7 7" />
-                    : streamingSubmissionAction === "followup" ? <path d="M4 6h14M4 12h8M4 18h8m6-6v8m-4-4h8" />
-                    : <path d="M5 19v-5a4 4 0 0 1 4-4h10m-5-5 5 5-5 5" />}
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  {showStop ? (
+                    <rect
+                      x="6"
+                      y="6"
+                      width="12"
+                      height="12"
+                      rx="1"
+                      fill="currentColor"
+                    />
+                  ) : !isStreaming ? (
+                    <path d="M12 19V5m-7 7 7-7 7 7" />
+                  ) : streamingSubmissionAction === "followup" ? (
+                    <path d="M4 6h14M4 12h8M4 18h8m6-6v8m-4-4h8" />
+                  ) : (
+                    <path d="M5 19v-5a4 4 0 0 1 4-4h10m-5-5 5 5-5 5" />
+                  )}
                 </svg>
               </button>
             </div>
           </div>
         </div>
-        {bashMode && <div className="composer-shell-mode">{t("chat.shell")} · {bashExcluded ? t("chat.outputLocal") : t("chat.outputModel")}</div>}
-        <span className="sr-only" role="status">{isStreaming ? t("chat.agentRunning") : ""}</span>
+        {bashMode && (
+          <div className="composer-shell-mode">
+            {t("chat.shell")} ·{" "}
+            {bashExcluded ? t("chat.outputLocal") : t("chat.outputModel")}
+          </div>
+        )}
+        <span className="sr-only" role="status">
+          {isStreaming ? t("chat.agentRunning") : ""}
+        </span>
       </div>
     </div>
   );

@@ -84,15 +84,19 @@ function getDefaultEnvironment(): WebPushEnvironment {
 }
 
 function pushStatusCode(error: unknown): number | undefined {
-  if (typeof error !== "object" || error === null || !("statusCode" in error)) return undefined;
+  if (typeof error !== "object" || error === null || !("statusCode" in error))
+    return undefined;
   const statusCode = (error as { statusCode?: unknown }).statusCode;
   return typeof statusCode === "number" ? statusCode : undefined;
 }
 
-export function createWebPushNotifier(environment: WebPushEnvironment): WebPushNotifier {
+export function createWebPushNotifier(
+  environment: WebPushEnvironment,
+): WebPushNotifier {
   const state: PushStateFile = (() => {
     const loaded = environment.loadState();
-    if (loaded?.vapidKeys?.publicKey && loaded.vapidKeys.privateKey) return loaded;
+    if (loaded?.vapidKeys?.publicKey && loaded.vapidKeys.privateKey)
+      return loaded;
     return { vapidKeys: environment.generateVapidKeys(), subscriptions: [] };
   })();
   const saveState = () => {
@@ -106,7 +110,9 @@ export function createWebPushNotifier(environment: WebPushEnvironment): WebPushN
     },
     addSubscription(subscription) {
       state.subscriptions = [
-        ...state.subscriptions.filter((s) => s.endpoint !== subscription.endpoint),
+        ...state.subscriptions.filter(
+          (s) => s.endpoint !== subscription.endpoint,
+        ),
         subscription,
       ];
       saveState();
@@ -115,7 +121,10 @@ export function createWebPushNotifier(environment: WebPushEnvironment): WebPushN
       if (state.subscriptions.length === 0) return;
       const sessionName = await environment.getSessionName(sessionId);
       const payload = JSON.stringify({
-        title: sessionName ?? enMessages["i18n.sessionComplete"] ?? "Session complete",
+        title:
+          sessionName ??
+          enMessages["i18n.sessionComplete"] ??
+          "Session complete",
         body: enMessages["i18n.taskFinished"] ?? "Task finished.",
         url: `/?session=${encodeURIComponent(sessionId)}`,
         tag: `pi-session-complete:${sessionId}`,
@@ -128,7 +137,9 @@ export function createWebPushNotifier(environment: WebPushEnvironment): WebPushN
         } catch (error) {
           const statusCode = pushStatusCode(error);
           if (statusCode === 404 || statusCode === 410) {
-            state.subscriptions = state.subscriptions.filter((s) => s.endpoint !== subscription.endpoint);
+            state.subscriptions = state.subscriptions.filter(
+              (s) => s.endpoint !== subscription.endpoint,
+            );
             pruned = true;
           }
         }
@@ -144,7 +155,9 @@ declare global {
 
 function getNotifier(): Promise<WebPushNotifier> {
   if (!globalThis.__piWebPushNotifier) {
-    globalThis.__piWebPushNotifier = Promise.resolve().then(() => createWebPushNotifier(getDefaultEnvironment()));
+    globalThis.__piWebPushNotifier = Promise.resolve().then(() =>
+      createWebPushNotifier(getDefaultEnvironment()),
+    );
   }
   return globalThis.__piWebPushNotifier;
 }
@@ -153,8 +166,12 @@ export function getVapidPublicKey(): Promise<string> {
   return getNotifier().then((notifier) => notifier.getVapidPublicKey());
 }
 
-export function addSubscription(subscription: PushSubscriptionRecord): Promise<void> {
-  return getNotifier().then((notifier) => notifier.addSubscription(subscription));
+export function addSubscription(
+  subscription: PushSubscriptionRecord,
+): Promise<void> {
+  return getNotifier().then((notifier) =>
+    notifier.addSubscription(subscription),
+  );
 }
 
 export async function notifySessionComplete(sessionId: string): Promise<void> {

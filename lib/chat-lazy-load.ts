@@ -17,15 +17,24 @@ export function getSnapshotTail(loadedCount: number): number | null {
 
 export const CHAT_SCROLL_TAIL_TOLERANCE = 8;
 
-export function captureScrollDistance(scrollHeight: number, scrollTop: number): number {
+export function captureScrollDistance(
+  scrollHeight: number,
+  scrollTop: number,
+): number {
   return scrollHeight - scrollTop;
 }
 
-export function restoreScrollTop(scrollHeight: number, savedDistance: number): number {
+export function restoreScrollTop(
+  scrollHeight: number,
+  savedDistance: number,
+): number {
   return Math.max(0, scrollHeight - savedDistance);
 }
 
-export function didPrependHistory(previousFirstEntryId: string | undefined, firstEntryId: string | undefined): boolean {
+export function didPrependHistory(
+  previousFirstEntryId: string | undefined,
+  firstEntryId: string | undefined,
+): boolean {
   return previousFirstEntryId !== firstEntryId;
 }
 

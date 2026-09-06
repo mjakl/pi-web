@@ -34,14 +34,13 @@ test("rejects unknown and removed options with a help hint", () => {
 });
 
 test("rejects unexpected positional arguments", () => {
-  assert.throws(
-    () => parseLaunchOptions(["start"], {}),
-    /Unexpected argument/,
-  );
+  assert.throws(() => parseLaunchOptions(["start"], {}), /Unexpected argument/);
 });
 
 test("CLI writes help and parse errors before exiting", () => {
-  const help = spawnSync(process.execPath, [cliPath, "--help"], { encoding: "utf8" });
+  const help = spawnSync(process.execPath, [cliPath, "--help"], {
+    encoding: "utf8",
+  });
   assert.equal(help.status, 0);
   assert.match(help.stdout, /Usage: pi-web/);
 
@@ -62,18 +61,18 @@ test("fails before Next startup with actionable host Pi guidance", () => {
     },
   });
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /Host Pi validation failed: no pi executable was found on PATH.*Install or update Pi.*first on PATH.*restart Pi Web/s);
+  assert.match(
+    result.stderr,
+    /Host Pi validation failed: no pi executable was found on PATH.*Install or update Pi.*first on PATH.*restart Pi Web/s,
+  );
 });
 
 test("preserves port and hostname options", () => {
-  assert.deepEqual(
-    parseLaunchOptions(["-p", "8080", "-H", "0.0.0.0"], {}),
-    {
-      help: false,
-      port: "8080",
-      hostname: "0.0.0.0",
-    },
-  );
+  assert.deepEqual(parseLaunchOptions(["-p", "8080", "-H", "0.0.0.0"], {}), {
+    help: false,
+    port: "8080",
+    hostname: "0.0.0.0",
+  });
 });
 
 test("rejects port values that could inject cmd arguments", () => {

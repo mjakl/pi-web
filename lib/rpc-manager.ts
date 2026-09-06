@@ -1,26 +1,46 @@
 import { assertWorkingDirectoryAvailable } from "./worktree";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import { createAgentSessionFromServices, createAgentSessionServices, getAgentDir, initTheme, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import {
+  createAgentSessionFromServices,
+  createAgentSessionServices,
+  getAgentDir,
+  initTheme,
+  SessionManager,
+  SettingsManager,
+} from "@earendil-works/pi-coding-agent";
 import { randomUUID } from "crypto";
 import { existsSync, realpathSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { ExtensionUiBridge } from "./extension-ui-bridge";
 import { validateAgentImages } from "./image-attachments";
 import { invalidateModelsCache } from "./models-cache";
-import { isThinkingLevel, resolveVisibleModels, selectInitialModelScope } from "./model-scope";
+import {
+  isThinkingLevel,
+  resolveVisibleModels,
+  selectInitialModelScope,
+} from "./model-scope";
 import {
   createProjectCommandBashExtension,
   createProjectCommandBashOperations,
   preferUserBashExtension,
 } from "./project-command-env";
-import { extractTextContent, sessionTitleFromFirstMessage } from "./session-metadata";
+import {
+  extractTextContent,
+  sessionTitleFromFirstMessage,
+} from "./session-metadata";
 import { rewindSessionFile } from "./session-rewind";
 import { cacheSessionPath } from "./session-reader";
-import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
+import {
+  getProjectTrustStatus,
+  projectTrustReloadOptions,
+} from "./project-trust";
 import { persistExplicitStartupPreferences } from "./startup-preferences";
 import { errorMessage } from "./error-message";
 import { notifySessionComplete } from "./web-push";
-import type { ExtensionCommandContextActions, SlashCommandInfo } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionCommandContextActions,
+  SlashCommandInfo,
+} from "@earendil-works/pi-coding-agent";
 import type { AgentSessionLike, ToolInfo } from "./pi-types";
 import type {
   AgentEvent,
@@ -31,7 +51,10 @@ import type {
   SessionMessageEntry,
 } from "./types";
 import { resolveShellTools } from "./powershell-settings";
-import { CHAT_ONLY_RESOURCE_LOADER_OPTIONS, contextFilesSystemPrompt } from "./chat-only";
+import {
+  CHAT_ONLY_RESOURCE_LOADER_OPTIONS,
+  contextFilesSystemPrompt,
+} from "./chat-only";
 import {
   appendSessionToolSelection,
   readSessionToolSelection,
@@ -76,13 +99,28 @@ interface RpcSessionStartOptions {
   thinkingLevel?: ThinkingLevel;
 }
 
-const CODING_TOOL_NAMES = ["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"];
+const CODING_TOOL_NAMES = [
+  "read",
+  "bash",
+  "powershell",
+  "edit",
+  "write",
+  "grep",
+  "find",
+  "ls",
+];
 
-function withExtensionTools(session: AgentSessionLike, toolNames: string[]): string[] {
+function withExtensionTools(
+  session: AgentSessionLike,
+  toolNames: string[],
+): string[] {
   if (toolNames.length === 0) return [];
 
   const codingToolNames = new Set(CODING_TOOL_NAMES);
-  const selectedToolNames = resolveShellTools(toolNames, session.settingsManager.getDefaultTools());
+  const selectedToolNames = resolveShellTools(
+    toolNames,
+    session.settingsManager.getDefaultTools(),
+  );
   const extensionToolNames = session
     .getAllTools()
     .map((t) => t.name)
@@ -98,7 +136,9 @@ function withExtensionTools(session: AgentSessionLike, toolNames: string[]): str
 
 export class AgentSessionWrapper {
   private listeners = new Set<EventListener>();
-  private readonly extensionUi = new ExtensionUiBridge((event) => this.emit(event));
+  private readonly extensionUi = new ExtensionUiBridge((event) =>
+    this.emit(event),
+  );
   private pendingPromptCount = 0;
   private activeMutatingCommands = 0;
   private sessionReplacement: "fork" | "clone" | "rewind" | null = null;
@@ -160,7 +200,13 @@ export class AgentSessionWrapper {
   }
 
   isRunning(): boolean {
-    return this.isActive() && (this.pendingPromptCount > 0 || this.inner.isStreaming || this.inner.isCompacting || this.inner.isBashRunning);
+    return (
+      this.isActive() &&
+      (this.pendingPromptCount > 0 ||
+        this.inner.isStreaming ||
+        this.inner.isCompacting ||
+        this.inner.isBashRunning)
+    );
   }
 
   isChatOnly(): boolean {
@@ -178,18 +224,25 @@ export class AgentSessionWrapper {
   }
 
   private notifyAgentRunCompleteIfIdle(): void {
-    if (this._stopping || !this.agentRunNeedsCompletion || this.isRunning()) return;
+    if (this._stopping || !this.agentRunNeedsCompletion || this.isRunning())
+      return;
     this.agentRunNeedsCompletion = false;
     try {
       this.onAgentRunComplete?.(this.sessionId);
     } catch (error) {
-      console.error("[pi-web] completion listener failed:", error instanceof Error ? error.message : error);
+      console.error(
+        "[pi-web] completion listener failed:",
+        error instanceof Error ? error.message : error,
+      );
     }
   }
 
   beginExtensionBinding(): void {
     void this.ensureExtensionsBound().catch((err) => {
-      console.error("[pi-web] failed to dispatch session_start to extensions:", err instanceof Error ? err.message : err);
+      console.error(
+        "[pi-web] failed to dispatch session_start to extensions:",
+        err instanceof Error ? err.message : err,
+      );
     });
   }
 
@@ -211,23 +264,28 @@ export class AgentSessionWrapper {
         uiContext: this.extensionUi.createUiContext(),
         mode: "rpc",
         commandContextActions: this.createExtensionCommandContextActions(),
-        shutdownHandler: () => this.emit({
-          type: "extension_ui_request",
-          id: randomUUID(),
-          method: "notify",
-          notifyType: "warning",
-          message: "Extension requested shutdown, but shutdown is not supported in Pi Web.",
-        } as ExtensionUiRequest as AgentEvent),
-        onError: (error) => this.emit({
-          type: "extension_error",
-          extensionPath: error.extensionPath,
-          event: error.event,
-          error: error.error,
-        }),
+        shutdownHandler: () =>
+          this.emit({
+            type: "extension_ui_request",
+            id: randomUUID(),
+            method: "notify",
+            notifyType: "warning",
+            message:
+              "Extension requested shutdown, but shutdown is not supported in Pi Web.",
+          } as ExtensionUiRequest as AgentEvent),
+        onError: (error) =>
+          this.emit({
+            type: "extension_error",
+            extensionPath: error.extensionPath,
+            event: error.event,
+            error: error.error,
+          }),
       });
       this.extensionsBound = true;
       this.applyExactSystemPrompt();
-      console.log(`[pi-web] session_start dispatched to extensions for session ${this.inner.sessionId}`);
+      console.log(
+        `[pi-web] session_start dispatched to extensions for session ${this.inner.sessionId}`,
+      );
     })().catch((err) => {
       this.extensionBindingError = err;
       throw err;
@@ -251,11 +309,13 @@ export class AgentSessionWrapper {
   }
 
   private shouldWaitForExtensions(type: string): boolean {
-    return type === "prompt"
-      || type === "steer"
-      || type === "follow_up"
-      || type === "get_commands"
-      || type === "get_state";
+    return (
+      type === "prompt" ||
+      type === "steer" ||
+      type === "follow_up" ||
+      type === "get_commands" ||
+      type === "get_state"
+    );
   }
 
   private async withFinalIdleReset<T>(operation: () => Promise<T>): Promise<T> {
@@ -313,7 +373,8 @@ export class AgentSessionWrapper {
   }
 
   private hasPersistedTranscript(): boolean {
-    const sessionFile = this.inner.sessionManager.getSessionFile() ?? this.sessionFile;
+    const sessionFile =
+      this.inner.sessionManager.getSessionFile() ?? this.sessionFile;
     return Boolean(sessionFile && existsSync(sessionFile));
   }
 
@@ -322,17 +383,23 @@ export class AgentSessionWrapper {
     this.idleTimer = null;
     if (!this.isActive() || this.hasPersistedTranscript()) return;
     if (!this.isRunning()) this.forceShutdownOnIdle = false;
-    this.idleTimer = setTimeout(() => {
-      this.idleTimer = null;
-      if (!this.isActive() || this.hasPersistedTranscript()) return;
-      if (this.isRunning() && !this.forceShutdownOnIdle) {
-        this.resetIdleTimer();
-        return;
-      }
-      void this.shutdown().catch((error) => {
-        console.error("[pi-web] failed to shut down abandoned draft:", error instanceof Error ? error.message : error);
-      });
-    }, 10 * 60 * 1000);
+    this.idleTimer = setTimeout(
+      () => {
+        this.idleTimer = null;
+        if (!this.isActive() || this.hasPersistedTranscript()) return;
+        if (this.isRunning() && !this.forceShutdownOnIdle) {
+          this.resetIdleTimer();
+          return;
+        }
+        void this.shutdown().catch((error) => {
+          console.error(
+            "[pi-web] failed to shut down abandoned draft:",
+            error instanceof Error ? error.message : error,
+          );
+        });
+      },
+      10 * 60 * 1000,
+    );
   }
 
   private persistBashOnlySession(): void {
@@ -343,9 +410,10 @@ export class AgentSessionWrapper {
     const header = manager.getHeader();
     if (!header) return;
 
-    const content = [header, ...manager.getEntries()]
-      .map((entry) => JSON.stringify(entry))
-      .join("\n") + "\n";
+    const content =
+      [header, ...manager.getEntries()]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n") + "\n";
     writeFileSync(sessionFile, content, { encoding: "utf8", flag: "wx" });
 
     // Pi normally delays the first flush until an assistant message exists.
@@ -371,7 +439,8 @@ export class AgentSessionWrapper {
     replacement: "fork" | "clone" | "rewind",
     operation: () => Promise<T>,
   ): Promise<T> {
-    if (this.sessionReplacement) throw new Error("Session history is already being changed");
+    if (this.sessionReplacement)
+      throw new Error("Session history is already being changed");
     this.sessionReplacement = replacement;
     try {
       return await operation();
@@ -381,25 +450,45 @@ export class AgentSessionWrapper {
   }
 
   private isSessionRunningForReplacement(): boolean {
-    return this.inner.isBashRunning
-      || this.inner.isStreaming
-      || this.inner.isCompacting
-      || this.pendingPromptCount > 0;
+    return (
+      this.inner.isBashRunning ||
+      this.inner.isStreaming ||
+      this.inner.isCompacting ||
+      this.pendingPromptCount > 0
+    );
   }
 
   async send(command: Record<string, unknown>): Promise<unknown> {
     if (!this.isActive()) throw new Error("Session is stopped");
     const type = command.type as string;
     // Read-only inspection and stopping remain possible after external deletion.
-    if (!["get_state", "get_session_stats", "get_last_assistant_text", "get_tools", "get_commands", "abort", "abort_compaction", "abort_bash", "clear_queue"].includes(type)) {
+    if (
+      ![
+        "get_state",
+        "get_session_stats",
+        "get_last_assistant_text",
+        "get_tools",
+        "get_commands",
+        "abort",
+        "abort_compaction",
+        "abort_bash",
+        "clear_queue",
+      ].includes(type)
+    ) {
       assertWorkingDirectoryAvailable(this.cwd);
     }
-    const allowedDuringReplacement = COMMANDS_ALLOWED_DURING_SESSION_REPLACEMENT.has(type);
+    const allowedDuringReplacement =
+      COMMANDS_ALLOWED_DURING_SESSION_REPLACEMENT.has(type);
     if (this.sessionReplacement && !allowedDuringReplacement) {
       throw new Error("Session history is being changed");
     }
-    if (SESSION_REPLACEMENT_COMMAND_TYPES.has(type) && this.activeMutatingCommands > 0) {
-      throw new Error(`Cannot ${type} while another session command is running`);
+    if (
+      SESSION_REPLACEMENT_COMMAND_TYPES.has(type) &&
+      this.activeMutatingCommands > 0
+    ) {
+      throw new Error(
+        `Cannot ${type} while another session command is running`,
+      );
     }
 
     const tracksMutation = !allowedDuringReplacement;
@@ -408,7 +497,8 @@ export class AgentSessionWrapper {
     try {
       // Status reconciliation must not postpone forced cleanup after Stop.
       if (type !== "get_state") this.resetIdleTimer();
-      if (this.shouldWaitForExtensions(type)) await this.waitForExtensionsBound();
+      if (this.shouldWaitForExtensions(type))
+        await this.waitForExtensionsBound();
       if (this.sessionReplacement && !allowedDuringReplacement) {
         throw new Error("Session history is being changed");
       }
@@ -419,407 +509,517 @@ export class AgentSessionWrapper {
       }
 
       switch (type) {
-      case "prompt": {
-        // Serialize only admission. Once the preceding prompt has either
-        // passed or failed preflight, the SDK can atomically decide whether
-        // this submission starts a run or joins its streaming queue.
-        const releaseAdmission = await this.acquirePromptAdmission();
-        try {
-          if (this.inner.isBashRunning) {
-            throw new Error("Cannot send a prompt while a shell command is running");
-          }
-          const promptImages = command.images as Array<{ type: "image"; data: string; mimeType: string }> | undefined;
-          const streamingBehavior = command.streamingBehavior as "steer" | "followUp" | undefined;
-          let preflightAccepted = false;
-          let preflightSettled = false;
-          let promptSettled = false;
-          let acceptPreflight!: () => void;
-          let rejectPreflight!: (error: unknown) => void;
-          const preflight = new Promise<void>((resolve, reject) => {
-            acceptPreflight = () => {
-              preflightAccepted = true;
-              this.agentRunNeedsCompletion = true;
-              if (preflightSettled) return;
-              preflightSettled = true;
-              resolve();
-            };
-            rejectPreflight = (error) => {
-              if (preflightSettled) return;
-              preflightSettled = true;
-              reject(error);
-            };
-          });
-          const finishPrompt = () => {
-            if (promptSettled) return;
-            promptSettled = true;
-            this.pendingPromptCount = Math.max(0, this.pendingPromptCount - 1);
-            this.resetIdleTimer();
-            this.notifyAgentRunCompleteIfIdle();
-          };
-
-          this.pendingPromptCount += 1;
-          let prompt: Promise<void>;
+        case "prompt": {
+          // Serialize only admission. Once the preceding prompt has either
+          // passed or failed preflight, the SDK can atomically decide whether
+          // this submission starts a run or joins its streaming queue.
+          const releaseAdmission = await this.acquirePromptAdmission();
           try {
-            prompt = this.inner.prompt(command.message as string, {
-              ...(promptImages?.length ? { images: promptImages } : {}),
-              ...(streamingBehavior ? { streamingBehavior } : {}),
-              source: "rpc",
-              // Match pi's RPC contract: acknowledge only after synchronous prompt
-              // validation and extension preflight have accepted the submission.
-              preflightResult: (success) => {
-                if (success) {
-                  this.applyExactSystemPrompt();
-                  acceptPreflight();
-                }
-              },
+            if (this.inner.isBashRunning) {
+              throw new Error(
+                "Cannot send a prompt while a shell command is running",
+              );
+            }
+            const promptImages = command.images as
+              | Array<{ type: "image"; data: string; mimeType: string }>
+              | undefined;
+            const streamingBehavior = command.streamingBehavior as
+              | "steer"
+              | "followUp"
+              | undefined;
+            let preflightAccepted = false;
+            let preflightSettled = false;
+            let promptSettled = false;
+            let acceptPreflight!: () => void;
+            let rejectPreflight!: (error: unknown) => void;
+            const preflight = new Promise<void>((resolve, reject) => {
+              acceptPreflight = () => {
+                preflightAccepted = true;
+                this.agentRunNeedsCompletion = true;
+                if (preflightSettled) return;
+                preflightSettled = true;
+                resolve();
+              };
+              rejectPreflight = (error) => {
+                if (preflightSettled) return;
+                preflightSettled = true;
+                reject(error);
+              };
             });
-          } catch (error) {
-            finishPrompt();
-            throw error;
+            const finishPrompt = () => {
+              if (promptSettled) return;
+              promptSettled = true;
+              this.pendingPromptCount = Math.max(
+                0,
+                this.pendingPromptCount - 1,
+              );
+              this.resetIdleTimer();
+              this.notifyAgentRunCompleteIfIdle();
+            };
+
+            this.pendingPromptCount += 1;
+            let prompt: Promise<void>;
+            try {
+              prompt = this.inner.prompt(command.message as string, {
+                ...(promptImages?.length ? { images: promptImages } : {}),
+                ...(streamingBehavior ? { streamingBehavior } : {}),
+                source: "rpc",
+                // Match pi's RPC contract: acknowledge only after synchronous prompt
+                // validation and extension preflight have accepted the submission.
+                preflightResult: (success) => {
+                  if (success) {
+                    this.applyExactSystemPrompt();
+                    acceptPreflight();
+                  }
+                },
+              });
+            } catch (error) {
+              finishPrompt();
+              throw error;
+            }
+
+            void prompt
+              .then(
+                () => {
+                  // Compatibility fallback if a future SDK resolves without invoking
+                  // the internal callback. This waits for the run, but never acks early.
+                  acceptPreflight();
+                  finishPrompt();
+                  if (!streamingBehavior) this.emit({ type: "prompt_done" });
+                },
+                (error) => {
+                  rejectPreflight(error);
+                  finishPrompt();
+                  // A preflight rejection is returned by the POST itself. Only an
+                  // unexpected failure after acceptance needs the asynchronous event.
+                  if (preflightAccepted) {
+                    this.emit({
+                      type: "prompt_error",
+                      errorMessage: errorMessage(error),
+                    });
+                    if (!streamingBehavior) this.emit({ type: "prompt_done" });
+                  }
+                },
+              )
+              .catch((error) => {
+                console.error(
+                  "[pi-web] prompt completion handler failed:",
+                  error instanceof Error ? error.message : error,
+                );
+              });
+
+            await preflight;
+            return null;
+          } finally {
+            releaseAdmission();
+          }
+        }
+
+        case "abort":
+          this.forceShutdownOnIdle = true;
+          try {
+            await this.withFinalIdleReset(() => this.inner.abort());
+            return null;
+          } finally {
+            if (!this.isRunning()) this.forceShutdownOnIdle = false;
           }
 
-          void prompt.then(() => {
-            // Compatibility fallback if a future SDK resolves without invoking
-            // the internal callback. This waits for the run, but never acks early.
-            acceptPreflight();
-            finishPrompt();
-            if (!streamingBehavior) this.emit({ type: "prompt_done" });
-          }, (error) => {
-            rejectPreflight(error);
-            finishPrompt();
-            // A preflight rejection is returned by the POST itself. Only an
-            // unexpected failure after acceptance needs the asynchronous event.
-            if (preflightAccepted) {
-              this.emit({
-                type: "prompt_error",
-                errorMessage: errorMessage(error),
-              });
-              if (!streamingBehavior) this.emit({ type: "prompt_done" });
+        case "get_state": {
+          const model = this.inner.model;
+          const contextUsage = this.inner.getContextUsage();
+          return {
+            sessionId: this.inner.sessionId,
+            sessionFile: this.inner.sessionFile ?? "",
+            isStreaming: this.inner.isStreaming,
+            isPromptRunning: this.pendingPromptCount > 0,
+            isBashRunning: this.inner.isBashRunning,
+            isCompacting: this.inner.isCompacting,
+            autoCompactionEnabled: this.inner.autoCompactionEnabled,
+            autoRetryEnabled: this.inner.autoRetryEnabled,
+            model: model
+              ? { id: model.id, provider: model.provider }
+              : undefined,
+            messageCount: 0,
+            pendingMessageCount: this.inner.pendingMessageCount,
+            queuedMessages: {
+              steering: [...this.inner.getSteeringMessages()],
+              followUp: [...this.inner.getFollowUpMessages()],
+            },
+            contextUsage: contextUsage
+              ? {
+                  percent: contextUsage.percent,
+                  contextWindow: contextUsage.contextWindow,
+                  tokens: contextUsage.tokens,
+                }
+              : null,
+            systemPrompt: this.inner.agent.state?.systemPrompt ?? "",
+            thinkingLevel: this.inner.agent.state?.thinkingLevel ?? "off",
+            extensionStatuses: this.extensionUi.statuses(),
+            extensionWidgets: this.extensionUi.widgets(),
+          };
+        }
+
+        case "set_model": {
+          const { provider, modelId } = command as {
+            provider: string;
+            modelId: string;
+          };
+          let model = this.inner.modelRuntime.getModel(provider, modelId);
+          if (!model) {
+            await this.inner.modelRuntime.refresh({ allowNetwork: false });
+            model = this.inner.modelRuntime.getModel(provider, modelId);
+          }
+          if (!model)
+            throw new Error(`Model not found: ${provider}/${modelId}`);
+          await this.inner.setModel(model);
+          invalidateModelsCache();
+          return { id: model.id, provider: model.provider };
+        }
+
+        case "fork": {
+          if (this.isSessionRunningForReplacement()) {
+            throw new Error("Cannot fork while the session is running");
+          }
+          return this.withSessionReplacement("fork", async () => {
+            const entryId = command.entryId as string;
+            const sessionManager = this.inner.sessionManager;
+            const currentSessionFile = this.inner.sessionFile;
+
+            if (!sessionManager.isPersisted()) return { cancelled: true };
+            if (!currentSessionFile)
+              throw new Error("Persisted session is missing a session file");
+
+            const entry = sessionManager.getEntry(entryId);
+            if (!entry) throw new Error("Invalid entry ID for forking");
+
+            const sessionDir = sessionManager.getSessionDir();
+            let newSessionFile: string;
+
+            if (!entry.parentId) {
+              // Fork before the first message: create an empty session linked to this one
+              const newManager = SessionManager.create(
+                sessionManager.getCwd(),
+                sessionDir,
+              );
+              newManager.newSession({ parentSession: currentSessionFile });
+              newSessionFile = newManager.getSessionFile() as string;
+            } else {
+              // Fork after some history: copy path up to (but not including) the fork point
+              const sourceManager = SessionManager.open(
+                currentSessionFile,
+                sessionDir,
+              );
+              const forkedPath = sourceManager.createBranchedSession(
+                entry.parentId,
+              );
+              if (!forkedPath)
+                throw new Error("Failed to create forked session");
+              newSessionFile = forkedPath;
             }
-          }).catch((error) => {
-            console.error(
-              "[pi-web] prompt completion handler failed:",
-              error instanceof Error ? error.message : error,
-            );
+
+            const newSessionId = SessionManager.open(
+              newSessionFile,
+              sessionDir,
+            ).getSessionId();
+            cacheSessionPath(newSessionId, newSessionFile);
+            return { cancelled: false, newSessionId };
           });
-
-          await preflight;
-          return null;
-        } finally {
-          releaseAdmission();
-        }
-      }
-
-      case "abort":
-        this.forceShutdownOnIdle = true;
-        try {
-          await this.withFinalIdleReset(() => this.inner.abort());
-          return null;
-        } finally {
-          if (!this.isRunning()) this.forceShutdownOnIdle = false;
         }
 
-      case "get_state": {
-        const model = this.inner.model;
-        const contextUsage = this.inner.getContextUsage();
-        return {
-          sessionId: this.inner.sessionId,
-          sessionFile: this.inner.sessionFile ?? "",
-          isStreaming: this.inner.isStreaming,
-          isPromptRunning: this.pendingPromptCount > 0,
-          isBashRunning: this.inner.isBashRunning,
-          isCompacting: this.inner.isCompacting,
-          autoCompactionEnabled: this.inner.autoCompactionEnabled,
-          autoRetryEnabled: this.inner.autoRetryEnabled,
-          model: model ? { id: model.id, provider: model.provider } : undefined,
-          messageCount: 0,
-          pendingMessageCount: this.inner.pendingMessageCount,
-          queuedMessages: {
-            steering: [...this.inner.getSteeringMessages()],
-            followUp: [...this.inner.getFollowUpMessages()],
-          },
-          contextUsage: contextUsage
-            ? { percent: contextUsage.percent, contextWindow: contextUsage.contextWindow, tokens: contextUsage.tokens }
-            : null,
-          systemPrompt: this.inner.agent.state?.systemPrompt ?? "",
-          thinkingLevel: this.inner.agent.state?.thinkingLevel ?? "off",
-          extensionStatuses: this.extensionUi.statuses(),
-          extensionWidgets: this.extensionUi.widgets(),
-        };
-      }
-
-      case "set_model": {
-        const { provider, modelId } = command as { provider: string; modelId: string };
-        let model = this.inner.modelRuntime.getModel(provider, modelId);
-        if (!model) {
-          await this.inner.modelRuntime.refresh({ allowNetwork: false });
-          model = this.inner.modelRuntime.getModel(provider, modelId);
-        }
-        if (!model) throw new Error(`Model not found: ${provider}/${modelId}`);
-        await this.inner.setModel(model);
-        invalidateModelsCache();
-        return { id: model.id, provider: model.provider };
-      }
-
-      case "fork": {
-        if (this.isSessionRunningForReplacement()) {
-          throw new Error("Cannot fork while the session is running");
-        }
-        return this.withSessionReplacement("fork", async () => {
-          const entryId = command.entryId as string;
+        case "clone": {
+          if (this.isSessionRunningForReplacement()) {
+            throw new Error("Cannot clone while the session is running");
+          }
           const sessionManager = this.inner.sessionManager;
           const currentSessionFile = this.inner.sessionFile;
+          const leafId =
+            typeof command.leafId === "string"
+              ? command.leafId
+              : sessionManager.getLeafId();
+          const branchHasAssistant =
+            leafId &&
+            sessionManager
+              .getBranch(leafId)
+              .some(
+                (entry) =>
+                  entry.type === "message" &&
+                  entry.message.role === "assistant",
+              );
 
-          if (!sessionManager.isPersisted()) return { cancelled: true };
-          if (!currentSessionFile) throw new Error("Persisted session is missing a session file");
+          if (!sessionManager.isPersisted() || !leafId || !branchHasAssistant)
+            return { cancelled: true };
+          if (!currentSessionFile || !existsSync(currentSessionFile))
+            return { cancelled: true };
 
-          const entry = sessionManager.getEntry(entryId);
-          if (!entry) throw new Error("Invalid entry ID for forking");
+          return this.withSessionReplacement("clone", async () => {
+            const sessionDir = sessionManager.getSessionDir();
+            const sourceManager = SessionManager.open(
+              currentSessionFile,
+              sessionDir,
+            );
+            const clonedPath = sourceManager.createBranchedSession(leafId);
+            if (!clonedPath || !existsSync(clonedPath))
+              throw new Error("Failed to clone current session branch");
 
-          const sessionDir = sessionManager.getSessionDir();
-          let newSessionFile: string;
+            const newSessionId = SessionManager.open(
+              clonedPath,
+              sessionDir,
+            ).getSessionId();
+            cacheSessionPath(newSessionId, clonedPath);
+            return { cancelled: false, newSessionId };
+          });
+        }
 
-          if (!entry.parentId) {
-            // Fork before the first message: create an empty session linked to this one
-            const newManager = SessionManager.create(sessionManager.getCwd(), sessionDir);
-            newManager.newSession({ parentSession: currentSessionFile });
-            newSessionFile = newManager.getSessionFile() as string;
-          } else {
-            // Fork after some history: copy path up to (but not including) the fork point
-            const sourceManager = SessionManager.open(currentSessionFile, sessionDir);
-            const forkedPath = sourceManager.createBranchedSession(entry.parentId);
-            if (!forkedPath) throw new Error("Failed to create forked session");
-            newSessionFile = forkedPath;
+        case "rewind": {
+          if (!this.isActive()) throw new Error("Session is stopped");
+          if (this.isSessionRunningForReplacement())
+            throw new Error("Cannot rewind while the session is running");
+          const entryId = command.entryId;
+          const target =
+            typeof entryId === "string"
+              ? this.inner.sessionManager.getEntry(entryId)
+              : undefined;
+          if (
+            !target ||
+            target.type !== "message" ||
+            target.message.role !== "user"
+          ) {
+            throw new Error("Rewind requires an existing user message");
           }
-
-          const newSessionId = SessionManager.open(newSessionFile, sessionDir).getSessionId();
-          cacheSessionPath(newSessionId, newSessionFile);
-          return { cancelled: false, newSessionId };
-        });
-      }
-
-      case "clone": {
-        if (this.isSessionRunningForReplacement()) {
-          throw new Error("Cannot clone while the session is running");
-        }
-        const sessionManager = this.inner.sessionManager;
-        const currentSessionFile = this.inner.sessionFile;
-        const leafId = typeof command.leafId === "string" ? command.leafId : sessionManager.getLeafId();
-        const branchHasAssistant = leafId && sessionManager.getBranch(leafId).some(
-          (entry) => entry.type === "message" && entry.message.role === "assistant",
-        );
-
-        if (!sessionManager.isPersisted() || !leafId || !branchHasAssistant) return { cancelled: true };
-        if (!currentSessionFile || !existsSync(currentSessionFile)) return { cancelled: true };
-
-        return this.withSessionReplacement("clone", async () => {
-          const sessionDir = sessionManager.getSessionDir();
-          const sourceManager = SessionManager.open(currentSessionFile, sessionDir);
-          const clonedPath = sourceManager.createBranchedSession(leafId);
-          if (!clonedPath || !existsSync(clonedPath)) throw new Error("Failed to clone current session branch");
-
-          const newSessionId = SessionManager.open(clonedPath, sessionDir).getSessionId();
-          cacheSessionPath(newSessionId, clonedPath);
-          return { cancelled: false, newSessionId };
-        });
-      }
-
-      case "rewind": {
-        if (!this.isActive()) throw new Error("Session is stopped");
-        if (this.isSessionRunningForReplacement()) throw new Error("Cannot rewind while the session is running");
-        const entryId = command.entryId;
-        const target = typeof entryId === "string" ? this.inner.sessionManager.getEntry(entryId) : undefined;
-        if (!target || target.type !== "message" || target.message.role !== "user") {
-          throw new Error("Rewind requires an existing user message");
-        }
-        const file = this.sessionFile;
-        if (!file || !existsSync(file)) throw new Error("Rewind requires a saved session");
-        return this.withSessionReplacement("rewind", async () => {
-          let message: unknown;
-          await this.shutdown({ afterDispose: () => {
-            message = rewindSessionFile(file, this.sessionId, entryId as string);
-          } });
-          return { message };
-        });
-      }
-
-      case "navigate_tree": {
-        if (this.inner.isBashRunning) {
-          throw new Error("Cannot navigate while a shell command is running");
-        }
-        const result = await this.inner.navigateTree(command.targetId as string, {});
-        return { cancelled: result.cancelled };
-      }
-
-      case "set_thinking_level": {
-        const level = command.level as string;
-        this.inner.setThinkingLevel(level);
-        // setThinkingLevel clamps xhigh→high for models where supportsXhigh()===false.
-        // If the model has DeepSeek thinking compat (reasoningEffortMap maps xhigh→max),
-        // force the state back so the compat layer can use it correctly.
-        if (level === "xhigh" && (this.inner.model as { compat?: { thinkingFormat?: string } } | null)?.compat?.thinkingFormat === "deepseek" && this.inner.agent?.state) {
-          this.inner.agent.state.thinkingLevel = "xhigh";
-        }
-        return null;
-      }
-
-      case "compact": {
-        return await this.withFinalIdleReset(() =>
-          this.inner.compact(command.customInstructions as string | undefined)
-        );
-      }
-
-      case "set_session_name": {
-        const name = (command.name as string | undefined)?.trim();
-        if (!name) throw new Error("Session name cannot be empty");
-        this.inner.setSessionName(name);
-        return null;
-      }
-
-      case "get_session_stats": {
-        return {
-          ...this.inner.getSessionStats(),
-          sessionName: this.inner.sessionManager.getSessionName(),
-        };
-      }
-
-      case "get_last_assistant_text": {
-        return { text: this.inner.getLastAssistantText() ?? "" };
-      }
-
-      case "set_auto_compaction": {
-        this.inner.setAutoCompactionEnabled(command.enabled as boolean);
-        return null;
-      }
-
-      case "clear_queue": {
-        // Full clear only: pi has no single-item dequeue, and clear+requeue
-        // races against the agent loop pulling messages mid-flight.
-        return this.inner.clearQueue();
-      }
-
-      case "steer": {
-        const steerImages = command.images as Array<{ type: "image"; data: string; mimeType: string }> | undefined;
-        await this.inner.steer(command.message as string, steerImages?.length ? steerImages : undefined);
-        return null;
-      }
-
-      case "follow_up": {
-        const followImages = command.images as Array<{ type: "image"; data: string; mimeType: string }> | undefined;
-        await this.inner.followUp(command.message as string, followImages?.length ? followImages : undefined);
-        return null;
-      }
-
-      case "get_tools": {
-        const all: ToolInfo[] = this.inner.getAllTools();
-        const active = new Set<string>(this.inner.getActiveToolNames());
-        return all.map((t) => ({
-          ...t,
-          active: active.has(t.name),
-        }));
-      }
-
-      case "get_commands": {
-        const commands: SlashCommandInfo[] = [];
-        for (const registered of this.inner.extensionRunner.getRegisteredCommands()) {
-          commands.push({
-            name: registered.invocationName,
-            description: registered.description,
-            source: "extension",
-            sourceInfo: registered.sourceInfo,
+          const file = this.sessionFile;
+          if (!file || !existsSync(file))
+            throw new Error("Rewind requires a saved session");
+          return this.withSessionReplacement("rewind", async () => {
+            let message: unknown;
+            await this.shutdown({
+              afterDispose: () => {
+                message = rewindSessionFile(
+                  file,
+                  this.sessionId,
+                  entryId as string,
+                );
+              },
+            });
+            return { message };
           });
         }
-        for (const template of this.inner.promptTemplates) {
-          commands.push({
-            name: template.name,
-            description: template.description,
-            source: "prompt",
-            sourceInfo: template.sourceInfo,
-          });
+
+        case "navigate_tree": {
+          if (this.inner.isBashRunning) {
+            throw new Error("Cannot navigate while a shell command is running");
+          }
+          const result = await this.inner.navigateTree(
+            command.targetId as string,
+            {},
+          );
+          return { cancelled: result.cancelled };
         }
-        for (const skill of this.inner.resourceLoader.getSkills().skills) {
-          commands.push({
-            name: `skill:${skill.name}`,
-            description: skill.description,
-            source: "skill",
-            sourceInfo: skill.sourceInfo,
-          });
+
+        case "set_thinking_level": {
+          const level = command.level as string;
+          this.inner.setThinkingLevel(level);
+          // setThinkingLevel clamps xhigh→high for models where supportsXhigh()===false.
+          // If the model has DeepSeek thinking compat (reasoningEffortMap maps xhigh→max),
+          // force the state back so the compat layer can use it correctly.
+          if (
+            level === "xhigh" &&
+            (
+              this.inner.model as {
+                compat?: { thinkingFormat?: string };
+              } | null
+            )?.compat?.thinkingFormat === "deepseek" &&
+            this.inner.agent?.state
+          ) {
+            this.inner.agent.state.thinkingLevel = "xhigh";
+          }
+          return null;
         }
-        return { commands };
-      }
 
-      case "set_tools": {
-        const toolNames = command.toolNames as string[];
-        this.setActiveToolSelection(toolNames);
-        return null;
-      }
-
-      case "reload": {
-        const activeToolNames = this.inner.getActiveToolNames();
-        await this.waitForExtensionsBound();
-        this.extensionUi.resetForReload();
-        this.syncProjectTrust();
-        await this.inner.reload();
-        this.setActiveToolSelection(activeToolNames);
-        this.applyExactSystemPrompt();
-        invalidateModelsCache();
-        return { success: true };
-      }
-
-      case "abort_compaction": {
-        this.inner.abortCompaction();
-        return null;
-      }
-
-      case "extension_ui_response": {
-        this.extensionUi.resolveResponse(command as ExtensionUiResponse);
-        return null;
-      }
-
-      case "extension_ui_input": {
-        this.extensionUi.handleInput(command.id as string, command.data as string);
-        return null;
-      }
-
-      case "set_auto_retry": {
-        this.inner.setAutoRetryEnabled(command.enabled as boolean);
-        return null;
-      }
-
-      case "bash": {
-        if (this.pendingPromptCount > 0 || this.inner.isStreaming || this.inner.isCompacting || this.inner.isBashRunning) {
-          throw new Error("Cannot run a shell command while the session is busy");
+        case "compact": {
+          return await this.withFinalIdleReset(() =>
+            this.inner.compact(
+              command.customInstructions as string | undefined,
+            ),
+          );
         }
-        const execution = this.inner.executeBash(
-          command.command as string,
-          undefined,
-          {
-            excludeFromContext: command.excludeFromContext as boolean | undefined,
-            operations: createProjectCommandBashOperations({
-              shellPath: this.inner.settingsManager.getShellPath(),
-            }),
-          },
-        );
-        try {
-          const result = await execution;
-          this.persistBashOnlySession();
-          return result;
-        } finally {
-          this.resetIdleTimer();
-        }
-      }
 
-      case "abort_bash": {
-        this.forceShutdownOnIdle = true;
-        this.inner.abortBash();
-        return null;
-      }
+        case "set_session_name": {
+          const name = (command.name as string | undefined)?.trim();
+          if (!name) throw new Error("Session name cannot be empty");
+          this.inner.setSessionName(name);
+          return null;
+        }
+
+        case "get_session_stats": {
+          return {
+            ...this.inner.getSessionStats(),
+            sessionName: this.inner.sessionManager.getSessionName(),
+          };
+        }
+
+        case "get_last_assistant_text": {
+          return { text: this.inner.getLastAssistantText() ?? "" };
+        }
+
+        case "set_auto_compaction": {
+          this.inner.setAutoCompactionEnabled(command.enabled as boolean);
+          return null;
+        }
+
+        case "clear_queue": {
+          // Full clear only: pi has no single-item dequeue, and clear+requeue
+          // races against the agent loop pulling messages mid-flight.
+          return this.inner.clearQueue();
+        }
+
+        case "steer": {
+          const steerImages = command.images as
+            | Array<{ type: "image"; data: string; mimeType: string }>
+            | undefined;
+          await this.inner.steer(
+            command.message as string,
+            steerImages?.length ? steerImages : undefined,
+          );
+          return null;
+        }
+
+        case "follow_up": {
+          const followImages = command.images as
+            | Array<{ type: "image"; data: string; mimeType: string }>
+            | undefined;
+          await this.inner.followUp(
+            command.message as string,
+            followImages?.length ? followImages : undefined,
+          );
+          return null;
+        }
+
+        case "get_tools": {
+          const all: ToolInfo[] = this.inner.getAllTools();
+          const active = new Set<string>(this.inner.getActiveToolNames());
+          return all.map((t) => ({
+            ...t,
+            active: active.has(t.name),
+          }));
+        }
+
+        case "get_commands": {
+          const commands: SlashCommandInfo[] = [];
+          for (const registered of this.inner.extensionRunner.getRegisteredCommands()) {
+            commands.push({
+              name: registered.invocationName,
+              description: registered.description,
+              source: "extension",
+              sourceInfo: registered.sourceInfo,
+            });
+          }
+          for (const template of this.inner.promptTemplates) {
+            commands.push({
+              name: template.name,
+              description: template.description,
+              source: "prompt",
+              sourceInfo: template.sourceInfo,
+            });
+          }
+          for (const skill of this.inner.resourceLoader.getSkills().skills) {
+            commands.push({
+              name: `skill:${skill.name}`,
+              description: skill.description,
+              source: "skill",
+              sourceInfo: skill.sourceInfo,
+            });
+          }
+          return { commands };
+        }
+
+        case "set_tools": {
+          const toolNames = command.toolNames as string[];
+          this.setActiveToolSelection(toolNames);
+          return null;
+        }
+
+        case "reload": {
+          const activeToolNames = this.inner.getActiveToolNames();
+          await this.waitForExtensionsBound();
+          this.extensionUi.resetForReload();
+          this.syncProjectTrust();
+          await this.inner.reload();
+          this.setActiveToolSelection(activeToolNames);
+          this.applyExactSystemPrompt();
+          invalidateModelsCache();
+          return { success: true };
+        }
+
+        case "abort_compaction": {
+          this.inner.abortCompaction();
+          return null;
+        }
+
+        case "extension_ui_response": {
+          this.extensionUi.resolveResponse(command as ExtensionUiResponse);
+          return null;
+        }
+
+        case "extension_ui_input": {
+          this.extensionUi.handleInput(
+            command.id as string,
+            command.data as string,
+          );
+          return null;
+        }
+
+        case "set_auto_retry": {
+          this.inner.setAutoRetryEnabled(command.enabled as boolean);
+          return null;
+        }
+
+        case "bash": {
+          if (
+            this.pendingPromptCount > 0 ||
+            this.inner.isStreaming ||
+            this.inner.isCompacting ||
+            this.inner.isBashRunning
+          ) {
+            throw new Error(
+              "Cannot run a shell command while the session is busy",
+            );
+          }
+          const execution = this.inner.executeBash(
+            command.command as string,
+            undefined,
+            {
+              excludeFromContext: command.excludeFromContext as
+                | boolean
+                | undefined,
+              operations: createProjectCommandBashOperations({
+                shellPath: this.inner.settingsManager.getShellPath(),
+              }),
+            },
+          );
+          try {
+            const result = await execution;
+            this.persistBashOnlySession();
+            return result;
+          } finally {
+            this.resetIdleTimer();
+          }
+        }
+
+        case "abort_bash": {
+          this.forceShutdownOnIdle = true;
+          this.inner.abortBash();
+          return null;
+        }
 
         default:
           throw new Error(`Unsupported command: ${type}`);
       }
     } finally {
-      if (tracksMutation) this.activeMutatingCommands = Math.max(0, this.activeMutatingCommands - 1);
+      if (tracksMutation)
+        this.activeMutatingCommands = Math.max(
+          0,
+          this.activeMutatingCommands - 1,
+        );
     }
   }
 
@@ -828,7 +1028,10 @@ export class AgentSessionWrapper {
     if (this.inner.isCompacting) this.inner.abortCompaction();
     if (this.pendingPromptCount > 0 || this.inner.isStreaming) {
       void this.inner.abort().catch((error) => {
-        console.error("[pi-web] failed to cancel active session work:", error instanceof Error ? error.message : error);
+        console.error(
+          "[pi-web] failed to cancel active session work:",
+          error instanceof Error ? error.message : error,
+        );
       });
     }
   }
@@ -864,7 +1067,11 @@ export class AgentSessionWrapper {
     }
 
     this.sessionShutdownEmitted = true;
-    void (async () => this.inner.extensionRunner.emit({ type: "session_shutdown", reason: "quit" }))()
+    void (async () =>
+      this.inner.extensionRunner.emit({
+        type: "session_shutdown",
+        reason: "quit",
+      }))()
       .catch((error) => {
         console.error(
           "[pi-web] session_shutdown before dispose failed:",
@@ -874,8 +1081,11 @@ export class AgentSessionWrapper {
       .finally(finishDispose);
   }
 
-  async shutdown(options: { manual?: boolean; afterDispose?: () => void } = {}): Promise<void> {
-    const emitStopped = options.manual && this._alive && !this.sessionStoppedEmitted;
+  async shutdown(
+    options: { manual?: boolean; afterDispose?: () => void } = {},
+  ): Promise<void> {
+    const emitStopped =
+      options.manual && this._alive && !this.sessionStoppedEmitted;
     this._stopping = true;
     this.agentRunNeedsCompletion = false;
     if (options.manual) this.cancelActiveWork();
@@ -892,7 +1102,10 @@ export class AgentSessionWrapper {
         await this.waitForExtensionsBound();
         if (!this.sessionShutdownEmitted) {
           this.sessionShutdownEmitted = true;
-          await this.inner.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+          await this.inner.extensionRunner.emit({
+            type: "session_shutdown",
+            reason: "quit",
+          });
         }
       })();
       try {
@@ -905,7 +1118,9 @@ export class AgentSessionWrapper {
           }),
           new Promise<void>((resolveTimeout) => {
             timeout = setTimeout(() => {
-              console.error(`[pi-web] session shutdown cleanup timed out after ${SESSION_SHUTDOWN_TIMEOUT_MS}ms`);
+              console.error(
+                `[pi-web] session shutdown cleanup timed out after ${SESSION_SHUTDOWN_TIMEOUT_MS}ms`,
+              );
               resolveTimeout();
             }, SESSION_SHUTDOWN_TIMEOUT_MS);
           }),
@@ -926,7 +1141,9 @@ export class AgentSessionWrapper {
       newSession: async () => ({ cancelled: true }),
       fork: async () => ({ cancelled: true }),
       navigateTree: async (targetId, options) => {
-        const result = await this.inner.navigateTree(targetId, { summarize: options?.summarize });
+        const result = await this.inner.navigateTree(targetId, {
+          summarize: options?.summarize,
+        });
         return { cancelled: result.cancelled };
       },
       switchSession: async () => ({ cancelled: true }),
@@ -935,7 +1152,10 @@ export class AgentSessionWrapper {
         this.syncProjectTrust();
         await this.inner.reload({
           beforeSessionStart: () => {
-            this.inner.extensionRunner.setUIContext(this.extensionUi.createUiContext(), "rpc");
+            this.inner.extensionRunner.setUIContext(
+              this.extensionUi.createUiContext(),
+              "rpc",
+            );
           },
         });
         this.applyExactSystemPrompt();
@@ -967,7 +1187,12 @@ export type RpcSessionOperation = {
 
 declare global {
   var __piSessions: Map<string, AgentSessionWrapper> | undefined;
-  var __piStartLocks: Map<string, Promise<{ session: AgentSessionWrapper; realSessionId: string }>> | undefined;
+  var __piStartLocks:
+    | Map<
+        string,
+        Promise<{ session: AgentSessionWrapper; realSessionId: string }>
+      >
+    | undefined;
   var __piStartingSessionCwds: Map<string, number> | undefined;
   var __piSessionLifecycles: Map<string, RpcSessionLifecycle> | undefined;
 }
@@ -975,7 +1200,8 @@ declare global {
 function getRegistry(): Map<string, AgentSessionWrapper> {
   if (!globalThis.__piSessions) {
     globalThis.__piSessions = new Map();
-    const destroy = () => globalThis.__piSessions?.forEach((session) => session.destroy());
+    const destroy = () =>
+      globalThis.__piSessions?.forEach((session) => session.destroy());
     const shutdown = () => {
       const sessions = Array.from(globalThis.__piSessions?.values() ?? []);
       void Promise.allSettled(sessions.map((session) => session.shutdown()));
@@ -1001,22 +1227,32 @@ function registerRpcWrapper(wrapper: AgentSessionWrapper): void {
   if (!wrapper.isChatOnly()) wrapper.beginExtensionBinding();
 }
 
-function getLocks(): Map<string, Promise<{ session: AgentSessionWrapper; realSessionId: string }>> {
+function getLocks(): Map<
+  string,
+  Promise<{ session: AgentSessionWrapper; realSessionId: string }>
+> {
   if (!globalThis.__piStartLocks) globalThis.__piStartLocks = new Map();
   return globalThis.__piStartLocks;
 }
 
 function getLifecycle(sessionId: string): RpcSessionLifecycle {
-  if (!globalThis.__piSessionLifecycles) globalThis.__piSessionLifecycles = new Map();
+  if (!globalThis.__piSessionLifecycles)
+    globalThis.__piSessionLifecycles = new Map();
   let lifecycle = globalThis.__piSessionLifecycles.get(sessionId);
   if (!lifecycle) {
-    lifecycle = { generation: 0, stopping: null, toolChangeTail: Promise.resolve() };
+    lifecycle = {
+      generation: 0,
+      stopping: null,
+      toolChangeTail: Promise.resolve(),
+    };
     globalThis.__piSessionLifecycles.set(sessionId, lifecycle);
   }
   return lifecycle;
 }
 
-export function beginRpcSessionOperation(sessionId: string): RpcSessionOperation {
+export function beginRpcSessionOperation(
+  sessionId: string,
+): RpcSessionOperation {
   const lifecycle = getLifecycle(sessionId);
   return {
     sessionId,
@@ -1025,17 +1261,21 @@ export function beginRpcSessionOperation(sessionId: string): RpcSessionOperation
   };
 }
 
-async function assertRpcSessionOperationCurrent(operation: RpcSessionOperation): Promise<void> {
+async function assertRpcSessionOperationCurrent(
+  operation: RpcSessionOperation,
+): Promise<void> {
   await operation.priorStop;
   if (
-    operation.priorStop
-    || getLifecycle(operation.sessionId).generation !== operation.generation
+    operation.priorStop ||
+    getLifecycle(operation.sessionId).generation !== operation.generation
   ) {
     throw new Error("Session was stopped");
   }
 }
 
-async function acquireRpcSessionToolChange(operation: RpcSessionOperation): Promise<() => void> {
+async function acquireRpcSessionToolChange(
+  operation: RpcSessionOperation,
+): Promise<() => void> {
   await assertRpcSessionOperationCurrent(operation);
   const lifecycle = getLifecycle(operation.sessionId);
   const previous = lifecycle.toolChangeTail;
@@ -1061,7 +1301,8 @@ function normalizeRpcCwd(cwd: string): string {
 }
 
 function getStartingSessionCwds(): Map<string, number> {
-  if (!globalThis.__piStartingSessionCwds) globalThis.__piStartingSessionCwds = new Map();
+  if (!globalThis.__piStartingSessionCwds)
+    globalThis.__piStartingSessionCwds = new Map();
   return globalThis.__piStartingSessionCwds;
 }
 
@@ -1076,11 +1317,15 @@ function trackStartingSession(cwd: string): () => void {
   };
 }
 
-export function getRpcSession(sessionId: string): AgentSessionWrapper | undefined {
+export function getRpcSession(
+  sessionId: string,
+): AgentSessionWrapper | undefined {
   return getRegistry().get(sessionId);
 }
 
-export function isRpcSessionActive(session: AgentSessionWrapper | undefined): boolean {
+export function isRpcSessionActive(
+  session: AgentSessionWrapper | undefined,
+): boolean {
   return session?.isActive() ?? false;
 }
 
@@ -1095,7 +1340,15 @@ export async function activateRpcSession(
   sessionFile: string,
 ): Promise<AgentSessionWrapper> {
   await assertRpcSessionOperationCurrent(operation);
-  const session = (await startRpcSession(operation.sessionId, sessionFile, undefined, {}, operation)).session;
+  const session = (
+    await startRpcSession(
+      operation.sessionId,
+      sessionFile,
+      undefined,
+      {},
+      operation,
+    )
+  ).session;
   await assertRpcSessionOperationCurrent(operation);
   return session;
 }
@@ -1110,7 +1363,15 @@ export async function sendRpcSessionCommand(
   let session = getRpcSession(operation.sessionId);
   if (!session || !isRpcSessionActive(session)) {
     if (!sessionFile) throw new Error("Session not found");
-    session = (await startRpcSession(operation.sessionId, sessionFile, undefined, options, operation)).session;
+    session = (
+      await startRpcSession(
+        operation.sessionId,
+        sessionFile,
+        undefined,
+        options,
+        operation,
+      )
+    ).session;
   }
   await assertRpcSessionOperationCurrent(operation);
   return session.send(command);
@@ -1127,22 +1388,35 @@ export async function setRpcSessionTools(
     const sessionId = operation.sessionId;
     const toolNames = validateSessionToolSelection(requestedToolNames);
     const existing = getRpcSession(sessionId);
-    if (existing?.isAlive() && !existing.isActive()) throw new Error("Session is stopping");
+    if (existing?.isAlive() && !existing.isActive())
+      throw new Error("Session is stopping");
 
     if (!existing?.isAlive()) {
       if (!sessionFile) throw new Error("Session not found");
       const manager = SessionManager.open(sessionFile, undefined);
       assertWorkingDirectoryAvailable(manager.getCwd());
       appendSessionToolSelection(manager, toolNames);
-      const started = await startRpcSession(sessionId, sessionFile, undefined, {}, operation);
+      const started = await startRpcSession(
+        sessionId,
+        sessionFile,
+        undefined,
+        {},
+        operation,
+      );
       await assertRpcSessionOperationCurrent(operation);
-      return { session: started.session, sessionId: started.realSessionId, recreated: false };
+      return {
+        session: started.session,
+        sessionId: started.realSessionId,
+        recreated: false,
+      };
     }
 
     assertWorkingDirectoryAvailable(existing.cwd);
-    if (existing.isRunning()) throw new Error("Cannot change tools while the session is running");
+    if (existing.isRunning())
+      throw new Error("Cannot change tools while the session is running");
 
-    const crossesChatOnlyBoundary = existing.isChatOnly() !== (toolNames.length === 0);
+    const crossesChatOnlyBoundary =
+      existing.isChatOnly() !== (toolNames.length === 0);
     appendSessionToolSelection(existing.inner.sessionManager, toolNames);
 
     if (!crossesChatOnlyBoundary) {
@@ -1150,9 +1424,10 @@ export async function setRpcSessionTools(
       return { session: existing, sessionId, recreated: false };
     }
 
-    const persistedFile = existing.sessionFile && existsSync(existing.sessionFile)
-      ? existing.sessionFile
-      : undefined;
+    const persistedFile =
+      existing.sessionFile && existsSync(existing.sessionFile)
+        ? existing.sessionFile
+        : undefined;
     const sessionCwd = existing.cwd;
     const model = existing.inner.model;
     const currentThinkingLevel = existing.inner.agent.state?.thinkingLevel;
@@ -1160,27 +1435,55 @@ export async function setRpcSessionTools(
     await assertRpcSessionOperationCurrent(operation);
 
     if (persistedFile) {
-      const started = await startRpcSession(sessionId, persistedFile, undefined, {}, operation);
+      const started = await startRpcSession(
+        sessionId,
+        persistedFile,
+        undefined,
+        {},
+        operation,
+      );
       await assertRpcSessionOperationCurrent(operation);
-      return { session: started.session, sessionId: started.realSessionId, recreated: true };
+      return {
+        session: started.session,
+        sessionId: started.realSessionId,
+        recreated: true,
+      };
     }
 
-    const started = await startRpcSession(`__recreate__${randomUUID()}`, "", sessionCwd, {
-      toolNames,
-      ...(model ? { initialModel: { provider: model.provider, modelId: model.id } } : {}),
-      allowInitialModelFallback: true,
-      ...(isThinkingLevel(currentThinkingLevel) ? { thinkingLevel: currentThinkingLevel } : {}),
-    }, operation);
+    const started = await startRpcSession(
+      `__recreate__${randomUUID()}`,
+      "",
+      sessionCwd,
+      {
+        toolNames,
+        ...(model
+          ? { initialModel: { provider: model.provider, modelId: model.id } }
+          : {}),
+        allowInitialModelFallback: true,
+        ...(isThinkingLevel(currentThinkingLevel)
+          ? { thinkingLevel: currentThinkingLevel }
+          : {}),
+      },
+      operation,
+    );
     await assertRpcSessionOperationCurrent(operation);
-    return { session: started.session, sessionId: started.realSessionId, recreated: true };
+    return {
+      session: started.session,
+      sessionId: started.realSessionId,
+      recreated: true,
+    };
   } finally {
     releaseToolChange();
   }
 }
 
-function runtimeMessageActivityMs(entry: SessionMessageEntry): number | undefined {
-  if (entry.message.role !== "user" && entry.message.role !== "assistant") return undefined;
-  if (typeof entry.message.timestamp === "number") return entry.message.timestamp;
+function runtimeMessageActivityMs(
+  entry: SessionMessageEntry,
+): number | undefined {
+  if (entry.message.role !== "user" && entry.message.role !== "assistant")
+    return undefined;
+  if (typeof entry.message.timestamp === "number")
+    return entry.message.timestamp;
   const timestamp = new Date(entry.timestamp).getTime();
   return Number.isNaN(timestamp) ? undefined : timestamp;
 }
@@ -1200,8 +1503,12 @@ export function getRpcSessionInfos(): SessionInfo[] {
     const entries = manager.getEntries() as unknown as Array<
       { type: string; timestamp: string } | SessionMessageEntry
     >;
-    const messages = entries.filter((entry): entry is SessionMessageEntry => entry.type === "message");
-    const firstUserMessage = messages.find((entry) => entry.message.role === "user");
+    const messages = entries.filter(
+      (entry): entry is SessionMessageEntry => entry.type === "message",
+    );
+    const firstUserMessage = messages.find(
+      (entry) => entry.message.role === "user",
+    );
     const sessionFile = manager.getSessionFile() ?? session.sessionFile;
     const persisted = Boolean(sessionFile && existsSync(sessionFile));
 
@@ -1209,14 +1516,16 @@ export function getRpcSessionInfos(): SessionInfo[] {
     // loads commands. Do not leak it into history before a prompt is accepted.
     if (!persisted && (!session.isRunning() || !firstUserMessage)) continue;
 
-    const created = header?.timestamp
-      ?? entries[0]?.timestamp
-      ?? new Date().toISOString();
+    const created =
+      header?.timestamp ?? entries[0]?.timestamp ?? new Date().toISOString();
     const headerTimestamp = new Date(created).getTime();
-    let lastActivityMs = Number.isNaN(headerTimestamp) ? Date.now() : headerTimestamp;
+    let lastActivityMs = Number.isNaN(headerTimestamp)
+      ? Date.now()
+      : headerTimestamp;
     for (const message of messages) {
       const activityMs = runtimeMessageActivityMs(message);
-      if (activityMs !== undefined) lastActivityMs = Math.max(lastActivityMs, activityMs);
+      if (activityMs !== undefined)
+        lastActivityMs = Math.max(lastActivityMs, activityMs);
     }
 
     sessions.push({
@@ -1227,7 +1536,9 @@ export function getRpcSessionInfos(): SessionInfo[] {
       created,
       modified: new Date(lastActivityMs).toISOString(),
       messageCount: messages.length,
-      firstMessage: sessionTitleFromFirstMessage(firstUserMessage ? extractTextContent(firstUserMessage.message) : ""),
+      firstMessage: sessionTitleFromFirstMessage(
+        firstUserMessage ? extractTextContent(firstUserMessage.message) : "",
+      ),
       transient: !persisted,
     });
   }
@@ -1238,7 +1549,8 @@ export function hasBusyRpcSessionForCwd(cwd: string): boolean {
   const targetCwd = normalizeRpcCwd(cwd);
   if (getStartingSessionCwds().has(targetCwd)) return true;
   return Array.from(getRegistry().values()).some(
-    (session) => normalizeRpcCwd(session.cwd) === targetCwd && session.isRunning(),
+    (session) =>
+      normalizeRpcCwd(session.cwd) === targetCwd && session.isRunning(),
   );
 }
 
@@ -1272,7 +1584,9 @@ export async function stopRpcSession(sessionId: string): Promise<boolean> {
   const priorStop = lifecycle.stopping;
   const registry = getRegistry();
   const locks = getLocks();
-  const hadRuntime = Boolean(registry.get(sessionId)?.isAlive() || locks.has(sessionId));
+  const hadRuntime = Boolean(
+    registry.get(sessionId)?.isAlive() || locks.has(sessionId),
+  );
   lifecycle.generation += 1;
   const stopping = (async () => {
     await priorStop;
@@ -1309,19 +1623,17 @@ export async function startRpcSession(
   operation?: RpcSessionOperation,
 ): Promise<{ session: AgentSessionWrapper; realSessionId: string }> {
   const { initialModel, allowInitialModelFallback, thinkingLevel } = options;
-  const requestedToolNames = options.toolNames === undefined
-    ? undefined
-    : validateSessionToolSelection(options.toolNames);
+  const requestedToolNames =
+    options.toolNames === undefined
+      ? undefined
+      : validateSessionToolSelection(options.toolNames);
   if (operation) await assertRpcSessionOperationCurrent(operation);
   const lifecycleSessionId = operation?.sessionId ?? sessionId;
   const lifecycle = getLifecycle(lifecycleSessionId);
   const priorStop = lifecycle.stopping;
   const startGeneration = operation?.generation ?? lifecycle.generation;
   if (priorStop) await priorStop;
-  if (
-    operation?.priorStop
-    || lifecycle.generation !== startGeneration
-  ) {
+  if (operation?.priorStop || lifecycle.generation !== startGeneration) {
     throw new Error("Session was stopped before startup");
   }
   const registry = getRegistry();
@@ -1393,36 +1705,55 @@ export async function startRpcSession(
             ],
             extensionsOverride: preferUserBashExtension,
           },
-      ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
+      ...(trustReloadOptions
+        ? { resourceLoaderReloadOptions: trustReloadOptions }
+        : {}),
     });
     const scope = await resolveVisibleModels(
       services.modelRuntime,
       services.settingsManager.getEnabledModels(),
     );
-    const effectiveInitialModel = initialModel && (
-      !allowInitialModelFallback
-      || scope.visible.some((model) => model.provider === initialModel.provider && model.id === initialModel.modelId)
-    )
-      ? initialModel
-      : undefined;
+    const effectiveInitialModel =
+      initialModel &&
+      (!allowInitialModelFallback ||
+        scope.visible.some(
+          (model) =>
+            model.provider === initialModel.provider &&
+            model.id === initialModel.modelId,
+        ))
+        ? initialModel
+        : undefined;
     const defaultProvider = services.settingsManager.getDefaultProvider();
     const defaultModelId = services.settingsManager.getDefaultModel();
-    const hasExistingMessages = sessionManager.getBranch().some((entry) => entry.type === "message");
+    const hasExistingMessages = sessionManager
+      .getBranch()
+      .some((entry) => entry.type === "message");
     const initial = hasExistingMessages
       ? { scopedModels: [...scope.scopedModels] }
       : selectInitialModelScope(scope, {
-        ...(effectiveInitialModel ? { requestedModel: effectiveInitialModel } : {}),
-        ...(defaultProvider && defaultModelId
-          ? { defaultModel: { provider: defaultProvider, modelId: defaultModelId } }
-          : {}),
-        ...(thinkingLevel ? { thinkingLevel } : {}),
-      });
+          ...(effectiveInitialModel
+            ? { requestedModel: effectiveInitialModel }
+            : {}),
+          ...(defaultProvider && defaultModelId
+            ? {
+                defaultModel: {
+                  provider: defaultProvider,
+                  modelId: defaultModelId,
+                },
+              }
+            : {}),
+          ...(thinkingLevel ? { thinkingLevel } : {}),
+        });
     const { session: inner } = await createAgentSessionFromServices({
       services,
       sessionManager,
       ...(initial.model ? { model: initial.model } : {}),
-      ...(initial.thinkingLevel ? { thinkingLevel: initial.thinkingLevel } : {}),
-      ...(initial.scopedModels.length > 0 ? { scopedModels: initial.scopedModels } : {}),
+      ...(initial.thinkingLevel
+        ? { thinkingLevel: initial.thinkingLevel }
+        : {}),
+      ...(initial.scopedModels.length > 0
+        ? { scopedModels: initial.scopedModels }
+        : {}),
       ...(toolsOption !== undefined ? { tools: toolsOption } : {}),
     });
 
@@ -1434,7 +1765,12 @@ export async function startRpcSession(
       },
       {
         ...(inner.model
-          ? { model: { provider: inner.model.provider, modelId: inner.model.id } }
+          ? {
+              model: {
+                provider: inner.model.provider,
+                modelId: inner.model.id,
+              },
+            }
           : {}),
         thinkingLevel: inner.thinkingLevel,
         supportsThinking: inner.supportsThinking(),
@@ -1446,18 +1782,29 @@ export async function startRpcSession(
     // requested builtin coding tools PLUS all extension/package tools, so installed
     // extensions stay usable in Pi Web just like in the `pi` CLI.
     if (!chatOnly) {
-      inner.setActiveToolsByName(withExtensionTools(inner, selectedToolNames ?? inner.getActiveToolNames()));
+      inner.setActiveToolsByName(
+        withExtensionTools(
+          inner,
+          selectedToolNames ?? inner.getActiveToolNames(),
+        ),
+      );
     }
 
     const exactSystemPrompt = chatOnly
-      ? () => contextFilesSystemPrompt(inner.resourceLoader.getAgentsFiles().agentsFiles)
+      ? () =>
+          contextFilesSystemPrompt(
+            inner.resourceLoader.getAgentsFiles().agentsFiles,
+          )
       : undefined;
     const wrapper = new AgentSessionWrapper(inner, {
       exactSystemPrompt,
       chatOnly,
       onAgentRunComplete: (completedSessionId) => {
         void notifySessionComplete(completedSessionId).catch((error) => {
-          console.error("[pi-web] failed to send completion push:", error instanceof Error ? error.message : error);
+          console.error(
+            "[pi-web] failed to send completion push:",
+            error instanceof Error ? error.message : error,
+          );
         });
       },
     });
@@ -1478,9 +1825,10 @@ export async function startRpcSession(
   })().finally(() => {
     if (locks.get(sessionId) === starting) locks.delete(sessionId);
     if (
-      lifecycleSessionId !== sessionId
-      && locks.get(lifecycleSessionId) === starting
-    ) locks.delete(lifecycleSessionId);
+      lifecycleSessionId !== sessionId &&
+      locks.get(lifecycleSessionId) === starting
+    )
+      locks.delete(lifecycleSessionId);
     finishStartingSession();
   });
 

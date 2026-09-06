@@ -21,7 +21,8 @@ function queryMatches(query: string): boolean {
 
 const subscribeMobile = (cb: () => void) => subscribeToQuery(MOBILE_QUERY, cb);
 const getMobileSnapshot = () => queryMatches(MOBILE_QUERY);
-const subscribeNarrowMobile = (cb: () => void) => subscribeToQuery(NARROW_MOBILE_QUERY, cb);
+const subscribeNarrowMobile = (cb: () => void) =>
+  subscribeToQuery(NARROW_MOBILE_QUERY, cb);
 const getNarrowMobileSnapshot = () => queryMatches(NARROW_MOBILE_QUERY);
 
 function getServerSnapshot(): boolean {
@@ -34,10 +35,18 @@ function getServerSnapshot(): boolean {
  * then syncs to the real viewport after hydration.
  */
 export function useIsMobile(): boolean {
-  return useSyncExternalStore(subscribeMobile, getMobileSnapshot, getServerSnapshot);
+  return useSyncExternalStore(
+    subscribeMobile,
+    getMobileSnapshot,
+    getServerSnapshot,
+  );
 }
 
 /** Returns true when the compact mobile toolbar should collapse extra actions. */
 export function useIsNarrowMobile(): boolean {
-  return useSyncExternalStore(subscribeNarrowMobile, getNarrowMobileSnapshot, getServerSnapshot);
+  return useSyncExternalStore(
+    subscribeNarrowMobile,
+    getNarrowMobileSnapshot,
+    getServerSnapshot,
+  );
 }

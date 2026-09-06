@@ -7,7 +7,10 @@ export async function GET(request: Request) {
     const cwd = new URL(request.url).searchParams.get("cwd")?.trim() ?? "";
     const authorized = await authorizeDirectory(cwd);
     if ("error" in authorized) {
-      return Response.json({ error: authorized.error }, { status: authorized.status });
+      return Response.json(
+        { error: authorized.error },
+        { status: authorized.status },
+      );
     }
 
     return Response.json(await getGitStatus(cwd));

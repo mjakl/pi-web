@@ -9,7 +9,9 @@ export { allowFileRoot } from "./allowed-roots";
 export async function getAllowedFileRoots(): Promise<Set<string>> {
   const roots = new Set<string>();
   const sessionCwds = await listSessionCwds();
-  const projects = await Promise.all(sessionCwds.map((cwd) => resolveProject(cwd)));
+  const projects = await Promise.all(
+    sessionCwds.map((cwd) => resolveProject(cwd)),
+  );
   sessionCwds.forEach((cwd, index) => {
     roots.add(toSlashPath(cwd));
     roots.add(toSlashPath(projects[index].projectRoot));
@@ -29,7 +31,9 @@ export type DirectoryAuthorization =
  * before the filesystem is touched, so an unauthorized caller cannot learn
  * which paths exist, and again after symbolic links resolve.
  */
-export async function authorizeDirectory(cwd: string): Promise<DirectoryAuthorization> {
+export async function authorizeDirectory(
+  cwd: string,
+): Promise<DirectoryAuthorization> {
   if (!cwd || !isAbsolutePath(cwd)) {
     return { status: 400, error: "cwd must be an absolute path" };
   }

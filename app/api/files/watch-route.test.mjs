@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -25,12 +32,18 @@ function readServerSentEvents(response) {
           const raw = buffered.slice(0, separator);
           buffered = buffered.slice(separator + 2);
           const data = /^data: (.*)$/m.exec(raw)?.[1];
-          return { event: /^event: (.*)$/m.exec(raw)?.[1], data: data ? JSON.parse(data) : undefined };
+          return {
+            event: /^event: (.*)$/m.exec(raw)?.[1],
+            data: data ? JSON.parse(data) : undefined,
+          };
         }
         const chunk = await Promise.race([
           reader.read(),
           new Promise((_resolve, reject) => {
-            setTimeout(() => reject(new Error(`no SSE event within ${timeoutMs}ms`)), timeoutMs).unref();
+            setTimeout(
+              () => reject(new Error(`no SSE event within ${timeoutMs}ms`)),
+              timeoutMs,
+            ).unref();
           }),
         ]);
         if (chunk.done) throw new Error("SSE stream ended");
@@ -48,7 +61,9 @@ async function replaceAtomically(filePath, content) {
 
 test("file watching keeps reporting changes across same-path replacements", async (t) => {
   const agentDir = await mkdtemp(join(tmpdir(), "pi-web-watch-route-agent-"));
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-web-watch-route-")));
+  const dir = await realpath(
+    await mkdtemp(join(tmpdir(), "pi-web-watch-route-")),
+  );
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const previousRoots = globalThis.__piAdditionalAllowedRoots;
   process.env.PI_CODING_AGENT_DIR = agentDir;

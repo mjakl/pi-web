@@ -12,43 +12,60 @@ type JsonMessageUpdateEvent = Extract<
   { type: "message_update" }
 >;
 
-type JsonAssistantMessageEvent = JsonMessageUpdateEvent["assistantMessageEvent"];
-type JsonToolCallStartEvent = Extract<JsonAssistantMessageEvent, { type: "toolcall_start" }>;
-type JsonToolCallDeltaEvent = Extract<JsonAssistantMessageEvent, { type: "toolcall_delta" }>;
+type JsonAssistantMessageEvent =
+  JsonMessageUpdateEvent["assistantMessageEvent"];
+type JsonToolCallStartEvent = Extract<
+  JsonAssistantMessageEvent,
+  { type: "toolcall_start" }
+>;
+type JsonToolCallDeltaEvent = Extract<
+  JsonAssistantMessageEvent,
+  { type: "toolcall_delta" }
+>;
 
 export type ClientAssistantMessageEvent =
-  | Exclude<JsonAssistantMessageEvent, { type: "toolcall_start" | "toolcall_delta" }>
+  | Exclude<
+      JsonAssistantMessageEvent,
+      { type: "toolcall_start" | "toolcall_delta" }
+    >
   | (JsonToolCallStartEvent & { id?: string; toolName?: string })
   | (JsonToolCallDeltaEvent & { id?: string; toolName?: string });
 
-export type ClientMessageUpdateEvent = Omit<JsonMessageUpdateEvent, "assistantMessageEvent"> & {
+export type ClientMessageUpdateEvent = Omit<
+  JsonMessageUpdateEvent,
+  "assistantMessageEvent"
+> & {
   assistantMessageEvent: ClientAssistantMessageEvent;
 };
 
-const OMITTED_EVENT_TYPES = new Set([
-  "turn_start",
-  "turn_end",
-]);
+const OMITTED_EVENT_TYPES = new Set(["turn_start", "turn_end"]);
 
 function toolCallMetadata(
   event: Record<string, unknown>,
 ): { id: string; toolName: string } | null {
   if (
-    (event.type !== "toolcall_start" && event.type !== "toolcall_delta")
-    || !isRecord(event.partial)
-  ) return null;
+    (event.type !== "toolcall_start" && event.type !== "toolcall_delta") ||
+    !isRecord(event.partial)
+  )
+    return null;
   const content = event.partial.content;
   const contentIndex = event.contentIndex;
   if (!Array.isArray(content) || typeof contentIndex !== "number") return null;
 
   const block = content[contentIndex];
   if (!isRecord(block) || block.type !== "toolCall") return null;
-  const id = typeof block.id === "string"
-    ? block.id
-    : (typeof block.toolCallId === "string" ? block.toolCallId : null);
-  const toolName = typeof block.name === "string"
-    ? block.name
-    : (typeof block.toolName === "string" ? block.toolName : null);
+  const id =
+    typeof block.id === "string"
+      ? block.id
+      : typeof block.toolCallId === "string"
+        ? block.toolCallId
+        : null;
+  const toolName =
+    typeof block.name === "string"
+      ? block.name
+      : typeof block.toolName === "string"
+        ? block.toolName
+        : null;
   return id !== null && toolName !== null ? { id, toolName } : null;
 }
 
@@ -61,10 +78,11 @@ export function toClientAgentEvent(
   if (event.type === "message_update") {
     const assistantMessageEvent = event.assistantMessageEvent;
     if (
-      typeof assistantMessageEvent !== "object"
-      || assistantMessageEvent === null
-      || Array.isArray(assistantMessageEvent)
-    ) return null;
+      typeof assistantMessageEvent !== "object" ||
+      assistantMessageEvent === null ||
+      Array.isArray(assistantMessageEvent)
+    )
+      return null;
 
     if (!("partial" in assistantMessageEvent)) {
       return {
@@ -73,12 +91,16 @@ export function toClientAgentEvent(
       } as ClientMessageUpdateEvent;
     }
 
-    const metadata = toolCallMetadata(assistantMessageEvent as Record<string, unknown>);
+    const metadata = toolCallMetadata(
+      assistantMessageEvent as Record<string, unknown>,
+    );
     const { partial: _partial, ...deltaEvent } = assistantMessageEvent;
     void _partial;
     return {
       type: "message_update",
-      assistantMessageEvent: metadata ? { ...deltaEvent, ...metadata } : deltaEvent,
+      assistantMessageEvent: metadata
+        ? { ...deltaEvent, ...metadata }
+        : deltaEvent,
     } as ClientMessageUpdateEvent;
   }
 
@@ -99,7 +121,9 @@ export function isEventIncludedInSnapshot(
   event: AgentEventLike,
   snapshot: unknown,
 ): boolean {
-  return snapshot !== undefined
-    && (event.type === "message_start" || event.type === "message_update")
-    && event.message === snapshot;
+  return (
+    snapshot !== undefined &&
+    (event.type === "message_start" || event.type === "message_update") &&
+    event.message === snapshot
+  );
 }

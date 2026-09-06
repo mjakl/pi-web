@@ -15,12 +15,16 @@ import { computeSessionTotalActiveMs } from "@/lib/session-timing";
 import { computeSessionStats } from "@/lib/session-stats";
 import type { SessionEntry } from "@/lib/types";
 import { readSessionToolSelection } from "@/lib/session-tool-selection";
-import { extractTextContent, readStableSessionFile, sessionTitleFromFirstMessage } from "@/lib/session-metadata";
+import {
+  extractTextContent,
+  readStableSessionFile,
+  sessionTitleFromFirstMessage,
+} from "@/lib/session-metadata";
 import type { SessionMetadataFingerprint } from "@/lib/session-metadata-types";
 
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   try {
@@ -32,14 +36,23 @@ export async function GET(
     }
 
     const liveSessionManager = liveRpc?.inner.sessionManager;
-    const filePath = liveRpc?.sessionFile || liveSessionManager?.getSessionFile() || resolvedPath || "";
+    const filePath =
+      liveRpc?.sessionFile ||
+      liveSessionManager?.getSessionFile() ||
+      resolvedPath ||
+      "";
     const searchParams = new URL(req.url).searchParams;
     const deferThinking = searchParams.has("deferThinking");
     const deferToolResultImages = searchParams.has("deferMedia");
     const rawTail = Number(searchParams.get("tail"));
-    const tail = Number.isFinite(rawTail) && rawTail > 0 ? Math.min(rawTail, SESSION_TAIL_MAX) : SESSION_TAIL_DEFAULT;
+    const tail =
+      Number.isFinite(rawTail) && rawTail > 0
+        ? Math.min(rawTail, SESSION_TAIL_MAX)
+        : SESSION_TAIL_DEFAULT;
 
-    const readSnapshot = async (fingerprint: SessionMetadataFingerprint | null) => {
+    const readSnapshot = async (
+      fingerprint: SessionMetadataFingerprint | null,
+    ) => {
       const sm = liveSessionManager ?? SessionManager.open(resolvedPath!);
       const entries = sm.getEntries();
       const leafId = sm.getLeafId();
@@ -56,28 +69,37 @@ export async function GET(
       // keep monotonic token/cost counters across compaction and page reloads.
       const stats = computeSessionStats(entries as unknown as SessionEntry[]);
       const sessionName = sm.getSessionName();
-      const firstUserEntry = entries.find((entry) => entry.type === "message" && entry.message.role === "user");
-      const firstUserMessage = firstUserEntry?.type === "message" ? firstUserEntry.message : undefined;
+      const firstUserEntry = entries.find(
+        (entry) => entry.type === "message" && entry.message.role === "user",
+      );
+      const firstUserMessage =
+        firstUserEntry?.type === "message" ? firstUserEntry.message : undefined;
       const header = sm.getHeader();
       const parentSessionId = header?.parentSession
         ? await resolveSessionIdByPath(header.parentSession)
         : undefined;
       const toolNames = readSessionToolSelection(entries as never);
-      const info = header ? (await attachSessionProjectInfo([{
-        path: filePath,
-        id: header.id,
-        cwd: header.cwd ?? "",
-        name: sessionName,
-        created: header.timestamp,
-        modified: fingerprint?.modified ?? header.timestamp,
-        fileSize: fingerprint?.fileSize,
-        messageCount: stats.totalMessages,
-        firstMessage: sessionTitleFromFirstMessage(
-          firstUserMessage ? extractTextContent(firstUserMessage) : "",
-        ),
-        parentSessionId,
-        transient: fingerprint === null,
-      }]))[0] : null;
+      const info = header
+        ? (
+            await attachSessionProjectInfo([
+              {
+                path: filePath,
+                id: header.id,
+                cwd: header.cwd ?? "",
+                name: sessionName,
+                created: header.timestamp,
+                modified: fingerprint?.modified ?? header.timestamp,
+                fileSize: fingerprint?.fileSize,
+                messageCount: stats.totalMessages,
+                firstMessage: sessionTitleFromFirstMessage(
+                  firstUserMessage ? extractTextContent(firstUserMessage) : "",
+                ),
+                parentSessionId,
+                transient: fingerprint === null,
+              },
+            ])
+          )[0]
+        : null;
 
       return {
         sessionId: id,
@@ -96,7 +118,10 @@ export async function GET(
       ? await readStableSessionFile(filePath, readSnapshot)
       : await readSnapshot(null);
     if (!snapshot) {
-      return Response.json({ error: "Session changed during read" }, { status: 409 });
+      return Response.json(
+        { error: "Session changed during read" },
+        { status: 409 },
+      );
     }
     return Response.json(snapshot);
   } catch (error) {
@@ -107,11 +132,11 @@ export async function GET(
 // PATCH /api/sessions/[id]  body: { name: string }
 export async function PATCH(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   try {
-    const { name } = await req.json() as { name?: string };
+    const { name } = (await req.json()) as { name?: string };
     if (typeof name !== "string") {
       return Response.json({ error: "name is required" }, { status: 400 });
     }
@@ -130,7 +155,7 @@ export async function PATCH(
 // DELETE /api/sessions/[id]
 export async function DELETE(
   _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   try {

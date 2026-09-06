@@ -8,8 +8,8 @@ not create, delete, prune, or change branches in a worktree.
 
 Open the folder picker in the sidebar. Expand a repository to see its working
 folders, then select one. If only one working folder exists, select the
-repository directly; no expansion is needed. Folder names and paths identify
-the choices; there is no separate branch or worktree dropdown.
+repository directly; no expansion is needed. Folder names and paths identify the
+choices; there is no separate branch or worktree dropdown.
 
 The original checkout and linked worktrees are equal choices. Repositories
 backed by a bare Git directory are supported: the bare directory identifies the
@@ -24,20 +24,21 @@ Sessions from the same repository stay together in the sidebar.
 
 ## Changes made by other tools
 
-Pi Web refreshes the folder list when you open the picker or expand a repository.
-Close and reopen it to see worktrees created or deleted by another agent. There
-is no background worktree polling, including while the picker is open.
+Pi Web refreshes the folder list when you open the picker or expand a
+repository. Close and reopen it to see worktrees created or deleted by another
+agent. There is no background worktree polling, including while the picker is
+open.
 
 Discovery reads Git's worktree metadata; it does not scan the files in each
 checkout. Missing and prunable worktrees are excluded from the folder choices.
 
 ## Sessions whose folders are missing
 
-You can still read a session after its working folder disappears. Pi Web shows
-a read-only notice and blocks activation, messages, fork, clone, compaction, and
-other agent commands that change the session. Runtime inspection and stopping
-an existing agent remain available. Pi Web does not recreate the folder or run
-the session in a replacement folder.
+You can still read a session after its working folder disappears. Pi Web shows a
+read-only notice and blocks activation, messages, fork, clone, compaction, and
+other agent commands that change the session. Runtime inspection and stopping an
+existing agent remain available. Pi Web does not recreate the folder or run the
+session in a replacement folder.
 
 Folder availability is checked when opening or refreshing a session and when
 opening the picker. The backend checks again before activation and agent
@@ -55,6 +56,6 @@ original folder.
 
 ## HTTP interface
 
-`GET /api/worktrees?cwd=<directory>` lists existing worktrees and reports project
-identity and folder availability. The former `POST` and `DELETE` worktree
-operations are removed and return HTTP 405.
+`GET /api/worktrees?cwd=<directory>` lists existing worktrees and reports
+project identity and folder availability. The former `POST` and `DELETE`
+worktree operations are removed and return HTTP 405.

@@ -47,14 +47,20 @@ function addMessage(stats: SessionFileStats, message: AgentMessage): void {
   } else if (message.role === "assistant") {
     stats.assistantMessages += 1;
     if (Array.isArray(message.content)) {
-      stats.toolCalls += message.content.filter((c) => c.type === "toolCall").length;
+      stats.toolCalls += message.content.filter(
+        (c) => c.type === "toolCall",
+      ).length;
     }
     addUsage(stats, message.usage);
   }
 }
 
 function finishStats(stats: SessionFileStats): SessionFileStats {
-  stats.tokens.total = stats.tokens.input + stats.tokens.output + stats.tokens.cacheRead + stats.tokens.cacheWrite;
+  stats.tokens.total =
+    stats.tokens.input +
+    stats.tokens.output +
+    stats.tokens.cacheRead +
+    stats.tokens.cacheWrite;
   return stats;
 }
 
@@ -77,19 +83,33 @@ export function mergeSessionStats(
   const loaded = computeMessageStats(loadedMessages);
   const delta = (now: number, before: number) => Math.max(0, now - before);
   const tokens = {
-    input: fileStats.tokens.input + delta(current.tokens.input, loaded.tokens.input),
-    output: fileStats.tokens.output + delta(current.tokens.output, loaded.tokens.output),
-    cacheRead: fileStats.tokens.cacheRead + delta(current.tokens.cacheRead, loaded.tokens.cacheRead),
-    cacheWrite: fileStats.tokens.cacheWrite + delta(current.tokens.cacheWrite, loaded.tokens.cacheWrite),
+    input:
+      fileStats.tokens.input + delta(current.tokens.input, loaded.tokens.input),
+    output:
+      fileStats.tokens.output +
+      delta(current.tokens.output, loaded.tokens.output),
+    cacheRead:
+      fileStats.tokens.cacheRead +
+      delta(current.tokens.cacheRead, loaded.tokens.cacheRead),
+    cacheWrite:
+      fileStats.tokens.cacheWrite +
+      delta(current.tokens.cacheWrite, loaded.tokens.cacheWrite),
     total: 0,
   };
-  tokens.total = tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite;
+  tokens.total =
+    tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite;
   return {
-    userMessages: fileStats.userMessages + delta(current.userMessages, loaded.userMessages),
-    assistantMessages: fileStats.assistantMessages + delta(current.assistantMessages, loaded.assistantMessages),
+    userMessages:
+      fileStats.userMessages + delta(current.userMessages, loaded.userMessages),
+    assistantMessages:
+      fileStats.assistantMessages +
+      delta(current.assistantMessages, loaded.assistantMessages),
     toolCalls: fileStats.toolCalls + delta(current.toolCalls, loaded.toolCalls),
-    toolResults: fileStats.toolResults + delta(current.toolResults, loaded.toolResults),
-    totalMessages: fileStats.totalMessages + delta(current.totalMessages, loaded.totalMessages),
+    toolResults:
+      fileStats.toolResults + delta(current.toolResults, loaded.toolResults),
+    totalMessages:
+      fileStats.totalMessages +
+      delta(current.totalMessages, loaded.totalMessages),
     tokens,
     cost: fileStats.cost + delta(current.cost, loaded.cost),
   };

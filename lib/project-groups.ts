@@ -11,8 +11,13 @@ export interface RecentProject {
 }
 
 /** Projects sorted by most recent activity and deduplicated by stable key. */
-export function getRecentProjects(sessions: readonly SessionInfo[]): RecentProject[] {
-  const latestByProject = new Map<string, { root: string; cwd: string; modified: string }>();
+export function getRecentProjects(
+  sessions: readonly SessionInfo[],
+): RecentProject[] {
+  const latestByProject = new Map<
+    string,
+    { root: string; cwd: string; modified: string }
+  >();
   for (const session of sessions) {
     const root = session.projectRoot ?? session.cwd;
     if (!root) continue;

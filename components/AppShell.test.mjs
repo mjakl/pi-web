@@ -7,7 +7,11 @@ import { createJiti } from "jiti";
 registerHooks({
   load(url, context, nextLoad) {
     if (!url.endsWith(".css")) return nextLoad(url, context);
-    return { format: "module", shortCircuit: true, source: "export default {};" };
+    return {
+      format: "module",
+      shortCircuit: true,
+      source: "export default {};",
+    };
   },
 });
 
@@ -31,12 +35,13 @@ Object.assign(globalThis, {
   IS_REACT_ACT_ENVIRONMENT: true,
 });
 
-globalThis.fetch = async () => Response.json({
-  sessions: [],
-  activeSessionIds: [],
-  runningSessionIds: [],
-  projects: [],
-});
+globalThis.fetch = async () =>
+  Response.json({
+    sessions: [],
+    activeSessionIds: [],
+    runningSessionIds: [],
+    projects: [],
+  });
 
 const jiti = createJiti(import.meta.url, {
   jsx: { runtime: "automatic" },
@@ -45,8 +50,12 @@ const jiti = createJiti(import.meta.url, {
 const React = await jiti.import("react");
 const { act } = React;
 const { createRoot } = await jiti.import("react-dom/client");
-const { AppRouterContext } = await jiti.import("next/dist/shared/lib/app-router-context.shared-runtime.js");
-const { SearchParamsContext } = await jiti.import("next/dist/shared/lib/hooks-client-context.shared-runtime.js");
+const { AppRouterContext } = await jiti.import(
+  "next/dist/shared/lib/app-router-context.shared-runtime.js",
+);
+const { SearchParamsContext } = await jiti.import(
+  "next/dist/shared/lib/hooks-client-context.shared-runtime.js",
+);
 const { AppShell } = await jiti.import("./AppShell.tsx");
 const { SessionSidebar } = await jiti.import("./SessionSidebar.tsx");
 
@@ -75,14 +84,21 @@ test("follows system theme changes while the app shell is mounted", async () => 
   const originalMatchMedia = window.matchMedia.bind(window);
   const listeners = new Set();
   let prefersDark = false;
-  window.matchMedia = (query) => query === "(prefers-color-scheme: dark)"
-    ? {
-        get matches() { return prefersDark; },
-        media: query,
-        addEventListener(type, listener) { if (type === "change") listeners.add(listener); },
-        removeEventListener(type, listener) { if (type === "change") listeners.delete(listener); },
-      }
-    : originalMatchMedia(query);
+  window.matchMedia = (query) =>
+    query === "(prefers-color-scheme: dark)"
+      ? {
+          get matches() {
+            return prefersDark;
+          },
+          media: query,
+          addEventListener(type, listener) {
+            if (type === "change") listeners.add(listener);
+          },
+          removeEventListener(type, listener) {
+            if (type === "change") listeners.delete(listener);
+          },
+        }
+      : originalMatchMedia(query);
   localStorage.setItem("pi-theme", "auto");
 
   const container = document.createElement("div");
@@ -95,7 +111,9 @@ test("follows system theme changes while the app shell is mounted", async () => 
     });
 
     prefersDark = true;
-    await act(() => listeners.forEach((listener) => listener(new Event("change"))));
+    await act(() =>
+      listeners.forEach((listener) => listener(new Event("change"))),
+    );
     assert.equal(document.documentElement.classList.contains("dark"), true);
   } finally {
     await act(() => root.unmount());
@@ -120,7 +138,9 @@ const sidebarSession = {
 
 async function click(element) {
   await act(async () => {
-    element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    element.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
@@ -135,7 +155,11 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function sidebarForInventoryTest(refreshKey, beginSessionInventoryAttempt, onSessionsChange) {
+function sidebarForInventoryTest(
+  refreshKey,
+  beginSessionInventoryAttempt,
+  onSessionsChange,
+) {
   return React.createElement(SessionSidebar, {
     selectedSessionId: null,
     onSelectSession() {},
@@ -147,14 +171,21 @@ function sidebarForInventoryTest(refreshKey, beginSessionInventoryAttempt, onSes
 }
 
 function emptyInventoryResponse() {
-  return Response.json({ sessions: [], activeSessionIds: [], runningSessionIds: [] });
+  return Response.json({
+    sessions: [],
+    activeSessionIds: [],
+    runningSessionIds: [],
+  });
 }
 
 function refreshSucceeded(container) {
   return container.querySelector('button[title="Refresh"] polyline') !== null;
 }
 
-function createRefreshHarness({ selected = true, provideTranscriptRefresh = true } = {}) {
+function createRefreshHarness({
+  selected = true,
+  provideTranscriptRefresh = true,
+} = {}) {
   const originalFetch = globalThis.fetch;
   const inventoryRequests = [];
   const transcriptRequests = [];
@@ -173,30 +204,36 @@ function createRefreshHarness({ selected = true, provideTranscriptRefresh = true
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  const render = () => act(async () => {
-    root.render(React.createElement(SessionSidebar, {
-      selectedSessionId: selected ? sidebarSession.id : null,
-      onSelectSession() {},
-      beginSessionInventoryAttempt: () => ++nextAttempt,
-      refreshKey,
-      actionsAvailable: true,
-      ...(provideTranscriptRefresh ? {
-        onRefreshSelectedSession: () => {
-          const request = deferred();
-          transcriptRequests.push(request);
-          return request.promise;
-        },
-      } : {}),
-    }));
-    await Promise.resolve();
-  });
+  const render = () =>
+    act(async () => {
+      root.render(
+        React.createElement(SessionSidebar, {
+          selectedSessionId: selected ? sidebarSession.id : null,
+          onSelectSession() {},
+          beginSessionInventoryAttempt: () => ++nextAttempt,
+          refreshKey,
+          actionsAvailable: true,
+          ...(provideTranscriptRefresh
+            ? {
+                onRefreshSelectedSession: () => {
+                  const request = deferred();
+                  transcriptRequests.push(request);
+                  return request.promise;
+                },
+              }
+            : {}),
+        }),
+      );
+      await Promise.resolve();
+    });
 
   return {
     inventoryRequests,
     transcriptRequests,
     container,
     render,
-    clickRefresh: () => click(container.querySelector('button[title="Refresh"]')),
+    clickRefresh: () =>
+      click(container.querySelector('button[title="Refresh"]')),
     triggerBackgroundLoad: async () => {
       refreshKey += 1;
       await render();
@@ -237,11 +274,16 @@ function createInventoryHarness(onSessionsChange) {
   return {
     requests,
     container,
-    get nextAttempt() { return nextAttempt; },
-    render: (refreshKey) => act(async () => {
-      root.render(sidebarForInventoryTest(refreshKey, begin, onSessionsChange));
-      await Promise.resolve();
-    }),
+    get nextAttempt() {
+      return nextAttempt;
+    },
+    render: (refreshKey) =>
+      act(async () => {
+        root.render(
+          sidebarForInventoryTest(refreshKey, begin, onSessionsChange),
+        );
+        await Promise.resolve();
+      }),
     cleanup: async () => {
       await act(() => root.unmount());
       container.remove();
@@ -265,7 +307,9 @@ test("a closed sidebar is inert and hidden from accessibility navigation until r
     assert.equal(document.activeElement === sidebarControl, true);
 
     const hide = container.querySelector('button[aria-label="Hide sidebar"]');
-    await act(() => hide.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await act(() =>
+      hide.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
     assert.match(sidebar.className, /sidebar-closed/);
     assert.equal(sidebar.hasAttribute("inert"), true);
     assert.equal(sidebar.getAttribute("aria-hidden"), "true");
@@ -274,7 +318,9 @@ test("a closed sidebar is inert and hidden from accessibility navigation until r
     assert.equal(document.activeElement === sidebarControl, false);
 
     const show = container.querySelector('button[aria-label="Show sidebar"]');
-    await act(() => show.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await act(() =>
+      show.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
     assert.match(sidebar.className, /sidebar-open/);
     assert.equal(sidebar.hasAttribute("inert"), false);
     assert.equal(sidebar.getAttribute("aria-hidden"), null);
@@ -289,12 +335,14 @@ test("a closed sidebar is inert and hidden from accessibility navigation until r
 test("closing the actual sidebar removes its body portal and reopening starts with actions closed", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
-    if (String(url).startsWith("/api/sessions")) return Response.json({
-      sessions: [sidebarSession],
-      activeSessionIds: [],
-      runningSessionIds: [],
-    });
-    if (url === "/api/agent/running") return Response.json({ activeSessionIds: [], runningSessionIds: [] });
+    if (String(url).startsWith("/api/sessions"))
+      return Response.json({
+        sessions: [sidebarSession],
+        activeSessionIds: [],
+        runningSessionIds: [],
+      });
+    if (url === "/api/agent/running")
+      return Response.json({ activeSessionIds: [], runningSessionIds: [] });
     return Response.json({});
   };
 
@@ -307,19 +355,36 @@ test("closing the actual sidebar removes its body portal and reopening starts wi
       root.render(appShell());
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
-    const trigger = container.querySelector('[aria-label="Session actions for Sidebar session"]');
+    const trigger = container.querySelector(
+      '[aria-label="Session actions for Sidebar session"]',
+    );
     assert.ok(trigger);
     await click(trigger);
-    assert.ok(document.body.querySelector('[role="group"][aria-label="Session actions for Sidebar session"]'));
+    assert.ok(
+      document.body.querySelector(
+        '[role="group"][aria-label="Session actions for Sidebar session"]',
+      ),
+    );
 
     await click(container.querySelector('button[aria-label="Hide sidebar"]'));
-    assert.equal(document.body.querySelector('[role="group"][aria-label="Session actions for Sidebar session"]'), null);
+    assert.equal(
+      document.body.querySelector(
+        '[role="group"][aria-label="Session actions for Sidebar session"]',
+      ),
+      null,
+    );
 
     await click(container.querySelector('button[aria-label="Show sidebar"]'));
-    const reopenedTrigger = container.querySelector('[aria-label="Session actions for Sidebar session"]');
+    const reopenedTrigger = container.querySelector(
+      '[aria-label="Session actions for Sidebar session"]',
+    );
     assert.equal(reopenedTrigger.getAttribute("aria-expanded"), "false");
     await click(reopenedTrigger);
-    assert.ok(document.body.querySelector('[role="group"][aria-label="Session actions for Sidebar session"]'));
+    assert.ok(
+      document.body.querySelector(
+        '[role="group"][aria-label="Session actions for Sidebar session"]',
+      ),
+    );
   } finally {
     await act(() => root.unmount());
     container.remove();
@@ -360,7 +425,10 @@ test("a stale inventory failure cannot replace a newer success or its loading st
       harness.requests[0].reject(new Error("stale inventory failure"));
       await Promise.resolve();
     });
-    assert.equal(harness.container.textContent.includes("stale inventory failure"), false);
+    assert.equal(
+      harness.container.textContent.includes("stale inventory failure"),
+      false,
+    );
     assert.equal(harness.container.textContent.includes("Loading..."), false);
   } finally {
     await harness.cleanup();
@@ -376,14 +444,20 @@ test("an older pending success may recover from a newer inventory failure", asyn
       harness.requests[1].reject(new Error("current inventory failure"));
       await Promise.resolve();
     });
-    assert.equal(harness.container.textContent.includes("current inventory failure"), true);
+    assert.equal(
+      harness.container.textContent.includes("current inventory failure"),
+      true,
+    );
     assert.equal(harness.container.textContent.includes("Loading..."), false);
 
     await act(async () => {
       harness.requests[0].resolve(emptyInventoryResponse());
       await Promise.resolve();
     });
-    assert.equal(harness.container.textContent.includes("current inventory failure"), false);
+    assert.equal(
+      harness.container.textContent.includes("current inventory failure"),
+      false,
+    );
     assert.equal(harness.container.textContent.includes("Loading..."), false);
   } finally {
     await harness.cleanup();
@@ -430,10 +504,15 @@ test("the current inventory abort finishes loading without reporting an error", 
   try {
     await harness.render(0);
     await act(async () => {
-      harness.requests[0].reject(new DOMException("current abort", "AbortError"));
+      harness.requests[0].reject(
+        new DOMException("current abort", "AbortError"),
+      );
       await Promise.resolve();
     });
-    assert.equal(harness.container.textContent.includes("current abort"), false);
+    assert.equal(
+      harness.container.textContent.includes("current abort"),
+      false,
+    );
     assert.equal(harness.container.textContent.includes("Loading..."), false);
   } finally {
     await harness.cleanup();
@@ -528,7 +607,10 @@ test("a superseded manual Refresh cannot publish late success", async () => {
     await harness.clickRefresh();
     await harness.clickRefresh();
 
-    await settle(harness.inventoryRequests[2], new Response(null, { status: 500 }));
+    await settle(
+      harness.inventoryRequests[2],
+      new Response(null, { status: 500 }),
+    );
     await settle(harness.transcriptRequests[1], true);
     await settle(harness.transcriptRequests[0], true);
     await settle(harness.inventoryRequests[1], emptyInventoryResponse());
@@ -548,7 +630,11 @@ test("holding Ctrl reveals session shortcuts and a number selects that recent se
   }));
   globalThis.fetch = async (url) => {
     if (String(url).startsWith("/api/sessions")) {
-      return Response.json({ sessions, activeSessionIds: [], runningSessionIds: [] });
+      return Response.json({
+        sessions,
+        activeSessionIds: [],
+        runningSessionIds: [],
+      });
     }
     if (url === "/api/agent/running") return emptyInventoryResponse();
     return Response.json({});
@@ -560,33 +646,57 @@ test("holding Ctrl reveals session shortcuts and a number selects that recent se
   const root = createRoot(container);
   try {
     await act(async () => {
-      root.render(React.createElement(SessionSidebar, {
-        selectedSessionId: null,
-        onSelectSession: (session) => selected.push(session.id),
-        beginSessionInventoryAttempt: () => 1,
-        actionsAvailable: true,
-      }));
+      root.render(
+        React.createElement(SessionSidebar, {
+          selectedSessionId: null,
+          onSelectSession: (session) => selected.push(session.id),
+          beginSessionInventoryAttempt: () => 1,
+          actionsAvailable: true,
+        }),
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    const newSessionButton = container.querySelector('button[aria-label="New session"]');
+    const newSessionButton = container.querySelector(
+      'button[aria-label="New session"]',
+    );
     assert.equal(newSessionButton.querySelector("kbd"), null);
-    assert.equal(newSessionButton.getAttribute("aria-keyshortcuts"), "Meta+K Control+K");
-    await act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Control", ctrlKey: true })));
+    assert.equal(
+      newSessionButton.getAttribute("aria-keyshortcuts"),
+      "Meta+K Control+K",
+    );
+    await act(() =>
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Control", ctrlKey: true }),
+      ),
+    );
     assert.equal(container.querySelectorAll("kbd").length, 11);
     assert.equal(newSessionButton.querySelector("kbd").textContent, "Ctrl+K");
-    assert.equal(container.querySelector("[data-session-inventory-id] kbd").textContent, "Ctrl+1");
+    assert.equal(
+      container.querySelector("[data-session-inventory-id] kbd").textContent,
+      "Ctrl+1",
+    );
 
-    const shortcut = new KeyboardEvent("keydown", { key: "0", ctrlKey: true, cancelable: true });
+    const shortcut = new KeyboardEvent("keydown", {
+      key: "0",
+      ctrlKey: true,
+      cancelable: true,
+    });
     await act(() => window.dispatchEvent(shortcut));
     assert.equal(shortcut.defaultPrevented, true);
     assert.deepEqual(selected, ["session-10"]);
 
-    await act(() => window.dispatchEvent(new KeyboardEvent("keyup", { key: "Control" })));
+    await act(() =>
+      window.dispatchEvent(new KeyboardEvent("keyup", { key: "Control" })),
+    );
     assert.equal(container.querySelector("kbd"), null);
     assert.ok(newSessionButton.querySelector("svg"));
 
-    await act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Meta", metaKey: true })));
+    await act(() =>
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Meta", metaKey: true }),
+      ),
+    );
     assert.equal(newSessionButton.querySelector("kbd").textContent, "⌘K");
     await act(() => window.dispatchEvent(new Event("blur")));
     assert.equal(container.querySelector("kbd"), null);
@@ -613,16 +723,23 @@ test("background inventory completion does not show manual Refresh success", asy
 test("sidebar Activate starts a saved session without a prompt, reports failure, and allows retry", async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];
-  let activationResponse = Promise.resolve(Response.json({ error: "Startup failed" }, { status: 500 }));
+  let activationResponse = Promise.resolve(
+    Response.json({ error: "Startup failed" }, { status: 500 }),
+  );
   globalThis.fetch = async (url, init) => {
     if (url === `/api/agent/${sidebarSession.id}`) {
       requests.push([url, init.method, JSON.parse(init.body)]);
       return activationResponse;
     }
     if (String(url).startsWith("/api/sessions")) {
-      return Response.json({ sessions: [sidebarSession], activeSessionIds: [], runningSessionIds: [] });
+      return Response.json({
+        sessions: [sidebarSession],
+        activeSessionIds: [],
+        runningSessionIds: [],
+      });
     }
-    if (url === "/api/agent/running") return Response.json({ activeSessionIds: [], runningSessionIds: [] });
+    if (url === "/api/agent/running")
+      return Response.json({ activeSessionIds: [], runningSessionIds: [] });
     return Response.json({});
   };
   const container = document.createElement("div");
@@ -632,23 +749,37 @@ test("sidebar Activate starts a saved session without a prompt, reports failure,
   let activeIds = new Set();
   try {
     await act(async () => {
-      root.render(React.createElement(SessionSidebar, {
-        selectedSessionId: sidebarSession.id,
-        onSelectSession: () => { selections += 1; },
-        onActiveSessionIdsChange: (ids) => { activeIds = ids; },
-        beginSessionInventoryAttempt: () => 1,
-        actionsAvailable: true,
-      }));
+      root.render(
+        React.createElement(SessionSidebar, {
+          selectedSessionId: sidebarSession.id,
+          onSelectSession: () => {
+            selections += 1;
+          },
+          onActiveSessionIdsChange: (ids) => {
+            activeIds = ids;
+          },
+          beginSessionInventoryAttempt: () => 1,
+          actionsAvailable: true,
+        }),
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     const initialSelections = selections;
-    const trigger = () => container.querySelector(".session-row button[aria-controls]");
+    const trigger = () =>
+      container.querySelector(".session-row button[aria-controls]");
     const activate = async () => {
       await click(trigger());
-      await click([...container.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Activate"));
+      await click(
+        [...container.querySelectorAll('[role="group"] button')].find(
+          (button) => button.textContent === "Activate",
+        ),
+      );
     };
     await activate();
-    assert.match(container.textContent, /Could not activate session: Startup failed/);
+    assert.match(
+      container.textContent,
+      /Could not activate session: Startup failed/,
+    );
     assert.equal(activeIds.has(sidebarSession.id), false);
     assert.ok(container.querySelector('[aria-label="Session stopped"]'));
     assert.equal(document.activeElement, trigger());
@@ -660,14 +791,28 @@ test("sidebar Activate starts a saved session without a prompt, reports failure,
     await click(trigger());
     assert.equal(container.querySelector('[role="group"]'), null);
     assert.equal(requests.length, 2);
-    await act(async () => pending.resolve(Response.json({ success: true, data: {} })));
+    await act(async () =>
+      pending.resolve(Response.json({ success: true, data: {} })),
+    );
     assert.equal(activeIds.has(sidebarSession.id), true);
     assert.ok(container.querySelector('[aria-label="Session active"]'));
     assert.doesNotMatch(container.textContent, /Could not activate session/);
     assert.equal(selections, initialSelections);
-    assert.deepEqual(requests, Array(2).fill([`/api/agent/${sidebarSession.id}`, "POST", { type: "get_state" }]));
+    assert.deepEqual(
+      requests,
+      Array(2).fill([
+        `/api/agent/${sidebarSession.id}`,
+        "POST",
+        { type: "get_state" },
+      ]),
+    );
     await click(trigger());
-    assert.deepEqual([...container.querySelectorAll('[role="group"] button')].map((button) => button.textContent), ["Stop", "Rename", "Delete"]);
+    assert.deepEqual(
+      [...container.querySelectorAll('[role="group"] button')].map(
+        (button) => button.textContent,
+      ),
+      ["Stop", "Rename", "Delete"],
+    );
   } finally {
     await act(() => root.unmount());
     container.remove();
@@ -677,19 +822,31 @@ test("sidebar Activate starts a saved session without a prompt, reports failure,
 
 test("sidebar puts running then active sessions first and shortcuts follow live ordering", async () => {
   const originalFetch = globalThis.fetch;
-  const sessions = ["stopped-new", "active-new", "running-new", "stopped-old", "active-old", "running-old"]
-    .map((id, index) => ({
-      ...sidebarSession,
-      id,
-      name: id,
-      modified: `2026-09-01T10:0${5 - index}:00.000Z`,
-    }));
+  const sessions = [
+    "stopped-new",
+    "active-new",
+    "running-new",
+    "stopped-old",
+    "active-old",
+    "running-old",
+  ].map((id, index) => ({
+    ...sidebarSession,
+    id,
+    name: id,
+    modified: `2026-09-01T10:0${5 - index}:00.000Z`,
+  }));
   let activity = {
-    activeSessionIds: ["active-new", "active-old", "running-new", "running-old"],
+    activeSessionIds: [
+      "active-new",
+      "active-old",
+      "running-new",
+      "running-old",
+    ],
     runningSessionIds: ["running-new", "running-old"],
   };
   globalThis.fetch = async (url) => {
-    if (String(url).startsWith("/api/sessions")) return Response.json({ sessions, ...activity });
+    if (String(url).startsWith("/api/sessions"))
+      return Response.json({ sessions, ...activity });
     if (url === "/api/agent/running") return Response.json(activity);
     return Response.json({});
   };
@@ -698,30 +855,67 @@ test("sidebar puts running then active sessions first and shortcuts follow live 
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  const rowIds = () => [...container.querySelectorAll(".session-row")].map((row) => row.dataset.sessionInventoryId);
+  const rowIds = () =>
+    [...container.querySelectorAll(".session-row")].map(
+      (row) => row.dataset.sessionInventoryId,
+    );
   try {
     await act(async () => {
-      root.render(React.createElement(SessionSidebar, {
-        selectedSessionId: "running-new",
-        onSelectSession: (session) => selected.push(session.id),
-        beginSessionInventoryAttempt: () => 1,
-        onSessionsChange: (items) => inventories.push(items.map((item) => item.id)),
-        actionsAvailable: true,
-      }));
+      root.render(
+        React.createElement(SessionSidebar, {
+          selectedSessionId: "running-new",
+          onSelectSession: (session) => selected.push(session.id),
+          beginSessionInventoryAttempt: () => 1,
+          onSessionsChange: (items) =>
+            inventories.push(items.map((item) => item.id)),
+          actionsAvailable: true,
+        }),
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    assert.deepEqual(rowIds(), ["running-new", "running-old", "active-new", "active-old", "stopped-new", "stopped-old"]);
-    assert.deepEqual(inventories.at(-1), sessions.map((session) => session.id));
+    assert.deepEqual(rowIds(), [
+      "running-new",
+      "running-old",
+      "active-new",
+      "active-old",
+      "stopped-new",
+      "stopped-old",
+    ]);
+    assert.deepEqual(
+      inventories.at(-1),
+      sessions.map((session) => session.id),
+    );
 
-    activity = { activeSessionIds: ["active-old", "running-old"], runningSessionIds: ["active-old"] };
+    activity = {
+      activeSessionIds: ["active-old", "running-old"],
+      runningSessionIds: ["active-old"],
+    };
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    assert.deepEqual(rowIds(), ["active-old", "running-old", "stopped-new", "active-new", "running-new", "stopped-old"]);
-    await act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "1", ctrlKey: true, cancelable: true })));
+    assert.deepEqual(rowIds(), [
+      "active-old",
+      "running-old",
+      "stopped-new",
+      "active-new",
+      "running-new",
+      "stopped-old",
+    ]);
+    await act(() =>
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "1",
+          ctrlKey: true,
+          cancelable: true,
+        }),
+      ),
+    );
     assert.equal(selected.at(-1), "active-old");
-    assert.equal(container.querySelector("[data-session-inventory-id] kbd").textContent, "Ctrl+1");
+    assert.equal(
+      container.querySelector("[data-session-inventory-id] kbd").textContent,
+      "Ctrl+1",
+    );
   } finally {
     await act(() => root.unmount());
     container.remove();
@@ -735,12 +929,16 @@ test("the header can refresh the current page on desktop and mobile", async () =
   const root = createRoot(container);
   const originalReload = window.location.reload;
   let reloads = 0;
-  window.location.reload = () => { reloads++; };
+  window.location.reload = () => {
+    reloads++;
+  };
   try {
     for (const width of [1064, 390]) {
       await act(() => window.happyDOM.setWindowSize({ width, height: 844 }));
       await act(() => root.render(appShell()));
-      const buttons = container.querySelectorAll('button[aria-label="Refresh page"]');
+      const buttons = container.querySelectorAll(
+        'button[aria-label="Refresh page"]',
+      );
       assert.equal(buttons.length, 1);
       assert.equal(buttons[0].title, "Refresh page and reconnect");
       await act(() => buttons[0].click());
@@ -758,40 +956,80 @@ test("context usage agrees between the top bar and statistics panel on desktop a
   const originalFetch = globalThis.fetch;
   const originalResizeObserver = globalThis.ResizeObserver;
   const originalIntersectionObserver = globalThis.IntersectionObserver;
-  globalThis.ResizeObserver = class { observe() {} disconnect() {} };
-  globalThis.IntersectionObserver = class { observe() {} disconnect() {} };
+  globalThis.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+  };
+  globalThis.IntersectionObserver = class {
+    observe() {}
+    disconnect() {}
+  };
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   globalThis.fetch = async (input) => {
     const path = new URL(String(input), "http://localhost").pathname;
     if (path === `/api/sessions/${sidebarSession.id}/state`) {
-      return Response.json({ active: false, running: false, state: {
-        contextUsage: { tokens: 48000, contextWindow: 200000, percent: 24 },
-      } });
-    }
-    if (path === `/api/sessions/${sidebarSession.id}`) {
-      return Response.json({ sessionId: sidebarSession.id, filePath: sidebarSession.path, info: sidebarSession,
-        totalActiveMs: 0, tree: [], leafId: null,
-        context: { messages: [], entryIds: [], hasMore: false },
-        stats: { userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0, totalMessages: 0,
-          tokens: { input: 12000, output: 4000, cacheRead: 32000, cacheWrite: 0, total: 48000 }, cost: 0 },
+      return Response.json({
+        active: false,
+        running: false,
+        state: {
+          contextUsage: { tokens: 48000, contextWindow: 200000, percent: 24 },
+        },
       });
     }
-    return Response.json({ sessions: [sidebarSession], activeSessionIds: [], runningSessionIds: [], projects: [], models: [] });
+    if (path === `/api/sessions/${sidebarSession.id}`) {
+      return Response.json({
+        sessionId: sidebarSession.id,
+        filePath: sidebarSession.path,
+        info: sidebarSession,
+        totalActiveMs: 0,
+        tree: [],
+        leafId: null,
+        context: { messages: [], entryIds: [], hasMore: false },
+        stats: {
+          userMessages: 0,
+          assistantMessages: 0,
+          toolCalls: 0,
+          toolResults: 0,
+          totalMessages: 0,
+          tokens: {
+            input: 12000,
+            output: 4000,
+            cacheRead: 32000,
+            cacheWrite: 0,
+            total: 48000,
+          },
+          cost: 0,
+        },
+      });
+    }
+    return Response.json({
+      sessions: [sidebarSession],
+      activeSessionIds: [],
+      runningSessionIds: [],
+      projects: [],
+      models: [],
+    });
   };
   try {
     for (const width of [1064, 390, 320]) {
       await act(() => window.happyDOM.setWindowSize({ width, height: 844 }));
       await act(() => root.render(appShell(`session=${sidebarSession.id}`)));
-      const button = container.querySelector('button[aria-label="Session info"]');
+      const button = container.querySelector(
+        'button[aria-label="Session info"]',
+      );
       assert.ok(button, "session statistics button exists");
       assert.match(button.textContent, /48k \/ 200k \(24%\)/);
       assert.match(button.title, /Context: 48,000 \/ 200,000 tokens \(24%\)/);
-      if (button.getAttribute("aria-pressed") !== "true") await act(() => button.click());
+      if (button.getAttribute("aria-pressed") !== "true")
+        await act(() => button.click());
       const panel = container.querySelector(".session-info-popover");
       assert.ok(panel, "statistics panel opens");
-      const valueFor = (label) => [...panel.querySelectorAll("div")].find((element) => element.textContent === label)?.nextElementSibling?.textContent;
+      const valueFor = (label) =>
+        [...panel.querySelectorAll("div")].find(
+          (element) => element.textContent === label,
+        )?.nextElementSibling?.textContent;
       assert.equal(valueFor("Context window"), "48,000 / 200,000 tokens");
       assert.equal(valueFor("Context usage"), "24%");
     }

@@ -18,7 +18,15 @@ export function encodeFilePathForApi(filePath: string): string {
 /** URL for the file API. The only place this shape is built. */
 export function getFileApiUrl(
   filePath: string,
-  type: "list" | "read" | "download" | "meta" | "preview" | "watch" | "upload" | "upload-check",
+  type:
+    | "list"
+    | "read"
+    | "download"
+    | "meta"
+    | "preview"
+    | "watch"
+    | "upload"
+    | "upload-check",
   sourceSessionId?: string | null,
   params: Record<string, string | number | undefined> = {},
 ): string {
@@ -42,7 +50,8 @@ export function getFileDirectory(filePath: string): string {
   const lastSlash = normalized.lastIndexOf("/");
   if (lastSlash < 0) return "";
   if (lastSlash === 0) return "/";
-  if (lastSlash === 2 && /^[a-zA-Z]:\//.test(normalized)) return normalized.slice(0, 3);
+  if (lastSlash === 2 && /^[a-zA-Z]:\//.test(normalized))
+    return normalized.slice(0, 3);
   return normalized.slice(0, lastSlash);
 }
 

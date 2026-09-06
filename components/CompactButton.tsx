@@ -9,10 +9,20 @@ export interface CompactionControl {
   onClick: () => void;
 }
 
-export function CompactButton({ control, warning = false, hidden = false }: { control: CompactionControl | null; warning?: boolean; hidden?: boolean }) {
+export function CompactButton({
+  control,
+  warning = false,
+  hidden = false,
+}: {
+  control: CompactionControl | null;
+  warning?: boolean;
+  hidden?: boolean;
+}) {
   const { t } = useI18n();
   if (!control || hidden) return null;
-  const label = t(control.compacting ? "chat.stopCompaction" : "chat.compactContext");
+  const label = t(
+    control.compacting ? "chat.stopCompaction" : "chat.compactContext",
+  );
   return (
     <button
       type="button"
@@ -25,10 +35,22 @@ export function CompactButton({ control, warning = false, hidden = false }: { co
       title={label}
     >
       {control.compacting ? (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
           <rect x="7" y="7" width="10" height="10" rx="1" fill="currentColor" />
         </svg>
-      ) : <CompactIcon />}
+      ) : (
+        <CompactIcon />
+      )}
     </button>
   );
 }

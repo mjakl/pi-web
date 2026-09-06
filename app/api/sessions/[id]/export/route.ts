@@ -10,8 +10,11 @@ import { resolveSessionPath } from "@/lib/session-reader";
 const execFileAsync = promisify(execFile);
 
 function getPiCliPath(): string {
-  const { cli } = JSON.parse(process.env.PI_WEB_HOST_PI ?? "{}") as { cli?: unknown };
-  if (typeof cli !== "string") throw new Error("Validated host Pi runtime is missing");
+  const { cli } = JSON.parse(process.env.PI_WEB_HOST_PI ?? "{}") as {
+    cli?: unknown;
+  };
+  if (typeof cli !== "string")
+    throw new Error("Validated host Pi runtime is missing");
   return cli;
 }
 
@@ -60,12 +63,19 @@ function patchExportHtml(html: string): string {
   const n = (s: string) => s.replace(/\r\n/g, "\n");
   html = n(html);
 
-  const replaceRequired = (source: string, name: string, search: string, replacement: string) => {
+  const replaceRequired = (
+    source: string,
+    name: string,
+    search: string,
+    replacement: string,
+  ) => {
     const normalizedSearch = n(search);
     const normalizedReplacement = n(replacement);
     const matches = source.split(normalizedSearch).length - 1;
     if (matches !== 1) {
-      throw new Error(`Failed to patch exported HTML: ${name} expected 1 match, found ${matches}`);
+      throw new Error(
+        `Failed to patch exported HTML: ${name} expected 1 match, found ${matches}`,
+      );
     }
     return source.replace(normalizedSearch, normalizedReplacement);
   };
@@ -90,7 +100,7 @@ function patchExportHtml(html: string): string {
               stack.push(node.children[i]);
             }
           }
-        }`
+        }`,
   );
 
   html = replaceRequired(
@@ -108,7 +118,7 @@ function patchExportHtml(html: string): string {
             for (let i = node.children.length - 1; i >= 0; i--) {
               stack.push(node.children[i]);
             }
-          }`
+          }`,
   );
 
   html = replaceRequired(
@@ -141,28 +151,35 @@ function patchExportHtml(html: string): string {
             }
             containsActive.set(node, has);
           }
-        }`
+        }`,
   );
 
   return html;
 }
 
-async function exportSession(filePath: string, outputPath: string): Promise<void> {
-  await execFileAsync(process.execPath, [getPiCliPath(), "--export", filePath, outputPath], {
-    cwd: process.cwd(),
-    timeout: 30_000,
-    env: {
-      ...process.env,
-      PI_OFFLINE: "1",
-      PI_SKIP_VERSION_CHECK: "1",
+async function exportSession(
+  filePath: string,
+  outputPath: string,
+): Promise<void> {
+  await execFileAsync(
+    process.execPath,
+    [getPiCliPath(), "--export", filePath, outputPath],
+    {
+      cwd: process.cwd(),
+      timeout: 30_000,
+      env: {
+        ...process.env,
+        PI_OFFLINE: "1",
+        PI_SKIP_VERSION_CHECK: "1",
+      },
+      maxBuffer: 1024 * 1024,
     },
-    maxBuffer: 1024 * 1024,
-  });
+  );
 }
 
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const inline = new URL(req.url).searchParams.get("inline") === "1";
@@ -188,7 +205,11 @@ export async function GET(
       return new Response(patchedHtml, {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
-          "Content-Disposition": contentDisposition(inline ? "inline" : "attachment", fileName, "session.html"),
+          "Content-Disposition": contentDisposition(
+            inline ? "inline" : "attachment",
+            fileName,
+            "session.html",
+          ),
           "Cache-Control": "no-cache",
           "Content-Security-Policy": "frame-ancestors 'none'",
           "X-Content-Type-Options": "nosniff",

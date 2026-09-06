@@ -1,5 +1,9 @@
 import type { SessionEntry } from "./types";
-import { getSessionEntries, isValidSessionId, resolveSessionPath } from "./session-reader";
+import {
+  getSessionEntries,
+  isValidSessionId,
+  resolveSessionPath,
+} from "./session-reader";
 
 /** Whether `sessionId` is a readable session whose persisted entries satisfy `isReferencedByEntries` for `filePath`. */
 export async function isReferencedBySession(

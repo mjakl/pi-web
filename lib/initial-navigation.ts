@@ -3,7 +3,9 @@ export interface InitialNavigation {
   sessionId: string | null;
 }
 
-export function getInitialNavigation(searchParams: Pick<URLSearchParams, "get">): InitialNavigation {
+export function getInitialNavigation(
+  searchParams: Pick<URLSearchParams, "get">,
+): InitialNavigation {
   const requestedCwd = searchParams.get("cwd")?.trim() || null;
 
   return {

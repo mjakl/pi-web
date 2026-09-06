@@ -1,10 +1,6 @@
 import { getBrowserStorage, type StorageLike } from "./browser-storage";
 
-const SETTINGS_SECTION_VALUES = [
-  "general",
-  "skills",
-  "plugins",
-] as const;
+const SETTINGS_SECTION_VALUES = ["general", "skills", "plugins"] as const;
 
 export type SettingsSection = (typeof SETTINGS_SECTION_VALUES)[number];
 export type SettingsDetailSection = Exclude<SettingsSection, "general">;
@@ -18,8 +14,10 @@ interface SettingsNavigationState {
 }
 
 function isSettingsSection(value: unknown): value is SettingsSection {
-  return typeof value === "string"
-    && SETTINGS_SECTION_VALUES.includes(value as SettingsSection);
+  return (
+    typeof value === "string" &&
+    SETTINGS_SECTION_VALUES.includes(value as SettingsSection)
+  );
 }
 
 function readState(storage: StorageLike): SettingsNavigationState {
@@ -27,22 +25,27 @@ function readState(storage: StorageLike): SettingsNavigationState {
   if (!raw) return {};
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+      return {};
     const state = parsed as SettingsNavigationState;
     return {
       section: typeof state.section === "string" ? state.section : undefined,
-      selections: state.selections !== null
-        && typeof state.selections === "object"
-        && !Array.isArray(state.selections)
-        ? state.selections
-        : undefined,
+      selections:
+        state.selections !== null &&
+        typeof state.selections === "object" &&
+        !Array.isArray(state.selections)
+          ? state.selections
+          : undefined,
     };
   } catch {
     return {};
   }
 }
 
-function selectionKey(section: SettingsDetailSection, cwd?: string | null): string | null {
+function selectionKey(
+  section: SettingsDetailSection,
+  cwd?: string | null,
+): string | null {
   return cwd ? JSON.stringify([section, cwd]) : null;
 }
 

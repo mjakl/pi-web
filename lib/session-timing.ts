@@ -12,7 +12,9 @@ interface TimingEntry {
  * bash entries are also boundaries because the log records only their finish
  * time, so counting the incoming gap could include arbitrary human idle.
  */
-export function computeSessionTotalActiveMs(entries: readonly TimingEntry[]): number {
+export function computeSessionTotalActiveMs(
+  entries: readonly TimingEntry[],
+): number {
   let totalActiveMs = 0;
   let previousTimestamp: number | undefined;
 
@@ -38,8 +40,10 @@ export function computeSessionTotalActiveMs(entries: readonly TimingEntry[]): nu
 }
 
 function isTimingEntry(type: string): boolean {
-  return type === "message"
-    || type === "compaction"
-    || type === "branch_summary"
-    || type === "custom_message";
+  return (
+    type === "message" ||
+    type === "compaction" ||
+    type === "branch_summary" ||
+    type === "custom_message"
+  );
 }

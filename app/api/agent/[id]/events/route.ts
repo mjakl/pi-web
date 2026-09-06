@@ -10,7 +10,7 @@ import {
 // GET /api/agent/[id]/events - SSE stream of agent events
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const operation = beginRpcSessionOperation(id);
@@ -22,9 +22,11 @@ export async function GET(
     sessionPromise = Promise.resolve(activeSession);
   } else {
     const filePath = await resolveSessionPath(id);
-    if (!filePath) return Response.json({ error: "Session not found" }, { status: 404 });
+    if (!filePath)
+      return Response.json({ error: "Session not found" }, { status: 404 });
     const activate = new URL(req.url).searchParams.has("activate");
-    if (!activate) return Response.json({ error: "Session is stopped" }, { status: 409 });
+    if (!activate)
+      return Response.json({ error: "Session is stopped" }, { status: 409 });
     if (req.signal.aborted) return new Response(null, { status: 204 });
     sessionPromise = activateRpcSession(operation, filePath);
   }

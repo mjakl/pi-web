@@ -1,4 +1,7 @@
-import type { FileViewerDisplayMode, FileViewerState } from "./file-viewer-state";
+import type {
+  FileViewerDisplayMode,
+  FileViewerState,
+} from "./file-viewer-state";
 
 export interface Tab {
   id: string;
@@ -21,20 +24,25 @@ interface OpenFileTabInput {
 export function openFileTab(tabs: Tab[], input: OpenFileTabInput): Tab[] {
   const existing = tabs.find((tab) => tab.id === input.tabId);
   if (!existing) {
-    return [...tabs, {
-      id: input.tabId,
-      label: input.fileName,
-      filePath: input.filePath,
-      sourceSessionId: input.sourceSessionId,
-      initialDisplayMode: input.modeHint,
-      viewerState: input.modeHint ? {
-        displayMode: input.modeHint,
-        wrapLines: false,
-        scrollTop: 0,
-        scrollLeft: 0,
-      } : undefined,
-      viewerRevision: 0,
-    }];
+    return [
+      ...tabs,
+      {
+        id: input.tabId,
+        label: input.fileName,
+        filePath: input.filePath,
+        sourceSessionId: input.sourceSessionId,
+        initialDisplayMode: input.modeHint,
+        viewerState: input.modeHint
+          ? {
+              displayMode: input.modeHint,
+              wrapLines: false,
+              scrollTop: 0,
+              scrollLeft: 0,
+            }
+          : undefined,
+        viewerRevision: 0,
+      },
+    ];
   }
 
   const sourceChanged = Boolean(
@@ -70,7 +78,8 @@ export function saveFileViewerState(
   viewerState: FileViewerState,
 ): Tab[] {
   const index = tabs.findIndex((tab) => tab.id === tabId);
-  if (index === -1 || (tabs[index].viewerRevision ?? 0) !== viewerRevision) return tabs;
+  if (index === -1 || (tabs[index].viewerRevision ?? 0) !== viewerRevision)
+    return tabs;
 
   const next = [...tabs];
   next[index] = { ...next[index], viewerState };

@@ -28,20 +28,32 @@ function parseHttpIdleTimeoutMs(value: unknown): number | undefined {
 // Undici can emit an internal Client error while terminating a response body.
 // The body stream still rejects; this prevents the EventEmitter error from
 // terminating the Next.js process first.
-function withUndiciErrorListener<T extends undici.Dispatcher>(dispatcher: T): T {
+function withUndiciErrorListener<T extends undici.Dispatcher>(
+  dispatcher: T,
+): T {
   if (dispatcher instanceof EventEmitter) {
-    EventEmitter.prototype.on.call(dispatcher, "error", ignoreUndiciDispatcherError);
+    EventEmitter.prototype.on.call(
+      dispatcher,
+      "error",
+      ignoreUndiciDispatcherError,
+    );
   }
   return dispatcher;
 }
 
-function createUndiciClient(origin: string | URL, options: object): undici.Dispatcher {
+function createUndiciClient(
+  origin: string | URL,
+  options: object,
+): undici.Dispatcher {
   return withUndiciErrorListener(
     new undici.Client(origin, options as undici.Client.Options),
   );
 }
 
-function createUndiciOriginDispatcher(origin: string | URL, options: object): undici.Dispatcher {
+function createUndiciOriginDispatcher(
+  origin: string | URL,
+  options: object,
+): undici.Dispatcher {
   const dispatcherOptions = options as undici.Pool.Options;
   if (dispatcherOptions.connections === 1) {
     return createUndiciClient(origin, dispatcherOptions);

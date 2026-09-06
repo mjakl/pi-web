@@ -10,13 +10,24 @@ export interface AgentEventSourceLike {
   close(): void;
 }
 
-export type AgentEventConnectionStatus = "ready_timeout" | "startup_error" | "closed";
+export type AgentEventConnectionStatus =
+  | "ready_timeout"
+  | "startup_error"
+  | "closed";
 
 class AgentEventConnectionError extends Error {
-  constructor(public readonly status: AgentEventConnectionStatus, message?: string) {
-    super(message ?? translateMessage(
-      status === "ready_timeout" ? "chat.agentStartTimedOut" : "chat.agentStreamConnectFailed",
-    ));
+  constructor(
+    public readonly status: AgentEventConnectionStatus,
+    message?: string,
+  ) {
+    super(
+      message ??
+        translateMessage(
+          status === "ready_timeout"
+            ? "chat.agentStartTimedOut"
+            : "chat.agentStreamConnectFailed",
+        ),
+    );
     this.name = "AgentEventConnectionError";
   }
 }
@@ -48,14 +59,18 @@ const EVENT_SOURCE_OPEN = 1;
 /** Owns the EventSource, agent-readiness handshake, and passive reconnect. */
 export class AgentEventConnection {
   private current: Connection | null = null;
-  private retry: { sessionId: string; timer: ReturnType<typeof setTimeout> } | null = null;
+  private retry: {
+    sessionId: string;
+    timer: ReturnType<typeof setTimeout>;
+  } | null = null;
   private retryGeneration = 0;
 
   constructor(private readonly options: AgentEventConnectionOptions) {}
 
   close(): void {
     this.stopRetrying();
-    if (this.current) this.discard(this.current, new AgentEventConnectionError("closed"));
+    if (this.current)
+      this.discard(this.current, new AgentEventConnectionError("closed"));
   }
 
   maintain(sessionId: string): void {
@@ -78,8 +93,8 @@ export class AgentEventConnection {
       if (!connection || connection.sessionId !== sessionId) {
         connection = this.open(sessionId, activate);
       } else if (
-        connection.attempt.ready
-        && connection.source.readyState === EVENT_SOURCE_OPEN
+        connection.attempt.ready &&
+        connection.source.readyState === EVENT_SOURCE_OPEN
       ) {
         return;
       }
@@ -97,16 +112,14 @@ export class AgentEventConnection {
   }
 
   private open(sessionId: string, activate: boolean): Connection {
-    if (this.current) this.discard(this.current, new AgentEventConnectionError("closed"));
+    if (this.current)
+      this.discard(this.current, new AgentEventConnectionError("closed"));
 
     let source: AgentEventSourceLike;
     try {
       source = this.options.createSource(sessionId, activate);
     } catch (error) {
-      throw new AgentEventConnectionError(
-        "closed",
-        errorMessage(error),
-      );
+      throw new AgentEventConnectionError("closed", errorMessage(error));
     }
 
     let settled = false;
@@ -147,8 +160,14 @@ export class AgentEventConnection {
         attempt.succeed();
         this.stopRetrying();
       } else if (event.type === "startup_error") {
-        const message = typeof event.errorMessage === "string" ? event.errorMessage : undefined;
-        this.fail(connection, new AgentEventConnectionError("startup_error", message));
+        const message =
+          typeof event.errorMessage === "string"
+            ? event.errorMessage
+            : undefined;
+        this.fail(
+          connection,
+          new AgentEventConnectionError("startup_error", message),
+        );
         return;
       }
       this.options.onEvent(event);
@@ -171,7 +190,10 @@ export class AgentEventConnection {
     else this.scheduleRetry(connection.sessionId);
   }
 
-  private discard(connection: Connection, error: AgentEventConnectionError): void {
+  private discard(
+    connection: Connection,
+    error: AgentEventConnectionError,
+  ): void {
     connection.attempt.fail(error);
     connection.source.close();
     if (this.current === connection) this.current = null;

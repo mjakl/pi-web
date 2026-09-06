@@ -1,11 +1,24 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useState, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { errorMessage } from "@/lib/error-message";
 import { createClientId } from "@/lib/client-id";
 import { SettingsSectionIcon } from "./SettingsPanel";
 import type { SessionInfo } from "@/lib/types";
-import { SESSION_METADATA_BATCH_SIZE, type SessionRowMetadata } from "@/lib/session-metadata-types";
+import {
+  SESSION_METADATA_BATCH_SIZE,
+  type SessionRowMetadata,
+} from "@/lib/session-metadata-types";
 import {
   canAcceptInventoryResult,
   hasSessionRowMetadata,
@@ -13,7 +26,11 @@ import {
 } from "@/lib/transcript-refresh";
 import { loadExplorerOpen, saveExplorerOpen } from "@/lib/file-explorer-state";
 import { getBrowserStorage } from "@/lib/browser-storage";
-import { getProjectActivity, getRecentProjects, sessionsForProject } from "@/lib/project-groups";
+import {
+  getProjectActivity,
+  getRecentProjects,
+  sessionsForProject,
+} from "@/lib/project-groups";
 import { workspaceKeyOf } from "@/lib/workspace-memory";
 import { useI18n } from "@/hooks/useI18n";
 import { DirectoryPicker } from "./DirectoryPicker";
@@ -59,11 +76,13 @@ function ToolbarIconButton({
       aria-label={title}
       aria-pressed={ariaPressed}
       className={`sidebar-toolbar-button${skipHover ? " is-hover-locked" : ""}`}
-      style={{
-        marginRight,
-        "--toolbar-button-color": color,
-        "--toolbar-button-background": background,
-      } as CSSProperties}
+      style={
+        {
+          marginRight,
+          "--toolbar-button-color": color,
+          "--toolbar-button-background": background,
+        } as CSSProperties
+      }
     >
       {children}
     </button>
@@ -87,7 +106,11 @@ interface Props {
     projectRoot?: string | null,
     projectKey?: string | null,
   ) => void;
-  onOpenFile?: (filePath: string, fileName: string, options?: { sourceSessionId?: string | null; modeHint?: "diff" }) => void;
+  onOpenFile?: (
+    filePath: string,
+    fileName: string,
+    options?: { sourceSessionId?: string | null; modeHint?: "diff" },
+  ) => void;
   explorerRefreshKey?: number;
   onExplorerRefresh?: () => void;
   onAtMention?: (relativePath: string, isDir: boolean) => void;
@@ -98,7 +121,10 @@ interface Props {
   onActiveSessionIdsChange?: (ids: Set<string>) => void;
   onRunningSessionIdsChange?: (ids: Set<string>) => void;
   beginSessionInventoryAttempt: () => number;
-  onSessionsChange?: (sessions: SessionInfo[], inventoryAttempt: number) => void;
+  onSessionsChange?: (
+    sessions: SessionInfo[],
+    inventoryAttempt: number,
+  ) => void;
   onRefreshSelectedSession?: () => Promise<boolean>;
   actionsAvailable: boolean;
   /** Opens the settings dialog at the last used section. */
@@ -169,7 +195,10 @@ function loadUnreadSessionIds(): Set<string> {
     const raw = getBrowserStorage()?.getItem(UNREAD_SESSIONS_STORAGE_KEY);
     if (!raw) return new Set();
     const parsed = JSON.parse(raw) as unknown;
-    if (Array.isArray(parsed)) return new Set(parsed.filter((id): id is string => typeof id === "string"));
+    if (Array.isArray(parsed))
+      return new Set(
+        parsed.filter((id): id is string => typeof id === "string"),
+      );
     return new Set();
   } catch {
     return new Set();
@@ -180,7 +209,8 @@ function saveUnreadSessionIds(ids: Set<string>): void {
   try {
     const storage = getBrowserStorage();
     if (ids.size === 0) storage?.removeItem(UNREAD_SESSIONS_STORAGE_KEY);
-    else storage?.setItem(UNREAD_SESSIONS_STORAGE_KEY, JSON.stringify([...ids]));
+    else
+      storage?.setItem(UNREAD_SESSIONS_STORAGE_KEY, JSON.stringify([...ids]));
   } catch {
     // ignore storage quota / privacy-mode errors
   }
@@ -188,7 +218,9 @@ function saveUnreadSessionIds(ids: Set<string>): void {
 
 /** Substitute the home dir prefix with ~ (no path truncation — see PathLabel) */
 function displayCwd(cwd: string, homeDir?: string): string {
-  return (homeDir && cwd.startsWith(homeDir)) ? "~" + cwd.slice(homeDir.length) : cwd;
+  return homeDir && cwd.startsWith(homeDir)
+    ? "~" + cwd.slice(homeDir.length)
+    : cwd;
 }
 
 /**
@@ -220,7 +252,12 @@ function PathLabel({ text, style }: { text: string; style?: CSSProperties }) {
 
 /** A dropdown panel shown as a native popover, anchored by CSS to its trigger. */
 function AnchoredMenu({
-  id, open, onOpenChange, anchorClass, children, style,
+  id,
+  open,
+  onOpenChange,
+  anchorClass,
+  children,
+  style,
 }: {
   id: string;
   open: boolean;
@@ -234,8 +271,9 @@ function AnchoredMenu({
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof el.showPopover !== "function") return;
-    if (open) { if (!el.matches(":popover-open")) el.showPopover(); }
-    else if (el.matches(":popover-open")) el.hidePopover();
+    if (open) {
+      if (!el.matches(":popover-open")) el.showPopover();
+    } else if (el.matches(":popover-open")) el.hidePopover();
   }, [open]);
 
   return (
@@ -248,7 +286,11 @@ function AnchoredMenu({
       // it and state follows. Tracking both directions matters: a UA-driven
       // open that React never learned about would be closed again by the
       // effect above on the next render.
-      onToggle={(e) => onOpenChange((e as unknown as { newState?: string }).newState === "open")}
+      onToggle={(e) =>
+        onOpenChange(
+          (e as unknown as { newState?: string }).newState === "open",
+        )
+      }
       style={style}
     >
       {children}
@@ -256,7 +298,32 @@ function AnchoredMenu({
   );
 }
 
-export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onActiveSessionIdsChange, onRunningSessionIdsChange, beginSessionInventoryAttempt, onSessionsChange, onRefreshSelectedSession, actionsAvailable, onOpenSettings }: Props) {
+export function SessionSidebar({
+  homeDir,
+  selectedSessionId,
+  onSelectSession,
+  onNewSession,
+  initialSessionId,
+  skipInitialProjectSelection,
+  onInitialRestoreDone,
+  refreshKey,
+  onSessionDeleted,
+  selectedCwd: selectedCwdProp,
+  onCwdChange,
+  onOpenFile,
+  explorerRefreshKey,
+  onExplorerRefresh,
+  onAtMention,
+  onAtMentions,
+  onBackgroundTaskDone,
+  onActiveSessionIdsChange,
+  onRunningSessionIdsChange,
+  beginSessionInventoryAttempt,
+  onSessionsChange,
+  onRefreshSelectedSession,
+  actionsAvailable,
+  onOpenSettings,
+}: Props) {
   const { t } = useI18n();
   const projectMenuId = useId();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
@@ -270,9 +337,12 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
   const [customPathValue, setCustomPathValue] = useState(loadLastCustomCwd);
   const [customPathError, setCustomPathError] = useState<string | null>(null);
   const [customPathValidating, setCustomPathValidating] = useState(false);
-  const [validatedProject, setValidatedProject] = useState<ValidatedProject | null>(null);
+  const [validatedProject, setValidatedProject] =
+    useState<ValidatedProject | null>(null);
   // Worktree switcher state
-  const [worktreeState, setWorktreeState] = useState<WorktreeState | null>(null);
+  const [worktreeState, setWorktreeState] = useState<WorktreeState | null>(
+    null,
+  );
   const [explorerOpen, setExplorerOpen] = useState(true);
   const [explorerKey, setExplorerKey] = useState(0);
   const [explorerUploadBusy, setExplorerUploadBusy] = useState(false);
@@ -281,17 +351,29 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
   const [changesCollapsed, setChangesCollapsed] = useState(true);
   const [sessionRefreshDone, setSessionRefreshDone] = useState(false);
   const [explorerRefreshDone, setExplorerRefreshDone] = useState(false);
-  const [activeSessionIds, setActiveSessionIds] = useState<Set<string>>(() => new Set());
-  const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
-  const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(() => loadUnreadSessionIds());
-  const [shortcutModifier, setShortcutModifier] = useState<"ctrl" | "meta" | null>(null);
+  const [activeSessionIds, setActiveSessionIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(() =>
+    loadUnreadSessionIds(),
+  );
+  const [shortcutModifier, setShortcutModifier] = useState<
+    "ctrl" | "meta" | null
+  >(null);
   const previousRunningSessionIdsRef = useRef<Set<string>>(new Set());
   // Once polling has delivered a snapshot it is the source of truth for
   // running state; late /api/sessions responses must not overwrite it.
   const runningPollAuthoritativeRef = useRef(false);
-  const sessionRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const sessionRefreshRequestIdRef = useRef(0);
-  const explorerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const explorerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const fileExplorerRef = useRef<FileExplorerHandle>(null);
   const sessionListRef = useRef<HTMLDivElement>(null);
   const metadataQueueRef = useRef<Map<string, SessionInfo>>(new Map());
@@ -302,7 +384,9 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
   const metadataAbortRef = useRef<AbortController | null>(null);
   const metadataStaleRefreshRef = useRef<Set<string>>(new Set());
   const metadataRetriedFingerprintRef = useRef<Map<string, string>>(new Map());
-  const metadataRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const metadataRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const drainMetadataQueueRef = useRef<() => void>(() => {});
   const refreshSessionInventoryRef = useRef<() => void>(() => {});
   const allSessionsRef = useRef(allSessions);
@@ -312,7 +396,11 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
     let needsRetry = false;
     for (const session of sessions) {
       const fingerprint = sessionFingerprint(session);
-      if (!fingerprint || metadataRetriedFingerprintRef.current.get(session.id) === fingerprint) continue;
+      if (
+        !fingerprint ||
+        metadataRetriedFingerprintRef.current.get(session.id) === fingerprint
+      )
+        continue;
       metadataRetriedFingerprintRef.current.set(session.id, fingerprint);
       needsRetry = true;
     }
@@ -328,24 +416,37 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
     metadataRequestRunningRef.current = true;
     try {
       while (metadataQueueRef.current.size > 0) {
-        const batch = [...metadataQueueRef.current.values()].slice(0, SESSION_METADATA_BATCH_SIZE);
-        for (const session of batch) metadataQueueRef.current.delete(session.id);
-        const requestSessions = batch.flatMap((session) => (
+        const batch = [...metadataQueueRef.current.values()].slice(
+          0,
+          SESSION_METADATA_BATCH_SIZE,
+        );
+        for (const session of batch)
+          metadataQueueRef.current.delete(session.id);
+        const requestSessions = batch.flatMap((session) =>
           session.fileSize === undefined
             ? []
-            : [{ id: session.id, fileSize: session.fileSize, modified: session.modified }]
-        ));
+            : [
+                {
+                  id: session.id,
+                  fileSize: session.fileSize,
+                  modified: session.modified,
+                },
+              ],
+        );
         if (requestSessions.length === 0) continue;
 
         const requeueCurrentBatch = (ids?: ReadonlySet<string>) => {
           for (const requested of batch) {
             if (ids && !ids.has(requested.id)) continue;
-            const current = allSessionsRef.current.find((session) => session.id === requested.id);
+            const current = allSessionsRef.current.find(
+              (session) => session.id === requested.id,
+            );
             if (
-              current
-              && !hasSessionRowMetadata(current)
-              && sessionFingerprint(current) === sessionFingerprint(requested)
-            ) metadataQueueRef.current.set(current.id, current);
+              current &&
+              !hasSessionRowMetadata(current) &&
+              sessionFingerprint(current) === sessionFingerprint(requested)
+            )
+              metadataQueueRef.current.set(current.id, current);
           }
         };
 
@@ -364,31 +465,37 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
             scheduleMetadataRetry(batch);
             return;
           }
-          const body = await response.json() as {
+          const body = (await response.json()) as {
             metadata?: SessionRowMetadata[];
             staleSessionIds?: string[];
           };
-          const metadataById = new Map((body.metadata ?? []).map((item) => [item.id, item]));
+          const metadataById = new Map(
+            (body.metadata ?? []).map((item) => [item.id, item]),
+          );
           const staleSessionIds = new Set(body.staleSessionIds ?? []);
-          setAllSessions((current) => current.map((session) => {
-            const metadata = metadataById.get(session.id);
-            if (
-              !metadata
-              || metadata.fileSize !== session.fileSize
-              || metadata.modified !== session.modified
-            ) return session;
-            const hydrated = {
-              ...session,
-              name: metadata.name,
-              messageCount: metadata.messageCount,
-              firstMessage: metadata.firstMessage,
-            };
-            const fingerprint = sessionFingerprint(hydrated);
-            if (fingerprint) metadataLoadedRef.current.set(session.id, fingerprint);
-            metadataRetriedFingerprintRef.current.delete(session.id);
-            metadataStaleRefreshRef.current.delete(session.id);
-            return hydrated;
-          }));
+          setAllSessions((current) =>
+            current.map((session) => {
+              const metadata = metadataById.get(session.id);
+              if (
+                !metadata ||
+                metadata.fileSize !== session.fileSize ||
+                metadata.modified !== session.modified
+              )
+                return session;
+              const hydrated = {
+                ...session,
+                name: metadata.name,
+                messageCount: metadata.messageCount,
+                firstMessage: metadata.firstMessage,
+              };
+              const fingerprint = sessionFingerprint(hydrated);
+              if (fingerprint)
+                metadataLoadedRef.current.set(session.id, fingerprint);
+              metadataRetriedFingerprintRef.current.delete(session.id);
+              metadataStaleRefreshRef.current.delete(session.id);
+              return hydrated;
+            }),
+          );
           if (staleSessionIds.size > 0) {
             requeueCurrentBatch(staleSessionIds);
             const needsRefresh = [...staleSessionIds].some((id) => {
@@ -400,7 +507,8 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
             return;
           }
         } catch (error) {
-          if (error instanceof DOMException && error.name === "AbortError") return;
+          if (error instanceof DOMException && error.name === "AbortError")
+            return;
           requeueCurrentBatch();
           scheduleMetadataRetry(batch);
           return;
@@ -411,115 +519,150 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
     }
   }, [scheduleMetadataRetry]);
 
-  const queueSessionMetadata = useCallback((sessions: SessionInfo[]) => {
-    for (const session of sessions) {
-      const fingerprint = sessionFingerprint(session);
-      if (!fingerprint || hasSessionRowMetadata(session)) continue;
-      if (metadataLoadedRef.current.get(session.id) === fingerprint) continue;
-      metadataQueueRef.current.set(session.id, session);
-    }
-    void drainMetadataQueue();
-  }, [drainMetadataQueue]);
+  const queueSessionMetadata = useCallback(
+    (sessions: SessionInfo[]) => {
+      for (const session of sessions) {
+        const fingerprint = sessionFingerprint(session);
+        if (!fingerprint || hasSessionRowMetadata(session)) continue;
+        if (metadataLoadedRef.current.get(session.id) === fingerprint) continue;
+        metadataQueueRef.current.set(session.id, session);
+      }
+      void drainMetadataQueue();
+    },
+    [drainMetadataQueue],
+  );
 
   useEffect(() => {
     metadataAbortRef.current = new AbortController();
     return () => {
       metadataAbortRef.current?.abort();
       metadataAbortRef.current = null;
-      if (metadataRetryTimerRef.current) clearTimeout(metadataRetryTimerRef.current);
+      if (metadataRetryTimerRef.current)
+        clearTimeout(metadataRetryTimerRef.current);
       metadataRetryTimerRef.current = null;
     };
   }, []);
 
   useEffect(() => {
     drainMetadataQueueRef.current = () => void drainMetadataQueue();
-    return () => { drainMetadataQueueRef.current = () => {}; };
+    return () => {
+      drainMetadataQueueRef.current = () => {};
+    };
   }, [drainMetadataQueue]);
 
   const showSessionRefreshSuccess = useCallback(() => {
     setSessionRefreshDone(true);
-    if (sessionRefreshTimerRef.current) clearTimeout(sessionRefreshTimerRef.current);
-    sessionRefreshTimerRef.current = setTimeout(() => setSessionRefreshDone(false), 2000);
+    if (sessionRefreshTimerRef.current)
+      clearTimeout(sessionRefreshTimerRef.current);
+    sessionRefreshTimerRef.current = setTimeout(
+      () => setSessionRefreshDone(false),
+      2000,
+    );
   }, []);
 
-  const loadSessions = useCallback(async (
-    showLoading = false,
-    force = false,
-  ): Promise<boolean> => {
-    const inventoryAttempt = beginSessionInventoryAttempt();
-    latestInventoryAttemptRef.current = inventoryAttempt;
-    try {
-      if (showLoading) setLoading(true);
-      const res = await fetch(force ? "/api/sessions?force=1" : "/api/sessions", {
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as {
-        sessions: SessionInfo[];
-        activeSessionIds?: string[];
-        runningSessionIds?: string[];
-      };
-      if (!canAcceptInventoryResult(inventoryAttempt, acceptedInventoryAttemptRef.current)) return false;
-      acceptedInventoryAttemptRef.current = inventoryAttempt;
-      setAllSessions((current) => {
-        const previousById = new Map(current.map((session) => [session.id, session]));
-        const nextById = new Map(data.sessions.map((session) => [session.id, session]));
-        const nextIds = new Set(nextById.keys());
-        for (const [id, fingerprint] of metadataLoadedRef.current) {
-          const next = nextById.get(id);
-          if (!next || sessionFingerprint(next) !== fingerprint) metadataLoadedRef.current.delete(id);
-        }
-        for (const id of metadataQueueRef.current.keys()) {
-          if (!nextIds.has(id)) metadataQueueRef.current.delete(id);
-        }
-        for (const id of metadataStaleRefreshRef.current) {
-          if (!nextIds.has(id)) metadataStaleRefreshRef.current.delete(id);
-        }
-        for (const id of metadataRetriedFingerprintRef.current.keys()) {
-          if (!nextIds.has(id)) metadataRetriedFingerprintRef.current.delete(id);
-        }
-        return data.sessions.map((session) => {
-          const previous = previousById.get(session.id);
-          const fingerprint = sessionFingerprint(session);
-          const preserveHydrated = previous
-            && fingerprint
-            && fingerprint === sessionFingerprint(previous)
-            && metadataLoadedRef.current.get(session.id) === fingerprint
-            && hasSessionRowMetadata(previous);
-          const preserveTransient = previous?.transient && session.transient && hasSessionRowMetadata(previous);
-          if (!preserveHydrated && !preserveTransient) return session;
-          return {
-            ...session,
-            name: previous.name,
-            messageCount: previous.messageCount,
-            firstMessage: previous.firstMessage,
-          };
+  const loadSessions = useCallback(
+    async (showLoading = false, force = false): Promise<boolean> => {
+      const inventoryAttempt = beginSessionInventoryAttempt();
+      latestInventoryAttemptRef.current = inventoryAttempt;
+      try {
+        if (showLoading) setLoading(true);
+        const res = await fetch(
+          force ? "/api/sessions?force=1" : "/api/sessions",
+          {
+            cache: "no-store",
+          },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as {
+          sessions: SessionInfo[];
+          activeSessionIds?: string[];
+          runningSessionIds?: string[];
+        };
+        if (
+          !canAcceptInventoryResult(
+            inventoryAttempt,
+            acceptedInventoryAttemptRef.current,
+          )
+        )
+          return false;
+        acceptedInventoryAttemptRef.current = inventoryAttempt;
+        setAllSessions((current) => {
+          const previousById = new Map(
+            current.map((session) => [session.id, session]),
+          );
+          const nextById = new Map(
+            data.sessions.map((session) => [session.id, session]),
+          );
+          const nextIds = new Set(nextById.keys());
+          for (const [id, fingerprint] of metadataLoadedRef.current) {
+            const next = nextById.get(id);
+            if (!next || sessionFingerprint(next) !== fingerprint)
+              metadataLoadedRef.current.delete(id);
+          }
+          for (const id of metadataQueueRef.current.keys()) {
+            if (!nextIds.has(id)) metadataQueueRef.current.delete(id);
+          }
+          for (const id of metadataStaleRefreshRef.current) {
+            if (!nextIds.has(id)) metadataStaleRefreshRef.current.delete(id);
+          }
+          for (const id of metadataRetriedFingerprintRef.current.keys()) {
+            if (!nextIds.has(id))
+              metadataRetriedFingerprintRef.current.delete(id);
+          }
+          return data.sessions.map((session) => {
+            const previous = previousById.get(session.id);
+            const fingerprint = sessionFingerprint(session);
+            const preserveHydrated =
+              previous &&
+              fingerprint &&
+              fingerprint === sessionFingerprint(previous) &&
+              metadataLoadedRef.current.get(session.id) === fingerprint &&
+              hasSessionRowMetadata(previous);
+            const preserveTransient =
+              previous?.transient &&
+              session.transient &&
+              hasSessionRowMetadata(previous);
+            if (!preserveHydrated && !preserveTransient) return session;
+            return {
+              ...session,
+              name: previous.name,
+              messageCount: previous.messageCount,
+              firstMessage: previous.firstMessage,
+            };
+          });
         });
-      });
-      setInventoryRevision((revision) => revision + 1);
-      // Treat the fetched running set as an initial fallback only. Once the
-      // lightweight poll is live, a slow session-list fetch cannot overwrite it.
-      if (!runningPollAuthoritativeRef.current) {
-        setActiveSessionIds(new Set(data.activeSessionIds ?? []));
-        setRunningSessionIds(new Set(data.runningSessionIds ?? []));
+        setInventoryRevision((revision) => revision + 1);
+        // Treat the fetched running set as an initial fallback only. Once the
+        // lightweight poll is live, a slow session-list fetch cannot overwrite it.
+        if (!runningPollAuthoritativeRef.current) {
+          setActiveSessionIds(new Set(data.activeSessionIds ?? []));
+          setRunningSessionIds(new Set(data.runningSessionIds ?? []));
+        }
+        // Drop markers for deleted sessions.
+        const unreadEligibleIds = new Set(
+          data.sessions.map((session) => session.id),
+        );
+        setUnreadSessionIds((prev) => {
+          if (prev.size === 0) return prev;
+          const next = new Set(
+            [...prev].filter((id) => unreadEligibleIds.has(id)),
+          );
+          return next.size === prev.size ? prev : next;
+        });
+        setError(null);
+        setLoading(false);
+        return true;
+      } catch (e) {
+        if (inventoryAttempt !== latestInventoryAttemptRef.current)
+          return false;
+        if (!(e instanceof DOMException && e.name === "AbortError"))
+          setError(errorMessage(e));
+        setLoading(false);
+        return false;
       }
-      // Drop markers for deleted sessions.
-      const unreadEligibleIds = new Set(data.sessions.map((session) => session.id));
-      setUnreadSessionIds((prev) => {
-        if (prev.size === 0) return prev;
-        const next = new Set([...prev].filter((id) => unreadEligibleIds.has(id)));
-        return next.size === prev.size ? prev : next;
-      });
-      setError(null);
-      setLoading(false);
-      return true;
-    } catch (e) {
-      if (inventoryAttempt !== latestInventoryAttemptRef.current) return false;
-      if (!(e instanceof DOMException && e.name === "AbortError")) setError(errorMessage(e));
-      setLoading(false);
-      return false;
-    }
-  }, [beginSessionInventoryAttempt]);
+    },
+    [beginSessionInventoryAttempt],
+  );
 
   const handleSessionRefresh = useCallback(() => {
     const requestId = ++sessionRefreshRequestIdRef.current;
@@ -529,16 +672,25 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
       refreshes.push(onRefreshSelectedSession?.() ?? Promise.resolve(false));
     }
     void Promise.allSettled(refreshes).then((results) => {
-      const succeeded = results.every((result) => result.status === "fulfilled" && result.value);
+      const succeeded = results.every(
+        (result) => result.status === "fulfilled" && result.value,
+      );
       if (succeeded && sessionRefreshRequestIdRef.current === requestId) {
         showSessionRefreshSuccess();
       }
     });
-  }, [loadSessions, onRefreshSelectedSession, selectedSessionId, showSessionRefreshSuccess]);
+  }, [
+    loadSessions,
+    onRefreshSelectedSession,
+    selectedSessionId,
+    showSessionRefreshSuccess,
+  ]);
 
   useEffect(() => {
     refreshSessionInventoryRef.current = () => void loadSessions(false, true);
-    return () => { refreshSessionInventoryRef.current = () => {}; };
+    return () => {
+      refreshSessionInventoryRef.current = () => {};
+    };
   }, [loadSessions]);
 
   const initialLoadDone = useRef(false);
@@ -587,7 +739,7 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
           signal: current.signal,
         });
         if (!res.ok) return;
-        const data = await res.json() as {
+        const data = (await res.json()) as {
           activeSessionIds?: string[];
           runningSessionIds?: string[];
         };
@@ -595,8 +747,12 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
         runningPollAuthoritativeRef.current = true;
         const nextActive = new Set(data.activeSessionIds ?? []);
         const nextRunning = new Set(data.runningSessionIds ?? []);
-        setActiveSessionIds((previous) => sameSessionIds(previous, nextActive) ? previous : nextActive);
-        setRunningSessionIds((previous) => sameSessionIds(previous, nextRunning) ? previous : nextRunning);
+        setActiveSessionIds((previous) =>
+          sameSessionIds(previous, nextActive) ? previous : nextActive,
+        );
+        setRunningSessionIds((previous) =>
+          sameSessionIds(previous, nextRunning) ? previous : nextRunning,
+        );
       } catch {
         // Keep the last known state; the next visible-tab poll retries.
       } finally {
@@ -639,12 +795,15 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
 
   useEffect(() => {
     const previous = previousRunningSessionIdsRef.current;
-    const completedInBackground = [...previous].filter((id) => (
-      !runningSessionIds.has(id)
-      && activeSessionIds.has(id)
-      && id !== selectedSessionId
-    ));
-    const newlyRunning = [...runningSessionIds].filter((id) => !previous.has(id));
+    const completedInBackground = [...previous].filter(
+      (id) =>
+        !runningSessionIds.has(id) &&
+        activeSessionIds.has(id) &&
+        id !== selectedSessionId,
+    );
+    const newlyRunning = [...runningSessionIds].filter(
+      (id) => !previous.has(id),
+    );
 
     if (completedInBackground.length > 0 || newlyRunning.length > 0) {
       setUnreadSessionIds((prev) => {
@@ -665,7 +824,14 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
     }
 
     previousRunningSessionIdsRef.current = runningSessionIds;
-  }, [activeSessionIds, runningSessionIds, selectedSessionId, allSessions, loadSessions, onBackgroundTaskDone]);
+  }, [
+    activeSessionIds,
+    runningSessionIds,
+    selectedSessionId,
+    allSessions,
+    loadSessions,
+    onBackgroundTaskDone,
+  ]);
 
   useEffect(() => {
     if (!selectedSessionId) return;
@@ -683,49 +849,71 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
 
   const restoredRef = useRef(false);
 
-  const projectSelection = useCallback((root: string, key: string): ProjectSelection => ({
-    root,
-    key,
-  }), []);
+  const projectSelection = useCallback(
+    (root: string, key: string): ProjectSelection => ({
+      root,
+      key,
+    }),
+    [],
+  );
 
   /** Resolve both display root and stable identity from server-provided data. */
-  const projectFor = useCallback((cwd: string | null): ProjectSelection | null => {
-    if (!cwd) return null;
-    // /api/cwd/validate resolves identity before a custom path becomes active,
-    // preventing one render with a raw path key from looking like a switch.
-    if (validatedProject?.cwd === cwd) {
-      return projectSelection(validatedProject.root, validatedProject.key);
-    }
-    if (worktreeState && worktreeState.forCwd === cwd) {
-      return projectSelection(worktreeState.projectRoot, worktreeState.projectKey);
-    }
-    // Any path in the loaded worktree list belongs to that project — covers
-    // worktrees without sessions, so switching to them keeps the row mounted.
-    if (worktreeState?.worktrees.some((w) => w.path === cwd)) {
-      return projectSelection(worktreeState.projectRoot, worktreeState.projectKey);
-    }
-    const match = allSessions.find((session) => (
-      session.cwd === cwd || (session.projectRoot ?? session.cwd) === cwd
-    ));
-    return match
-      ? projectSelection(match.projectRoot ?? match.cwd, workspaceKeyOf(match))
-      : projectSelection(cwd, cwd);
-  }, [validatedProject, worktreeState, allSessions, projectSelection]);
+  const projectFor = useCallback(
+    (cwd: string | null): ProjectSelection | null => {
+      if (!cwd) return null;
+      // /api/cwd/validate resolves identity before a custom path becomes active,
+      // preventing one render with a raw path key from looking like a switch.
+      if (validatedProject?.cwd === cwd) {
+        return projectSelection(validatedProject.root, validatedProject.key);
+      }
+      if (worktreeState && worktreeState.forCwd === cwd) {
+        return projectSelection(
+          worktreeState.projectRoot,
+          worktreeState.projectKey,
+        );
+      }
+      // Any path in the loaded worktree list belongs to that project — covers
+      // worktrees without sessions, so switching to them keeps the row mounted.
+      if (worktreeState?.worktrees.some((w) => w.path === cwd)) {
+        return projectSelection(
+          worktreeState.projectRoot,
+          worktreeState.projectKey,
+        );
+      }
+      const match = allSessions.find(
+        (session) =>
+          session.cwd === cwd || (session.projectRoot ?? session.cwd) === cwd,
+      );
+      return match
+        ? projectSelection(
+            match.projectRoot ?? match.cwd,
+            workspaceKeyOf(match),
+          )
+        : projectSelection(cwd, cwd);
+    },
+    [validatedProject, worktreeState, allSessions, projectSelection],
+  );
 
   // A worktree/session refresh can hydrate the stable key without changing
   // cwd, so notify when either changes. The parent treats same-cwd key changes
   // as identity hydration rather than a workspace switch.
-  const lastNotifiedProjectRef = useRef<{ cwd: string | null; key: string | null } | null>(null);
+  const lastNotifiedProjectRef = useRef<{
+    cwd: string | null;
+    key: string | null;
+  } | null>(null);
   useEffect(() => {
     const project = projectFor(selectedCwd);
     const previous = lastNotifiedProjectRef.current;
-    if (previous?.cwd === selectedCwd && previous.key === (project?.key ?? null)) return;
-    lastNotifiedProjectRef.current = { cwd: selectedCwd, key: project?.key ?? null };
-    onCwdChange?.(
-      selectedCwd,
-      project?.root ?? null,
-      project?.key ?? null,
-    );
+    if (
+      previous?.cwd === selectedCwd &&
+      previous.key === (project?.key ?? null)
+    )
+      return;
+    lastNotifiedProjectRef.current = {
+      cwd: selectedCwd,
+      key: project?.key ?? null,
+    };
+    onCwdChange?.(selectedCwd, project?.root ?? null, project?.key ?? null);
   }, [selectedCwd, onCwdChange, projectFor]);
 
   // Sync the folder picker to the selected session's cwd. Sessions of all
@@ -749,28 +937,40 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
     let cancelled = false;
     fetch(`/api/worktrees?cwd=${encodeURIComponent(selectedCwd)}`)
       .then((r) => r.json())
-      .then((d: { projectRoot?: string; projectKey?: string; isGit?: boolean; isTopLevel?: boolean; currentWorktreePath?: string | null; worktrees?: WorktreeEntry[]; error?: string }) => {
-        if (cancelled) return;
-        if (d.error || !d.projectRoot) {
-          setWorktreeState(null);
-          return;
-        }
-        setWorktreeState({
-          forCwd: selectedCwd,
-          projectRoot: d.projectRoot,
-          projectKey: d.projectKey ?? d.projectRoot,
-          isGit: d.isGit ?? false,
-          isTopLevel: d.isTopLevel ?? false,
-          currentWorktreePath: d.currentWorktreePath ?? null,
-          worktrees: d.worktrees ?? [],
-        });
-      })
+      .then(
+        (d: {
+          projectRoot?: string;
+          projectKey?: string;
+          isGit?: boolean;
+          isTopLevel?: boolean;
+          currentWorktreePath?: string | null;
+          worktrees?: WorktreeEntry[];
+          error?: string;
+        }) => {
+          if (cancelled) return;
+          if (d.error || !d.projectRoot) {
+            setWorktreeState(null);
+            return;
+          }
+          setWorktreeState({
+            forCwd: selectedCwd,
+            projectRoot: d.projectRoot,
+            projectKey: d.projectKey ?? d.projectRoot,
+            isGit: d.isGit ?? false,
+            isTopLevel: d.isTopLevel ?? false,
+            currentWorktreePath: d.currentWorktreePath ?? null,
+            worktrees: d.worktrees ?? [],
+          });
+        },
+      )
       .catch(() => {
         if (!cancelled) {
           setWorktreeState(null);
         }
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [selectedCwd, refreshKey]);
 
   // Auto-select cwd and restore session from URL on first load
@@ -793,46 +993,62 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
       const projects = getRecentProjects(allSessions);
       if (projects.length > 0) setSelectedCwd(projects[0].cwd);
     }
-  }, [allSessions, selectedCwd, initialSessionId, skipInitialProjectSelection, onSelectSession, onInitialRestoreDone]);
+  }, [
+    allSessions,
+    selectedCwd,
+    initialSessionId,
+    skipInitialProjectSelection,
+    onSelectSession,
+    onInitialRestoreDone,
+  ]);
 
-  const commitCustomPath = useCallback(async (candidate?: string) => {
-    const path = (candidate ?? customPathValue).trim();
-    if (!path || customPathValidating) return;
+  const commitCustomPath = useCallback(
+    async (candidate?: string) => {
+      const path = (candidate ?? customPathValue).trim();
+      if (!path || customPathValidating) return;
 
-    setCustomPathValidating(true);
-    setCustomPathError(null);
-    try {
-      const res = await fetch("/api/cwd/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cwd: path }),
-      });
-      const data = await res.json().catch(() => ({})) as {
-        cwd?: string;
-        projectRoot?: string;
-        projectKey?: string;
-        error?: string;
-      };
-      if (!res.ok || data.error || !data.cwd || !data.projectRoot || !data.projectKey) {
-        setCustomPathError(data.error ?? `HTTP ${res.status}`);
-        return;
+      setCustomPathValidating(true);
+      setCustomPathError(null);
+      try {
+        const res = await fetch("/api/cwd/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cwd: path }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          cwd?: string;
+          projectRoot?: string;
+          projectKey?: string;
+          error?: string;
+        };
+        if (
+          !res.ok ||
+          data.error ||
+          !data.cwd ||
+          !data.projectRoot ||
+          !data.projectKey
+        ) {
+          setCustomPathError(data.error ?? `HTTP ${res.status}`);
+          return;
+        }
+        setValidatedProject({
+          cwd: data.cwd,
+          root: data.projectRoot,
+          key: data.projectKey,
+        });
+        saveLastCustomCwd(data.cwd);
+        setCustomPathValue(data.cwd);
+        setSelectedCwd(data.cwd);
+        setCustomPathOpen(false);
+        setDropdownOpen(false);
+      } catch (e) {
+        setCustomPathError(errorMessage(e));
+      } finally {
+        setCustomPathValidating(false);
       }
-      setValidatedProject({
-        cwd: data.cwd,
-        root: data.projectRoot,
-        key: data.projectKey,
-      });
-      saveLastCustomCwd(data.cwd);
-      setCustomPathValue(data.cwd);
-      setSelectedCwd(data.cwd);
-      setCustomPathOpen(false);
-      setDropdownOpen(false);
-    } catch (e) {
-      setCustomPathError(errorMessage(e));
-    } finally {
-      setCustomPathValidating(false);
-    }
-  }, [customPathValue, customPathValidating]);
+    },
+    [customPathValue, customPathValidating],
+  );
 
   const handleCustomPathClick = useCallback(() => {
     setCustomPathOpen(true);
@@ -840,11 +1056,14 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
     setDropdownOpen(false);
   }, []);
   // Re-selecting a session restores its own working folder.
-  const handleSelectSessionFromList = useCallback((session: SessionInfo) => {
-    if (session.cwd) setSelectedCwd(session.cwd);
-    onSelectSession(session);
-    if (session.id === selectedSessionId) void onRefreshSelectedSession?.();
-  }, [onSelectSession, selectedSessionId, onRefreshSelectedSession]);
+  const handleSelectSessionFromList = useCallback(
+    (session: SessionInfo) => {
+      if (session.cwd) setSelectedCwd(session.cwd);
+      onSelectSession(session);
+      if (session.id === selectedSessionId) void onRefreshSelectedSession?.();
+    },
+    [onSelectSession, selectedSessionId, onRefreshSelectedSession],
+  );
 
   const handleSessionActivated = useCallback((id: string) => {
     setError(null);
@@ -864,10 +1083,13 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
     });
   }, []);
 
-  const handleSessionDeleted = useCallback((id: string) => {
-    onSessionDeleted?.(id);
-    loadSessions();
-  }, [loadSessions, onSessionDeleted]);
+  const handleSessionDeleted = useCallback(
+    (id: string) => {
+      onSessionDeleted?.(id);
+      loadSessions();
+    },
+    [loadSessions, onSessionDeleted],
+  );
 
   const handleNewSession = useCallback(() => {
     if (!selectedCwd) return;
@@ -879,12 +1101,22 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
 
   const recentProjects = getRecentProjects(allSessions);
   const currentProject = projectFor(selectedCwd);
-  if (selectedCwd && currentProject && !recentProjects.some(project => project.key === currentProject.key)) {
-    recentProjects.unshift({ key: currentProject.key, root: currentProject.root, cwd: selectedCwd });
+  if (
+    selectedCwd &&
+    currentProject &&
+    !recentProjects.some((project) => project.key === currentProject.key)
+  ) {
+    recentProjects.unshift({
+      key: currentProject.key,
+      root: currentProject.root,
+      cwd: selectedCwd,
+    });
   }
   const showProjectFilter = recentProjects.length > 8;
   const visibleProjects = projectFilter.trim()
-    ? recentProjects.filter((project) => project.root.toLowerCase().includes(projectFilter.trim().toLowerCase()))
+    ? recentProjects.filter((project) =>
+        project.root.toLowerCase().includes(projectFilter.trim().toLowerCase()),
+      )
     : recentProjects;
 
   // Sessions of every worktree in the selected project are shown together
@@ -902,27 +1134,46 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
   // a dot on the (collapsed) selector button so it is visible without opening
   // the dropdown.
   const hasOtherWorkspaceActivity = useMemo(
-    () => [...projectActivity.entries()].some(
-      ([key, { running, unread }]) => key !== selectedProjectKey && (running > 0 || unread > 0),
-    ),
+    () =>
+      [...projectActivity.entries()].some(
+        ([key, { running, unread }]) =>
+          key !== selectedProjectKey && (running > 0 || unread > 0),
+      ),
     [projectActivity, selectedProjectKey],
   );
 
-  const filteredSessions = useMemo(() => (selectedProjectKey
-    ? sessionsForProject(allSessions, selectedProjectKey)
-    : allSessions).toSorted((a, b) =>
-      Number(runningSessionIds.has(b.id)) - Number(runningSessionIds.has(a.id))
-      || Number(activeSessionIds.has(b.id)) - Number(activeSessionIds.has(a.id))
-      || b.modified.localeCompare(a.modified),
-    ), [activeSessionIds, allSessions, runningSessionIds, selectedProjectKey]);
+  const filteredSessions = useMemo(
+    () =>
+      (selectedProjectKey
+        ? sessionsForProject(allSessions, selectedProjectKey)
+        : allSessions
+      ).toSorted(
+        (a, b) =>
+          Number(runningSessionIds.has(b.id)) -
+            Number(runningSessionIds.has(a.id)) ||
+          Number(activeSessionIds.has(b.id)) -
+            Number(activeSessionIds.has(a.id)) ||
+          b.modified.localeCompare(a.modified),
+      ),
+    [activeSessionIds, allSessions, runningSessionIds, selectedProjectKey],
+  );
 
   useEffect(() => {
     const updateModifier = (event: KeyboardEvent) => {
-      setShortcutModifier(event.metaKey ? "meta" : event.ctrlKey ? "ctrl" : null);
+      setShortcutModifier(
+        event.metaKey ? "meta" : event.ctrlKey ? "ctrl" : null,
+      );
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       updateModifier(event);
-      if (event.repeat || event.altKey || event.shiftKey || (!event.ctrlKey && !event.metaKey) || !/^[0-9]$/.test(event.key)) return;
+      if (
+        event.repeat ||
+        event.altKey ||
+        event.shiftKey ||
+        (!event.ctrlKey && !event.metaKey) ||
+        !/^[0-9]$/.test(event.key)
+      )
+        return;
       const index = event.key === "0" ? 9 : Number(event.key) - 1;
       const session = filteredSessions[index];
       if (!session) return;
@@ -942,25 +1193,35 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
   }, [filteredSessions, handleSelectSessionFromList]);
 
   const observedInventoryKey = filteredSessions
-    .map((session) => `${session.id}:${sessionFingerprint(session) ?? "transient"}`)
+    .map(
+      (session) =>
+        `${session.id}:${sessionFingerprint(session) ?? "transient"}`,
+    )
     .join("|");
 
   useEffect(() => {
     const root = sessionListRef.current;
     if (!root || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries.flatMap((entry) => {
-        if (!entry.isIntersecting) return [];
-        const id = (entry.target as HTMLElement).dataset.sessionInventoryId;
-        const session = id ? allSessionsRef.current.find((candidate) => candidate.id === id) : undefined;
-        return session ? [session] : [];
-      });
-      if (visible.length > 0) queueSessionMetadata(visible);
-    }, {
-      root,
-      rootMargin: `${SESSION_METADATA_OVERSCAN_PX}px 0px`,
-    });
-    for (const row of root.querySelectorAll<HTMLElement>("[data-session-inventory-id]")) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.flatMap((entry) => {
+          if (!entry.isIntersecting) return [];
+          const id = (entry.target as HTMLElement).dataset.sessionInventoryId;
+          const session = id
+            ? allSessionsRef.current.find((candidate) => candidate.id === id)
+            : undefined;
+          return session ? [session] : [];
+        });
+        if (visible.length > 0) queueSessionMetadata(visible);
+      },
+      {
+        root,
+        rootMargin: `${SESSION_METADATA_OVERSCAN_PX}px 0px`,
+      },
+    );
+    for (const row of root.querySelectorAll<HTMLElement>(
+      "[data-session-inventory-id]",
+    )) {
       observer.observe(row);
     }
     return () => observer.disconnect();
@@ -974,7 +1235,14 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
   }, [selectedInventory, queueSessionMetadata]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflow: "hidden",
+      }}
+    >
       {customPathOpen && (
         <DirectoryPicker
           initialPath={customPathValue}
@@ -995,7 +1263,14 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
           flexShrink: 0,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 10,
+          }}
+        >
           <PiWebTitle />
           <div style={{ display: "flex", gap: 6 }}>
             <button
@@ -1004,14 +1279,32 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
               aria-label={t("i18n.newSession")}
               aria-keyshortcuts="Meta+K Control+K"
               className="sidebar-icon-button"
-              title={selectedCwd ? t("sidebar.newSessionTitle", { path: selectedCwd }) : t("sidebar.selectProject")}
+              title={
+                selectedCwd
+                  ? t("sidebar.newSessionTitle", { path: selectedCwd })
+                  : t("sidebar.selectProject")
+              }
             >
               {shortcutModifier && selectedCwd ? (
-                <kbd aria-hidden="true" style={{ fontFamily: "var(--font-mono)", fontSize: 10 }}>
-                  {t("sidebar.newSessionShortcut", { modifier: shortcutModifier === "meta" ? "⌘" : "Ctrl+" })}
+                <kbd
+                  aria-hidden="true"
+                  style={{ fontFamily: "var(--font-mono)", fontSize: 10 }}
+                >
+                  {t("sidebar.newSessionShortcut", {
+                    modifier: shortcutModifier === "meta" ? "⌘" : "Ctrl+",
+                  })}
                 </kbd>
               ) : (
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
                   <line x1="6" y1="1" x2="6" y2="11" />
                   <line x1="1" y1="6" x2="11" y2="6" />
                 </svg>
@@ -1020,12 +1313,19 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
             <button
               onClick={handleSessionRefresh}
               style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                background: sessionRefreshDone ? "rgba(74,222,128,0.18)" : "var(--bg-hover)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: sessionRefreshDone
+                  ? "rgba(74,222,128,0.18)"
+                  : "var(--bg-hover)",
                 border: `1px solid ${sessionRefreshDone ? "rgba(74,222,128,0.4)" : "var(--border)"}`,
-                color: sessionRefreshDone ? "var(--success)" : "var(--text-muted)",
+                color: sessionRefreshDone
+                  ? "var(--success)"
+                  : "var(--text-muted)",
                 cursor: "pointer",
-                width: 32, height: 32,
+                width: 32,
+                height: 32,
                 borderRadius: 7,
                 padding: 0,
                 flexShrink: 0,
@@ -1043,15 +1343,33 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
                 e.currentTarget.style.color = "var(--text-muted)";
                 e.currentTarget.style.borderColor = "var(--border)";
               }}
-               title={t("sidebar.refresh")}
+              title={t("sidebar.refresh")}
               aria-label={t("sidebar.refresh")}
             >
               {sessionRefreshDone ? (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="var(--success)"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               ) : (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                   <path d="M3 3v5h5" />
                 </svg>
@@ -1063,7 +1381,11 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
               title={t("common.settings")}
               aria-label={t("common.settings")}
             >
-              <SettingsSectionIcon section="general" size={15} strokeWidth={2} />
+              <SettingsSectionIcon
+                section="general"
+                size={15}
+                strokeWidth={2}
+              />
             </button>
           </div>
         </div>
@@ -1079,8 +1401,12 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
               display: "flex",
               alignItems: "center",
               padding: "6px 10px",
-              background: selectedCwd ? "var(--bg-hover)" : "rgba(37,99,235,0.06)",
-              border: selectedCwd ? "1px solid var(--border)" : "1px solid rgba(37,99,235,0.4)",
+              background: selectedCwd
+                ? "var(--bg-hover)"
+                : "rgba(37,99,235,0.06)",
+              border: selectedCwd
+                ? "1px solid var(--border)"
+                : "1px solid rgba(37,99,235,0.4)",
               borderRadius: 7,
               cursor: "pointer",
               fontSize: 12,
@@ -1111,7 +1437,9 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
                   color: "var(--text-dim)",
                 }}
               >
-                 {initialSessionId && !restoredRef.current ? "" : t("sidebar.selectProject")}
+                {initialSessionId && !restoredRef.current
+                  ? ""
+                  : t("sidebar.selectProject")}
               </span>
             )}
             {hasOtherWorkspaceActivity && (
@@ -1147,28 +1475,41 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
               overflow: "hidden",
             }}
           >
-              {showProjectFilter && (
-                <div style={{ padding: "6px 8px", borderBottom: "1px solid var(--border)" }}>
-                  <input
-                    value={projectFilter}
-                    onChange={(e) => setProjectFilter(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") {
-                        setProjectFilter("");
-                        setDropdownOpen(false);
-                      }
-                    }}
-                     placeholder={t("sidebar.filterProjects")}
-                    autoFocus
-                    className="menu-filter"
-                  />
-                </div>
-              )}
-              <div style={{ maxHeight: "min(50vh, 380px)", overflowY: "auto" }}>
-                {dropdownOpen && visibleProjects.map((project) => (
-                  <ProjectFolderGroup key={project.key} project={project}
-                    selectedCwd={selectedCwd} selected={project.key === selectedProject?.key}
-                    homeDir={homeDir} activity={showProjectActivity(projectActivity.get(project.key), t)}
+            {showProjectFilter && (
+              <div
+                style={{
+                  padding: "6px 8px",
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
+                <input
+                  value={projectFilter}
+                  onChange={(e) => setProjectFilter(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setProjectFilter("");
+                      setDropdownOpen(false);
+                    }
+                  }}
+                  placeholder={t("sidebar.filterProjects")}
+                  autoFocus
+                  className="menu-filter"
+                />
+              </div>
+            )}
+            <div style={{ maxHeight: "min(50vh, 380px)", overflowY: "auto" }}>
+              {dropdownOpen &&
+                visibleProjects.map((project) => (
+                  <ProjectFolderGroup
+                    key={project.key}
+                    project={project}
+                    selectedCwd={selectedCwd}
+                    selected={project.key === selectedProject?.key}
+                    homeDir={homeDir}
+                    activity={showProjectActivity(
+                      projectActivity.get(project.key),
+                      t,
+                    )}
                     onSelect={(cwd, root, key) => {
                       setValidatedProject({ cwd, root, key });
                       setSelectedCwd(cwd);
@@ -1176,46 +1517,92 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
                       setCustomPathOpen(false);
                       setCustomPathError(null);
                       setDropdownOpen(false);
-                    }} />
+                    }}
+                  />
                 ))}
-                {visibleProjects.length === 0 && projectFilter.trim() && (
-                   <div style={{ padding: "8px 10px", fontSize: 11, color: "var(--text-dim)" }}>{t("sidebar.noMatchingProjects")}</div>
-                )}
-              </div>
+              {visibleProjects.length === 0 && projectFilter.trim() && (
+                <div
+                  style={{
+                    padding: "8px 10px",
+                    fontSize: 11,
+                    color: "var(--text-dim)",
+                  }}
+                >
+                  {t("sidebar.noMatchingProjects")}
+                </div>
+              )}
+            </div>
 
-              {/* Custom path directory picker */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCustomPathClick();
-                }}
-                className="menu-item"
+            {/* Custom path directory picker */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCustomPathClick();
+              }}
+              className="menu-item"
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.1"
+                strokeLinecap="round"
+                style={{ flexShrink: 0 }}
               >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" style={{ flexShrink: 0 }}>
-                  <line x1="5" y1="1" x2="5" y2="9" />
-                  <line x1="1" y1="5" x2="9" y2="5" />
-                </svg>
-                <span>{t("sidebar.customPath")}</span>
-              </button>
+                <line x1="5" y1="1" x2="5" y2="9" />
+                <line x1="1" y1="5" x2="9" y2="5" />
+              </svg>
+              <span>{t("sidebar.customPath")}</span>
+            </button>
           </AnchoredMenu>
         </div>
-
       </div>
 
       {/* Session list */}
-      <div ref={sessionListRef} style={{ flex: explorerOpen && (selectedCwdProp || selectedCwd) ? "1 1 0" : "1 1 auto", overflowY: "auto", padding: "0", minHeight: 80 }}>
+      <div
+        ref={sessionListRef}
+        style={{
+          flex:
+            explorerOpen && (selectedCwdProp || selectedCwd)
+              ? "1 1 0"
+              : "1 1 auto",
+          overflowY: "auto",
+          padding: "0",
+          minHeight: 80,
+        }}
+      >
         {loading && (
-          <div style={{ padding: "16px 14px", color: "var(--text-muted)", fontSize: 12 }}>
+          <div
+            style={{
+              padding: "16px 14px",
+              color: "var(--text-muted)",
+              fontSize: 12,
+            }}
+          >
             {t("sidebar.loading")}
           </div>
         )}
         {error && (
-          <div style={{ padding: "12px 14px", color: "var(--danger)", fontSize: 12 }}>
+          <div
+            style={{
+              padding: "12px 14px",
+              color: "var(--danger)",
+              fontSize: 12,
+            }}
+          >
             {error}
           </div>
         )}
         {!loading && !error && filteredSessions.length === 0 && (
-          <div style={{ padding: "16px 14px", color: "var(--text-muted)", fontSize: 12 }}>
+          <div
+            style={{
+              padding: "16px 14px",
+              color: "var(--text-muted)",
+              fontSize: 12,
+            }}
+          >
             {t("sidebar.noSessions")}
           </div>
         )}
@@ -1223,9 +1610,11 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
           <SessionItem
             key={session.id}
             session={session}
-            shortcutLabel={shortcutModifier && index < 10
-              ? `${shortcutModifier === "meta" ? "⌘" : "Ctrl+"}${index === 9 ? 0 : index + 1}`
-              : undefined}
+            shortcutLabel={
+              shortcutModifier && index < 10
+                ? `${shortcutModifier === "meta" ? "⌘" : "Ctrl+"}${index === 9 ? 0 : index + 1}`
+                : undefined
+            }
             isSelected={session.id === selectedSessionId}
             isActive={activeSessionIds.has(session.id)}
             isRunning={runningSessionIds.has(session.id)}
@@ -1255,11 +1644,13 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
         >
           <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
             <button
-              onClick={() => setExplorerOpen((open) => {
-                const next = !open;
-                saveExplorerOpen(next);
-                return next;
-              })}
+              onClick={() =>
+                setExplorerOpen((open) => {
+                  const next = !open;
+                  saveExplorerOpen(next);
+                  return next;
+                })
+              }
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -1278,9 +1669,19 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
               }}
             >
               <svg
-                width="9" height="9" viewBox="0 0 10 10" fill="none"
-                stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-                style={{ transform: explorerOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s", flexShrink: 0 }}
+                width="9"
+                height="9"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  transform: explorerOpen ? "rotate(90deg)" : "none",
+                  transition: "transform 0.15s",
+                  flexShrink: 0,
+                }}
               >
                 <polyline points="3 2 7 5 3 8" />
               </svg>
@@ -1294,7 +1695,17 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
                 color={changesCollapsed ? "var(--text-dim)" : "var(--accent)"}
                 background={changesCollapsed ? "none" : "var(--bg-selected)"}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
                   <circle cx="12" cy="12" r="3" />
                   <path d="M3 12h6" />
                   <path d="M15 12h6" />
@@ -1311,8 +1722,19 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
                 color={fileSearchOpen ? "var(--accent)" : "var(--text-dim)"}
                 background={fileSearchOpen ? "var(--bg-selected)" : "none"}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" />
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-4-4" />
                 </svg>
               </ToolbarIconButton>
             )}
@@ -1323,7 +1745,17 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
                 title={t("sidebar.uploadFilesTitle")}
                 color="var(--text-dim)"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <path d="m17 8-5-5-5 5" />
                   <path d="M12 3v12" />
@@ -1335,21 +1767,45 @@ export function SessionSidebar({ homeDir, selectedSessionId, onSelectSession, on
                 if (onExplorerRefresh) onExplorerRefresh();
                 else setExplorerKey((k) => k + 1);
                 setExplorerRefreshDone(true);
-                if (explorerRefreshTimerRef.current) clearTimeout(explorerRefreshTimerRef.current);
-                explorerRefreshTimerRef.current = setTimeout(() => setExplorerRefreshDone(false), 2000);
+                if (explorerRefreshTimerRef.current)
+                  clearTimeout(explorerRefreshTimerRef.current);
+                explorerRefreshTimerRef.current = setTimeout(
+                  () => setExplorerRefreshDone(false),
+                  2000,
+                );
               }}
               title={t("sidebar.refreshExplorer")}
               skipHover={explorerRefreshDone}
               color={explorerRefreshDone ? "var(--success)" : "var(--text-dim)"}
-              background={explorerRefreshDone ? "rgba(74,222,128,0.18)" : "none"}
+              background={
+                explorerRefreshDone ? "rgba(74,222,128,0.18)" : "none"
+              }
               marginRight={6}
             >
               {explorerRefreshDone ? (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="var(--success)"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               ) : (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                   <path d="M3 3v5h5" />
                 </svg>
@@ -1389,19 +1845,54 @@ function showProjectActivity(
   activity: { running: number; unread: number } | undefined,
   t: (key: string) => string,
 ): ReactNode {
-  if (!activity || (activity.running === 0 && activity.unread === 0)) return null;
+  if (!activity || (activity.running === 0 && activity.unread === 0))
+    return null;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0, marginLeft: 6 }}>
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        flexShrink: 0,
+        marginLeft: 6,
+      }}
+    >
       {activity.running > 0 && (
         <span
           title={t("sidebar.agentRunning")}
           aria-label={`${t("sidebar.agentRunning")} (${activity.running})`}
-          style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--accent)", fontSize: 10, fontFamily: "var(--font-mono)" }}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 3,
+            color: "var(--accent)",
+            fontSize: 10,
+            fontFamily: "var(--font-mono)",
+          }}
         >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ display: "block" }}>
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+            style={{ display: "block" }}
+          >
             <g>
-              <path d="M21 12a9 9 0 1 1-3.8-7.4" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" />
-              <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite" />
+              <path
+                d="M21 12a9 9 0 1 1-3.8-7.4"
+                stroke="currentColor"
+                strokeWidth="2.8"
+                strokeLinecap="round"
+              />
+              <animateTransform
+                attributeName="transform"
+                type="rotate"
+                from="0 12 12"
+                to="360 12 12"
+                dur="0.9s"
+                repeatCount="indefinite"
+              />
             </g>
           </svg>
           {activity.running}
@@ -1411,9 +1902,24 @@ function showProjectActivity(
         <span
           title={t("sidebar.newSessionActivity")}
           aria-label={`${t("sidebar.newSessionActivity")} (${activity.unread})`}
-          style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--info)", fontSize: 10, fontFamily: "var(--font-mono)" }}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 3,
+            color: "var(--info)",
+            fontSize: 10,
+            fontFamily: "var(--font-mono)",
+          }}
         >
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "currentColor",
+              display: "inline-block",
+            }}
+          />
           {activity.unread}
         </span>
       )}

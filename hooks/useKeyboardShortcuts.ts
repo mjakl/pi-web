@@ -34,9 +34,13 @@ interface UseGlobalKeyboardShortcutsOptions {
  * also kills the turn running behind it. Text fields handle Esc themselves
  * (ChatInput closes its slash / @ menus first).
  */
-export function shouldAbortOnEscape(
-  { defaultPrevented, tagName }: { defaultPrevented: boolean; tagName?: string | null },
-): boolean {
+export function shouldAbortOnEscape({
+  defaultPrevented,
+  tagName,
+}: {
+  defaultPrevented: boolean;
+  tagName?: string | null;
+}): boolean {
   if (defaultPrevented) return false;
   return tagName !== "TEXTAREA" && tagName !== "INPUT";
 }
@@ -63,10 +67,13 @@ export function useGlobalKeyboardShortcuts(
       // ---- Esc: stop agent ----
       if (e.key === "Escape") {
         if (!globalAbortHandler) return;
-        if (!shouldAbortOnEscape({
-          defaultPrevented: e.defaultPrevented,
-          tagName: (e.target as HTMLElement)?.tagName,
-        })) return;
+        if (
+          !shouldAbortOnEscape({
+            defaultPrevented: e.defaultPrevented,
+            tagName: (e.target as HTMLElement)?.tagName,
+          })
+        )
+          return;
 
         e.preventDefault();
         globalAbortHandler();
@@ -74,7 +81,13 @@ export function useGlobalKeyboardShortcuts(
       }
 
       // ---- Cmd/Ctrl+K: new session ----
-      if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && !e.isComposing) {
+      if (
+        e.key.toLowerCase() === "k" &&
+        (e.metaKey || e.ctrlKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        !e.isComposing
+      ) {
         if (e.defaultPrevented || !activeCwd || !onNewSession) return;
         e.preventDefault();
         if (e.repeat) return;

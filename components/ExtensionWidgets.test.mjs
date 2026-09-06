@@ -18,14 +18,14 @@ const {
 } = await jiti.import("./ExtensionWidgets.tsx");
 
 function renderWidgets(props) {
-  return renderToStaticMarkup(
-    React.createElement(ExtensionWidgets, props),
-  );
+  return renderToStaticMarkup(React.createElement(ExtensionWidgets, props));
 }
 
 test("renders short extension widgets without a truncation marker", () => {
   const html = renderWidgets({
-    widgets: [{ key: "short", lines: ["first", "second"], placement: "aboveEditor" }],
+    widgets: [
+      { key: "short", lines: ["first", "second"], placement: "aboveEditor" },
+    ],
   });
 
   assert.match(html, /first\nsecond/);
@@ -36,10 +36,7 @@ test("renders short extension widgets without a truncation marker", () => {
 });
 
 test("collapses long widgets by default", () => {
-  const lines = Array.from(
-    { length: 12 },
-    (_, index) => `line-${index + 1}`,
-  );
+  const lines = Array.from({ length: 12 }, (_, index) => `line-${index + 1}`);
   const html = renderWidgets({
     widgets: [{ key: "long", lines, placement: "belowEditor" }],
   });
@@ -54,10 +51,7 @@ test("collapses long widgets by default", () => {
 });
 
 test("keeps all widget lines available for the scrollable expanded panel", () => {
-  const lines = Array.from(
-    { length: 12 },
-    (_, index) => `line-${index + 1}`,
-  );
+  const lines = Array.from({ length: 12 }, (_, index) => `line-${index + 1}`);
   const content = formatExtensionWidgetContent(lines);
 
   assert.match(content, /line-10/);
@@ -123,7 +117,9 @@ test("compares widget lines without delimiter collisions", () => {
 
 test("keeps one-line widgets compact but expandable", () => {
   const html = renderWidgets({
-    widgets: [{ key: "single-line-widget", lines: ["ready"], placement: "belowEditor" }],
+    widgets: [
+      { key: "single-line-widget", lines: ["ready"], placement: "belowEditor" },
+    ],
   });
 
   assert.match(html, /extension-widget-triggers/);
@@ -133,7 +129,10 @@ test("keeps one-line widgets compact but expandable", () => {
   assert.match(html, /Below editor widget/);
   assert.match(html, /<button[^>]*class="extension-widget-trigger/);
   assert.match(html, /aria-expanded="false"/);
-  assert.match(html, /title="single-line-widget - Below editor widget - Expand"/);
+  assert.match(
+    html,
+    /title="single-line-widget - Below editor widget - Expand"/,
+  );
   assert.match(html, /extension-widget-key/);
   assert.match(html, /extension-widget-update-pulse/);
   assert.doesNotMatch(html, /extension-widget-preview/);

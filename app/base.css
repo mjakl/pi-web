@@ -127,7 +127,8 @@
     opacity: 1;
   }
 
-  @supports (not (-webkit-appearance: -apple-pay-button)) or (contain-intrinsic-size: 1px) {
+  @supports (not (-webkit-appearance: -apple-pay-button)) or
+    (contain-intrinsic-size: 1px) {
     ::placeholder {
       color: color-mix(in oklab, currentcolor 50%, transparent);
     }
@@ -142,7 +143,7 @@
   }
 
   button,
-  input:where([type='button'], [type='reset'], [type='submit']) {
+  input:where([type="button"], [type="reset"], [type="submit"]) {
     appearance: button;
   }
 
@@ -151,7 +152,7 @@
     height: auto;
   }
 
-  [hidden]:where(:not([hidden='until-found'])) {
+  [hidden]:where(:not([hidden="until-found"])) {
     display: none !important;
   }
 }

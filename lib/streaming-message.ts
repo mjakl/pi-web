@@ -27,10 +27,13 @@ export const INITIAL_STREAMING_STATE: StreamingState = {
 function updateContentBlock(
   state: StreamingState,
   contentIndex: number,
-  update: (current: AssistantContentBlock | undefined) => AssistantContentBlock | null,
+  update: (
+    current: AssistantContentBlock | undefined,
+  ) => AssistantContentBlock | null,
 ): StreamingState {
   const message = state.streamingMessage;
-  if (!message || !Number.isInteger(contentIndex) || contentIndex < 0) return state;
+  if (!message || !Number.isInteger(contentIndex) || contentIndex < 0)
+    return state;
 
   const content = [...message.content];
   const nextBlock = update(content[contentIndex]);
@@ -48,15 +51,15 @@ function applyDelta(
 ): StreamingState {
   switch (event.type) {
     case "text_start":
-      return updateContentBlock(state, event.contentIndex, (current) => (
-        current?.type === "text" ? current : { type: "text", text: "" }
-      ));
+      return updateContentBlock(state, event.contentIndex, (current) =>
+        current?.type === "text" ? current : { type: "text", text: "" },
+      );
     case "text_delta":
-      return updateContentBlock(state, event.contentIndex, (current) => (
+      return updateContentBlock(state, event.contentIndex, (current) =>
         current?.type === "text"
           ? { ...current, text: current.text + event.delta }
-          : null
-      ));
+          : null,
+      );
     case "text_end":
       return updateContentBlock(state, event.contentIndex, (current) => ({
         ...(current?.type === "text" ? current : {}),
@@ -64,15 +67,17 @@ function applyDelta(
         text: event.content,
       }));
     case "thinking_start":
-      return updateContentBlock(state, event.contentIndex, (current) => (
-        current?.type === "thinking" ? current : { type: "thinking", thinking: "" }
-      ));
+      return updateContentBlock(state, event.contentIndex, (current) =>
+        current?.type === "thinking"
+          ? current
+          : { type: "thinking", thinking: "" },
+      );
     case "thinking_delta":
-      return updateContentBlock(state, event.contentIndex, (current) => (
+      return updateContentBlock(state, event.contentIndex, (current) =>
         current?.type === "thinking"
           ? { ...current, thinking: current.thinking + event.delta }
-          : null
-      ));
+          : null,
+      );
     case "thinking_end":
       return updateContentBlock(state, event.contentIndex, (current) => ({
         ...(current?.type === "thinking" ? current : {}),
@@ -99,16 +104,16 @@ function applyDelta(
         };
       });
     case "toolcall_delta":
-      return updateContentBlock(state, event.contentIndex, (current) => (
+      return updateContentBlock(state, event.contentIndex, (current) =>
         current?.type === "toolCall"
           ? {
-            ...current,
-            toolCallId: event.id || current.toolCallId,
-            toolName: event.toolName || current.toolName,
-            rawInput: (current.rawInput ?? "") + event.delta,
-          }
-          : null
-      ));
+              ...current,
+              toolCallId: event.id || current.toolCallId,
+              toolName: event.toolName || current.toolName,
+              rawInput: (current.rawInput ?? "") + event.delta,
+            }
+          : null,
+      );
     case "toolcall_end":
       return updateContentBlock(state, event.contentIndex, () => ({
         type: "toolCall",

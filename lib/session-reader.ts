@@ -5,20 +5,56 @@ import {
   estimateTokens,
   getAgentDir,
 } from "@earendil-works/pi-coding-agent";
-import { closeSync, type Dirent, existsSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from "fs";
+import {
+  closeSync,
+  type Dirent,
+  existsSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  statSync,
+  writeFileSync,
+} from "fs";
 import { readdir } from "fs/promises";
-import { dirname, isAbsolute, join, normalize as normalizePath, relative, resolve as resolvePath, sep } from "path";
+import {
+  dirname,
+  isAbsolute,
+  join,
+  normalize as normalizePath,
+  relative,
+  resolve as resolvePath,
+  sep,
+} from "path";
 import { isRecord } from "./types";
-import type { AgentMessage, ImageContent, SessionEntry, SessionHeader, SessionInfo, SessionContext } from "./types";
+import type {
+  AgentMessage,
+  ImageContent,
+  SessionEntry,
+  SessionHeader,
+  SessionInfo,
+  SessionContext,
+} from "./types";
 import type { SessionEntry as PiSessionEntry } from "@earendil-works/pi-coding-agent";
 import { normalizeToolCalls } from "./normalize";
 import { pathIdentityKey } from "./paths";
-import { MAX_TOOL_RESULT_IMAGE_BYTES, TOOL_RESULT_IMAGE_MIMES } from "./tool-result-images";
-import { isWorkingDirectoryAvailable, resolveProject, type ProjectInfo } from "./worktree";
+import {
+  MAX_TOOL_RESULT_IMAGE_BYTES,
+  TOOL_RESULT_IMAGE_MIMES,
+} from "./tool-result-images";
+import {
+  isWorkingDirectoryAvailable,
+  resolveProject,
+  type ProjectInfo,
+} from "./worktree";
 
 const SESSION_HEADER_MAX_BYTES = 64 * 1024;
 
-function readBoundedLines(filePath: string, maxBytes: number, maxLines: number): string[] {
+function readBoundedLines(
+  filePath: string,
+  maxBytes: number,
+  maxLines: number,
+): string[] {
   const fd = openSync(filePath, "r");
   try {
     const chunks: Buffer[] = [];
@@ -51,25 +87,32 @@ function readBoundedLines(filePath: string, maxBytes: number, maxLines: number):
     const lines = source.split("\n");
     if (!reachedEof && !source.endsWith("\n")) lines.pop();
     if (lines.at(-1) === "") lines.pop();
-    return lines.map((line) => line.endsWith("\r") ? line.slice(0, -1) : line);
+    return lines.map((line) =>
+      line.endsWith("\r") ? line.slice(0, -1) : line,
+    );
   } finally {
     closeSync(fd);
   }
 }
 
-export async function attachSessionProjectInfo(sessions: SessionInfo[]): Promise<SessionInfo[]> {
+export async function attachSessionProjectInfo(
+  sessions: SessionInfo[],
+): Promise<SessionInfo[]> {
   const uniqueCwds = [...new Set(sessions.map((s) => s.cwd).filter(Boolean))];
   const projectByCwd = new Map<string, ProjectInfo>();
-  await Promise.all(uniqueCwds.map(async (cwd) => {
-    projectByCwd.set(cwd, await resolveProject(cwd));
-  }));
+  await Promise.all(
+    uniqueCwds.map(async (cwd) => {
+      projectByCwd.set(cwd, await resolveProject(cwd));
+    }),
+  );
 
   return sessions.map((session) => {
     const project = session.cwd ? projectByCwd.get(session.cwd) : undefined;
     const projectRoot = project?.projectRoot ?? session.cwd;
-    const projectEntryPath = project?.isWorktree && !existsSync(session.cwd)
-      ? projectRoot
-      : session.cwd;
+    const projectEntryPath =
+      project?.isWorktree && !existsSync(session.cwd)
+        ? projectRoot
+        : session.cwd;
     return {
       ...session,
       cwdAvailable: isWorkingDirectoryAvailable(session.cwd),
@@ -86,18 +129,27 @@ export function mergeSessionLists(
   persistedSessions: SessionInfo[],
   supplementalSessions: SessionInfo[],
 ): SessionInfo[] {
-  const byId = new Map(supplementalSessions.map((session) => [session.id, session]));
+  const byId = new Map(
+    supplementalSessions.map((session) => [session.id, session]),
+  );
   for (const persisted of persistedSessions) {
     const runtime = byId.get(persisted.id);
-    byId.set(persisted.id, runtime ? {
-      ...persisted,
-      name: runtime.name,
-      messageCount: runtime.messageCount,
-      firstMessage: runtime.firstMessage,
-      transient: false,
-    } : persisted);
+    byId.set(
+      persisted.id,
+      runtime
+        ? {
+            ...persisted,
+            name: runtime.name,
+            messageCount: runtime.messageCount,
+            firstMessage: runtime.firstMessage,
+            transient: false,
+          }
+        : persisted,
+    );
   }
-  return [...byId.values()].sort((a, b) => b.modified.localeCompare(a.modified));
+  return [...byId.values()].sort((a, b) =>
+    b.modified.localeCompare(a.modified),
+  );
 }
 
 async function discoverSessionFiles(): Promise<string[]> {
@@ -110,20 +162,22 @@ async function discoverSessionFiles(): Promise<string[]> {
   }
 
   const files: string[] = [];
-  await Promise.all(projectDirs.map(async (projectDir) => {
-    if (!projectDir.isDirectory() && !projectDir.isSymbolicLink()) return;
-    const projectPath = join(sessionsDir, projectDir.name);
-    try {
-      const entries = await readdir(projectPath, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isFile() && entry.name.endsWith(".jsonl")) {
-          files.push(join(projectPath, entry.name));
+  await Promise.all(
+    projectDirs.map(async (projectDir) => {
+      if (!projectDir.isDirectory() && !projectDir.isSymbolicLink()) return;
+      const projectPath = join(sessionsDir, projectDir.name);
+      try {
+        const entries = await readdir(projectPath, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isFile() && entry.name.endsWith(".jsonl")) {
+            files.push(join(projectPath, entry.name));
+          }
         }
+      } catch {
+        // An unreadable project directory contributes no authorized sessions.
       }
-    } catch {
-      // An unreadable project directory contributes no authorized sessions.
-    }
-  }));
+    }),
+  );
   return files;
 }
 
@@ -166,7 +220,9 @@ export async function listAllSessions(): Promise<SessionInfo[]> {
     }
   }
 
-  const pathToId = new Map(inventory.map((session) => [pathIdentityKey(session.path), session.id]));
+  const pathToId = new Map(
+    inventory.map((session) => [pathIdentityKey(session.path), session.id]),
+  );
   const sessions = inventory.map(({ parentSessionPath, ...session }) => {
     if (!parentSessionPath) return session;
     return {
@@ -202,10 +258,10 @@ function resolvePathWithinDefaultSessions(
 ): string | null {
   const candidatePath = resolvePath(filePath);
   const relativePath = relative(sessionsDir, candidatePath);
-  return relativePath !== ""
-    && relativePath !== ".."
-    && !relativePath.startsWith(`..${sep}`)
-    && !isAbsolute(relativePath)
+  return relativePath !== "" &&
+    relativePath !== ".." &&
+    !relativePath.startsWith(`..${sep}`) &&
+    !isAbsolute(relativePath)
     ? candidatePath
     : null;
 }
@@ -277,16 +333,20 @@ function findSessionIdByPath(filePath: string): string | undefined {
 }
 
 function getPathCache(): Map<string, string> {
-  if (!globalThis.__piSessionPathCache) globalThis.__piSessionPathCache = new Map();
+  if (!globalThis.__piSessionPathCache)
+    globalThis.__piSessionPathCache = new Map();
   return globalThis.__piSessionPathCache;
 }
 
 function getPathToIdCache(): Map<string, string> {
-  if (!globalThis.__piPathToSessionIdCache) globalThis.__piPathToSessionIdCache = new Map();
+  if (!globalThis.__piPathToSessionIdCache)
+    globalThis.__piPathToSessionIdCache = new Map();
   return globalThis.__piPathToSessionIdCache;
 }
 
-export async function resolveSessionPath(sessionId: string): Promise<string | null> {
+export async function resolveSessionPath(
+  sessionId: string,
+): Promise<string | null> {
   const cached = getPathCache().get(sessionId);
   if (cached) return cached;
 
@@ -302,7 +362,9 @@ export async function resolveSessionPath(sessionId: string): Promise<string | nu
   return getPathCache().get(sessionId) ?? null;
 }
 
-export async function resolveSessionIdByPath(filePath: string): Promise<string | undefined> {
+export async function resolveSessionIdByPath(
+  filePath: string,
+): Promise<string | undefined> {
   const pathKey = pathIdentityKey(filePath);
   const cached = getPathToIdCache().get(pathKey);
   if (cached) return cached;
@@ -320,10 +382,18 @@ export function cacheSessionPath(sessionId: string, filePath: string): void {
   const pathCache = getPathCache();
   const reverseCache = getPathToIdCache();
   const previousPath = pathCache.get(sessionId);
-  const previousPathKey = previousPath ? pathIdentityKey(previousPath) : undefined;
+  const previousPathKey = previousPath
+    ? pathIdentityKey(previousPath)
+    : undefined;
   const previousSessionId = reverseCache.get(pathKey);
-  const previousOwnerPath = previousSessionId ? pathCache.get(previousSessionId) : undefined;
-  if (previousPathKey && previousPathKey !== pathKey && reverseCache.get(previousPathKey) === sessionId) {
+  const previousOwnerPath = previousSessionId
+    ? pathCache.get(previousSessionId)
+    : undefined;
+  if (
+    previousPathKey &&
+    previousPathKey !== pathKey &&
+    reverseCache.get(previousPathKey) === sessionId
+  ) {
     reverseCache.delete(previousPathKey);
   }
   if (
@@ -350,19 +420,24 @@ export function invalidateSessionPathCache(sessionId: string): void {
 }
 
 export function readSessionHeader(filePath: string): SessionHeader | null {
-  const firstLine = readBoundedLines(filePath, SESSION_HEADER_MAX_BYTES, 1)[0]?.trimEnd();
+  const firstLine = readBoundedLines(
+    filePath,
+    SESSION_HEADER_MAX_BYTES,
+    1,
+  )[0]?.trimEnd();
   if (!firstLine) return null;
   try {
     const header = JSON.parse(firstLine) as Partial<SessionHeader>;
     if (
-      header.type !== "session"
-      || !isValidSessionId(header.id)
-      || typeof header.cwd !== "string"
-      || !isAbsolute(header.cwd)
-      || typeof header.timestamp !== "string"
-      || Number.isNaN(Date.parse(header.timestamp))
-      || (header.parentSession !== undefined
-        && (typeof header.parentSession !== "string" || !isAbsolute(header.parentSession)))
+      header.type !== "session" ||
+      !isValidSessionId(header.id) ||
+      typeof header.cwd !== "string" ||
+      !isAbsolute(header.cwd) ||
+      typeof header.timestamp !== "string" ||
+      Number.isNaN(Date.parse(header.timestamp)) ||
+      (header.parentSession !== undefined &&
+        (typeof header.parentSession !== "string" ||
+          !isAbsolute(header.parentSession)))
     ) {
       return null;
     }
@@ -378,7 +453,10 @@ function hasLegacyBuiltInSubagentMetadata(lines: readonly string[]): boolean {
   return lines.slice(1).some((line) => {
     try {
       const entry = JSON.parse(line) as { type?: string; customType?: string };
-      return entry.type === "custom" && entry.customType === LEGACY_BUILT_IN_SUBAGENT_META_TYPE;
+      return (
+        entry.type === "custom" &&
+        entry.customType === LEGACY_BUILT_IN_SUBAGENT_META_TYPE
+      );
     } catch {
       return false;
     }
@@ -408,7 +486,9 @@ export function reparentChildSessions(filePath: string): void {
   let siblings: string[];
   try {
     siblings = readdirSync(dir).filter(
-      (file) => file.endsWith(".jsonl") && pathIdentityKey(join(dir, file)) !== targetPathKey,
+      (file) =>
+        file.endsWith(".jsonl") &&
+        pathIdentityKey(join(dir, file)) !== targetPathKey,
     );
   } catch {
     return;
@@ -417,7 +497,8 @@ export function reparentChildSessions(filePath: string): void {
     const childPath = join(dir, file);
     try {
       const parentSession = readSessionHeader(childPath)?.parentSession;
-      if (!parentSession || pathIdentityKey(parentSession) !== targetPathKey) continue;
+      if (!parentSession || pathIdentityKey(parentSession) !== targetPathKey)
+        continue;
 
       const lines = readFileSync(childPath, "utf8").split("\n");
       if (hasLegacyBuiltInSubagentMetadata(lines)) continue;
@@ -427,7 +508,9 @@ export function reparentChildSessions(filePath: string): void {
       header.parentSession = newParentPath;
       lines[0] = JSON.stringify(header);
       writeFileSync(childPath, lines.join("\n"));
-    } catch { /* skip malformed */ }
+    } catch {
+      /* skip malformed */
+    }
   }
 }
 
@@ -436,7 +519,10 @@ export function getSessionEntries(filePath: string): SessionEntry[] {
   return entries as unknown as SessionEntry[];
 }
 
-function getSessionSettings(entries: SessionEntry[], leafId?: string | null): Pick<SessionContext, "thinkingLevel" | "model"> {
+function getSessionSettings(
+  entries: SessionEntry[],
+  leafId?: string | null,
+): Pick<SessionContext, "thinkingLevel" | "model"> {
   if (leafId === null) return { thinkingLevel: null, model: null };
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
   let current = leafId ? byId.get(leafId) : undefined;
@@ -445,14 +531,27 @@ function getSessionSettings(entries: SessionEntry[], leafId?: string | null): Pi
   let model: SessionContext["model"] | undefined;
 
   while (current && (thinkingLevel === undefined || model === undefined)) {
-    if (thinkingLevel === undefined && current.type === "thinking_level_change") {
+    if (
+      thinkingLevel === undefined &&
+      current.type === "thinking_level_change"
+    ) {
       thinkingLevel = current.thinkingLevel;
     }
     if (model === undefined && current.type === "model_change") {
       model = { provider: current.provider, modelId: current.modelId };
-    } else if (model === undefined && current.type === "message" && current.message.role === "assistant") {
-      const message = current.message as { provider?: unknown; model?: unknown };
-      if (typeof message.provider === "string" && typeof message.model === "string") {
+    } else if (
+      model === undefined &&
+      current.type === "message" &&
+      current.message.role === "assistant"
+    ) {
+      const message = current.message as {
+        provider?: unknown;
+        model?: unknown;
+      };
+      if (
+        typeof message.provider === "string" &&
+        typeof message.model === "string"
+      ) {
         model = { provider: message.provider, modelId: message.model };
       }
     }
@@ -479,29 +578,49 @@ export function buildSessionContext(
   options: BuildSessionContextOptions = {},
 ): SessionContext {
   const { tail, excludeLeaf, throughEntryId } = options;
-  const branch = sliceActiveBranch(entries, leafId ?? null, entries.length, excludeLeaf);
-  const throughIndex = throughEntryId ? branch.findIndex((entry) => entry.id === throughEntryId) : -1;
-  if (throughEntryId && throughIndex < 0) throw new RangeError("History target is not before the current page");
+  const branch = sliceActiveBranch(
+    entries,
+    leafId ?? null,
+    entries.length,
+    excludeLeaf,
+  );
+  const throughIndex = throughEntryId
+    ? branch.findIndex((entry) => entry.id === throughEntryId)
+    : -1;
+  if (throughEntryId && throughIndex < 0)
+    throw new RangeError("History target is not before the current page");
   // ponytail: distant jumps load the intervening span; use bounded windows if rendering becomes costly.
-  const sliced = throughEntryId ? branch.slice(throughIndex)
-    : tail && tail > 0 ? branch.slice(-tail) : branch;
+  const sliced = throughEntryId
+    ? branch.slice(throughIndex)
+    : tail && tail > 0
+      ? branch.slice(-tail)
+      : branch;
   const hasMore = Boolean(sliced[0]?.parentId);
   // Paged chat history must retain compacted turns, in transcript order.
   // The unpaged SDK context remains available to context consumers.
-  const contextEntries = tail || throughEntryId ? sliced : piBuildContextEntries(
-    entries as unknown as PiSessionEntry[], leafId,
-  );
-  const historyAnchors = excludeLeaf ? undefined : branch.filter((entry) => (
-    (entry.type === "message" && entry.message.role === "user")
-    || entry.type === "compaction"
-    || (entry.type === "branch_summary" && Boolean(entry.summary))
-    || (entry.type === "custom_message" && entry.customType === "compaction")
-  )).map((entry) => ({
-    id: entry.id,
-    timestamp: entry.type === "message"
-      ? entry.message.timestamp ?? parseEntryTimestamp(entry.timestamp)
-      : parseEntryTimestamp(entry.timestamp),
-  }));
+  const contextEntries =
+    tail || throughEntryId
+      ? sliced
+      : piBuildContextEntries(entries as unknown as PiSessionEntry[], leafId);
+  const historyAnchors = excludeLeaf
+    ? undefined
+    : branch
+        .filter(
+          (entry) =>
+            (entry.type === "message" && entry.message.role === "user") ||
+            entry.type === "compaction" ||
+            (entry.type === "branch_summary" && Boolean(entry.summary)) ||
+            (entry.type === "custom_message" &&
+              entry.customType === "compaction"),
+        )
+        .map((entry) => ({
+          id: entry.id,
+          timestamp:
+            entry.type === "message"
+              ? (entry.message.timestamp ??
+                parseEntryTimestamp(entry.timestamp))
+              : parseEntryTimestamp(entry.timestamp),
+        }));
 
   // Convert entries and IDs together so fork and navigation targets stay aligned.
   const messages: AgentMessage[] = [];
@@ -513,10 +632,16 @@ export function buildSessionContext(
       if (localEntry.type === "compaction" && m.role === "custom") {
         // Reconstruct the context at this compaction, excluding later turns.
         // Match Pi's post-compaction estimate, including retained messages.
-        const compacted = piBuildSessionContext(entries as unknown as PiSessionEntry[], localEntry.id);
+        const compacted = piBuildSessionContext(
+          entries as unknown as PiSessionEntry[],
+          localEntry.id,
+        );
         m.details = {
           ...(isRecord(m.details) ? m.details : {}),
-          estimatedTokensAfter: compacted.messages.reduce((total, message) => total + estimateTokens(message), 0),
+          estimatedTokensAfter: compacted.messages.reduce(
+            (total, message) => total + estimateTokens(message),
+            0,
+          ),
         };
       }
       messages.push(m);
@@ -570,7 +695,9 @@ function parseEntryTimestamp(timestamp: string): number | undefined {
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
-function base64ImageInfo(block: unknown): { bytes: number; mime?: string } | null {
+function base64ImageInfo(
+  block: unknown,
+): { bytes: number; mime?: string } | null {
   if (!isRecord(block) || block.type !== "image") return null;
 
   let data: string | undefined;
@@ -578,14 +705,24 @@ function base64ImageInfo(block: unknown): { bytes: number; mime?: string } | nul
   if (typeof block.data === "string") {
     data = block.data;
     mime = typeof block.mimeType === "string" ? block.mimeType : undefined;
-  } else if (isRecord(block.source) && block.source.type === "base64" && typeof block.source.data === "string") {
+  } else if (
+    isRecord(block.source) &&
+    block.source.type === "base64" &&
+    typeof block.source.data === "string"
+  ) {
     data = block.source.data;
-    mime = typeof block.source.media_type === "string" ? block.source.media_type : undefined;
+    mime =
+      typeof block.source.media_type === "string"
+        ? block.source.media_type
+        : undefined;
   }
   if (!data) return null;
 
   const padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
-  return { bytes: Math.max(0, Math.floor(data.length * 3 / 4) - padding), mime };
+  return {
+    bytes: Math.max(0, Math.floor((data.length * 3) / 4) - padding),
+    mime,
+  };
 }
 
 function deferToolResultBase64Images(
@@ -649,21 +786,32 @@ function entryToUiMessage(
   switch (entry.type) {
     case "message": {
       let message = options.deferToolResultImages
-        ? deferToolResultBase64Images(normalizeToolCalls(entry.message), options.sessionId, entry.id)
+        ? deferToolResultBase64Images(
+            normalizeToolCalls(entry.message),
+            options.sessionId,
+            entry.id,
+          )
         : normalizeToolCalls(entry.message);
-      const legacyContent = message.role === "assistant" ? (message as { content: unknown }).content : undefined;
+      const legacyContent =
+        message.role === "assistant"
+          ? (message as { content: unknown }).content
+          : undefined;
       if (typeof legacyContent === "string") {
-        message = { ...message, content: [{ type: "text", text: legacyContent }] } as AgentMessage;
+        message = {
+          ...message,
+          content: [{ type: "text", text: legacyContent }],
+        } as AgentMessage;
       }
-      if (!options.deferThinking || message.role !== "assistant") return message;
+      if (!options.deferThinking || message.role !== "assistant")
+        return message;
       const content = message.content;
       return {
         ...message,
-        content: content.map((block) => (
+        content: content.map((block) =>
           block.type === "thinking" && block.thinking.trim() !== ""
             ? { ...block, thinking: "", deferred: true }
-            : block
-        )),
+            : block,
+        ),
       };
     }
     case "compaction":

@@ -9,7 +9,15 @@ const { resolveHostPi } = require("./host-pi");
 const { writeHostPiShims } = require("./link-host-pi");
 const { wireChildProcessLifecycle } = require("./process-lifecycle");
 
-function runNext(mode, args, { pkgDir = path.join(__dirname, ".."), env = process.env, requireBuild = false } = {}) {
+function runNext(
+  mode,
+  args,
+  {
+    pkgDir = path.join(__dirname, ".."),
+    env = process.env,
+    requireBuild = false,
+  } = {},
+) {
   const runtime = resolveHostPi({ env, checkoutDir: pkgDir });
   // Development and build resolve Pi through node_modules, where Turbopack,
   // webpack and TypeScript never see the preload's resolve hook. Prebuilt
@@ -20,14 +28,18 @@ function runNext(mode, args, { pkgDir = path.join(__dirname, ".."), env = proces
   }
   const nextBin = require.resolve("next/dist/bin/next", { paths: [pkgDir] });
   const preload = path.join(__dirname, "host-pi-runtime.js");
-  const child = spawn(process.execPath, ["--require", preload, nextBin, mode, ...args], {
-    cwd: pkgDir,
-    env: {
-      ...env,
-      PI_WEB_HOST_PI: JSON.stringify(runtime),
+  const child = spawn(
+    process.execPath,
+    ["--require", preload, nextBin, mode, ...args],
+    {
+      cwd: pkgDir,
+      env: {
+        ...env,
+        PI_WEB_HOST_PI: JSON.stringify(runtime),
+      },
+      stdio: "inherit",
     },
-    stdio: "inherit",
-  });
+  );
   wireChildProcessLifecycle(child);
   return child;
 }
@@ -41,7 +53,9 @@ if (require.main === module) {
   try {
     runNext(mode, args);
   } catch (error) {
-    console.error(`[pi-web] ${error instanceof Error ? error.message : String(error)}`);
+    console.error(
+      `[pi-web] ${error instanceof Error ? error.message : String(error)}`,
+    );
     process.exit(1);
   }
 }

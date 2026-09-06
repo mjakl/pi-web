@@ -2,19 +2,24 @@ import fs from "fs";
 import path from "path";
 
 const UPLOAD_CONFLICT_STRATEGIES = ["error", "overwrite", "skip"] as const;
-export type UploadConflictStrategy = typeof UPLOAD_CONFLICT_STRATEGIES[number];
+export type UploadConflictStrategy =
+  (typeof UPLOAD_CONFLICT_STRATEGIES)[number];
 
-const UPLOAD_CONFLICT_STRATEGY_SET = new Set<string>(UPLOAD_CONFLICT_STRATEGIES);
+const UPLOAD_CONFLICT_STRATEGY_SET = new Set<string>(
+  UPLOAD_CONFLICT_STRATEGIES,
+);
 
 export interface UploadTargetInspection {
   conflicts: string[];
   nonReplaceable: string[];
 }
 
-export function parseUploadConflictStrategy(value: string | null): UploadConflictStrategy | null {
+export function parseUploadConflictStrategy(
+  value: string | null,
+): UploadConflictStrategy | null {
   const candidate = value ?? "error";
   return UPLOAD_CONFLICT_STRATEGY_SET.has(candidate)
-    ? candidate as UploadConflictStrategy
+    ? (candidate as UploadConflictStrategy)
     : null;
 }
 
@@ -23,10 +28,19 @@ export function validateUploadFileNames(fileNames: string[]): string | null {
 
   const seen = new Set<string>();
   for (const fileName of fileNames) {
-    if (!fileName || fileName === "." || fileName === ".." || fileName.includes("\0")) {
+    if (
+      !fileName ||
+      fileName === "." ||
+      fileName === ".." ||
+      fileName.includes("\0")
+    ) {
       return `Invalid file name: ${fileName || "(empty)"}`;
     }
-    if (fileName.includes("/") || fileName.includes("\\") || path.basename(fileName) !== fileName) {
+    if (
+      fileName.includes("/") ||
+      fileName.includes("\\") ||
+      path.basename(fileName) !== fileName
+    ) {
       return `File names must not contain a path: ${fileName}`;
     }
     if (seen.has(fileName)) return `Duplicate file name in upload: ${fileName}`;
@@ -36,7 +50,10 @@ export function validateUploadFileNames(fileNames: string[]): string | null {
   return null;
 }
 
-export function inspectUploadTargets(directory: string, fileNames: string[]): UploadTargetInspection {
+export function inspectUploadTargets(
+  directory: string,
+  fileNames: string[],
+): UploadTargetInspection {
   const conflicts: string[] = [];
   const nonReplaceable: string[] = [];
 

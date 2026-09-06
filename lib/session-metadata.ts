@@ -14,12 +14,13 @@ export function extractTextContent(message: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
-    .filter((block): block is { type: "text"; text: string } => (
-      Boolean(block)
-      && typeof block === "object"
-      && (block as { type?: unknown }).type === "text"
-      && typeof (block as { text?: unknown }).text === "string"
-    ))
+    .filter(
+      (block): block is { type: "text"; text: string } =>
+        Boolean(block) &&
+        typeof block === "object" &&
+        (block as { type?: unknown }).type === "text" &&
+        typeof (block as { text?: unknown }).text === "string",
+    )
     .map((block) => block.text)
     .join(" ");
 }
@@ -40,9 +41,10 @@ function fingerprintMatches(
   fingerprint: SessionMetadataFingerprint,
   expected?: SessionMetadataFingerprint,
 ): boolean {
-  return !expected || (
-    fingerprint.fileSize === expected.fileSize
-    && fingerprint.modified === expected.modified
+  return (
+    !expected ||
+    (fingerprint.fileSize === expected.fileSize &&
+      fingerprint.modified === expected.modified)
   );
 }
 
@@ -50,25 +52,29 @@ function sameFileFingerprint(
   left: SessionFileFingerprint | null,
   right: SessionFileFingerprint | null,
 ): boolean {
-  return left && right ? (
-    left.fileSize === right.fileSize
-    && left.device === right.device
-    && left.inode === right.inode
-    && left.changedMs === right.changedMs
-    && left.modifiedMs === right.modifiedMs
-  ) : left === right;
+  return left && right
+    ? left.fileSize === right.fileSize &&
+        left.device === right.device &&
+        left.inode === right.inode &&
+        left.changedMs === right.changedMs &&
+        left.modifiedMs === right.modifiedMs
+    : left === right;
 }
 
 function publicFingerprint(
   fingerprint: SessionFileFingerprint | null,
 ): SessionMetadataFingerprint | null {
-  return fingerprint && {
-    fileSize: fingerprint.fileSize,
-    modified: fingerprint.modified,
-  };
+  return (
+    fingerprint && {
+      fileSize: fingerprint.fileSize,
+      modified: fingerprint.modified,
+    }
+  );
 }
 
-async function fileFingerprint(filePath: string): Promise<SessionFileFingerprint | null> {
+async function fileFingerprint(
+  filePath: string,
+): Promise<SessionFileFingerprint | null> {
   try {
     const stats = await stat(filePath);
     return {
@@ -96,7 +102,8 @@ export async function readStableSessionFile<T>(
   expected?: SessionMetadataFingerprint,
 ): Promise<T | null> {
   const before = await fileFingerprint(filePath);
-  if (expected && (!before || !fingerprintMatches(before, expected))) return null;
+  if (expected && (!before || !fingerprintMatches(before, expected)))
+    return null;
 
   let value!: T;
   let callbackError: unknown;
@@ -129,49 +136,59 @@ export async function readSessionRowMetadata(
   id: string,
   expected?: SessionMetadataFingerprint,
 ): Promise<SessionRowMetadata | null> {
-  return readStableSessionFile(filePath, async (fingerprint) => {
-    if (!fingerprint) return null;
+  return readStableSessionFile(
+    filePath,
+    async (fingerprint) => {
+      if (!fingerprint) return null;
 
-    let name: string | undefined;
-    let messageCount = 0;
-    let firstMessage = "";
-    const input = createReadStream(filePath, { encoding: "utf8" });
-    const lines = createInterface({ input, crlfDelay: Infinity });
+      let name: string | undefined;
+      let messageCount = 0;
+      let firstMessage = "";
+      const input = createReadStream(filePath, { encoding: "utf8" });
+      const lines = createInterface({ input, crlfDelay: Infinity });
 
-    try {
-      for await (const line of lines) {
-        let entry: Record<string, unknown>;
-        try {
-          entry = JSON.parse(line) as Record<string, unknown>;
-        } catch {
-          continue;
+      try {
+        for await (const line of lines) {
+          let entry: Record<string, unknown>;
+          try {
+            entry = JSON.parse(line) as Record<string, unknown>;
+          } catch {
+            continue;
+          }
+
+          if (entry.type === "session_info") {
+            name =
+              typeof entry.name === "string" && entry.name.trim()
+                ? entry.name.trim()
+                : undefined;
+            continue;
+          }
+          if (entry.type !== "message") continue;
+
+          messageCount += 1;
+          if (firstMessage) continue;
+          const message = entry.message;
+          if (
+            !message ||
+            typeof message !== "object" ||
+            (message as { role?: unknown }).role !== "user"
+          )
+            continue;
+          firstMessage = extractTextContent(message);
         }
-
-        if (entry.type === "session_info") {
-          name = typeof entry.name === "string" && entry.name.trim()
-            ? entry.name.trim()
-            : undefined;
-          continue;
-        }
-        if (entry.type !== "message") continue;
-
-        messageCount += 1;
-        if (firstMessage) continue;
-        const message = entry.message;
-        if (!message || typeof message !== "object" || (message as { role?: unknown }).role !== "user") continue;
-        firstMessage = extractTextContent(message);
+      } finally {
+        lines.close();
+        input.destroy();
       }
-    } finally {
-      lines.close();
-      input.destroy();
-    }
 
-    return {
-      id,
-      ...fingerprint,
-      name,
-      messageCount,
-      firstMessage: sessionTitleFromFirstMessage(firstMessage),
-    };
-  }, expected);
+      return {
+        id,
+        ...fingerprint,
+        name,
+        messageCount,
+        firstMessage: sessionTitleFromFirstMessage(firstMessage),
+      };
+    },
+    expected,
+  );
 }

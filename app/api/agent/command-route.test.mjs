@@ -13,13 +13,18 @@ function registerFakeSession(t, id, send) {
   const previousRegistry = globalThis.__piSessions;
   const previousLifecycles = globalThis.__piSessionLifecycles;
   globalThis.__piSessionLifecycles = new Map();
-  globalThis.__piSessions = new Map([[id, {
-    sessionId: id,
-    sessionFile: `/tmp/${id}.jsonl`,
-    isAlive: () => true,
-    isActive: () => true,
-    send,
-  }]]);
+  globalThis.__piSessions = new Map([
+    [
+      id,
+      {
+        sessionId: id,
+        sessionFile: `/tmp/${id}.jsonl`,
+        isAlive: () => true,
+        isActive: () => true,
+        send,
+      },
+    ],
+  ]);
   t.after(() => {
     globalThis.__piSessions = previousRegistry;
     globalThis.__piSessionLifecycles = previousLifecycles;
@@ -46,7 +51,11 @@ test("a prompt rejected before acceptance reports prompt_rejected", async (t) =>
 
   assert.deepEqual(await post(id, { type: "prompt", message: "hello" }), {
     status: 500,
-    body: { error: "Authentication failed", code: "prompt_rejected", accepted: false },
+    body: {
+      error: "Authentication failed",
+      code: "prompt_rejected",
+      accepted: false,
+    },
   });
 });
 
@@ -71,8 +80,11 @@ test("non-prompt command failures carry no prompt rejection code", async (t) => 
     throw new Error("Model not found");
   });
 
-  assert.deepEqual(await post(id, { type: "set_model", provider: "test", modelId: "missing" }), {
-    status: 500,
-    body: { error: "Model not found" },
-  });
+  assert.deepEqual(
+    await post(id, { type: "set_model", provider: "test", modelId: "missing" }),
+    {
+      status: 500,
+      body: { error: "Model not found" },
+    },
+  );
 });

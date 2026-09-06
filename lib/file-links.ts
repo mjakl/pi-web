@@ -33,9 +33,15 @@ function normalizeLocalPath(filePath: string): string {
 function isPathInside(candidate: string, root: string): boolean {
   const normalizedCandidate = normalizeLocalPath(candidate).replace(/\/+$/, "");
   const normalizedRoot = normalizeLocalPath(root).replace(/\/+$/, "");
-  const useCaseInsensitive = /^[a-zA-Z]:\//.test(normalizedCandidate) || /^[a-zA-Z]:\//.test(normalizedRoot);
-  const filePath = useCaseInsensitive ? normalizedCandidate.toLowerCase() : normalizedCandidate;
-  const rootPath = useCaseInsensitive ? normalizedRoot.toLowerCase() : normalizedRoot;
+  const useCaseInsensitive =
+    /^[a-zA-Z]:\//.test(normalizedCandidate) ||
+    /^[a-zA-Z]:\//.test(normalizedRoot);
+  const filePath = useCaseInsensitive
+    ? normalizedCandidate.toLowerCase()
+    : normalizedCandidate;
+  const rootPath = useCaseInsensitive
+    ? normalizedRoot.toLowerCase()
+    : normalizedRoot;
   return filePath === rootPath || filePath.startsWith(`${rootPath}/`);
 }
 
@@ -78,9 +84,14 @@ export function resolveLocalFileHref(
   const normalizedHref = normalizeFilePathSlashes(decodedHref);
   const lowerHref = normalizedHref.toLowerCase();
 
-  if (lowerHref.startsWith("/api/") || lowerHref.startsWith("/_next/")) return null;
+  if (lowerHref.startsWith("/api/") || lowerHref.startsWith("/_next/"))
+    return null;
   if (!isBackslashUncPath && normalizedHref.startsWith("//")) return null;
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/i.test(normalizedHref) && !lowerHref.startsWith("file:") && !/^[a-zA-Z]:\//.test(normalizedHref)) {
+  if (
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:/i.test(normalizedHref) &&
+    !lowerHref.startsWith("file:") &&
+    !/^[a-zA-Z]:\//.test(normalizedHref)
+  ) {
     return null;
   }
 
@@ -101,20 +112,33 @@ export function resolveLocalFileHref(
   if (!candidate) return null;
 
   const filePath = stripLineSuffix(normalizeLocalPath(candidate));
-  if (candidateKind === "relative" && relativeRoot && !isPathInside(filePath, relativeRoot)) return null;
+  if (
+    candidateKind === "relative" &&
+    relativeRoot &&
+    !isPathInside(filePath, relativeRoot)
+  )
+    return null;
   return filePath;
 }
 
 /** Resolve a filesystem path without applying URL or source-location syntax. */
-export function resolveLocalFilePath(filePath: string | undefined, baseDir?: string): string | null {
+export function resolveLocalFilePath(
+  filePath: string | undefined,
+  baseDir?: string,
+): string | null {
   if (!filePath) return null;
 
-  const windowsStyle = /^[a-zA-Z]:[\\/]/.test(filePath) ||
+  const windowsStyle =
+    /^[a-zA-Z]:[\\/]/.test(filePath) ||
     filePath.startsWith("\\\\") ||
-    (baseDir !== undefined && (/^[a-zA-Z]:[\\/]/.test(baseDir) || baseDir.startsWith("\\\\")));
-  const normalizeSlashes = (value: string) => windowsStyle ? value.replace(/\\/g, "/") : value;
+    (baseDir !== undefined &&
+      (/^[a-zA-Z]:[\\/]/.test(baseDir) || baseDir.startsWith("\\\\")));
+  const normalizeSlashes = (value: string) =>
+    windowsStyle ? value.replace(/\\/g, "/") : value;
   const normalizedPath = normalizeSlashes(filePath);
-  const normalizedBase = baseDir ? normalizeSlashes(baseDir).replace(/\/+$/, "") : undefined;
+  const normalizedBase = baseDir
+    ? normalizeSlashes(baseDir).replace(/\/+$/, "")
+    : undefined;
 
   const isDriveAbsolute = /^[a-zA-Z]:\//.test(normalizedPath);
   const isUncAbsolute = normalizedPath.startsWith("//");
@@ -123,9 +147,12 @@ export function resolveLocalFilePath(filePath: string | undefined, baseDir?: str
   if (isDriveAbsolute || isUncAbsolute) {
     candidate = normalizedPath;
   } else if (normalizedPath.startsWith("/")) {
-    const windowsRoot = normalizedBase?.match(/^([a-zA-Z]:)(?:\/|$)/)?.[1]
-      ?? normalizedBase?.match(/^(\/\/[^/]+\/[^/]+)(?:\/|$)/)?.[1];
-    candidate = windowsRoot ? `${windowsRoot}${normalizedPath}` : normalizedPath;
+    const windowsRoot =
+      normalizedBase?.match(/^([a-zA-Z]:)(?:\/|$)/)?.[1] ??
+      normalizedBase?.match(/^(\/\/[^/]+\/[^/]+)(?:\/|$)/)?.[1];
+    candidate = windowsRoot
+      ? `${windowsRoot}${normalizedPath}`
+      : normalizedPath;
   } else {
     if (!normalizedBase) return null;
     candidate = `${normalizedBase}/${normalizedPath}`;

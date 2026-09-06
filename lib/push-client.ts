@@ -20,10 +20,12 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 }
 
 function isPushSupported(): boolean {
-  return typeof window !== "undefined"
-    && "serviceWorker" in navigator
-    && "PushManager" in window
-    && "Notification" in window;
+  return (
+    typeof window !== "undefined" &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window &&
+    "Notification" in window
+  );
 }
 
 export async function setupPushSubscription(): Promise<boolean> {
@@ -34,7 +36,9 @@ export async function setupPushSubscription(): Promise<boolean> {
     try {
       const configResponse = await fetch("/api/push/config");
       if (!configResponse.ok) return false;
-      const { publicKey } = await configResponse.json() as { publicKey?: string };
+      const { publicKey } = (await configResponse.json()) as {
+        publicKey?: string;
+      };
       if (!publicKey) return false;
 
       // getRegistration() always settles; serviceWorker.ready never does

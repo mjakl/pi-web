@@ -1,5 +1,6 @@
 const CACHE_PREFIX = "pi-web";
-const CACHE_VERSION = new URL(self.location.href).searchParams.get("v") || "dev";
+const CACHE_VERSION =
+  new URL(self.location.href).searchParams.get("v") || "dev";
 const STATIC_CACHE = `${CACHE_PREFIX}-static-${CACHE_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 const PRECACHE_URLS = [
@@ -18,9 +19,9 @@ self.addEventListener("install", (event) => {
       // transient non-2xx (e.g. the generated /manifest.webmanifest route
       // during a server restart) would fail install and leave the worker
       // permanently inactive, silently disabling offline support.
-      .then((cache) => Promise.all(
-        PRECACHE_URLS.map((url) => cache.add(url).catch(() => {})),
-      ))
+      .then((cache) =>
+        Promise.all(PRECACHE_URLS.map((url) => cache.add(url).catch(() => {}))),
+      )
       .then(() => self.skipWaiting()),
   );
 });
@@ -32,7 +33,10 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key.startsWith(`${CACHE_PREFIX}-`) && key !== STATIC_CACHE)
+            .filter(
+              (key) =>
+                key.startsWith(`${CACHE_PREFIX}-`) && key !== STATIC_CACHE,
+            )
             .map((key) => caches.delete(key)),
         ),
       )
@@ -77,29 +81,34 @@ self.addEventListener("push", (event) => {
     // Ignore malformed or missing push payloads.
   }
   const { title, body, url, tag } = payload;
-  if (typeof title !== "string" || !title || typeof body !== "string" || !body) return;
+  if (typeof title !== "string" || !title || typeof body !== "string" || !body)
+    return;
 
   // The in-page notification path handles the visible case (and plays the
   // completion sound). Only surface a system notification when no window for
   // this app is visible — e.g. a backgrounded iOS PWA.
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      if (clients.some((client) => client.visibilityState === "visible")) return;
-      return self.registration.showNotification(title, {
-        body,
-        data: { url: typeof url === "string" && url ? url : "/" },
-        ...(typeof tag === "string" && tag ? { tag } : {}),
-      });
-    }),
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        if (clients.some((client) => client.visibilityState === "visible"))
+          return;
+        return self.registration.showNotification(title, {
+          body,
+          data: { url: typeof url === "string" && url ? url : "/" },
+          ...(typeof tag === "string" && tag ? { tag } : {}),
+        });
+      }),
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const requestedUrl = typeof event.notification.data?.url === "string"
-    ? event.notification.data.url
-    : "/";
+  const requestedUrl =
+    typeof event.notification.data?.url === "string"
+      ? event.notification.data.url
+      : "/";
   let targetUrl = new URL("/", self.location.origin);
   try {
     const candidate = new URL(requestedUrl, self.location.origin);
@@ -123,9 +132,10 @@ async function focusOrOpenWindow(targetUrl) {
 
   for (const client of candidates) {
     try {
-      const targetClient = client.url === targetUrl
-        ? client
-        : (await client.navigate(targetUrl)) ?? client;
+      const targetClient =
+        client.url === targetUrl
+          ? client
+          : ((await client.navigate(targetUrl)) ?? client);
       await targetClient.focus();
       return;
     } catch {

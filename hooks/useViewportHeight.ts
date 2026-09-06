@@ -23,10 +23,12 @@ function hasFocusedEditableElement(): boolean {
   const activeElement = document.activeElement;
   if (!(activeElement instanceof HTMLElement)) return false;
 
-  return activeElement.isContentEditable
-    || activeElement.tagName === "INPUT"
-    || activeElement.tagName === "SELECT"
-    || activeElement.tagName === "TEXTAREA";
+  return (
+    activeElement.isContentEditable ||
+    activeElement.tagName === "INPUT" ||
+    activeElement.tagName === "SELECT" ||
+    activeElement.tagName === "TEXTAREA"
+  );
 }
 
 /**
@@ -63,8 +65,13 @@ export function useViewportHeight(): void {
       const pageWasShifted = window.scrollX !== 0 || window.scrollY !== 0;
       const isUnscaled = Math.abs(viewport.scale - 1) < 0.01;
       const viewportRestored = layoutHeight - viewport.height <= 1;
-      const shouldNormalizeOpening = openingNormalizationPending && keyboardOpen;
-      if ((shouldNormalizeOpening || viewportRestored) && pageWasShifted && isUnscaled) {
+      const shouldNormalizeOpening =
+        openingNormalizationPending && keyboardOpen;
+      if (
+        (shouldNormalizeOpening || viewportRestored) &&
+        pageWasShifted &&
+        isUnscaled
+      ) {
         if (shouldNormalizeOpening) openingNormalizationPending = false;
         window.scrollTo(0, 0);
       }

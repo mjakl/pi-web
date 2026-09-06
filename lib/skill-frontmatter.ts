@@ -12,7 +12,10 @@ const KEY_LINE = `[ \\t]*(?:${KEY}|"${KEY}"|'${KEY}')[ \\t]*:`;
  * second key (as a truthiness check would) creates a duplicate YAML key that
  * makes the whole file unparseable, and the skill loader then drops the skill.
  */
-export function setDisableModelInvocation(content: string, disable: boolean): string {
+export function setDisableModelInvocation(
+  content: string,
+  disable: boolean,
+): string {
   const { frontmatter } = parseFrontmatter<Record<string, unknown>>(content);
   const hasKey = Object.prototype.hasOwnProperty.call(frontmatter, KEY);
   if (!disable && !hasKey) return content;
@@ -26,7 +29,10 @@ export function setDisableModelInvocation(content: string, disable: boolean): st
   if (disable) {
     if (hasKey) {
       const keyLine = new RegExp(`^(${KEY_LINE})[^\\r\\n]*(\\r?)$`, "m");
-      if (!keyLine.test(head)) throw new Error(`Cannot edit ${KEY}: unsupported frontmatter formatting`);
+      if (!keyLine.test(head))
+        throw new Error(
+          `Cannot edit ${KEY}: unsupported frontmatter formatting`,
+        );
       return head.replace(keyLine, "$1 true$2") + tail;
     }
     const withKey = head.replace(/^---(\r?\n)/, `---$1${KEY}: true$1`);
@@ -40,6 +46,7 @@ export function setDisableModelInvocation(content: string, disable: boolean): st
   // Drop the line together with its preceding newline so no blank line is
   // left behind; the key is never the first line of the frontmatter block.
   const keyLine = new RegExp(`\\n${KEY_LINE}[^\\n]*`);
-  if (!keyLine.test(head)) throw new Error(`Cannot edit ${KEY}: unsupported frontmatter formatting`);
+  if (!keyLine.test(head))
+    throw new Error(`Cannot edit ${KEY}: unsupported frontmatter formatting`);
   return head.replace(keyLine, "") + tail;
 }

@@ -12,7 +12,7 @@ import {
 // POST /api/agent/[id] - Send a command to an existing or persisted session
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const operation = beginRpcSessionOperation(id);
@@ -20,18 +20,20 @@ export async function POST(
   let promptAccepted = false;
 
   try {
-    const body = await req.json() as { type: string; [key: string]: unknown };
+    const body = (await req.json()) as { type: string; [key: string]: unknown };
     commandType = typeof body.type === "string" ? body.type : undefined;
     const requestedToolNames = body.toolNames;
     if (
-      requestedToolNames !== undefined
-      && (!Array.isArray(requestedToolNames) || requestedToolNames.some((name) => typeof name !== "string"))
+      requestedToolNames !== undefined &&
+      (!Array.isArray(requestedToolNames) ||
+        requestedToolNames.some((name) => typeof name !== "string"))
     ) {
       throw new Error("toolNames must be an array of strings");
     }
     const toolNames = requestedToolNames as string[] | undefined;
     const existing = getRpcSession(id);
-    const filePath = existing?.sessionFile || await resolveSessionPath(id) || undefined;
+    const filePath =
+      existing?.sessionFile || (await resolveSessionPath(id)) || undefined;
 
     if (body.type === "set_tools") {
       if (!isRpcSessionActive(existing) && !filePath) {
@@ -45,12 +47,15 @@ export async function POST(
     }
 
     if (!isRpcSessionActive(existing) && !filePath) {
-      return Response.json({
-        error: "Session not found",
-        ...(body.type === "prompt"
-          ? { code: "prompt_rejected", accepted: false }
-          : {}),
-      }, { status: 404 });
+      return Response.json(
+        {
+          error: "Session not found",
+          ...(body.type === "prompt"
+            ? { code: "prompt_rejected", accepted: false }
+            : {}),
+        },
+        { status: 404 },
+      );
     }
 
     const result = await sendRpcSessionCommand(operation, filePath, body, {
@@ -59,19 +64,22 @@ export async function POST(
     promptAccepted = body.type === "prompt";
     return Response.json({ success: true, data: result });
   } catch (error) {
-    return Response.json({
-      error: errorMessage(error),
-      ...(commandType === "prompt" && !promptAccepted
-        ? { code: "prompt_rejected", accepted: false }
-        : {}),
-    }, { status: 500 });
+    return Response.json(
+      {
+        error: errorMessage(error),
+        ...(commandType === "prompt" && !promptAccepted
+          ? { code: "prompt_rejected", accepted: false }
+          : {}),
+      },
+      { status: 500 },
+    );
   }
 }
 
 // GET /api/agent/[id] - Get current runtime state without starting it
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
@@ -91,7 +99,7 @@ export async function GET(
 // DELETE /api/agent/[id] - Stop a runtime without deleting its transcript
 export async function DELETE(
   _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   try {

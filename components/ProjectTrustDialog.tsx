@@ -66,10 +66,20 @@ export function ProjectTrustDialog({
             <path d="m9 12 2 2 4-4" />
           </svg>
           <div style={{ minWidth: 0 }}>
-            <div id="project-trust-title" style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
+            <div
+              id="project-trust-title"
+              style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}
+            >
               {t("trust.dialogTitle")}
             </div>
-            <div style={{ marginTop: 7, fontSize: 12, lineHeight: 1.6, color: "var(--text-muted)" }}>
+            <div
+              style={{
+                marginTop: 7,
+                fontSize: 12,
+                lineHeight: 1.6,
+                color: "var(--text-muted)",
+              }}
+            >
               {t("trust.dialogBody")}
             </div>
             <code
@@ -89,7 +99,15 @@ export function ProjectTrustDialog({
               {cwd}
             </code>
             {error && (
-              <div role="alert" style={{ marginTop: 10, color: "var(--danger)", fontSize: 12, lineHeight: 1.5 }}>
+              <div
+                role="alert"
+                style={{
+                  marginTop: 10,
+                  color: "var(--danger)",
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                }}
+              >
                 {error}
               </div>
             )}

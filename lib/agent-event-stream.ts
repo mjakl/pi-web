@@ -40,7 +40,11 @@ export function createAgentEventStream(
         unsubscribe = null;
         if (abortHandler) req.signal.removeEventListener("abort", abortHandler);
         if (closeController) {
-          try { controller.close(); } catch { /* stream already closed */ }
+          try {
+            controller.close();
+          } catch {
+            /* stream already closed */
+          }
         }
       };
       cancelStream = cleanup;
@@ -122,7 +126,10 @@ export function createAgentEventStream(
       }
       req.signal.addEventListener("abort", abortHandler, { once: true });
 
-      heartbeat = setInterval(() => enqueueText(":\n\n"), HEARTBEAT_INTERVAL_MS);
+      heartbeat = setInterval(
+        () => enqueueText(":\n\n"),
+        HEARTBEAT_INTERVAL_MS,
+      );
 
       // Force the response headers through without claiming that the agent is
       // ready. The client waits for the later `connected` data event.

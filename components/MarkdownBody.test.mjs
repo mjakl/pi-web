@@ -12,18 +12,30 @@ const { MarkdownBody } = await jiti.import("./MarkdownBody.tsx");
 
 function renderMarkdown(markdown) {
   return renderToStaticMarkup(
-    React.createElement(MarkdownBody, {
-      cwd: "/home/me/project",
-      onOpenFile() {},
-    }, markdown),
+    React.createElement(
+      MarkdownBody,
+      {
+        cwd: "/home/me/project",
+        onOpenFile() {},
+      },
+      markdown,
+    ),
   );
 }
 
 test("preserves currency, prose spacing, and bold text between dollar signs", () => {
-  const html = renderMarkdown("- **Amigo Europe mobile:** the adjusted total **increases by $0.570**. Its final curator call was retained as token usage but left **unpriced**. Adding its estimated **$2.763** charge outweighs the **$2.193** Flex saving on the draft-curator calls.");
+  const html = renderMarkdown(
+    "- **Amigo Europe mobile:** the adjusted total **increases by $0.570**. Its final curator call was retained as token usage but left **unpriced**. Adding its estimated **$2.763** charge outweighs the **$2.193** Flex saving on the draft-curator calls.",
+  );
 
-  assert.match(html, /<strong>increases by \$0\.570<\/strong>\. Its final curator call was retained as token usage but left <strong>unpriced<\/strong>\./);
-  assert.match(html, /<strong>\$2\.763<\/strong> charge outweighs the <strong>\$2\.193<\/strong>/);
+  assert.match(
+    html,
+    /<strong>increases by \$0\.570<\/strong>\. Its final curator call was retained as token usage but left <strong>unpriced<\/strong>\./,
+  );
+  assert.match(
+    html,
+    /<strong>\$2\.763<\/strong> charge outweighs the <strong>\$2\.193<\/strong>/,
+  );
   assert.doesNotMatch(html, /katex|<math/);
 });
 
@@ -67,19 +79,29 @@ test("leaves inline and display formula notation as ordinary Markdown", () => {
     [String.raw`\[\frac{a}{b}\]`, String.raw`[\frac{a}{b}]`],
     [String.raw`[ \frac{a}{b} ]`, String.raw`[ \frac{a}{b} ]`],
   ]) {
-    assert.equal(renderMarkdown(source), `<div class="markdown-body"><p>${expected}</p></div>`);
+    assert.equal(
+      renderMarkdown(source),
+      `<div class="markdown-body"><p>${expected}</p></div>`,
+    );
   }
 });
 
 test("keeps shell variables and LaTeX inside inline code literal", () => {
   const html = renderMarkdown("Use `$HOME` and `\\frac{a}{b}`");
   assert.match(html, /<code class="markdown-inline-code">\$HOME<\/code>/);
-  assert.match(html, /<code class="markdown-inline-code">\\frac\{a\}\{b\}<\/code>/);
+  assert.match(
+    html,
+    /<code class="markdown-inline-code">\\frac\{a\}\{b\}<\/code>/,
+  );
 });
 
 test("does not print undefined while a code fence is still opening", () => {
   const opening = renderToStaticMarkup(
-    React.createElement(MarkdownBody, { cwd: "/home/me/project", isStreaming: true }, "```ts\n"),
+    React.createElement(
+      MarkdownBody,
+      { cwd: "/home/me/project", isStreaming: true },
+      "```ts\n",
+    ),
   );
 
   assert.doesNotMatch(opening, /undefined/);
@@ -96,7 +118,10 @@ test("keeps in-page anchors in the page and matched to their target", () => {
   assert.match(anchor, /href="#user-content-sec"/);
   assert.doesNotMatch(anchor, /target="_blank"/);
 
-  assert.match(renderMarkdown("x[^1]\n\n[^1]: note"), /href="#user-content-user-content-fn-1"/);
+  assert.match(
+    renderMarkdown("x[^1]\n\n[^1]: note"),
+    /href="#user-content-user-content-fn-1"/,
+  );
 });
 
 test("only opens a real external scheme in a new tab", () => {
@@ -107,10 +132,17 @@ test("only opens a real external scheme in a new tab", () => {
 });
 
 test("serves local images through the file API and passes the session", () => {
-  assert.match(renderMarkdown("![a](./a.png)"), /\/api\/files\/home\/me\/project\/a\.png\?type=read/);
+  assert.match(
+    renderMarkdown("![a](./a.png)"),
+    /\/api\/files\/home\/me\/project\/a\.png\?type=read/,
+  );
 
   const scoped = renderToStaticMarkup(
-    React.createElement(MarkdownBody, { cwd: "/home/me/project", sessionId: "abc" }, "![a](./a.png)"),
+    React.createElement(
+      MarkdownBody,
+      { cwd: "/home/me/project", sessionId: "abc" },
+      "![a](./a.png)",
+    ),
   );
   assert.match(scoped, /sessionId=abc/);
 });
@@ -125,6 +157,12 @@ test("shows the alt text when an image source cannot be rendered", () => {
 });
 
 test("leaves a remote image untouched and still blocks javascript urls", () => {
-  assert.match(renderMarkdown("![c](https://example.com/c.png)"), /src="https:\/\/example\.com\/c\.png"/);
-  assert.doesNotMatch(renderMarkdown("[x](javascript:alert(1))"), /javascript:/i);
+  assert.match(
+    renderMarkdown("![c](https://example.com/c.png)"),
+    /src="https:\/\/example\.com\/c\.png"/,
+  );
+  assert.doesNotMatch(
+    renderMarkdown("[x](javascript:alert(1))"),
+    /javascript:/i,
+  );
 });

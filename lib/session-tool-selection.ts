@@ -12,21 +12,28 @@ export interface SessionToolSelectionData {
 const BUILTIN_TOOL_NAMES = new Set(PRESET_FULL);
 
 function parseToolSelectionData(data: unknown): string[] | undefined {
-  if (typeof data !== "object" || data === null || Array.isArray(data)) return undefined;
+  if (typeof data !== "object" || data === null || Array.isArray(data))
+    return undefined;
   const candidate = data as { version?: unknown; tools?: unknown };
   if (
-    candidate.version !== 1
-    || !Array.isArray(candidate.tools)
-    || candidate.tools.some((tool) => typeof tool !== "string" || !BUILTIN_TOOL_NAMES.has(tool))
-  ) return undefined;
+    candidate.version !== 1 ||
+    !Array.isArray(candidate.tools) ||
+    candidate.tools.some(
+      (tool) => typeof tool !== "string" || !BUILTIN_TOOL_NAMES.has(tool),
+    )
+  )
+    return undefined;
   return [...new Set(candidate.tools as string[])];
 }
 
 /** Return the newest valid persisted selection. Undefined identifies legacy sessions. */
-export function readSessionToolSelection(entries: readonly SessionEntry[]): string[] | undefined {
+export function readSessionToolSelection(
+  entries: readonly SessionEntry[],
+): string[] | undefined {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
-    if (entry.type !== "custom" || entry.customType !== TOOL_SELECTION_TYPE) continue;
+    if (entry.type !== "custom" || entry.customType !== TOOL_SELECTION_TYPE)
+      continue;
     const tools = parseToolSelectionData(entry.data);
     if (tools !== undefined) return tools;
   }

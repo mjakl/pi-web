@@ -16,13 +16,22 @@ test("defaults to enabled when nothing was ever stored", () => {
 });
 
 test("restores a stored opt-out", () => {
-  assert.equal(readSoundEnabled(createStorage({ "pi-sound-enabled": "false" })), false);
+  assert.equal(
+    readSoundEnabled(createStorage({ "pi-sound-enabled": "false" })),
+    false,
+  );
 });
 
 test("restores a stored opt-in", () => {
-  assert.equal(readSoundEnabled(createStorage({ "pi-sound-enabled": "true" })), true);
+  assert.equal(
+    readSoundEnabled(createStorage({ "pi-sound-enabled": "true" })),
+    true,
+  );
 });
 
 test("treats an unrecognised stored value as opted out", () => {
-  assert.equal(readSoundEnabled(createStorage({ "pi-sound-enabled": "yes" })), false);
+  assert.equal(
+    readSoundEnabled(createStorage({ "pi-sound-enabled": "yes" })),
+    false,
+  );
 });
