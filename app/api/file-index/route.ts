@@ -4,7 +4,11 @@ import fs from "fs";
 import path from "path";
 import { isIgnoredDirent } from "@/lib/file-dirent";
 import { authorizeDirectory } from "@/lib/file-access";
-import { buildEntriesFromFiles, filterFileEntries, type FileIndexEntry } from "@/lib/file-fuzzy";
+import {
+  buildEntriesFromFiles,
+  filterFileEntries,
+  type FileIndexEntry,
+} from "@/lib/file-fuzzy";
 
 const execFileAsync = promisify(execFile);
 
@@ -48,8 +52,20 @@ async function listWithGit(cwd: string): Promise<FileListing | null> {
   try {
     const { stdout } = await execFileAsync(
       "git",
-      ["-C", cwd, "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-      { timeout: 10_000, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, LC_ALL: "C" } },
+      [
+        "-C",
+        cwd,
+        "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "-z",
+      ],
+      {
+        timeout: 10_000,
+        maxBuffer: 64 * 1024 * 1024,
+        env: { ...process.env, LC_ALL: "C" },
+      },
     );
     const all = stdout.split("\0").filter(Boolean);
     if (all.length > GIT_HARD_CAP) {
@@ -67,7 +83,9 @@ async function listWithGit(cwd: string): Promise<FileListing | null> {
 function listWithWalk(cwd: string): FileListing {
   const files: string[] = [];
   // BFS so shallow files win when the cap truncates the listing.
-  const queue: Array<{ abs: string; rel: string; depth: number }> = [{ abs: cwd, rel: "", depth: 0 }];
+  const queue: Array<{ abs: string; rel: string; depth: number }> = [
+    { abs: cwd, rel: "", depth: 0 },
+  ];
   while (queue.length > 0) {
     const { abs, rel, depth } = queue.shift()!;
     let dirents: fs.Dirent[];
@@ -81,7 +99,11 @@ function listWithWalk(cwd: string): FileListing {
       const childRel = rel ? `${rel}/${d.name}` : d.name;
       if (d.isDirectory()) {
         if (depth + 1 <= MAX_WALK_DEPTH) {
-          queue.push({ abs: path.join(abs, d.name), rel: childRel, depth: depth + 1 });
+          queue.push({
+            abs: path.join(abs, d.name),
+            rel: childRel,
+            depth: depth + 1,
+          });
         }
       } else if (d.isFile()) {
         if (files.length >= WALK_HARD_CAP) {
@@ -107,7 +129,10 @@ export async function GET(req: Request) {
     const cwd = params.get("cwd")?.trim() ?? "";
     const authorized = await authorizeDirectory(cwd);
     if ("error" in authorized) {
-      return Response.json({ error: authorized.error }, { status: authorized.status });
+      return Response.json(
+        { error: authorized.error },
+        { status: authorized.status },
+      );
     }
     const query = params.get("q")?.slice(0, MAX_QUERY_LENGTH) ?? "";
 
@@ -126,7 +151,9 @@ export async function GET(req: Request) {
 
     if (query) {
       cached.entries ??= buildEntriesFromFiles(cached.listing.files);
-      return Response.json({ matches: filterFileEntries(cached.entries, query) });
+      return Response.json({
+        matches: filterFileEntries(cached.entries, query),
+      });
     }
 
     const { files, hardTruncated } = cached.listing;

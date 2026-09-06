@@ -10,8 +10,18 @@ export function getContextWarningLevel(
   usage: ContextUsage | null,
   dumbZoneTokens: number,
 ): ContextWarningLevel {
-  if (usage?.percent !== null && usage?.percent !== undefined && usage.percent >= 75) return "red";
-  if (usage?.tokens !== null && usage?.tokens !== undefined && usage.tokens >= dumbZoneTokens) return "yellow";
+  if (
+    usage?.percent !== null &&
+    usage?.percent !== undefined &&
+    usage.percent >= 75
+  )
+    return "red";
+  if (
+    usage?.tokens !== null &&
+    usage?.tokens !== undefined &&
+    usage.tokens >= dumbZoneTokens
+  )
+    return "yellow";
   return "none";
 }
 
@@ -21,7 +31,9 @@ export function getDumbZoneTokens(
   if (!storage) return DEFAULT_DUMB_ZONE_TOKENS;
   try {
     const value = Number(storage.getItem(STORAGE_KEY));
-    return Number.isSafeInteger(value) && value > 0 ? value : DEFAULT_DUMB_ZONE_TOKENS;
+    return Number.isSafeInteger(value) && value > 0
+      ? value
+      : DEFAULT_DUMB_ZONE_TOKENS;
   } catch {
     return DEFAULT_DUMB_ZONE_TOKENS;
   }

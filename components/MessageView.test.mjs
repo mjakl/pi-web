@@ -52,20 +52,25 @@ test("keeps long human messages scrollable inside the band and actions outside",
 
 test("keeps streaming metrics in reserved slots while the model label truncates", () => {
   const modelLabel = "A deliberately long model name for narrow layouts";
-  const html = renderMessage({
-    role: "assistant",
-    provider: "anthropic",
-    model: "claude-test",
-    content: [{ type: "text", text: "streaming response" }],
-  }, {
-    isStreaming: true,
-    modelNames: { "anthropic:claude-test": modelLabel },
-  });
+  const html = renderMessage(
+    {
+      role: "assistant",
+      provider: "anthropic",
+      model: "claude-test",
+      content: [{ type: "text", text: "streaming response" }],
+    },
+    {
+      isStreaming: true,
+      modelNames: { "anthropic:claude-test": modelLabel },
+    },
+  );
 
   assert.match(html, /grid-template-columns:minmax\(0, 1fr\) 9ch 10ch/);
   assert.match(
     html,
-    new RegExp(`<span title="${modelLabel}" style="[^"]*min-width:0;[^"]*overflow:hidden;[^"]*text-overflow:ellipsis;[^"]*white-space:nowrap[^"]*">`),
+    new RegExp(
+      `<span title="${modelLabel}" style="[^"]*min-width:0;[^"]*overflow:hidden;[^"]*text-overflow:ellipsis;[^"]*white-space:nowrap[^"]*">`,
+    ),
   );
   assert.match(
     html,
@@ -85,12 +90,15 @@ test("keeps streamed tool input out of collapsed markup while counting it", () =
     input: {},
     rawInput: '{"path":"/tmp/file","content":"secret-stream-fragment',
   };
-  const html = renderMessage({
-    role: "assistant",
-    provider: "anthropic",
-    model: "claude-test",
-    content: [block],
-  }, { isStreaming: true });
+  const html = renderMessage(
+    {
+      role: "assistant",
+      provider: "anthropic",
+      model: "claude-test",
+      content: [block],
+    },
+    { isStreaming: true },
+  );
 
   assert.match(html, /write/);
   assert.match(html, /Generating parameters/);
@@ -112,14 +120,17 @@ test("renders an extension Agent tool as a standard tool call", () => {
     content: [{ type: "text", text: "Parser is in lib/parser.ts" }],
     details: { sessionId: "extension-session" },
   };
-  const html = renderMessage({
-    role: "assistant",
-    provider: "anthropic",
-    model: "claude-test",
-    content: [block],
-  }, {
-    toolResults: new Map([[block.toolCallId, result]]),
-  });
+  const html = renderMessage(
+    {
+      role: "assistant",
+      provider: "anthropic",
+      model: "claude-test",
+      content: [block],
+    },
+    {
+      toolResults: new Map([[block.toolCallId, result]]),
+    },
+  );
 
   assert.match(html, /border:1px solid rgba\(34,197,94,0\.25\)/);
   assert.match(html, />Agent</);
@@ -211,7 +222,8 @@ test("renders a complete SDK skill expansion as a compact command", () => {
 test("does not collapse incomplete skill-looking user text", () => {
   const html = renderMessage({
     role: "user",
-    content: '<skill name="review" location="/skills/review/SKILL.md">\nordinary user text',
+    content:
+      '<skill name="review" location="/skills/review/SKILL.md">\nordinary user text',
   });
 
   assert.match(html, /ordinary user text/);
@@ -223,10 +235,13 @@ test("keeps attached images when restoring a compact command for editing", () =>
     type: "image",
     source: { type: "base64", media_type: "image/png", data: "QUJDRA==" },
   };
-  const restored = replaceUserMessageText({
-    role: "user",
-    content: [{ type: "text", text: COMPLETE_SKILL_EXPANSION }, image],
-  }, "/skill:review src/main.ts");
+  const restored = replaceUserMessageText(
+    {
+      role: "user",
+      content: [{ type: "text", text: COMPLETE_SKILL_EXPANSION }, image],
+    },
+    "/skill:review src/main.ts",
+  );
 
   assert.deepEqual(restored.content, [
     { type: "text", text: "/skill:review src/main.ts" },
@@ -239,10 +254,12 @@ test("renders assistant images as buttons that open a larger preview", () => {
     role: "assistant",
     provider: "openai",
     model: "gpt-test",
-    content: [{
-      type: "image",
-      source: { type: "base64", media_type: "image/png", data: "YWJj" },
-    }],
+    content: [
+      {
+        type: "image",
+        source: { type: "base64", media_type: "image/png", data: "YWJj" },
+      },
+    ],
   });
 
   assert.match(html, /<button[^>]+aria-label="Preview image"[^>]*>/);
@@ -285,7 +302,13 @@ test("hands the hover reveal of message actions to CSS", () => {
 
   const user = renderMessage(
     { role: "user", content: "hello" },
-    { entryId: "e1", forking: true, onFork: () => {}, onNavigate: () => {}, prevAssistantEntryId: "p1" },
+    {
+      entryId: "e1",
+      forking: true,
+      onFork: () => {},
+      onNavigate: () => {},
+      prevAssistantEntryId: "p1",
+    },
   );
   assert.match(user, /<div class="message-row"/);
   assert.match(user, /<div class="message-actions" data-forking="true"/);
@@ -293,9 +316,21 @@ test("hands the hover reveal of message actions to CSS", () => {
 
 test("summarizes subagent calls without coercing structured input to a string", () => {
   const html = renderMessage({
-    role: "assistant", provider: "openai", model: "test",
-    content: [{ type: "toolCall", toolCallId: "sub-1", toolName: "subagent",
-      input: { calls: [{ agent: "coder", prompt: "Investigate the notification API" }] } }],
+    role: "assistant",
+    provider: "openai",
+    model: "test",
+    content: [
+      {
+        type: "toolCall",
+        toolCallId: "sub-1",
+        toolName: "subagent",
+        input: {
+          calls: [
+            { agent: "coder", prompt: "Investigate the notification API" },
+          ],
+        },
+      },
+    ],
   });
   assert.match(html, /Subagent/);
   assert.match(html, /coder/);

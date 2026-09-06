@@ -11,10 +11,9 @@ const jiti = createJiti(import.meta.url, {
   moduleCache: false,
 });
 const { GET } = await jiti.import("./[id]/events/route.ts");
-const {
-  cacheSessionPath,
-  invalidateSessionPathCache,
-} = await jiti.import("../../../lib/session-reader.ts");
+const { cacheSessionPath, invalidateSessionPathCache } = await jiti.import(
+  "../../../lib/session-reader.ts",
+);
 
 function fakeSession(id) {
   return {
@@ -28,7 +27,10 @@ function fakeSession(id) {
 }
 
 // Isolated registry, lifecycle, start-lock, and agent-directory state.
-async function useIsolatedRuntime(t, { sessions = new Map(), locks = new Map() } = {}) {
+async function useIsolatedRuntime(
+  t,
+  { sessions = new Map(), locks = new Map() } = {},
+) {
   const previous = {
     sessions: globalThis.__piSessions,
     lifecycles: globalThis.__piSessionLifecycles,
@@ -54,23 +56,25 @@ async function useIsolatedRuntime(t, { sessions = new Map(), locks = new Map() }
 
 async function persistStoppedSession(t, agentDir, id) {
   const file = join(agentDir, "sessions", `${id}.jsonl`);
-  await writeFile(file, `${JSON.stringify({
-    type: "session",
-    version: 3,
-    id,
-    timestamp: "2026-01-01T00:00:00.000Z",
-    cwd: agentDir,
-  })}\n`);
+  await writeFile(
+    file,
+    `${JSON.stringify({
+      type: "session",
+      version: 3,
+      id,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      cwd: agentDir,
+    })}\n`,
+  );
   cacheSessionPath(id, file);
   t.after(() => invalidateSessionPathCache(id));
   return file;
 }
 
 function requestEvents(id, query = "") {
-  return GET(
-    new Request(`http://localhost/api/agent/${id}/events${query}`),
-    { params: Promise.resolve({ id }) },
-  );
+  return GET(new Request(`http://localhost/api/agent/${id}/events${query}`), {
+    params: Promise.resolve({ id }),
+  });
 }
 
 async function readFirstDataEvent(response) {
@@ -140,7 +144,10 @@ test("explicit activation starts a stopped session through the shared start lock
 test("an unknown session is not found even with activation requested", async (t) => {
   await useIsolatedRuntime(t);
 
-  const response = await requestEvents(`events-route-missing-${process.pid}`, "?activate");
+  const response = await requestEvents(
+    `events-route-missing-${process.pid}`,
+    "?activate",
+  );
 
   assert.equal(response.status, 404);
   assert.match(response.headers.get("Content-Type"), /^application\/json/);

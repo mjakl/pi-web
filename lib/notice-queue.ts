@@ -22,12 +22,15 @@ const MAX_NOTICES = 5;
 function markOldestNoticeExiting(notices: NoticeItem[]): NoticeItem[] {
   const index = notices.findIndex((notice) => !notice.exiting);
   if (index === -1) return notices;
-  return notices.map((notice, i) => (
-    i === index ? { ...notice, exiting: true } : notice
-  ));
+  return notices.map((notice, i) =>
+    i === index ? { ...notice, exiting: true } : notice,
+  );
 }
 
-function fillPendingNotices(visible: NoticeItem[], pending: NoticeItem[]): NoticeState {
+function fillPendingNotices(
+  visible: NoticeItem[],
+  pending: NoticeItem[],
+): NoticeState {
   // slice() reads a negative count from the end, so clamp before slicing.
   const take = Math.max(0, MAX_NOTICES - visible.length);
   let nextVisible = visible.concat(pending.slice(0, take));
@@ -38,10 +41,16 @@ function fillPendingNotices(visible: NoticeItem[], pending: NoticeItem[]): Notic
   return { visible: nextVisible, pending: nextPending };
 }
 
-export function noticeReducer(state: NoticeState, action: NoticeAction): NoticeState {
+export function noticeReducer(
+  state: NoticeState,
+  action: NoticeAction,
+): NoticeState {
   switch (action.type) {
     case "add": {
-      if (state.visible.some((notice) => notice.exiting) || state.visible.length >= MAX_NOTICES) {
+      if (
+        state.visible.some((notice) => notice.exiting) ||
+        state.visible.length >= MAX_NOTICES
+      ) {
         return {
           visible: state.visible.some((notice) => notice.exiting)
             ? state.visible

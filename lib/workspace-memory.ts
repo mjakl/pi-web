@@ -21,8 +21,10 @@ function readMap(storage: StorageLike): Record<string, string | undefined> {
   if (!raw) return {};
   try {
     const parsed: unknown = JSON.parse(raw);
-    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed as Record<string, string | undefined>
+    return parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+      ? (parsed as Record<string, string | undefined>)
       : {};
   } catch {
     return {};

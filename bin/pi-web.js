@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 "use strict";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { getUnsupportedNodeVersionMessage, isNodeVersionSupported } = require("./node-version");
+const {
+  getUnsupportedNodeVersionMessage,
+  isNodeVersionSupported,
+} = require("./node-version"); // eslint-disable-line @typescript-eslint/no-require-imports
 
 if (!isNodeVersionSupported(process.versions.node)) {
   console.error(getUnsupportedNodeVersionMessage(process.versions.node));
@@ -46,8 +48,13 @@ if (!loopbackHostnames.has(hostname)) {
 }
 
 try {
-  runNext("start", ["-p", port, "-H", hostname], { pkgDir, requireBuild: true });
+  runNext("start", ["-p", port, "-H", hostname], {
+    pkgDir,
+    requireBuild: true,
+  });
 } catch (error) {
-  console.error(`[pi-web] ${error instanceof Error ? error.message : String(error)}`);
+  console.error(
+    `[pi-web] ${error instanceof Error ? error.message : String(error)}`,
+  );
   process.exit(1);
 }

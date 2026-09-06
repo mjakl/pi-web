@@ -70,9 +70,16 @@ function render(code, lang) {
   return renderToStaticMarkup(React.createElement(CodeBlock, { code, lang }));
 }
 
-for (const [lang, code] of Object.entries({ ...FILE_VIEWER_LANGUAGES, ...TRANSCRIPT_LANGUAGES })) {
+for (const [lang, code] of Object.entries({
+  ...FILE_VIEWER_LANGUAGES,
+  ...TRANSCRIPT_LANGUAGES,
+})) {
   test(`tokenizes ${lang}`, () => {
-    assert.match(render(code, lang), /class="token/, `${lang} produced no tokens`);
+    assert.match(
+      render(code, lang),
+      /class="token/,
+      `${lang} produced no tokens`,
+    );
   });
 }
 

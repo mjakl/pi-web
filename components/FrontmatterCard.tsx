@@ -41,7 +41,9 @@ export function FrontmatterCard({ data }: FrontmatterCardProps) {
     ? (data[tagKey] as unknown[]).map(formatFrontmatterValue).filter(Boolean)
     : [];
 
-  const rows = entries.filter(([key]) => key !== tagKey && (key !== "title" || !title));
+  const rows = entries.filter(
+    ([key]) => key !== tagKey && (key !== "title" || !title),
+  );
 
   return (
     <div className="markdown-frontmatter">

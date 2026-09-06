@@ -27,7 +27,11 @@ test("rejects oversized and malformed metadata batches", async () => {
     modified: "2026-01-01T00:00:00.000Z",
   }));
   assert.equal((await POST(request(oversized))).status, 400);
-  assert.equal((await POST(request([{ id: "../escape", fileSize: 1, modified: "bad" }]))).status, 400);
+  assert.equal(
+    (await POST(request([{ id: "../escape", fileSize: 1, modified: "bad" }])))
+      .status,
+    400,
+  );
 });
 
 test("returns metadata only when the requested fingerprint is current", async (t) => {
@@ -36,11 +40,26 @@ test("returns metadata only when the requested fingerprint is current", async (t
   const id = "metadata-route-session";
   const filePath = join(projectDir, `2026-01-01_${id}.jsonl`);
   await mkdir(projectDir, { recursive: true });
-  await writeFile(filePath, [
-    JSON.stringify({ type: "session", version: 3, id, timestamp: "2026-01-01T00:00:00.000Z", cwd: agentDir }),
-    JSON.stringify({ type: "message", id: "u1", parentId: null, timestamp: "2026-01-01T00:00:01.000Z", message: { role: "user", content: "hello" } }),
-    "",
-  ].join("\n"));
+  await writeFile(
+    filePath,
+    [
+      JSON.stringify({
+        type: "session",
+        version: 3,
+        id,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        cwd: agentDir,
+      }),
+      JSON.stringify({
+        type: "message",
+        id: "u1",
+        parentId: null,
+        timestamp: "2026-01-01T00:00:01.000Z",
+        message: { role: "user", content: "hello" },
+      }),
+      "",
+    ].join("\n"),
+  );
   const fingerprint = await stat(filePath);
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const previousPathCache = globalThis.__piSessionPathCache;
@@ -56,11 +75,15 @@ test("returns metadata only when the requested fingerprint is current", async (t
     await rm(agentDir, { recursive: true, force: true });
   });
 
-  const response = await POST(request([{
-    id,
-    fileSize: fingerprint.size,
-    modified: fingerprint.mtime.toISOString(),
-  }]));
+  const response = await POST(
+    request([
+      {
+        id,
+        fileSize: fingerprint.size,
+        modified: fingerprint.mtime.toISOString(),
+      },
+    ]),
+  );
   const body = await response.json();
 
   assert.equal(response.status, 200);

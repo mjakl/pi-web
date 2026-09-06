@@ -19,12 +19,20 @@ function formatMessageBytes(n: number): string {
  * MarkdownBody with an oversized-content guard: huge messages render as a
  * click-to-reveal plain-text <pre> instead of running the markdown pipeline.
  */
-export function SafeMarkdownBody({ children, className, ...props }: React.ComponentProps<typeof MarkdownBody>) {
+export function SafeMarkdownBody({
+  children,
+  className,
+  ...props
+}: React.ComponentProps<typeof MarkdownBody>) {
   const { t } = useI18n();
   const [showRaw, setShowRaw] = useState(false);
 
   if (children.length <= MAX_MARKDOWN_CHARS) {
-    return <MarkdownBody className={className} {...props}>{children}</MarkdownBody>;
+    return (
+      <MarkdownBody className={className} {...props}>
+        {children}
+      </MarkdownBody>
+    );
   }
   if (!showRaw) {
     return (
@@ -44,12 +52,23 @@ export function SafeMarkdownBody({ children, className, ...props }: React.Compon
           textAlign: "left",
         }}
       >
-        ⚠ {t("i18n.largeMessageReveal", { size: formatMessageBytes(children.length) })}
+        ⚠{" "}
+        {t("i18n.largeMessageReveal", {
+          size: formatMessageBytes(children.length),
+        })}
       </button>
     );
   }
   return (
-    <div className={className} style={{ maxHeight: 420, overflow: "auto", fontSize: 12, lineHeight: 1.5 }}>
+    <div
+      className={className}
+      style={{
+        maxHeight: 420,
+        overflow: "auto",
+        fontSize: 12,
+        lineHeight: 1.5,
+      }}
+    >
       <pre
         style={{
           margin: 0,

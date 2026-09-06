@@ -15,9 +15,7 @@ const {
 } = await jiti.import("./ExtensionStatusBar.tsx");
 
 function renderStatusBar(props) {
-  return renderToStaticMarkup(
-    React.createElement(ExtensionStatusBar, props),
-  );
+  return renderToStaticMarkup(React.createElement(ExtensionStatusBar, props));
 }
 
 test("sorts status text by hidden key like the Pi CLI footer", () => {
@@ -61,11 +59,13 @@ test("renders a single status line without identifier keys", () => {
 test("renders widgets and status text in one footer", () => {
   const html = renderStatusBar({
     statuses: [{ key: "status", text: "connected" }],
-    widgets: [{
-      key: "usage",
-      lines: ["42%"],
-      placement: "aboveEditor",
-    }],
+    widgets: [
+      {
+        key: "usage",
+        lines: ["42%"],
+        placement: "aboveEditor",
+      },
+    ],
   });
 
   assert.match(html, /extension-status-shelf has-widgets has-status/);

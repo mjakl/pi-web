@@ -1,6 +1,5 @@
 import type { CSSProperties } from "react";
 
-
 interface IconProps {
   size?: number;
 }
@@ -41,7 +40,10 @@ type CatppuccinIconName =
 
 const CATPPUCCIN_ICONS_ROOT = "/icons/catppuccin";
 
-function CatppuccinIcon({ name, size = 14 }: IconProps & { name: CatppuccinIconName }) {
+function CatppuccinIcon({
+  name,
+  size = 14,
+}: IconProps & { name: CatppuccinIconName }) {
   const style = {
     width: size,
     height: size,
@@ -50,16 +52,17 @@ function CatppuccinIcon({ name, size = 14 }: IconProps & { name: CatppuccinIconN
   } as CSSProperties;
 
   return (
-    <span
-      aria-hidden="true"
-      className="catppuccin-file-icon"
-      style={style}
-    />
+    <span aria-hidden="true" className="catppuccin-file-icon" style={style} />
   );
 }
 
-export function FolderIcon({ size = 14, open = false }: IconProps & { open?: boolean }) {
-  return <CatppuccinIcon name={open ? "_folder_open" : "_folder"} size={size} />;
+export function FolderIcon({
+  size = 14,
+  open = false,
+}: IconProps & { open?: boolean }) {
+  return (
+    <CatppuccinIcon name={open ? "_folder_open" : "_folder"} size={size} />
+  );
 }
 
 export function GenericFileIcon({ size = 14 }: IconProps) {
@@ -68,7 +71,17 @@ export function GenericFileIcon({ size = 14 }: IconProps) {
 
 export function MentionIcon({ size = 14 }: IconProps) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <circle cx="12" cy="12" r="4" />
       <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
     </svg>
@@ -114,13 +127,39 @@ const EXTENSION_ICONS: Record<string, CatppuccinIconName> = {
 function getSpecialFileIcon(name: string): CatppuccinIconName | undefined {
   if (name === "dockerfile" || name.startsWith("dockerfile.")) return "docker";
   if (name === ".env" || name.startsWith(".env.")) return "env";
-  if ([".gitignore", ".gitattributes", ".gitmodules"].includes(name)) return "git";
+  if ([".gitignore", ".gitattributes", ".gitmodules"].includes(name))
+    return "git";
   if (name === "package-lock.json") return "npm-lock";
   if (name === "bun.lock") return "bun-lock";
-  if (["next.config.js", "next.config.mjs", "next.config.cjs", "next.config.ts"].includes(name)) return "next";
-  if ([".eslintrc", ".eslintrc.js", ".eslintrc.json", ".eslintrc.yml", "eslint.config.mjs", "eslint.config.js"].includes(name)) return "eslint";
-  if (["yarn.lock", "pnpm-lock.yaml", "cargo.lock"].includes(name)) return "lock";
-  if (name.endsWith(".config.ts") || name.endsWith(".config.js") || name.endsWith(".config.mjs") || name.endsWith(".config.cjs")) return "config";
+  if (
+    [
+      "next.config.js",
+      "next.config.mjs",
+      "next.config.cjs",
+      "next.config.ts",
+    ].includes(name)
+  )
+    return "next";
+  if (
+    [
+      ".eslintrc",
+      ".eslintrc.js",
+      ".eslintrc.json",
+      ".eslintrc.yml",
+      "eslint.config.mjs",
+      "eslint.config.js",
+    ].includes(name)
+  )
+    return "eslint";
+  if (["yarn.lock", "pnpm-lock.yaml", "cargo.lock"].includes(name))
+    return "lock";
+  if (
+    name.endsWith(".config.ts") ||
+    name.endsWith(".config.js") ||
+    name.endsWith(".config.mjs") ||
+    name.endsWith(".config.cjs")
+  )
+    return "config";
   return undefined;
 }
 
@@ -131,5 +170,9 @@ export function getFileIcon(name: string, size = 14): React.ReactNode {
 
   const ext = lower.split(".").pop() ?? "";
   const icon = EXTENSION_ICONS[ext];
-  return icon ? <CatppuccinIcon name={icon} size={size} /> : <GenericFileIcon size={size} />;
+  return icon ? (
+    <CatppuccinIcon name={icon} size={size} />
+  ) : (
+    <GenericFileIcon size={size} />
+  );
 }

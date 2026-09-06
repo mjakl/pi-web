@@ -16,9 +16,7 @@ const mermaidSrc = `sequenceDiagram
     Bob-->>Alice: Hi`;
 
 function renderMermaid(props) {
-  return renderToStaticMarkup(
-    React.createElement(MermaidBlock, props),
-  );
+  return renderToStaticMarkup(React.createElement(MermaidBlock, props));
 }
 
 test("MermaidBlock renders source by default", () => {
@@ -38,7 +36,11 @@ test("MermaidBlock can render preview by default", () => {
 });
 
 test("MermaidBlock with isStreaming falls back to source view", () => {
-  const html = renderMermaid({ code: mermaidSrc, isStreaming: true, defaultPreview: true });
+  const html = renderMermaid({
+    code: mermaidSrc,
+    isStreaming: true,
+    defaultPreview: true,
+  });
 
   assert.match(html, /disabled/);
   assert.match(html, />Preview</);
@@ -54,9 +56,7 @@ test("MermaidBlock renders empty graph without error", () => {
 });
 
 function renderCode(props) {
-  return renderToStaticMarkup(
-    React.createElement(CodeBlock, props),
-  );
+  return renderToStaticMarkup(React.createElement(CodeBlock, props));
 }
 
 test("CodeBlock highlights code when not streaming", () => {
@@ -67,7 +67,11 @@ test("CodeBlock highlights code when not streaming", () => {
 });
 
 test("CodeBlock renders plain text without tokenization while streaming", () => {
-  const html = renderCode({ code: "const x = 1;", lang: "javascript", isStreaming: true });
+  const html = renderCode({
+    code: "const x = 1;",
+    lang: "javascript",
+    isStreaming: true,
+  });
 
   assert.doesNotMatch(html, /class="token/);
   assert.match(html, /const x = 1;/);

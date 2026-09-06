@@ -38,7 +38,8 @@ function legacyCtrlSequence(key: string): string | null {
 
 export function toTerminalKeyData(event: TerminalKeyEventLike): string | null {
   if (event.metaKey) return null;
-  if (event.ctrlKey && !event.altKey && event.key.toLowerCase() === "v") return null;
+  if (event.ctrlKey && !event.altKey && event.key.toLowerCase() === "v")
+    return null;
 
   if (event.ctrlKey && !event.altKey) {
     const control = legacyCtrlSequence(event.key);

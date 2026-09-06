@@ -11,14 +11,14 @@ const jiti = createJiti(import.meta.url, {
   interopDefault: true,
   moduleCache: false,
 });
-const { DELETE: deleteSession, GET: getSessionDetail } = await jiti.import("./[id]/route.ts");
+const { DELETE: deleteSession, GET: getSessionDetail } =
+  await jiti.import("./[id]/route.ts");
 const { SessionManager } = await jiti.import("@earendil-works/pi-coding-agent");
 const { GET: getSessionState } = await jiti.import("./[id]/state/route.ts");
 const { GET: getSessionContext } = await jiti.import("./[id]/context/route.ts");
-const {
-  cacheSessionPath,
-  invalidateSessionPathCache,
-} = await jiti.import("../../../lib/session-reader.ts");
+const { cacheSessionPath, invalidateSessionPathCache } = await jiti.import(
+  "../../../lib/session-reader.ts",
+);
 
 test("deleting a parent preserves legacy subagent bytes and reparents generic children", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "pi-web-delete-reparent-"));
@@ -27,14 +27,15 @@ test("deleting a parent preserves legacy subagent bytes and reparents generic ch
   const legacyChildPath = join(dir, "legacy-child.jsonl");
   const genericChildPath = join(dir, "generic-child.jsonl");
   const parentId = "delete-reparent-parent";
-  const header = (id, parentSession) => JSON.stringify({
-    type: "session",
-    version: 3,
-    id,
-    timestamp: "2026-01-01T00:00:00.000Z",
-    cwd: dir,
-    ...(parentSession ? { parentSession } : {}),
-  });
+  const header = (id, parentSession) =>
+    JSON.stringify({
+      type: "session",
+      version: 3,
+      id,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      cwd: dir,
+      ...(parentSession ? { parentSession } : {}),
+    });
   const legacyContent = [
     header("delete-reparent-legacy-child", parentPath),
     JSON.stringify({
@@ -53,10 +54,16 @@ test("deleting a parent preserves legacy subagent bytes and reparents generic ch
     }),
     "",
   ].join("\n");
-  await writeFile(grandparentPath, `${header("delete-reparent-grandparent")}\n`);
+  await writeFile(
+    grandparentPath,
+    `${header("delete-reparent-grandparent")}\n`,
+  );
   await writeFile(parentPath, `${header(parentId, grandparentPath)}\n`);
   await writeFile(legacyChildPath, legacyContent);
-  await writeFile(genericChildPath, `${header("delete-reparent-generic-child", parentPath)}\n`);
+  await writeFile(
+    genericChildPath,
+    `${header("delete-reparent-generic-child", parentPath)}\n`,
+  );
   cacheSessionPath(parentId, parentPath);
   t.after(async () => {
     invalidateSessionPathCache(parentId);
@@ -64,14 +71,18 @@ test("deleting a parent preserves legacy subagent bytes and reparents generic ch
   });
 
   const response = await deleteSession(
-    new Request(`http://localhost/api/sessions/${parentId}`, { method: "DELETE" }),
+    new Request(`http://localhost/api/sessions/${parentId}`, {
+      method: "DELETE",
+    }),
     { params: Promise.resolve({ id: parentId }) },
   );
 
   assert.equal(response.status, 200);
   await assert.rejects(readFile(parentPath), { code: "ENOENT" });
   assert.equal(await readFile(legacyChildPath, "utf8"), legacyContent);
-  const genericHeader = JSON.parse((await readFile(genericChildPath, "utf8")).trim());
+  const genericHeader = JSON.parse(
+    (await readFile(genericChildPath, "utf8")).trim(),
+  );
   assert.equal(genericHeader.parentSession, grandparentPath);
 });
 
@@ -80,20 +91,28 @@ test("directly deleting a legacy subagent session still removes it", async (t) =
   const parentPath = join(dir, "parent.jsonl");
   const childPath = join(dir, "legacy-child.jsonl");
   const childId = "delete-legacy-child";
-  const header = (id, parentSession) => JSON.stringify({
-    type: "session",
-    version: 3,
-    id,
-    timestamp: "2026-01-01T00:00:00.000Z",
-    cwd: dir,
-    ...(parentSession ? { parentSession } : {}),
-  });
+  const header = (id, parentSession) =>
+    JSON.stringify({
+      type: "session",
+      version: 3,
+      id,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      cwd: dir,
+      ...(parentSession ? { parentSession } : {}),
+    });
   await writeFile(parentPath, `${header("delete-legacy-parent")}\n`);
-  await writeFile(childPath, [
-    header(childId, parentPath),
-    JSON.stringify({ type: "custom", customType: "pi-web:subagent", data: { version: 1 } }),
-    "",
-  ].join("\n"));
+  await writeFile(
+    childPath,
+    [
+      header(childId, parentPath),
+      JSON.stringify({
+        type: "custom",
+        customType: "pi-web:subagent",
+        data: { version: 1 },
+      }),
+      "",
+    ].join("\n"),
+  );
   cacheSessionPath(childId, childPath);
   t.after(async () => {
     invalidateSessionPathCache(childId);
@@ -101,13 +120,15 @@ test("directly deleting a legacy subagent session still removes it", async (t) =
   });
 
   const response = await deleteSession(
-    new Request(`http://localhost/api/sessions/${childId}`, { method: "DELETE" }),
+    new Request(`http://localhost/api/sessions/${childId}`, {
+      method: "DELETE",
+    }),
     { params: Promise.resolve({ id: childId }) },
   );
 
   assert.equal(response.status, 200);
   await assert.rejects(readFile(childPath), { code: "ENOENT" });
-  assert.equal(typeof await readFile(parentPath, "utf8"), "string");
+  assert.equal(typeof (await readFile(parentPath, "utf8")), "string");
 });
 
 test("deleting a session with a missing parent promotes its direct child to a root", async (t) => {
@@ -117,22 +138,28 @@ test("deleting a session with a missing parent promotes its direct child to a ro
   const missingParentPath = join(dir, "missing-parent.jsonl");
   const sessionId = "delete-missing-parent-child";
   const directChildId = "delete-missing-parent-direct-child";
-  await writeFile(sessionPath, `${JSON.stringify({
-    type: "session",
-    version: 3,
-    id: sessionId,
-    timestamp: "2026-01-01T00:00:00.000Z",
-    cwd: dir,
-    parentSession: missingParentPath,
-  })}\n`);
-  await writeFile(directChildPath, `${JSON.stringify({
-    type: "session",
-    version: 3,
-    id: directChildId,
-    timestamp: "2026-01-01T00:00:00.000Z",
-    cwd: dir,
-    parentSession: sessionPath,
-  })}\n`);
+  await writeFile(
+    sessionPath,
+    `${JSON.stringify({
+      type: "session",
+      version: 3,
+      id: sessionId,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      cwd: dir,
+      parentSession: missingParentPath,
+    })}\n`,
+  );
+  await writeFile(
+    directChildPath,
+    `${JSON.stringify({
+      type: "session",
+      version: 3,
+      id: directChildId,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      cwd: dir,
+      parentSession: sessionPath,
+    })}\n`,
+  );
   cacheSessionPath(sessionId, sessionPath);
   t.after(async () => {
     invalidateSessionPathCache(sessionId);
@@ -140,13 +167,17 @@ test("deleting a session with a missing parent promotes its direct child to a ro
   });
 
   const response = await deleteSession(
-    new Request(`http://localhost/api/sessions/${sessionId}`, { method: "DELETE" }),
+    new Request(`http://localhost/api/sessions/${sessionId}`, {
+      method: "DELETE",
+    }),
     { params: Promise.resolve({ id: sessionId }) },
   );
 
   assert.equal(response.status, 200);
   await assert.rejects(readFile(sessionPath), { code: "ENOENT" });
-  const [directChildHeaderLine] = (await readFile(directChildPath, "utf8")).split("\n");
+  const [directChildHeaderLine] = (
+    await readFile(directChildPath, "utf8")
+  ).split("\n");
   assert.equal("parentSession" in JSON.parse(directChildHeaderLine), false);
 });
 
@@ -167,18 +198,24 @@ test("live detail and state routes work without a persisted JSONL file", async (
     getLeafId: () => entry.id,
     getTree: () => [],
     getSessionName: () => undefined,
-    getSessionFile: () => `/tmp/pi-web-live-route-not-persisted-${process.pid}.jsonl`,
+    getSessionFile: () =>
+      `/tmp/pi-web-live-route-not-persisted-${process.pid}.jsonl`,
   };
-  globalThis.__piSessions = new Map([[id, {
-    isAlive: () => true,
-    isActive: () => true,
-    isRunning: () => true,
-    inner: { sessionManager },
-    sessionFile: sessionManager.getSessionFile(),
-    sessionId: id,
-    cwd: "/tmp",
-    send: async () => ({ isStreaming: true }),
-  }]]);
+  globalThis.__piSessions = new Map([
+    [
+      id,
+      {
+        isAlive: () => true,
+        isActive: () => true,
+        isRunning: () => true,
+        inner: { sessionManager },
+        sessionFile: sessionManager.getSessionFile(),
+        sessionId: id,
+        cwd: "/tmp",
+        send: async () => ({ isStreaming: true }),
+      },
+    ],
+  ]);
   t.after(() => {
     globalThis.__piSessions = previousRegistry;
   });
@@ -198,7 +235,10 @@ test("live detail and state routes work without a persisted JSONL file", async (
   assert.equal(detail.info.transient, true);
   assert.equal(detail.info.projectRoot, "/tmp");
   assert.equal(typeof detail.info.projectKey, "string");
-  assert.deepEqual(detail.context.messages.map((message) => message.content), ["hello live"]);
+  assert.deepEqual(
+    detail.context.messages.map((message) => message.content),
+    ["hello live"],
+  );
   assert.equal(stateResponse.status, 200);
   assert.deepEqual(await stateResponse.json(), {
     active: true,
@@ -220,23 +260,29 @@ test("persisted detail opens the session inside fingerprint verification", async
     timestamp,
     message: { role: "user", content: "before open" },
   };
-  await writeFile(filePath, [
-    JSON.stringify({ type: "session", version: 3, id, cwd: dir, timestamp }),
-    JSON.stringify(entry),
-    "",
-  ].join("\n"));
+  await writeFile(
+    filePath,
+    [
+      JSON.stringify({ type: "session", version: 3, id, cwd: dir, timestamp }),
+      JSON.stringify(entry),
+      "",
+    ].join("\n"),
+  );
   cacheSessionPath(id, filePath);
   globalThis.__piSessions = new Map();
 
   const originalOpen = SessionManager.open;
   SessionManager.open = function (...args) {
     const manager = originalOpen.apply(this, args);
-    appendFileSync(filePath, `${JSON.stringify({
-      ...entry,
-      id: "u2",
-      parentId: entry.id,
-      message: { role: "user", content: "after open" },
-    })}\n`);
+    appendFileSync(
+      filePath,
+      `${JSON.stringify({
+        ...entry,
+        id: "u2",
+        parentId: entry.id,
+        message: { role: "user", content: "after open" },
+      })}\n`,
+    );
     return manager;
   };
   t.after(async () => {
@@ -252,7 +298,9 @@ test("persisted detail opens the session inside fingerprint verification", async
   );
 
   assert.equal(response.status, 409);
-  assert.deepEqual(await response.json(), { error: "Session changed during read" });
+  assert.deepEqual(await response.json(), {
+    error: "Session changed during read",
+  });
 });
 
 test("detail route never advertises a newer fingerprint for older content", async (t) => {
@@ -269,7 +317,10 @@ test("detail route never advertises a newer fingerprint for older content", asyn
     timestamp,
     message: { role: "user", content: "before append" },
   };
-  await writeFile(filePath, `${JSON.stringify(header)}\n${JSON.stringify(entry)}\n`);
+  await writeFile(
+    filePath,
+    `${JSON.stringify(header)}\n${JSON.stringify(entry)}\n`,
+  );
 
   let appended = false;
   const sessionManager = {
@@ -280,27 +331,35 @@ test("detail route never advertises a newer fingerprint for older content", asyn
     getSessionName: () => {
       if (!appended) {
         appended = true;
-        appendFileSync(filePath, `${JSON.stringify({
-          ...entry,
-          id: "u2",
-          parentId: entry.id,
-          message: { role: "user", content: "after append" },
-        })}\n`);
+        appendFileSync(
+          filePath,
+          `${JSON.stringify({
+            ...entry,
+            id: "u2",
+            parentId: entry.id,
+            message: { role: "user", content: "after append" },
+          })}\n`,
+        );
       }
       return undefined;
     },
     getSessionFile: () => filePath,
   };
-  globalThis.__piSessions = new Map([[id, {
-    isAlive: () => true,
-    isActive: () => true,
-    isRunning: () => true,
-    inner: { sessionManager },
-    sessionFile: filePath,
-    sessionId: id,
-    cwd: dir,
-    send: async () => ({}),
-  }]]);
+  globalThis.__piSessions = new Map([
+    [
+      id,
+      {
+        isAlive: () => true,
+        isActive: () => true,
+        isRunning: () => true,
+        inner: { sessionManager },
+        sessionFile: filePath,
+        sessionId: id,
+        cwd: dir,
+        send: async () => ({}),
+      },
+    ],
+  ]);
   t.after(async () => {
     globalThis.__piSessions = previousRegistry;
     await rm(dir, { recursive: true, force: true });
@@ -312,7 +371,9 @@ test("detail route never advertises a newer fingerprint for older content", asyn
   );
 
   assert.equal(response.status, 409);
-  assert.deepEqual(await response.json(), { error: "Session changed during read" });
+  assert.deepEqual(await response.json(), {
+    error: "Session changed during read",
+  });
 });
 
 test("detail and context routes bound history to the tail window", async (t) => {
@@ -329,35 +390,52 @@ test("detail and context routes bound history to the tail window", async (t) => 
     });
   }
   const sessionManager = {
-    getHeader: () => ({ type: "session", id, cwd: "/tmp", timestamp: entries[0].timestamp }),
+    getHeader: () => ({
+      type: "session",
+      id,
+      cwd: "/tmp",
+      timestamp: entries[0].timestamp,
+    }),
     getEntries: () => entries,
     getLeafId: () => "e4999",
     getTree: () => [],
     getSessionName: () => undefined,
-    getSessionFile: () => `/tmp/pi-web-live-pagination-not-persisted-${process.pid}.jsonl`,
+    getSessionFile: () =>
+      `/tmp/pi-web-live-pagination-not-persisted-${process.pid}.jsonl`,
   };
-  globalThis.__piSessions = new Map([[id, {
-    isAlive: () => true,
-    isActive: () => true,
-    isRunning: () => false,
-    inner: { sessionManager },
-    sessionFile: sessionManager.getSessionFile(),
-    sessionId: id,
-    cwd: "/tmp",
-    send: async () => ({}),
-  }]]);
+  globalThis.__piSessions = new Map([
+    [
+      id,
+      {
+        isAlive: () => true,
+        isActive: () => true,
+        isRunning: () => false,
+        inner: { sessionManager },
+        sessionFile: sessionManager.getSessionFile(),
+        sessionId: id,
+        cwd: "/tmp",
+        send: async () => ({}),
+      },
+    ],
+  ]);
   t.after(() => {
     globalThis.__piSessions = previousRegistry;
   });
   const routeContext = { params: Promise.resolve({ id }) };
-  const detail = async (query = "") => (await getSessionDetail(
-    new Request(`http://localhost/api/sessions/${id}${query}`),
-    routeContext,
-  )).json();
-  const context = async (query = "") => (await getSessionContext(
-    new Request(`http://localhost/api/sessions/${id}/context${query}`),
-    routeContext,
-  )).json();
+  const detail = async (query = "") =>
+    (
+      await getSessionDetail(
+        new Request(`http://localhost/api/sessions/${id}${query}`),
+        routeContext,
+      )
+    ).json();
+  const context = async (query = "") =>
+    (
+      await getSessionContext(
+        new Request(`http://localhost/api/sessions/${id}/context${query}`),
+        routeContext,
+      )
+    ).json();
 
   const defaultDetail = await detail();
   assert.equal(defaultDetail.context.messages.length, 50);
@@ -374,13 +452,27 @@ test("detail and context routes bound history to the tail window", async (t) => 
   assert.equal(defaultPage.tail, 50);
   assert.equal(defaultPage.context.entryIds.length, 50);
   const olderPage = await context("?tail=5&before=e4950");
-  assert.deepEqual(olderPage.context.entryIds, ["e4945", "e4946", "e4947", "e4948", "e4949"]);
+  assert.deepEqual(olderPage.context.entryIds, [
+    "e4945",
+    "e4946",
+    "e4947",
+    "e4948",
+    "e4949",
+  ]);
   assert.equal(olderPage.before, "e4950");
   const jump = await context("?before=e4950&through=e100");
   assert.equal(jump.context.entryIds.length, 4850);
   assert.equal(jump.context.entryIds[0], "e100");
   assert.equal(jump.context.entryIds.at(-1), "e4949");
-  const invalidJump = await getSessionContext(new Request(`http://localhost/api/sessions/${id}/context?before=e4950&through=missing`), routeContext);
+  const invalidJump = await getSessionContext(
+    new Request(
+      `http://localhost/api/sessions/${id}/context?before=e4950&through=missing`,
+    ),
+    routeContext,
+  );
   assert.equal(invalidJump.status, 400);
-  assert.equal((await context("?tail=5000&before=e4950")).context.entryIds.length, 1000);
+  assert.equal(
+    (await context("?tail=5000&before=e4950")).context.entryIds.length,
+    1000,
+  );
 });

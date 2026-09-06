@@ -14,43 +14,84 @@ const preload = fileURLToPath(new URL("./host-pi-runtime.js", import.meta.url));
 function writePackage(root, name, version, extra = {}) {
   const dir = path.join(root, "node_modules", ...name.split("/"));
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({
-    name,
-    version,
-    type: "module",
-    main: "./index.js",
-    exports: { ".": { import: "./index.js" }, "./compat": { import: "./compat.js" } },
-    ...extra,
-  }));
-  fs.writeFileSync(path.join(dir, "index.js"), `export default ${JSON.stringify(`${name}@${version}`)};`);
-  fs.writeFileSync(path.join(dir, "compat.js"), `export default ${JSON.stringify(`${name}/compat@${version}`)};`);
+  fs.writeFileSync(
+    path.join(dir, "package.json"),
+    JSON.stringify({
+      name,
+      version,
+      type: "module",
+      main: "./index.js",
+      exports: {
+        ".": { import: "./index.js" },
+        "./compat": { import: "./compat.js" },
+      },
+      ...extra,
+    }),
+  );
+  fs.writeFileSync(
+    path.join(dir, "index.js"),
+    `export default ${JSON.stringify(`${name}@${version}`)};`,
+  );
+  fs.writeFileSync(
+    path.join(dir, "compat.js"),
+    `export default ${JSON.stringify(`${name}/compat@${version}`)};`,
+  );
   return dir;
 }
 
-function makePi(root, codingVersion = "0.85.0", dependencyVersion = codingVersion, executableName = "pi", { script = false } = {}) {
-  const dependencies = Object.fromEntries([
-    "@earendil-works/pi-agent-core",
-    "@earendil-works/pi-ai",
-    "@earendil-works/pi-tui",
-  ].map((name) => [name, `^${codingVersion}`]));
-  const codingDir = writePackage(root, "@earendil-works/pi-coding-agent", codingVersion, {
-    bin: { pi: "cli.js" },
-    dependencies,
-  });
+function makePi(
+  root,
+  codingVersion = "0.85.0",
+  dependencyVersion = codingVersion,
+  executableName = "pi",
+  { script = false } = {},
+) {
+  const dependencies = Object.fromEntries(
+    [
+      "@earendil-works/pi-agent-core",
+      "@earendil-works/pi-ai",
+      "@earendil-works/pi-tui",
+    ].map((name) => [name, `^${codingVersion}`]),
+  );
+  const codingDir = writePackage(
+    root,
+    "@earendil-works/pi-coding-agent",
+    codingVersion,
+    {
+      bin: { pi: "cli.js" },
+      dependencies,
+    },
+  );
   const cli = path.join(codingDir, "cli.js");
-  fs.writeFileSync(cli, `#!/usr/bin/env node\nconsole.log(${JSON.stringify(codingVersion)});\n`, { mode: 0o755 });
-  for (const name of [...Object.keys(dependencies), "@earendil-works/pi-server"]) writePackage(root, name, dependencyVersion);
+  fs.writeFileSync(
+    cli,
+    `#!/usr/bin/env node\nconsole.log(${JSON.stringify(codingVersion)});\n`,
+    { mode: 0o755 },
+  );
+  for (const name of [
+    ...Object.keys(dependencies),
+    "@earendil-works/pi-server",
+  ])
+    writePackage(root, name, dependencyVersion);
   const binDir = path.join(root, "node_modules", ".bin");
   fs.mkdirSync(binDir, { recursive: true });
   const executable = path.join(binDir, executableName);
-  if (script) fs.writeFileSync(executable, `#!/bin/sh\nexec node ${JSON.stringify(cli)} "$@"\n`, { mode: 0o755 });
-  else if (executableName === "pi") fs.symlinkSync(path.relative(binDir, cli), executable);
+  if (script)
+    fs.writeFileSync(
+      executable,
+      `#!/bin/sh\nexec node ${JSON.stringify(cli)} "$@"\n`,
+      { mode: 0o755 },
+    );
+  else if (executableName === "pi")
+    fs.symlinkSync(path.relative(binDir, cli), executable);
   else fs.writeFileSync(executable, "shim");
   return { binDir, codingDir, executable };
 }
 
 function tempDir(t) {
-  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-host-pi-")));
+  const dir = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-host-pi-")),
+  );
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
@@ -58,8 +99,12 @@ function tempDir(t) {
 function assertActionable(run, executable) {
   assert.throws(run, (error) => {
     assert.match(error.message, /^Host Pi validation failed:/);
-    if (executable) assert.ok(error.message.includes(`Executable: ${executable}.`));
-    assert.match(error.message, /Install or update Pi.*first on PATH.*restart Pi Web/s);
+    if (executable)
+      assert.ok(error.message.includes(`Executable: ${executable}.`));
+    assert.match(
+      error.message,
+      /Install or update Pi.*first on PATH.*restart Pi Web/s,
+    );
     return true;
   });
 }
@@ -69,18 +114,31 @@ test("Linux skips only the checkout candidate, not its independently listed syml
   const checkout = path.join(base, "checkout");
   const host = makePi(path.join(base, "host"));
   fs.mkdirSync(path.join(checkout, "node_modules"), { recursive: true });
-  fs.symlinkSync(host.binDir, path.join(checkout, "node_modules", ".bin"), "dir");
+  fs.symlinkSync(
+    host.binDir,
+    path.join(checkout, "node_modules", ".bin"),
+    "dir",
+  );
 
   const runtime = resolveHostPi({
     platform: "linux",
     checkoutDir: checkout,
-    env: { ...process.env, PATH: `${path.join(checkout, "node_modules", ".bin")}${path.delimiter}${host.binDir}${path.delimiter}${process.env.PATH}` },
+    env: {
+      ...process.env,
+      PATH: `${path.join(checkout, "node_modules", ".bin")}${path.delimiter}${host.binDir}${path.delimiter}${process.env.PATH}`,
+    },
   });
 
   assert.equal(runtime.executable, host.executable);
   assert.equal(runtime.cli, path.join(host.codingDir, "cli.js"));
-  assert.equal(runtime.packages["@earendil-works/pi-ai"].dir.endsWith(path.join("@earendil-works", "pi-ai")), true);
-  for (const descriptor of Object.values(runtime.packages)) assert.ok(fs.statSync(descriptor.entry).isFile());
+  assert.equal(
+    runtime.packages["@earendil-works/pi-ai"].dir.endsWith(
+      path.join("@earendil-works", "pi-ai"),
+    ),
+    true,
+  );
+  for (const descriptor of Object.values(runtime.packages))
+    assert.ok(fs.statSync(descriptor.entry).isFile());
 });
 
 test("a Pi left installed in the checkout never stands in for the host", (t) => {
@@ -92,19 +150,30 @@ test("a Pi left installed in the checkout never stands in for the host", (t) => 
   const runtime = resolveHostPi({
     platform: "linux",
     checkoutDir: checkout,
-    env: { ...process.env, PATH: `${leftover.binDir}${path.delimiter}${host.binDir}${path.delimiter}${process.env.PATH}` },
+    env: {
+      ...process.env,
+      PATH: `${leftover.binDir}${path.delimiter}${host.binDir}${path.delimiter}${process.env.PATH}`,
+    },
   });
 
   assert.equal(runtime.executable, host.executable);
-  assert.equal(runtime.packages["@earendil-works/pi-coding-agent"].dir, host.codingDir);
+  assert.equal(
+    runtime.packages["@earendil-works/pi-coding-agent"].dir,
+    host.codingDir,
+  );
 });
 
 test("accepts an isolated manager's .bin script shim as the host pi", (t) => {
-  const host = makePi(path.join(tempDir(t), "host"), "0.85.0", "0.85.0", "pi", { script: true });
+  const host = makePi(path.join(tempDir(t), "host"), "0.85.0", "0.85.0", "pi", {
+    script: true,
+  });
 
   const runtime = resolveHostPi({
     platform: "linux",
-    env: { ...process.env, PATH: `${host.binDir}${path.delimiter}${process.env.PATH}` },
+    env: {
+      ...process.env,
+      PATH: `${host.binDir}${path.delimiter}${process.env.PATH}`,
+    },
   });
 
   assert.equal(runtime.executable, host.executable);
@@ -115,13 +184,22 @@ test("the first pi on PATH is authoritative when its graph is invalid", (t) => {
   const base = tempDir(t);
   const firstBin = path.join(base, "first");
   fs.mkdirSync(firstBin, { recursive: true });
-  fs.writeFileSync(path.join(firstBin, "pi"), "#!/bin/sh\necho 0.84.3\n", { mode: 0o755 });
+  fs.writeFileSync(path.join(firstBin, "pi"), "#!/bin/sh\necho 0.84.3\n", {
+    mode: 0o755,
+  });
   const valid = makePi(path.join(base, "valid"));
 
-  assertActionable(() => resolveHostPi({
-    platform: "linux",
-    env: { ...process.env, PATH: `${firstBin}${path.delimiter}${valid.binDir}${path.delimiter}${process.env.PATH}` },
-  }), path.join(firstBin, "pi"));
+  assertActionable(
+    () =>
+      resolveHostPi({
+        platform: "linux",
+        env: {
+          ...process.env,
+          PATH: `${firstBin}${path.delimiter}${valid.binDir}${path.delimiter}${process.env.PATH}`,
+        },
+      }),
+    path.join(firstBin, "pi"),
+  );
 });
 
 test("accepts matching Pi package versions without running the executable", (t) => {
@@ -129,11 +207,17 @@ test("accepts matching Pi package versions without running the executable", (t) 
   for (const version of ["0.1.0", "0.85.0", "1.0.0-beta.1"]) {
     const host = makePi(path.join(base, version), version);
     const marker = path.join(base, "executed");
-    fs.writeFileSync(path.join(host.codingDir, "cli.js"), `#!/usr/bin/env node\nimport fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'executed'); process.exit(1);\n`);
+    fs.writeFileSync(
+      path.join(host.codingDir, "cli.js"),
+      `#!/usr/bin/env node\nimport fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'executed'); process.exit(1);\n`,
+    );
 
     const runtime = resolveHostPi({
       platform: "linux",
-      env: { ...process.env, PATH: `${host.binDir}${path.delimiter}${process.env.PATH}` },
+      env: {
+        ...process.env,
+        PATH: `${host.binDir}${path.delimiter}${process.env.PATH}`,
+      },
     });
     assert.equal(Object.keys(runtime.packages).length, 5);
     assert.equal(fs.existsSync(marker), false);
@@ -143,15 +227,25 @@ test("accepts matching Pi package versions without running the executable", (t) 
 test("resolves a matching standalone pi-server installation from PATH", (t) => {
   const base = tempDir(t);
   const host = makePi(path.join(base, "host"), "0.85.0");
-  fs.rmSync(path.join(base, "host", "node_modules", "@earendil-works", "pi-server"), { recursive: true });
+  fs.rmSync(
+    path.join(base, "host", "node_modules", "@earendil-works", "pi-server"),
+    { recursive: true },
+  );
   const standalone = path.join(base, "standalone");
-  const serverDir = writePackage(standalone, "@earendil-works/pi-server", "0.85.0");
+  const serverDir = writePackage(
+    standalone,
+    "@earendil-works/pi-server",
+    "0.85.0",
+  );
   const standaloneBin = path.join(standalone, "node_modules", ".bin");
   fs.mkdirSync(standaloneBin, { recursive: true });
 
   const runtime = resolveHostPi({
     platform: "linux",
-    env: { ...process.env, PATH: `${host.binDir}${path.delimiter}${standaloneBin}${path.delimiter}${process.env.PATH}` },
+    env: {
+      ...process.env,
+      PATH: `${host.binDir}${path.delimiter}${standaloneBin}${path.delimiter}${process.env.PATH}`,
+    },
   });
 
   assert.equal(runtime.packages["@earendil-works/pi-server"].dir, serverDir);
@@ -161,19 +255,31 @@ test("a pi-server left in the checkout never supplies the standalone package", (
   const base = tempDir(t);
   const checkout = path.join(base, "checkout");
   const host = makePi(path.join(base, "host"), "0.85.0");
-  fs.rmSync(path.join(base, "host", "node_modules", "@earendil-works", "pi-server"), { recursive: true });
+  fs.rmSync(
+    path.join(base, "host", "node_modules", "@earendil-works", "pi-server"),
+    { recursive: true },
+  );
   writePackage(checkout, "@earendil-works/pi-server", "0.85.0");
   const checkoutBin = path.join(checkout, "node_modules", ".bin");
   fs.mkdirSync(checkoutBin, { recursive: true });
   const standalone = path.join(base, "standalone");
-  const serverDir = writePackage(standalone, "@earendil-works/pi-server", "0.85.0");
+  const serverDir = writePackage(
+    standalone,
+    "@earendil-works/pi-server",
+    "0.85.0",
+  );
   const standaloneBin = path.join(standalone, "node_modules", ".bin");
   fs.mkdirSync(standaloneBin, { recursive: true });
 
   const runtime = resolveHostPi({
     platform: "linux",
     checkoutDir: checkout,
-    env: { ...process.env, PATH: [checkoutBin, host.binDir, standaloneBin, process.env.PATH].join(path.delimiter) },
+    env: {
+      ...process.env,
+      PATH: [checkoutBin, host.binDir, standaloneBin, process.env.PATH].join(
+        path.delimiter,
+      ),
+    },
   });
 
   assert.equal(runtime.packages["@earendil-works/pi-server"].dir, serverDir);
@@ -182,10 +288,17 @@ test("a pi-server left in the checkout never supplies the standalone package", (
 test("rejects mismatched Pi package versions", (t) => {
   const base = tempDir(t);
   const host = makePi(path.join(base, "host"), "0.85.0", "0.84.4");
-  assertActionable(() => resolveHostPi({
-    platform: "linux",
-    env: { ...process.env, PATH: `${host.binDir}${path.delimiter}${process.env.PATH}` },
-  }), host.executable);
+  assertActionable(
+    () =>
+      resolveHostPi({
+        platform: "linux",
+        env: {
+          ...process.env,
+          PATH: `${host.binDir}${path.delimiter}${process.env.PATH}`,
+        },
+      }),
+    host.executable,
+  );
 });
 
 test("honors PATHEXT order", (t) => {
@@ -221,42 +334,79 @@ test("macOS resolves the first executable Pi from PATH", (t) => {
   const host = makePi(path.join(base, "host"));
   const runtime = resolveHostPi({
     platform: "darwin",
-    env: { ...process.env, PATH: `${host.binDir}${path.delimiter}${process.env.PATH}` },
+    env: {
+      ...process.env,
+      PATH: `${host.binDir}${path.delimiter}${process.env.PATH}`,
+    },
   });
   assert.equal(runtime.executable, host.executable);
 });
 
 test("rejects Android and Termux before searching PATH", () => {
-  assertActionable(() => resolveHostPi({ platform: "android", env: { PATH: "" } }));
-  assertActionable(() => resolveHostPi({
-    platform: "linux",
-    env: { PATH: "", TERMUX_VERSION: "0.118" },
-  }));
+  assertActionable(() =>
+    resolveHostPi({ platform: "android", env: { PATH: "" } }),
+  );
+  assertActionable(() =>
+    resolveHostPi({
+      platform: "linux",
+      env: { PATH: "", TERMUX_VERSION: "0.118" },
+    }),
+  );
 });
 
 test("missing dependencies fail with host guidance", (t) => {
   const base = tempDir(t);
   const missing = makePi(path.join(base, "missing"));
-  fs.rmSync(path.join(base, "missing", "node_modules", "@earendil-works", "pi-agent-core"), { recursive: true });
-  assertActionable(() => resolveHostPi({
-    platform: "linux",
-    env: { ...process.env, PATH: `${missing.binDir}${path.delimiter}${process.env.PATH}` },
-  }), missing.executable);
+  fs.rmSync(
+    path.join(
+      base,
+      "missing",
+      "node_modules",
+      "@earendil-works",
+      "pi-agent-core",
+    ),
+    { recursive: true },
+  );
+  assertActionable(
+    () =>
+      resolveHostPi({
+        platform: "linux",
+        env: {
+          ...process.env,
+          PATH: `${missing.binDir}${path.delimiter}${process.env.PATH}`,
+        },
+      }),
+    missing.executable,
+  );
 });
 
 test("validates package root entries during startup and rejects symlink escapes", (t) => {
   const base = tempDir(t);
   const host = makePi(path.join(base, "host"));
-  const aiEntry = path.join(base, "host", "node_modules", "@earendil-works", "pi-ai", "index.js");
+  const aiEntry = path.join(
+    base,
+    "host",
+    "node_modules",
+    "@earendil-works",
+    "pi-ai",
+    "index.js",
+  );
   const outside = path.join(base, "outside.js");
   fs.writeFileSync(outside, "export default 'outside';");
   fs.rmSync(aiEntry);
   fs.symlinkSync(outside, aiEntry);
 
-  assertActionable(() => resolveHostPi({
-    platform: "linux",
-    env: { ...process.env, PATH: `${host.binDir}${path.delimiter}${process.env.PATH}` },
-  }), host.executable);
+  assertActionable(
+    () =>
+      resolveHostPi({
+        platform: "linux",
+        env: {
+          ...process.env,
+          PATH: `${host.binDir}${path.delimiter}${process.env.PATH}`,
+        },
+      }),
+    host.executable,
+  );
 });
 
 test("runtime hook imports validated host entries instead of checkout-local Pi", (t) => {
@@ -272,7 +422,10 @@ test("runtime hook imports validated host entries instead of checkout-local Pi",
       "@earendil-works/pi-ai": {
         dir: hostDir,
         entry: path.join(hostDir, "index.js"),
-        exports: { ".": { import: "./index.js" }, "./compat": { import: "./compat.js" } },
+        exports: {
+          ".": { import: "./index.js" },
+          "./compat": { import: "./compat.js" },
+        },
       },
       "@earendil-works/pi-tui": {
         dir: hostTuiDir,
@@ -281,11 +434,24 @@ test("runtime hook imports validated host entries instead of checkout-local Pi",
     },
   };
 
-  const result = spawnSync(process.execPath, ["--require", preload, "--input-type=module", "--eval", "import value from '@earendil-works/pi-ai/compat'; import tui from '@earendil-works/pi-tui'; import aliased from '@earendil-works/pi-tui-0123456789abcdef'; console.log(value, tui, aliased)"], {
-    cwd: localRoot,
-    encoding: "utf8",
-    env: { ...process.env, PI_WEB_HOST_PI: JSON.stringify(runtime) },
-  });
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--require",
+      preload,
+      "--input-type=module",
+      "--eval",
+      "import value from '@earendil-works/pi-ai/compat'; import tui from '@earendil-works/pi-tui'; import aliased from '@earendil-works/pi-tui-0123456789abcdef'; console.log(value, tui, aliased)",
+    ],
+    {
+      cwd: localRoot,
+      encoding: "utf8",
+      env: { ...process.env, PI_WEB_HOST_PI: JSON.stringify(runtime) },
+    },
+  );
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout.trim(), "@earendil-works/pi-ai/compat@0.84.4 @earendil-works/pi-tui@0.84.4 @earendil-works/pi-tui@0.84.4");
+  assert.equal(
+    result.stdout.trim(),
+    "@earendil-works/pi-ai/compat@0.84.4 @earendil-works/pi-tui@0.84.4 @earendil-works/pi-tui@0.84.4",
+  );
 });

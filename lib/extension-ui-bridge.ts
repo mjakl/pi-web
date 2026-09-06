@@ -1,7 +1,14 @@
 import { Theme } from "@earendil-works/pi-coding-agent";
-import { KeybindingsManager as TuiKeybindingsManager, TUI_KEYBINDINGS } from "@earendil-works/pi-tui";
+import {
+  KeybindingsManager as TuiKeybindingsManager,
+  TUI_KEYBINDINGS,
+} from "@earendil-works/pi-tui";
 import { randomUUID } from "crypto";
-import { createHeadlessCustomUiTui, DEFAULT_CUSTOM_UI_COLUMNS, type HeadlessCustomUiTui } from "./custom-ui-terminal";
+import {
+  createHeadlessCustomUiTui,
+  DEFAULT_CUSTOM_UI_COLUMNS,
+  type HeadlessCustomUiTui,
+} from "./custom-ui-terminal";
 import { errorMessage } from "./error-message";
 import type { ExtensionUiContextLike } from "./pi-types";
 import type {
@@ -29,7 +36,10 @@ type ExtensionWidgetComponent = {
   dispose?: () => void;
 };
 
-type ExtensionWidgetFactory = (tui: HeadlessCustomUiTui, theme: Theme) => unknown;
+type ExtensionWidgetFactory = (
+  tui: HeadlessCustomUiTui,
+  theme: Theme,
+) => unknown;
 
 type ActiveExtensionWidget = {
   key: string;
@@ -57,25 +67,50 @@ type ExtensionUiRequestBody = Record<string, unknown> & {
 class PlainTextTheme extends Theme {
   constructor() {
     super(
-      { text: "", muted: "", thinkingXhigh: "", searchMatchText: "" } as ConstructorParameters<typeof Theme>[0],
+      {
+        text: "",
+        muted: "",
+        thinkingXhigh: "",
+        searchMatchText: "",
+      } as ConstructorParameters<typeof Theme>[0],
       { selectedBg: "" } as ConstructorParameters<typeof Theme>[1],
       "truecolor",
     );
   }
 
-  override fg(...[, text]: Parameters<Theme["fg"]>): string { return text; }
-  override bg(...[, text]: Parameters<Theme["bg"]>): string { return text; }
-  override bold(text: string): string { return text; }
-  override italic(text: string): string { return text; }
-  override underline(text: string): string { return text; }
-  override inverse(text: string): string { return text; }
-  override strikethrough(text: string): string { return text; }
-  override getFgAnsi(): string { return ""; }
-  override getBgAnsi(): string { return ""; }
+  override fg(...[, text]: Parameters<Theme["fg"]>): string {
+    return text;
+  }
+  override bg(...[, text]: Parameters<Theme["bg"]>): string {
+    return text;
+  }
+  override bold(text: string): string {
+    return text;
+  }
+  override italic(text: string): string {
+    return text;
+  }
+  override underline(text: string): string {
+    return text;
+  }
+  override inverse(text: string): string {
+    return text;
+  }
+  override strikethrough(text: string): string {
+    return text;
+  }
+  override getFgAnsi(): string {
+    return "";
+  }
+  override getBgAnsi(): string {
+    return "";
+  }
   override getThinkingBorderColor(): (text: string) => string {
     return (text) => text;
   }
-  override getBashModeBorderColor(): (text: string) => string { return (text) => text; }
+  override getBashModeBorderColor(): (text: string) => string {
+    return (text) => text;
+  }
 }
 
 const PLAIN_TEXT_THEME = new PlainTextTheme();
@@ -115,7 +150,8 @@ export class ExtensionUiBridge {
   dispose(): void {
     this.disposed = true;
     for (const pending of this.pendingUiResponses.values()) pending.cancel();
-    for (const id of Array.from(this.activeCustomUis.keys())) this.closeCustomUi(id, undefined);
+    for (const id of Array.from(this.activeCustomUis.keys()))
+      this.closeCustomUi(id, undefined);
     this.pendingUiResponses.clear();
     this.pendingUiRequests.clear();
     this.clearExtensionWidgets(false);
@@ -142,7 +178,11 @@ export class ExtensionUiBridge {
   }
 
   private disposeExtensionWidgetComponent(component: unknown): void {
-    if (!component || (typeof component !== "object" && typeof component !== "function")) return;
+    if (
+      !component ||
+      (typeof component !== "object" && typeof component !== "function")
+    )
+      return;
     const dispose = (component as { dispose?: unknown }).dispose;
     if (typeof dispose !== "function") return;
     try {
@@ -170,7 +210,8 @@ export class ExtensionUiBridge {
     this.activeExtensionWidgets.delete(key);
     this.extensionWidgets.delete(key);
     if (active) this.disposeExtensionWidgetComponent(active.component);
-    if (this.extensionWidgetGenerations.get(key) !== generation) return generation;
+    if (this.extensionWidgetGenerations.get(key) !== generation)
+      return generation;
     if (emitClear) this.emitExtensionWidgetClear(key);
     return generation;
   }
@@ -237,18 +278,27 @@ export class ExtensionUiBridge {
 
   private renderExtensionWidget(active: ActiveExtensionWidget): void {
     if (
-      this.activeExtensionWidgets.get(active.key) !== active
-      || this.extensionWidgetGenerations.get(active.key) !== active.generation
-    ) return;
+      this.activeExtensionWidgets.get(active.key) !== active ||
+      this.extensionWidgetGenerations.get(active.key) !== active.generation
+    )
+      return;
 
     let lines: unknown;
     try {
       lines = active.component.render(DEFAULT_CUSTOM_UI_COLUMNS);
     } catch (error) {
-      this.failExtensionWidget(active.key, active.generation, error, active.clearEmitted);
+      this.failExtensionWidget(
+        active.key,
+        active.generation,
+        error,
+        active.clearEmitted,
+      );
       return;
     }
-    if (!Array.isArray(lines) || !lines.every((line) => typeof line === "string")) {
+    if (
+      !Array.isArray(lines) ||
+      !lines.every((line) => typeof line === "string")
+    ) {
       this.failExtensionWidget(
         active.key,
         active.generation,
@@ -258,9 +308,10 @@ export class ExtensionUiBridge {
       return;
     }
     if (
-      this.activeExtensionWidgets.get(active.key) !== active
-      || this.extensionWidgetGenerations.get(active.key) !== active.generation
-    ) return;
+      this.activeExtensionWidgets.get(active.key) !== active ||
+      this.extensionWidgetGenerations.get(active.key) !== active.generation
+    )
+      return;
 
     const widgetLines = lines as string[];
     this.extensionWidgets.set(active.key, {
@@ -284,7 +335,8 @@ export class ExtensionUiBridge {
     factory: ExtensionWidgetFactory,
     options?: { placement?: "aboveEditor" | "belowEditor" },
   ): void {
-    const hadPrevious = this.extensionWidgets.has(key) || this.activeExtensionWidgets.has(key);
+    const hadPrevious =
+      this.extensionWidgets.has(key) || this.activeExtensionWidgets.has(key);
     const generation = this.clearExtensionWidget(key, hadPrevious);
     if (this.extensionWidgetGenerations.get(key) !== generation) return;
     const tui = createHeadlessCustomUiTui(() => {
@@ -304,14 +356,16 @@ export class ExtensionUiBridge {
       return;
     }
     if (
-      !component
-      || (typeof component !== "object" && typeof component !== "function")
-      || typeof (component as { render?: unknown }).render !== "function"
+      !component ||
+      (typeof component !== "object" && typeof component !== "function") ||
+      typeof (component as { render?: unknown }).render !== "function"
     ) {
       this.failExtensionWidget(
         key,
         generation,
-        new Error("Extension widget factory must return a component with render(width)"),
+        new Error(
+          "Extension widget factory must return a component with render(width)",
+        ),
         hadPrevious,
         component,
       );
@@ -331,10 +385,14 @@ export class ExtensionUiBridge {
   }
 
   private getCustomUiWidth(options: unknown): number {
-    if (!options || typeof options !== "object") return DEFAULT_CUSTOM_UI_COLUMNS;
-    const overlayOptions = (options as { overlayOptions?: unknown }).overlayOptions;
-    const resolved = typeof overlayOptions === "function" ? overlayOptions() : overlayOptions;
-    if (!resolved || typeof resolved !== "object") return DEFAULT_CUSTOM_UI_COLUMNS;
+    if (!options || typeof options !== "object")
+      return DEFAULT_CUSTOM_UI_COLUMNS;
+    const overlayOptions = (options as { overlayOptions?: unknown })
+      .overlayOptions;
+    const resolved =
+      typeof overlayOptions === "function" ? overlayOptions() : overlayOptions;
+    if (!resolved || typeof resolved !== "object")
+      return DEFAULT_CUSTOM_UI_COLUMNS;
     const width = (resolved as { width?: unknown }).width;
     return typeof width === "number" && Number.isFinite(width)
       ? Math.max(40, Math.min(140, Math.round(width)))
@@ -407,13 +465,10 @@ export class ExtensionUiBridge {
 
     return new Promise<T>((resolve) => {
       let completed = false;
-      const tui = createHeadlessCustomUiTui(
-        () => {
-          const custom = this.activeCustomUis.get(id);
-          if (custom) this.emitCustomUiRender(id, custom);
-        },
-        width,
-      );
+      const tui = createHeadlessCustomUiTui(() => {
+        const custom = this.activeCustomUis.get(id);
+        if (custom) this.emitCustomUiRender(id, custom);
+      }, width);
       const finish = (value: T) => {
         if (completed) return;
         completed = true;
@@ -438,7 +493,11 @@ export class ExtensionUiBridge {
             }
             return;
           }
-          if (!component || typeof component !== "object" || typeof (component as CustomUiComponent).render !== "function") {
+          if (
+            !component ||
+            typeof component !== "object" ||
+            typeof (component as CustomUiComponent).render !== "function"
+          ) {
             finish(undefined as T);
             return;
           }
@@ -509,34 +568,58 @@ export class ExtensionUiBridge {
 
   createUiContext(): ExtensionUiContextLike {
     return {
-      select: (title, options, opts) => this.requestExtensionUi(
-        { method: "select", title, options, ...(opts?.timeout ? { timeout: opts.timeout } : {}) },
-        undefined,
-        (response) => "value" in response ? response.value : undefined,
-        opts?.timeout,
-        opts?.signal,
-      ),
-      confirm: (title, message, opts) => this.requestExtensionUi(
-        { method: "confirm", title, message, ...(opts?.timeout ? { timeout: opts.timeout } : {}) },
-        false,
-        (response) => "confirmed" in response ? response.confirmed : false,
-        opts?.timeout,
-        opts?.signal,
-      ),
-      input: (title, placeholder, opts) => this.requestExtensionUi(
-        { method: "input", title, ...(placeholder !== undefined ? { placeholder } : {}), ...(opts?.timeout ? { timeout: opts.timeout } : {}) },
-        undefined,
-        (response) => "value" in response ? response.value : undefined,
-        opts?.timeout,
-        opts?.signal,
-      ),
-      editor: (title, prefill, opts) => this.requestExtensionUi(
-        { method: "editor", title, ...(prefill !== undefined ? { prefill } : {}), ...(opts?.timeout ? { timeout: opts.timeout } : {}) },
-        undefined,
-        (response) => "value" in response ? response.value : undefined,
-        opts?.timeout,
-        opts?.signal,
-      ),
+      select: (title, options, opts) =>
+        this.requestExtensionUi(
+          {
+            method: "select",
+            title,
+            options,
+            ...(opts?.timeout ? { timeout: opts.timeout } : {}),
+          },
+          undefined,
+          (response) => ("value" in response ? response.value : undefined),
+          opts?.timeout,
+          opts?.signal,
+        ),
+      confirm: (title, message, opts) =>
+        this.requestExtensionUi(
+          {
+            method: "confirm",
+            title,
+            message,
+            ...(opts?.timeout ? { timeout: opts.timeout } : {}),
+          },
+          false,
+          (response) => ("confirmed" in response ? response.confirmed : false),
+          opts?.timeout,
+          opts?.signal,
+        ),
+      input: (title, placeholder, opts) =>
+        this.requestExtensionUi(
+          {
+            method: "input",
+            title,
+            ...(placeholder !== undefined ? { placeholder } : {}),
+            ...(opts?.timeout ? { timeout: opts.timeout } : {}),
+          },
+          undefined,
+          (response) => ("value" in response ? response.value : undefined),
+          opts?.timeout,
+          opts?.signal,
+        ),
+      editor: (title, prefill, opts) =>
+        this.requestExtensionUi(
+          {
+            method: "editor",
+            title,
+            ...(prefill !== undefined ? { prefill } : {}),
+            ...(opts?.timeout ? { timeout: opts.timeout } : {}),
+          },
+          undefined,
+          (response) => ("value" in response ? response.value : undefined),
+          opts?.timeout,
+          opts?.signal,
+        ),
       notify: (message, type) => {
         this.emit({
           type: "extension_ui_request",
@@ -605,7 +688,8 @@ export class ExtensionUiBridge {
           title,
         } as ExtensionUiRequest as AgentEvent);
       },
-      custom: <T = unknown>(factory: unknown, options?: unknown) => this.requestExtensionCustomUi<T>(factory, options),
+      custom: <T = unknown>(factory: unknown, options?: unknown) =>
+        this.requestExtensionCustomUi<T>(factory, options),
       pasteToEditor: (text) => {
         this.emit({
           type: "extension_ui_request",
@@ -626,10 +710,15 @@ export class ExtensionUiBridge {
       addAutocompleteProvider: () => {},
       setEditorComponent: () => {},
       getEditorComponent: () => undefined,
-      get theme() { return PLAIN_TEXT_THEME; },
+      get theme() {
+        return PLAIN_TEXT_THEME;
+      },
       getAllThemes: () => [],
       getTheme: () => undefined,
-      setTheme: () => ({ success: false, error: "Theme switching is not supported in Pi Web extension UI yet" }),
+      setTheme: () => ({
+        success: false,
+        error: "Theme switching is not supported in Pi Web extension UI yet",
+      }),
       getToolsExpanded: () => false,
       setToolsExpanded: () => {},
     };

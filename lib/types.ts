@@ -51,7 +51,11 @@ export interface ToolCallContent {
   rawInput?: string;
 }
 
-export type AssistantContentBlock = TextContent | ImageContent | ThinkingContent | ToolCallContent;
+export type AssistantContentBlock =
+  | TextContent
+  | ImageContent
+  | ThinkingContent
+  | ToolCallContent;
 
 export interface UserMessage {
   role: "user";
@@ -116,7 +120,12 @@ export interface BashExecutionMessage {
   timestamp?: number;
 }
 
-export type AgentMessage = UserMessage | AssistantMessage | ToolResultMessage | CustomMessage | BashExecutionMessage;
+export type AgentMessage =
+  | UserMessage
+  | AssistantMessage
+  | ToolResultMessage
+  | CustomMessage
+  | BashExecutionMessage;
 
 // Live session event as delivered to browser listeners.
 export interface AgentEvent {

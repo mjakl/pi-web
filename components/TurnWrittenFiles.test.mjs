@@ -11,14 +11,15 @@ const { renderToStaticMarkup } = await jiti.import("react-dom/server");
 const { TurnWrittenFiles } = await jiti.import("./TurnWrittenFiles.tsx");
 
 function render(props) {
-  return renderToStaticMarkup(
-    React.createElement(TurnWrittenFiles, props),
-  );
+  return renderToStaticMarkup(React.createElement(TurnWrittenFiles, props));
 }
 
 test("renders a button per file showing the basename and full path", () => {
   const html = render({
-    files: [{ filePath: "/abs/out/report.html" }, { filePath: "/abs/out/data.json" }],
+    files: [
+      { filePath: "/abs/out/report.html" },
+      { filePath: "/abs/out/data.json" },
+    ],
     onOpenFile() {},
   });
   assert.match(html, /<button/);

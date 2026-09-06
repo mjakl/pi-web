@@ -1,6 +1,14 @@
 "use client";
 
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { SessionInfo } from "@/lib/types";
 import { formatRelativeTime } from "@/lib/i18n/format";
 import { useI18n } from "@/hooks/useI18n";
@@ -9,7 +17,8 @@ import { errorMessage } from "@/lib/error-message";
 
 export const SESSION_ITEM_HEIGHT = 54;
 
-const TABBABLE_SELECTOR = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+const TABBABLE_SELECTOR =
+  "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
 type MenuPosition = {
   top: number;
@@ -25,7 +34,12 @@ type ActionSurface =
   | { kind: "menu"; position: MenuPosition }
   | { kind: "rename" };
 
-type FocusPolicy = "none" | "trigger" | "trigger-if-owned" | "surface" | HTMLElement;
+type FocusPolicy =
+  | "none"
+  | "trigger"
+  | "trigger-if-owned"
+  | "surface"
+  | HTMLElement;
 
 const IDLE_ACTION_SURFACE: ActionSurface = { kind: "idle" };
 
@@ -39,8 +53,14 @@ function menuPositionFor(
   const rowHeight = window.matchMedia("(pointer: coarse)").matches ? 44 : 34;
   const height = (transient ? Number(isActive) : 3) * rowHeight + 10;
   return {
-    left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
-    top: rect.bottom + 4 + height <= window.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4),
+    left: Math.max(
+      8,
+      Math.min(rect.right - width, window.innerWidth - width - 8),
+    ),
+    top:
+      rect.bottom + 4 + height <= window.innerHeight
+        ? rect.bottom + 4
+        : Math.max(8, rect.top - height - 4),
     anchorTop: rect.top,
     anchorLeft: rect.left,
     isActive,
@@ -54,7 +74,14 @@ const SESSION_INDICATORS = {
     label: "sidebar.agentRunning",
     color: "var(--accent)",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ display: "block" }}>
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+        style={{ display: "block" }}
+      >
         <g>
           <path
             d="M21 12a9 9 0 1 1-3.8-7.4"
@@ -79,7 +106,13 @@ const SESSION_INDICATORS = {
     label: "sidebar.sessionActive",
     color: "var(--success)",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 14 14"
+        fill="none"
+        aria-hidden="true"
+      >
         <circle cx="7" cy="7" r="5" fill="currentColor" />
       </svg>
     ),
@@ -89,20 +122,47 @@ const SESSION_INDICATORS = {
     label: "sidebar.sessionStopped",
     color: "var(--text-dim)",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-        <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.25" opacity="0.6" />
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 14 14"
+        fill="none"
+        aria-hidden="true"
+      >
+        <circle
+          cx="7"
+          cy="7"
+          r="4.5"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          opacity="0.6"
+        />
       </svg>
     ),
   },
 };
 
-export function SessionIndicator({ kind, unread = false }: { kind: keyof typeof SESSION_INDICATORS; unread?: boolean }) {
+export function SessionIndicator({
+  kind,
+  unread = false,
+}: {
+  kind: keyof typeof SESSION_INDICATORS;
+  unread?: boolean;
+}) {
   const { t } = useI18n();
   const { title, label, color, icon } = SESSION_INDICATORS[kind];
   return (
     <span
-      title={unread ? t("sidebar.unreadSessionStatus", { status: t(title) }) : t(title)}
-      aria-label={unread ? t("sidebar.unreadSessionStatus", { status: t(label) }) : t(label)}
+      title={
+        unread
+          ? t("sidebar.unreadSessionStatus", { status: t(title) })
+          : t(title)
+      }
+      aria-label={
+        unread
+          ? t("sidebar.unreadSessionStatus", { status: t(label) })
+          : t(label)
+      }
       className={unread ? "session-indicator-unread" : undefined}
       style={{
         width: 14,
@@ -149,7 +209,8 @@ export const SessionItem = memo(function SessionItem({
   onDeleted?: (id: string) => void;
 }) {
   const { t } = useI18n();
-  const [actionSurface, setActionSurface] = useState<ActionSurface>(IDLE_ACTION_SURFACE);
+  const [actionSurface, setActionSurface] =
+    useState<ActionSurface>(IDLE_ACTION_SURFACE);
   const [renameValue, setRenameValue] = useState("");
   const [stopping, setStopping] = useState(false);
   const [activating, setActivating] = useState(false);
@@ -174,34 +235,45 @@ export const SessionItem = memo(function SessionItem({
   const eligibleForActions = isActive || !session.transient;
   const hasActions = actionsAvailable && eligibleForActions;
   const actionPending = stopping || activating || deleting;
-  const renderedSurface = actionsAvailable ? actionSurface : IDLE_ACTION_SURFACE;
+  const renderedSurface = actionsAvailable
+    ? actionSurface
+    : IDLE_ACTION_SURFACE;
   actionsAvailableRef.current = actionsAvailable;
   hasActionsRef.current = hasActions;
   renderedSurfaceRef.current = renderedSurface;
-  const menuPosition = renderedSurface.kind === "menu" ? renderedSurface.position : undefined;
-  const menuEligibilityValid = !menuPosition
-    || (menuPosition.isActive === Boolean(isActive)
-      && menuPosition.transient === Boolean(session.transient));
+  const menuPosition =
+    renderedSurface.kind === "menu" ? renderedSurface.position : undefined;
+  const menuEligibilityValid =
+    !menuPosition ||
+    (menuPosition.isActive === Boolean(isActive) &&
+      menuPosition.transient === Boolean(session.transient));
 
-  const transitionActionSurface = useCallback((next: ActionSurface, focus: FocusPolicy) => {
-    const actionsAvailableNow = actionsAvailableRef.current;
-    const hasActionsNow = hasActionsRef.current;
-    renderedSurfaceRef.current = actionsAvailableNow ? next : IDLE_ACTION_SURFACE;
-    if (!actionsAvailableNow || (focus === "trigger" && !hasActionsNow)) {
-      pendingFocusRef.current = "none";
-    } else if (focus === "trigger-if-owned") {
-      pendingFocusRef.current = menuHadFocusRef.current && hasActionsNow ? "trigger" : "none";
-    } else {
-      pendingFocusRef.current = focus;
-    }
-    menuHadFocusRef.current = false;
-    setActionSurface(next);
-  }, []);
+  const transitionActionSurface = useCallback(
+    (next: ActionSurface, focus: FocusPolicy) => {
+      const actionsAvailableNow = actionsAvailableRef.current;
+      const hasActionsNow = hasActionsRef.current;
+      renderedSurfaceRef.current = actionsAvailableNow
+        ? next
+        : IDLE_ACTION_SURFACE;
+      if (!actionsAvailableNow || (focus === "trigger" && !hasActionsNow)) {
+        pendingFocusRef.current = "none";
+      } else if (focus === "trigger-if-owned") {
+        pendingFocusRef.current =
+          menuHadFocusRef.current && hasActionsNow ? "trigger" : "none";
+      } else {
+        pendingFocusRef.current = focus;
+      }
+      menuHadFocusRef.current = false;
+      setActionSurface(next);
+    },
+    [],
+  );
 
   useLayoutEffect(() => {
     if (!actionsAvailable) {
       pendingFocusRef.current = "none";
-      if (actionSurface.kind !== "idle") transitionActionSurface(IDLE_ACTION_SURFACE, "none");
+      if (actionSurface.kind !== "idle")
+        transitionActionSurface(IDLE_ACTION_SURFACE, "none");
       return;
     }
 
@@ -212,13 +284,19 @@ export const SessionItem = memo(function SessionItem({
     } else if (focus === "trigger") {
       menuTriggerRef.current?.focus();
     } else if (focus === "surface") {
-      if (renderedSurface.kind === "menu") menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+      if (renderedSurface.kind === "menu")
+        menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
       else if (renderedSurface.kind === "rename") {
         inputRef.current?.focus();
         inputRef.current?.select();
       }
     }
-  }, [actionSurface, actionsAvailable, renderedSurface, transitionActionSurface]);
+  }, [
+    actionSurface,
+    actionsAvailable,
+    renderedSurface,
+    transitionActionSurface,
+  ]);
 
   // Follow the trigger rather than tearing the popup down when it moves. A
   // phone fires resize for every URL-bar and on-screen-keyboard animation, and
@@ -226,18 +304,31 @@ export const SessionItem = memo(function SessionItem({
   const repositionMenu = useCallback(() => {
     const rect = menuTriggerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const position = menuPositionFor(rect, Boolean(isActive), Boolean(session.transient));
-    setActionSurface((current) => (current.kind === "menu" ? { kind: "menu", position } : current));
+    const position = menuPositionFor(
+      rect,
+      Boolean(isActive),
+      Boolean(session.transient),
+    );
+    setActionSurface((current) =>
+      current.kind === "menu" ? { kind: "menu", position } : current,
+    );
   }, [isActive, session.transient]);
 
   useLayoutEffect(() => {
     if (!menuPosition) return;
     const rect = menuTriggerRef.current?.getBoundingClientRect();
     if (!rect || !menuEligibilityValid) {
-      transitionActionSurface(IDLE_ACTION_SURFACE, rect ? "trigger-if-owned" : "none");
+      transitionActionSurface(
+        IDLE_ACTION_SURFACE,
+        rect ? "trigger-if-owned" : "none",
+      );
       return;
     }
-    if (rect.top !== menuPosition.anchorTop || rect.left !== menuPosition.anchorLeft) repositionMenu();
+    if (
+      rect.top !== menuPosition.anchorTop ||
+      rect.left !== menuPosition.anchorLeft
+    )
+      repositionMenu();
   });
 
   // Show as a native popover so the browser owns dismissal. Its light dismiss
@@ -271,38 +362,68 @@ export const SessionItem = memo(function SessionItem({
       document.removeEventListener("keydown", dismissOnEscape);
       window.removeEventListener("resize", repositionMenu);
     };
-  }, [menuEligibilityValid, menuPosition, repositionMenu, transitionActionSurface]);
+  }, [
+    menuEligibilityValid,
+    menuPosition,
+    repositionMenu,
+    transitionActionSurface,
+  ]);
 
   const firstMessage = session.firstMessage ?? "";
-  const title = session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12);
+  const title =
+    session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12);
   const actionsLabel = t("sidebar.sessionActions", { title });
 
   const startRename = useCallback(() => {
     if (session.transient) return;
-    setRenameValue(session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12));
+    setRenameValue(
+      session.name || firstMessage.slice(0, 50) || session.id.slice(0, 12),
+    );
     transitionActionSurface({ kind: "rename" }, "surface");
-  }, [session.name, session.transient, firstMessage, session.id, transitionActionSurface]);
+  }, [
+    session.name,
+    session.transient,
+    firstMessage,
+    session.id,
+    transitionActionSurface,
+  ]);
 
-  const commitRename = useCallback(async (restoreFocus = false) => {
-    const name = renameValue.trim();
-    transitionActionSurface(IDLE_ACTION_SURFACE, restoreFocus ? "trigger" : "none");
-    // No-op when unchanged: the fallback title (first message / id) isn't a
-    // real stored name, so don't persist it as one. (The rename input seeds
-    // from the same server-collapsed firstMessage, so an untouched rename of
-    // a skill-invoked session stays a no-op instead of persisting raw XML.)
-    if (renameValue === title || name === (session.name ?? "")) return;
-    try {
-      const response = await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      onRenamed?.();
-    } catch {
-      // ignore
-    }
-  }, [renameValue, session.id, session.name, onRenamed, title, transitionActionSurface]);
+  const commitRename = useCallback(
+    async (restoreFocus = false) => {
+      const name = renameValue.trim();
+      transitionActionSurface(
+        IDLE_ACTION_SURFACE,
+        restoreFocus ? "trigger" : "none",
+      );
+      // No-op when unchanged: the fallback title (first message / id) isn't a
+      // real stored name, so don't persist it as one. (The rename input seeds
+      // from the same server-collapsed firstMessage, so an untouched rename of
+      // a skill-invoked session stays a no-op instead of persisting raw XML.)
+      if (renameValue === title || name === (session.name ?? "")) return;
+      try {
+        const response = await fetch(
+          `/api/sessions/${encodeURIComponent(session.id)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          },
+        );
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        onRenamed?.();
+      } catch {
+        // ignore
+      }
+    },
+    [
+      renameValue,
+      session.id,
+      session.name,
+      onRenamed,
+      title,
+      transitionActionSurface,
+    ],
+  );
 
   const performActivate = useCallback(async () => {
     if (isActive || session.transient) return;
@@ -312,37 +433,61 @@ export const SessionItem = memo(function SessionItem({
       await sendAgentCommand(session.id, { type: "get_state" });
       onActivated?.(session.id);
     } catch (error) {
-      onActivationFailed?.(t("sidebar.activationFailed", {
-        error: errorMessage(error),
-      }));
+      onActivationFailed?.(
+        t("sidebar.activationFailed", {
+          error: errorMessage(error),
+        }),
+      );
     } finally {
       setActivating(false);
     }
-  }, [isActive, session.id, session.transient, onActivated, onActivationFailed, t, transitionActionSurface]);
+  }, [
+    isActive,
+    session.id,
+    session.transient,
+    onActivated,
+    onActivationFailed,
+    t,
+    transitionActionSurface,
+  ]);
 
   const performStop = useCallback(async () => {
     if (!isActive) return;
     transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     setStopping(true);
     try {
-      const response = await fetch(`/api/agent/${encodeURIComponent(session.id)}`, { method: "DELETE" });
+      const response = await fetch(
+        `/api/agent/${encodeURIComponent(session.id)}`,
+        { method: "DELETE" },
+      );
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      if (session.transient) transitionActionSurface(IDLE_ACTION_SURFACE, "none");
+      if (session.transient)
+        transitionActionSurface(IDLE_ACTION_SURFACE, "none");
       onStopped?.(session.id);
     } catch {
       // Transient sessions keep their trigger only when Stop fails.
-      if (session.transient) transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
+      if (session.transient)
+        transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     } finally {
       setStopping(false);
     }
-  }, [isActive, onStopped, session.id, session.transient, transitionActionSurface]);
+  }, [
+    isActive,
+    onStopped,
+    session.id,
+    session.transient,
+    transitionActionSurface,
+  ]);
 
   const performDelete = useCallback(async () => {
     if (session.transient) return;
     transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
     setDeleting(true);
     try {
-      const response = await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "DELETE" });
+      const response = await fetch(
+        `/api/sessions/${encodeURIComponent(session.id)}`,
+        { method: "DELETE" },
+      );
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       transitionActionSurface(IDLE_ACTION_SURFACE, "none");
       onDeleted?.(session.id);
@@ -352,68 +497,107 @@ export const SessionItem = memo(function SessionItem({
     }
   }, [session.id, session.transient, onDeleted, transitionActionSurface]);
 
-  const handleMenuKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Tab") return;
-    const buttons = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
-    const leavingBackward = e.shiftKey && e.target === buttons[0];
-    const leavingForward = !e.shiftKey && e.target === buttons.at(-1);
-    if (!leavingBackward && !leavingForward) return;
+  const handleMenuKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== "Tab") return;
+      const buttons = [
+        ...(menuRef.current?.querySelectorAll<HTMLButtonElement>("button") ??
+          []),
+      ];
+      const leavingBackward = e.shiftKey && e.target === buttons[0];
+      const leavingForward = !e.shiftKey && e.target === buttons.at(-1);
+      if (!leavingBackward && !leavingForward) return;
 
-    e.preventDefault();
-    const trigger = menuTriggerRef.current;
-    let destination: HTMLElement | null = trigger;
-    if (leavingForward && trigger) {
-      const tabbable = [...document.querySelectorAll<HTMLElement>(TABBABLE_SELECTOR)]
-        .filter((element) => element.tabIndex >= 0 && !element.closest("[hidden], [inert]") && !menuRef.current?.contains(element));
-      destination = tabbable[tabbable.indexOf(trigger) + 1] ?? trigger;
-    }
-    transitionActionSurface(IDLE_ACTION_SURFACE, destination ?? "none");
-  }, [transitionActionSurface]);
+      e.preventDefault();
+      const trigger = menuTriggerRef.current;
+      let destination: HTMLElement | null = trigger;
+      if (leavingForward && trigger) {
+        const tabbable = [
+          ...document.querySelectorAll<HTMLElement>(TABBABLE_SELECTOR),
+        ].filter(
+          (element) =>
+            element.tabIndex >= 0 &&
+            !element.closest("[hidden], [inert]") &&
+            !menuRef.current?.contains(element),
+        );
+        destination = tabbable[tabbable.indexOf(trigger) + 1] ?? trigger;
+      }
+      transitionActionSurface(IDLE_ACTION_SURFACE, destination ?? "none");
+    },
+    [transitionActionSurface],
+  );
 
-  const toggleMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    if (actionPending) return;
-    if (dismissedAtRef.current > 0 && dismissedAtRef.current >= pressStartedAtRef.current) {
-      // This press is what closed the popup. Leave it closed.
-      dismissedAtRef.current = 0;
-      return;
-    }
-    if (menuPosition) {
-      transitionActionSurface(IDLE_ACTION_SURFACE, "none");
-      return;
-    }
+  const toggleMenu = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      if (actionPending) return;
+      if (
+        dismissedAtRef.current > 0 &&
+        dismissedAtRef.current >= pressStartedAtRef.current
+      ) {
+        // This press is what closed the popup. Leave it closed.
+        dismissedAtRef.current = 0;
+        return;
+      }
+      if (menuPosition) {
+        transitionActionSurface(IDLE_ACTION_SURFACE, "none");
+        return;
+      }
 
-    const position = menuPositionFor(
-      e.currentTarget.getBoundingClientRect(),
-      Boolean(isActive),
-      Boolean(session.transient),
-    );
-    transitionActionSurface({ kind: "menu", position }, "surface");
-  }, [actionPending, isActive, menuPosition, session.transient, transitionActionSurface]);
+      const position = menuPositionFor(
+        e.currentTarget.getBoundingClientRect(),
+        Boolean(isActive),
+        Boolean(session.transient),
+      );
+      transitionActionSurface({ kind: "menu", position }, "surface");
+    },
+    [
+      actionPending,
+      isActive,
+      menuPosition,
+      session.transient,
+      transitionActionSurface,
+    ],
+  );
 
-  const chooseMenuAction = useCallback((e: React.MouseEvent, action: "activate" | "stop" | "rename" | "delete") => {
-    e.stopPropagation();
-    if (action === "rename") startRename();
-    else if (action === "activate") void performActivate();
-    else if (action === "stop") void performStop();
-    else void performDelete();
-  }, [performActivate, performDelete, performStop, startRename]);
+  const chooseMenuAction = useCallback(
+    (
+      e: React.MouseEvent,
+      action: "activate" | "stop" | "rename" | "delete",
+    ) => {
+      e.stopPropagation();
+      if (action === "rename") startRename();
+      else if (action === "activate") void performActivate();
+      else if (action === "stop") void performStop();
+      else void performDelete();
+    },
+    [performActivate, performDelete, performStop, startRename],
+  );
 
   // Fixed-height outer wrapper — content swaps in place so the list never reflows.
   return (
     <div
       className="session-row"
       data-session-inventory-id={session.id}
-      onClick={renderedSurface.kind === "idle" || renderedSurface.kind === "menu" ? () => onSelect(session) : undefined}
+      onClick={
+        renderedSurface.kind === "idle" || renderedSurface.kind === "menu"
+          ? () => onSelect(session)
+          : undefined
+      }
       style={{
         height: SESSION_ITEM_HEIGHT,
         display: "flex",
         alignItems: "center",
         paddingLeft: 14,
         paddingRight: 8,
-        cursor: renderedSurface.kind === "idle" || renderedSurface.kind === "menu" ? "pointer" : "default",
+        cursor:
+          renderedSurface.kind === "idle" || renderedSurface.kind === "menu"
+            ? "pointer"
+            : "default",
         background: isSelected ? "var(--bg-selected)" : undefined,
-        borderLeft: isSelected ? "2px solid var(--accent)" : "2px solid transparent",
+        borderLeft: isSelected
+          ? "2px solid var(--accent)"
+          : "2px solid transparent",
         transition: "background 0.1s",
         opacity: actionPending ? 0.5 : 1,
         gap: 6,
@@ -428,7 +612,10 @@ export const SessionItem = memo(function SessionItem({
           value={renameValue}
           onChange={(e) => setRenameValue(e.target.value)}
           onBlur={(e) => {
-            if (e.relatedTarget !== menuTriggerRef.current && renderedSurfaceRef.current.kind === "rename") {
+            if (
+              e.relatedTarget !== menuTriggerRef.current &&
+              renderedSurfaceRef.current.kind === "rename"
+            ) {
               void commitRename();
             }
           }}
@@ -469,26 +656,84 @@ export const SessionItem = memo(function SessionItem({
               }}
               title={title}
             >
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+              <span
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  minWidth: 0,
+                }}
+              >
                 {title}
               </span>
             </div>
-            <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 8, color: "var(--text-dim)", fontSize: 11, minWidth: 0 }}>
-              <SessionIndicator kind={isRunning ? "running" : isActive ? "active" : "stopped"} unread={isUnread} />
-              <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflow: "hidden" }}>
-                <span title={session.modified} style={{ whiteSpace: "nowrap", flexShrink: 0 }}>{formatRelativeTime(session.modified)}</span>
+            <div
+              style={{
+                marginTop: 2,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                color: "var(--text-dim)",
+                fontSize: 11,
+                minWidth: 0,
+              }}
+            >
+              <SessionIndicator
+                kind={isRunning ? "running" : isActive ? "active" : "stopped"}
+                unread={isUnread}
+              />
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  minWidth: 0,
+                  overflow: "hidden",
+                }}
+              >
+                <span
+                  title={session.modified}
+                  style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+                >
+                  {formatRelativeTime(session.modified)}
+                </span>
                 {session.isWorktree && session.branch && (
                   <span
                     title={`Worktree: ${session.cwd}`}
-                    style={{ display: "flex", alignItems: "center", gap: 3, color: "var(--accent)", minWidth: 0, overflow: "hidden" }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 3,
+                      color: "var(--accent)",
+                      minWidth: 0,
+                      overflow: "hidden",
+                    }}
                   >
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <svg
+                      width="9"
+                      height="9"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ flexShrink: 0 }}
+                    >
                       <line x1="6" y1="3" x2="6" y2="15" />
                       <circle cx="18" cy="6" r="3" />
                       <circle cx="6" cy="18" r="3" />
                       <path d="M18 9a9 9 0 0 1-9 9" />
                     </svg>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.branch}</span>
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {session.branch}
+                    </span>
                   </span>
                 )}
               </span>
@@ -514,9 +759,14 @@ export const SessionItem = memo(function SessionItem({
               <kbd
                 aria-hidden="true"
                 style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 28, height: 28,
-                  color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28,
+                  height: 28,
+                  color: "var(--text-dim)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10,
                 }}
               >
                 {shortcutLabel}
@@ -525,33 +775,57 @@ export const SessionItem = memo(function SessionItem({
               <button
                 ref={menuTriggerRef}
                 type="button"
-                onPointerDown={() => { pressStartedAtRef.current = Date.now(); }}
+                onPointerDown={() => {
+                  pressStartedAtRef.current = Date.now();
+                }}
                 aria-label={actionsLabel}
                 aria-controls={menuId}
                 aria-expanded={Boolean(menuPosition)}
                 aria-disabled={actionPending || undefined}
                 onClick={toggleMenu}
-                onFocus={() => { menuHadFocusRef.current = false; }}
+                onFocus={() => {
+                  menuHadFocusRef.current = false;
+                }}
                 style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 28, height: 28, padding: 0,
-                  background: menuPosition ? "var(--bg-selected)" : "transparent",
-                  border: "1px solid transparent", borderRadius: 6,
-                  color: "var(--text-muted)", cursor: actionPending ? "default" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28,
+                  height: 28,
+                  padding: 0,
+                  background: menuPosition
+                    ? "var(--bg-selected)"
+                    : "transparent",
+                  border: "1px solid transparent",
+                  borderRadius: 6,
+                  color: "var(--text-muted)",
+                  cursor: actionPending ? "default" : "pointer",
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
                   <circle cx="5" cy="12" r="1.8" />
                   <circle cx="12" cy="12" r="1.8" />
                   <circle cx="19" cy="12" r="1.8" />
                 </svg>
               </button>
-            ) : <span />}
+            ) : (
+              <span />
+            )}
             {session.messageCount === undefined ? (
-              <span role="status" aria-label={t("sidebar.loading")}>…</span>
+              <span role="status" aria-label={t("sidebar.loading")}>
+                …
+              </span>
             ) : (
               <span
-                title={t("sidebar.messagesCount", { count: session.messageCount })}
+                title={t("sidebar.messagesCount", {
+                  count: session.messageCount,
+                })}
                 style={{ whiteSpace: "nowrap" }}
               >
                 {t("sidebar.messagesCount", { count: session.messageCount })}
@@ -566,39 +840,69 @@ export const SessionItem = memo(function SessionItem({
               className="menu-surface"
               popover="auto"
               onToggle={(e) => {
-                if ((e as unknown as { newState?: string }).newState !== "closed") return;
+                if (
+                  (e as unknown as { newState?: string }).newState !== "closed"
+                )
+                  return;
                 dismissedAtRef.current = Date.now();
-                transitionActionSurface(IDLE_ACTION_SURFACE, "trigger-if-owned");
+                transitionActionSurface(
+                  IDLE_ACTION_SURFACE,
+                  "trigger-if-owned",
+                );
               }}
               role="group"
               aria-label={actionsLabel}
               style={{
                 // inset/margin reset the UA popover sheet, which centres with
                 // inset: 0 and margin: auto and would ignore top/left.
-                position: "fixed", inset: "auto", margin: 0,
-                top: menuPosition.top, left: menuPosition.left, zIndex: 1000,
-                width: "min(144px, calc(100vw - 16px))", maxHeight: "calc(100vh - 16px)", overflowY: "auto",
+                position: "fixed",
+                inset: "auto",
+                margin: 0,
+                top: menuPosition.top,
+                left: menuPosition.left,
+                zIndex: 1000,
+                width: "min(144px, calc(100vw - 16px))",
+                maxHeight: "calc(100vh - 16px)",
+                overflowY: "auto",
               }}
               onClick={(e) => e.stopPropagation()}
-              onFocusCapture={() => { menuHadFocusRef.current = true; }}
+              onFocusCapture={() => {
+                menuHadFocusRef.current = true;
+              }}
               onKeyDown={handleMenuKeyDown}
             >
               {isActive && (
-                <button type="button" onClick={(e) => chooseMenuAction(e, "stop")} className="menu-item">
+                <button
+                  type="button"
+                  onClick={(e) => chooseMenuAction(e, "stop")}
+                  className="menu-item"
+                >
                   {t("sidebar.stop")}
                 </button>
               )}
               {!isActive && !session.transient && (
-                <button type="button" onClick={(e) => chooseMenuAction(e, "activate")} className="menu-item">
+                <button
+                  type="button"
+                  onClick={(e) => chooseMenuAction(e, "activate")}
+                  className="menu-item"
+                >
                   {t("sidebar.activate")}
                 </button>
               )}
               {!session.transient && (
                 <>
-                  <button type="button" onClick={(e) => chooseMenuAction(e, "rename")} className="menu-item">
+                  <button
+                    type="button"
+                    onClick={(e) => chooseMenuAction(e, "rename")}
+                    className="menu-item"
+                  >
                     {t("sidebar.rename")}
                   </button>
-                  <button type="button" onClick={(e) => chooseMenuAction(e, "delete")} className="menu-item menu-item-danger">
+                  <button
+                    type="button"
+                    onClick={(e) => chooseMenuAction(e, "delete")}
+                    className="menu-item menu-item-danger"
+                  >
                     {t("sidebar.delete")}
                   </button>
                 </>

@@ -17,7 +17,9 @@ function hasReferenceBoundaryAfter(text: string, index: number): boolean {
 
 function containsExactPathReference(text: string, filePath: string): boolean {
   const target = toSlashPath(filePath);
-  const targets = target.startsWith("/") ? [target, `file://${target}`] : [target];
+  const targets = target.startsWith("/")
+    ? [target, `file://${target}`]
+    : [target];
   const haystacks = new Set([toSlashPath(text), toSlashPath(safeDecode(text))]);
 
   for (const haystack of haystacks) {
@@ -26,7 +28,10 @@ function containsExactPathReference(text: string, filePath: string): boolean {
       while (index !== -1) {
         const before = index === 0 ? "" : haystack[index - 1];
         const afterIndex = index + t.length;
-        if ((index === 0 || !isPathChar(before)) && hasReferenceBoundaryAfter(haystack, afterIndex)) {
+        if (
+          (index === 0 || !isPathChar(before)) &&
+          hasReferenceBoundaryAfter(haystack, afterIndex)
+        ) {
           return true;
         }
         index = haystack.indexOf(t, index + 1);
@@ -50,19 +55,27 @@ function collectStrings(value: unknown, out: string[]): void {
   for (const item of Object.values(value)) collectStrings(item, out);
 }
 
-export function isFilePathReferencedByEntries(filePath: string, entries: SessionEntry[]): boolean {
+export function isFilePathReferencedByEntries(
+  filePath: string,
+  entries: SessionEntry[],
+): boolean {
   for (const entry of entries) {
     const strings: string[] = [];
     collectStrings(entry, strings);
-    if (strings.some((text) => containsExactPathReference(text, filePath))) return true;
+    if (strings.some((text) => containsExactPathReference(text, filePath)))
+      return true;
   }
   return false;
 }
 
-export function isBashOutputPathReferencedByEntries(filePath: string, entries: SessionEntry[]): boolean {
-  return entries.some((entry) => (
-    entry.type === "message"
-    && entry.message.role === "bashExecution"
-    && entry.message.fullOutputPath === filePath
-  ));
+export function isBashOutputPathReferencedByEntries(
+  filePath: string,
+  entries: SessionEntry[],
+): boolean {
+  return entries.some(
+    (entry) =>
+      entry.type === "message" &&
+      entry.message.role === "bashExecution" &&
+      entry.message.fullOutputPath === filePath,
+  );
 }

@@ -19,9 +19,13 @@ function dispatchNotificationClick(data) {
   listeners.get("notificationclick")({
     notification: {
       data,
-      close: () => { closed = true; },
+      close: () => {
+        closed = true;
+      },
     },
-    waitUntil: (promise) => { pending = promise; },
+    waitUntil: (promise) => {
+      pending = promise;
+    },
   });
   return { pending, wasClosed: () => closed };
 }
@@ -34,11 +38,15 @@ function dispatchPush(payload, clients) {
     openWindow: async () => assert.fail("push must not open windows"),
   };
   self.registration = {
-    showNotification: async (title, options) => { shown.push({ title, options }); },
+    showNotification: async (title, options) => {
+      shown.push({ title, options });
+    },
   };
   listeners.get("push")({
     data: { json: () => payload },
-    waitUntil: (promise) => { pending = promise; },
+    waitUntil: (promise) => {
+      pending = promise;
+    },
   });
   return { pending, shown };
 }
@@ -55,19 +63,25 @@ test("push shows a notification when no window is visible", async () => {
   );
   await event.pending;
 
-  assert.deepEqual(event.shown, [{
-    title: "Session complete",
-    options: {
-      body: "Task finished.",
-      data: { url: "/?session=session-1" },
-      tag: "pi-session-complete:session-1",
+  assert.deepEqual(event.shown, [
+    {
+      title: "Session complete",
+      options: {
+        body: "Task finished.",
+        data: { url: "/?session=session-1" },
+        tag: "pi-session-complete:session-1",
+      },
     },
-  }]);
+  ]);
 });
 
 test("push skips the system notification when a window is visible", async () => {
   const event = dispatchPush(
-    { title: "Session complete", body: "Task finished.", url: "/?session=session-1" },
+    {
+      title: "Session complete",
+      body: "Task finished.",
+      url: "/?session=session-1",
+    },
     [
       { url: "https://pi.test/?session=other", visibilityState: "hidden" },
       { url: "https://pi.test/?session=session-1", visibilityState: "visible" },
@@ -79,10 +93,7 @@ test("push skips the system notification when a window is visible", async () => 
 });
 
 test("push ignores malformed payloads", async () => {
-  const event = dispatchPush(
-    { title: "", body: 42 },
-    [],
-  );
+  const event = dispatchPush({ title: "", body: 42 }, []);
   await event.pending;
 
   assert.deepEqual(event.shown, []);
@@ -92,7 +103,9 @@ test("notification click focuses an existing client at the session URL", async (
   const calls = [];
   const focusedClient = {
     url: "https://pi.test/?session=session-1",
-    focus: async () => { calls.push("focus"); },
+    focus: async () => {
+      calls.push("focus");
+    },
     navigate: async () => assert.fail("exact client should not navigate"),
   };
   self.clients = {
@@ -110,7 +123,9 @@ test("notification click focuses an existing client at the session URL", async (
 test("notification click navigates an existing client to the session", async () => {
   const calls = [];
   const navigatedClient = {
-    focus: async () => { calls.push("focus"); },
+    focus: async () => {
+      calls.push("focus");
+    },
   };
   const existingClient = {
     url: "https://pi.test/?session=other-session",
@@ -138,10 +153,14 @@ test("notification click opens a window and rejects cross-origin targets", async
   const opened = [];
   self.clients = {
     matchAll: async () => [],
-    openWindow: async (url) => { opened.push(url); },
+    openWindow: async (url) => {
+      opened.push(url);
+    },
   };
 
-  const event = dispatchNotificationClick({ url: "https://example.com/redirect" });
+  const event = dispatchNotificationClick({
+    url: "https://example.com/redirect",
+  });
   await event.pending;
 
   assert.deepEqual(opened, ["https://pi.test/"]);

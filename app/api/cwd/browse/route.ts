@@ -28,12 +28,18 @@ export async function GET(request: Request) {
     try {
       resolved = await resolveDirectory(candidate);
     } catch {
-      return Response.json({ error: "Directory does not exist" }, { status: 404 });
+      return Response.json(
+        { error: "Directory does not exist" },
+        { status: 404 },
+      );
     }
 
     const directoryStat = await stat(resolved);
     if (!directoryStat.isDirectory()) {
-      return Response.json({ error: "Path is not a directory" }, { status: 400 });
+      return Response.json(
+        { error: "Path is not a directory" },
+        { status: 400 },
+      );
     }
 
     const directories = await listDirectories(resolved);

@@ -25,12 +25,17 @@ function parseLimit(value: unknown): number {
 
 function formatInstalls(count?: number): string {
   if (!count || count <= 0) return "";
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, "")}M installs`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}K installs`;
+  if (count >= 1_000_000)
+    return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, "")}M installs`;
+  if (count >= 1_000)
+    return `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}K installs`;
   return `${count} install${count === 1 ? "" : "s"}`;
 }
 
-async function searchSkillsApi(query: string, limit: number): Promise<SkillSearchResult[]> {
+async function searchSkillsApi(
+  query: string,
+  limit: number,
+): Promise<SkillSearchResult[]> {
   const url = `${SEARCH_API_BASE}/api/search?q=${encodeURIComponent(query)}&limit=${limit}`;
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`skills.sh search failed: HTTP ${res.status}`);
@@ -58,8 +63,12 @@ async function searchSkillsApi(query: string, limit: number): Promise<SkillSearc
 // POST /api/skills/search  body: { query: string, limit?: number }
 export async function POST(req: Request) {
   try {
-    const { query, limit: rawLimit } = await req.json() as { query?: string; limit?: unknown };
-    if (!query?.trim()) return Response.json({ error: "query required" }, { status: 400 });
+    const { query, limit: rawLimit } = (await req.json()) as {
+      query?: string;
+      limit?: unknown;
+    };
+    if (!query?.trim())
+      return Response.json({ error: "query required" }, { status: 400 });
     const limit = parseLimit(rawLimit);
 
     const results = await searchSkillsApi(query.trim(), limit);

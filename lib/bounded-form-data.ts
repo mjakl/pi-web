@@ -15,7 +15,10 @@ function declaredContentLength(request: Request): number | null {
  * Parse multipart data only after constraining the complete wire body. This
  * bounds chunked requests too, where Content-Length is unavailable or false.
  */
-export async function parseFormDataWithinLimit(request: Request, maxBytes: number): Promise<FormData> {
+export async function parseFormDataWithinLimit(
+  request: Request,
+  maxBytes: number,
+): Promise<FormData> {
   const declared = declaredContentLength(request);
   if (declared !== null && declared > maxBytes) {
     throw new RequestBodyTooLargeError();

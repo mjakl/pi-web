@@ -31,10 +31,10 @@ export async function persistExplicitStartupPreferences(
   let modelDefaultChanged = false;
 
   if (
-    explicit.model
-    && effective.model
-    && explicit.model.provider === effective.model.provider
-    && explicit.model.modelId === effective.model.modelId
+    explicit.model &&
+    effective.model &&
+    explicit.model.provider === effective.model.provider &&
+    explicit.model.modelId === effective.model.modelId
   ) {
     settingsManager.setDefaultModelAndProvider(
       effective.model.provider,
@@ -44,8 +44,8 @@ export async function persistExplicitStartupPreferences(
   }
 
   if (
-    explicit.thinkingLevel
-    && (effective.supportsThinking || effective.thinkingLevel !== "off")
+    explicit.thinkingLevel &&
+    (effective.supportsThinking || effective.thinkingLevel !== "off")
   ) {
     settingsManager.setDefaultThinkingLevel(effective.thinkingLevel);
   }

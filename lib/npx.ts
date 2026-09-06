@@ -49,7 +49,10 @@ export interface RunNpxResult {
  * Cross-platform wrapper for invoking `npx <args>` without ever using a
  * shell, so user-controlled arguments are never interpreted as shell syntax.
  */
-export async function runNpx(args: string[], opts: RunNpxOptions = {}): Promise<RunNpxResult> {
+export async function runNpx(
+  args: string[],
+  opts: RunNpxOptions = {},
+): Promise<RunNpxResult> {
   const npxCli = findNpxCli();
   const { command, commandArgs } = npxCli
     ? { command: execPath, commandArgs: [npxCli, ...args] }

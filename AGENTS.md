@@ -9,15 +9,15 @@ live turns through in-process Pi SDK `AgentSession` instances.
 - Use `npm`; requirements and available scripts are authoritative in
   `package.json` and `package-lock.json`. Use the development tool pins in
   `mise.toml` (`mise install`, then `mise exec -- <command>` unless mise is
-  active). Prepare a fresh checkout with `npm ci`, with `NODE_ENV` unset so
-  dev dependencies are installed. `justfile` delegates to the npm scripts.
+  active). Prepare a fresh checkout with `npm ci`, with `NODE_ENV` unset so dev
+  dependencies are installed. `justfile` delegates to the npm scripts.
 - Pi itself is not a dependency of this checkout. Development, build,
   type-check, and tests all need a host Pi on `PATH`; see
   [Host Pi runtime](#host-pi-runtime).
 - Treat `~/.pi/agent` (or `PI_CODING_AGENT_DIR`) as user-owned state. Tests and
   experiments that write sessions, settings, credentials, or skills must use a
-  temporary agent directory or an explicit fixture. Do not alter the user's
-  live Pi state unless the task requires it.
+  temporary agent directory or an explicit fixture. Do not alter the user's live
+  Pi state unless the task requires it.
 - Do not hand-edit generated output such as `.next/`, `next-env.d.ts`, or
   `*.tsbuildinfo`.
 - `AGENTS.md` is the repository instruction source. `CLAUDE.md` is its symlink
@@ -54,17 +54,17 @@ Next.js routes in app/api
 
 Start with these owners instead of a broad file inventory:
 
-| Change area | Start here |
-| --- | --- |
-| Persisted session reading, metadata, families, or context | `lib/session-reader.ts`, `lib/session-*.ts`, `app/api/sessions/**` |
-| Live session startup, commands, tools, fork/clone, or cleanup | `lib/rpc-manager.ts`, `app/api/agent/**` |
-| Extension dialogs, statuses, widgets, or custom UI | `lib/extension-ui-bridge.ts` |
-| Browser streaming and reconciliation | `hooks/useAgentSession.ts`, `lib/agent-event-*.ts`, `lib/agent-client.ts` |
-| File access, path identity, Git, or worktrees | `lib/file-access.ts`, `lib/path-security.ts`, `lib/paths.ts`, `lib/worktree.ts` |
-| Project resources, trust, plugins, or skills | `lib/project-trust.ts`, `lib/chat-only.ts`, `app/api/{project-trust,plugins,skills}/**` |
-| Models and startup preferences | `lib/model-scope.ts`, `lib/models-cache.ts`, `lib/agent-config-stamp.ts`, `lib/startup-preferences.ts`, `app/api/models/**` |
-| Application shell and session workspace UI | `components/AppShell.tsx`, `components/SessionSidebar.tsx`, `components/ChatWindow.tsx`, `components/ChatInput.tsx` |
-| Host Pi resolution, package shims, and Next.js startup | `bin/host-pi.js`, `bin/host-pi-runtime.js`, `bin/link-host-pi.js`, `bin/run-next.js` |
+| Change area                                                   | Start here                                                                                                                  |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Persisted session reading, metadata, families, or context     | `lib/session-reader.ts`, `lib/session-*.ts`, `app/api/sessions/**`                                                          |
+| Live session startup, commands, tools, fork/clone, or cleanup | `lib/rpc-manager.ts`, `app/api/agent/**`                                                                                    |
+| Extension dialogs, statuses, widgets, or custom UI            | `lib/extension-ui-bridge.ts`                                                                                                |
+| Browser streaming and reconciliation                          | `hooks/useAgentSession.ts`, `lib/agent-event-*.ts`, `lib/agent-client.ts`                                                   |
+| File access, path identity, Git, or worktrees                 | `lib/file-access.ts`, `lib/path-security.ts`, `lib/paths.ts`, `lib/worktree.ts`                                             |
+| Project resources, trust, plugins, or skills                  | `lib/project-trust.ts`, `lib/chat-only.ts`, `app/api/{project-trust,plugins,skills}/**`                                     |
+| Models and startup preferences                                | `lib/model-scope.ts`, `lib/models-cache.ts`, `lib/agent-config-stamp.ts`, `lib/startup-preferences.ts`, `app/api/models/**` |
+| Application shell and session workspace UI                    | `components/AppShell.tsx`, `components/SessionSidebar.tsx`, `components/ChatWindow.tsx`, `components/ChatInput.tsx`         |
+| Host Pi resolution, package shims, and Next.js startup        | `bin/host-pi.js`, `bin/host-pi-runtime.js`, `bin/link-host-pi.js`, `bin/run-next.js`                                        |
 
 ## High-risk invariants
 
@@ -147,10 +147,10 @@ Start with these owners instead of a broad file inventory:
 
 - Pi Web has no built-in authentication and does not restrict request Host,
   Origin, or Content-Type headers. Security is owned by the layer in front of
-  the application: non-loopback access requires a trusted network or an
-  external security layer. Do not add an application-level hostname or origin
-  allowlist, and do not add a Content-Type gate as a CSRF defence; the gate
-  was removed by decision, knowing loopback has no layer in front of it.
+  the application: non-loopback access requires a trusted network or an external
+  security layer. Do not add an application-level hostname or origin allowlist,
+  and do not add a Content-Type gate as a CSRF defence; the gate was removed by
+  decision, knowing loopback has no layer in front of it.
 - Pi Web's file APIs are not a general filesystem browser. Keep containment and
   symlink-safe authorization centralized in `lib/path-security.ts`; add roots
   through the existing allowed-root flow rather than adding route-local path
@@ -180,19 +180,17 @@ Start with these owners instead of a broad file inventory:
 
 ## Development server
 
-- Before `npm run dev`, run
-  `lsof -nP -iTCP:30141 -sTCP:LISTEN`. Reuse a healthy Pi Web process. A second
-  dev server for the same checkout cannot work around the port because both
-  processes contend for `.next/dev/lock`.
+- Before `npm run dev`, run `lsof -nP -iTCP:30141 -sTCP:LISTEN`. Reuse a healthy
+  Pi Web process. A second dev server for the same checkout cannot work around
+  the port because both processes contend for `.next/dev/lock`.
 - Do not run `next build` or `npm run build` during normal development; they
-  write production state into `.next/` and interfere with the dev server. Do
-  not use `next dev --webpack` as a fallback; development uses Turbopack.
+  write production state into `.next/` and interfere with the dev server. Do not
+  use `next dev --webpack` as a fallback; development uses Turbopack.
 - A browser-only `Module ... factory is not available` overlay commonly means a
   stale HMR graph. Reload the page explicitly, then compare current server logs
   and a direct HTTP/API request. Restart only if the failure reproduces from a
-  fresh page and server-side checks fail too. Stop the exact process
-  gracefully, move `.next/` to a temporary backup, and restart with
-  `npm run dev`.
+  fresh page and server-side checks fail too. Stop the exact process gracefully,
+  move `.next/` to a temporary backup, and restart with `npm run dev`.
 - Next.js may append a generated `BEGIN:nextjs-agent-rules` block to this file
   when the dev server starts. Inspect `git status` after server use and exclude
   that generated block from unrelated changes.
@@ -202,39 +200,39 @@ Start with these owners instead of a broad file inventory:
 - Add or update the nearest `*.test.mjs` regression test for changed behavior.
   Use `just test-one <file>` (or `npm run test:one -- <file>`) while iterating.
   Put Node runner options before paths, for example
-  `just test-one --test-name-pattern "first pi" bin/host-pi.test.mjs`.
-  These commands prepare shims and use the host preload, which resolves Pi
-  the way the server does; shims alone cover only the package root.
+  `just test-one --test-name-pattern "first pi" bin/host-pi.test.mjs`. These
+  commands prepare shims and use the host preload, which resolves Pi the way the
+  server does; shims alone cover only the package root.
 - Regression tests exercise exported behavior or rendered output. Never read a
   source file and assert on its text.
 - Before implementation handoff, run `just ci` (or `npm run ci`): Oxfmt, ESLint,
   `tsc --noEmit`, and the full native Node suite. If dependencies are not
   installed or a check cannot run, report that explicitly rather than claiming
   validation. `tsc` reads the host Pi shims rather than writing them; after a
-  host Pi change or an unresolved `@earendil-works` import, run `npm run prepare`
-  before typechecking.
+  host Pi change or an unresolved `@earendil-works` import, run
+  `npm run prepare` before typechecking.
 - Keep `qa` and `ci` non-mutating validation of source. Disposable generated
   outputs (host shims, TypeScript incremental state, test fixtures) are allowed;
   `just lint` / `npm run lint` checks Oxfmt formatting before ESLint. Apply
-  formatting and supported ESLint fixes explicitly with `just fix` / `npm run fix`,
-  then inspect the diff. For formatting alone, use `npm exec -- oxfmt .`; check it
-  without writing with `npm exec -- oxfmt --check .`. Keep formatting policy and
-  exclusions in [`.oxfmtrc.json`](.oxfmtrc.json), not per-command ignore lists.
-- For instruction-only or documentation-only changes, run `git diff --check`
-  and validate every referenced path, link, and command; code checks are not
+  formatting and supported ESLint fixes explicitly with `just fix` /
+  `npm run fix`, then inspect the diff. For formatting alone, use
+  `npm exec -- oxfmt .`; check it without writing with
+  `npm exec -- oxfmt --check .`. Keep formatting policy and exclusions in
+  [`.oxfmtrc.json`](.oxfmtrc.json), not per-command ignore lists.
+- For instruction-only or documentation-only changes, run `git diff --check` and
+  validate every referenced path, link, and command; code checks are not
   required unless the change also affects code or configuration.
 - Always inspect `git diff --stat`, `git diff --check`, and the final diff for
   generated state, user data, secrets, and unrelated rewrites before handoff.
-- For a change to `dependencies`, the `build` script, or the `files` list,
-  prove the published package still starts: in a scratch copy of the tree,
-  run `npm run build`, then `npm pack`, install the tarball with
-  `--omit=dev`, and run its `pi-web` bin. Use the disposable build/install steps
-  in `.github/workflows/validation.yml` and `scripts/runtime-smoke.test.mjs`
-  to verify Node 22.19 startup and a server-side host Pi session read with
-  isolated state on loopback. Keep this smoke separate from routine `just ci`.
-  `npm pack` has no build step and
-  ships whatever `.next` exists. A consumer install never contains the
-  packages bundled into `.next` and holds no Pi packages at all, so the started
-  server must reach Pi through the preload, and the build keeps `--webpack` because a
-  Turbopack build reaches `serverExternalPackages` through
+- For a change to `dependencies`, the `build` script, or the `files` list, prove
+  the published package still starts: in a scratch copy of the tree, run
+  `npm run build`, then `npm pack`, install the tarball with `--omit=dev`, and
+  run its `pi-web` bin. Use the disposable build/install steps in
+  `.github/workflows/validation.yml` and `scripts/runtime-smoke.test.mjs` to
+  verify Node 22.19 startup and a server-side host Pi session read with isolated
+  state on loopback. Keep this smoke separate from routine `just ci`. `npm pack`
+  has no build step and ships whatever `.next` exists. A consumer install never
+  contains the packages bundled into `.next` and holds no Pi packages at all, so
+  the started server must reach Pi through the preload, and the build keeps
+  `--webpack` because a Turbopack build reaches `serverExternalPackages` through
   `.next/node_modules/<package>-<hash>` symlinks that `npm pack` drops.

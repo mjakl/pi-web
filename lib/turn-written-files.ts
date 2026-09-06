@@ -11,7 +11,9 @@ function isFileWritingToolName(toolName: string): boolean {
   return isWriteToolName(toolName) || isEditToolName(toolName);
 }
 
-function readToolPath(input: Record<string, unknown> | undefined): string | null {
+function readToolPath(
+  input: Record<string, unknown> | undefined,
+): string | null {
   if (!input) return null;
   const value = input.file_path ?? input.path;
   return typeof value === "string" && value.length > 0 ? value : null;

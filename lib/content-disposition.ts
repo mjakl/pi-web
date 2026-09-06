@@ -1,6 +1,7 @@
 function encodeHeaderValue(value: string): string {
-  return encodeURIComponent(value).replace(/[!'()*]/g, (ch) =>
-    `%${ch.charCodeAt(0).toString(16).toUpperCase()}`
+  return encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 }
 
@@ -14,6 +15,7 @@ export function contentDisposition(
   fileName: string,
   fallbackName: string,
 ): string {
-  const fallback = fileName.replace(/[^\x20-\x7E]|["\\;\r\n]/g, "_") || fallbackName;
+  const fallback =
+    fileName.replace(/[^\x20-\x7E]|["\\;\r\n]/g, "_") || fallbackName;
   return `${type}; filename="${fallback}"; filename*=UTF-8''${encodeHeaderValue(fileName)}`;
 }

@@ -43,7 +43,10 @@ export function clearDraft(key: string): void {
   drafts.delete(key);
 }
 
-export function mergeRestoredSubmissionText(submitted: string, current: string): string {
+export function mergeRestoredSubmissionText(
+  submitted: string,
+  current: string,
+): string {
   if (!submitted.trim()) return current;
   if (!current.trim()) return submitted;
   return `${submitted}\n\n${current}`;
@@ -87,18 +90,25 @@ export function rekeyDraft(
   nextKey: string,
   currentDraft?: ChatDraft,
 ): ChatDraft | null {
-  if (previousKey === nextKey) return currentDraft ? cloneDraft(currentDraft) : getDraft(nextKey);
+  if (previousKey === nextKey)
+    return currentDraft ? cloneDraft(currentDraft) : getDraft(nextKey);
 
   const storedPrevious = getDraft(previousKey);
-  const previous = currentDraft && !isEmptyDraft(currentDraft)
-    ? cloneDraft(currentDraft)
-    : (storedPrevious ?? (currentDraft ? cloneDraft(currentDraft) : null));
+  const previous =
+    currentDraft && !isEmptyDraft(currentDraft)
+      ? cloneDraft(currentDraft)
+      : (storedPrevious ?? (currentDraft ? cloneDraft(currentDraft) : null));
   const next = getDraft(nextKey);
   clearDraft(previousKey);
   if (!previous) return next;
 
   const merged = next
-    ? mergeRestoredSubmissionDraft(next.value, next.images, previous.value, previous.images)
+    ? mergeRestoredSubmissionDraft(
+        next.value,
+        next.images,
+        previous.value,
+        previous.images,
+      )
     : previous;
   setDraft(nextKey, merged);
   return cloneDraft(merged);

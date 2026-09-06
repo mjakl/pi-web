@@ -1,13 +1,24 @@
-import { findCurrentWorktreePath, isWorkingDirectoryAvailable, listWorktrees, resolveProject } from "@/lib/worktree";
+import {
+  findCurrentWorktreePath,
+  isWorkingDirectoryAvailable,
+  listWorktrees,
+  resolveProject,
+} from "@/lib/worktree";
 import { allowFileRoot, getAllowedFileRoots } from "@/lib/file-access";
-import { isExistingPathWithinRoots, isPathWithinRoots } from "@/lib/path-security";
+import {
+  isExistingPathWithinRoots,
+  isPathWithinRoots,
+} from "@/lib/path-security";
 import { pathIdentityKey } from "@/lib/paths";
 
 /** Same gate as /api/files: only session cwds / project roots / explicitly
  *  allowed dirs may be inspected through this endpoint. */
 async function checkCwdAllowed(cwd: string): Promise<Response | null> {
   const allowedRoots = await getAllowedFileRoots();
-  if (!isPathWithinRoots(cwd, allowedRoots) || !isExistingPathWithinRoots(cwd, allowedRoots)) {
+  if (
+    !isPathWithinRoots(cwd, allowedRoots) ||
+    !isExistingPathWithinRoots(cwd, allowedRoots)
+  ) {
     return Response.json({ error: "Access denied" }, { status: 403 });
   }
   return null;
@@ -30,7 +41,9 @@ export async function GET(req: Request) {
     try {
       // For a removed-worktree cwd (session of a deleted worktree), fall back
       // to the known repository so its other folders remain selectable.
-      worktrees = await listWorktrees(isWorkingDirectoryAvailable(cwd) ? cwd : project.projectRoot);
+      worktrees = await listWorktrees(
+        isWorkingDirectoryAvailable(cwd) ? cwd : project.projectRoot,
+      );
       currentWorktreePath = findCurrentWorktreePath(worktrees, cwd);
     } catch {
       isGit = false;

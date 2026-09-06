@@ -11,13 +11,17 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 const AGENT_CONFIG_FILES = ["auth.json", "models.json"];
 
 /** Opaque marker of the agent configuration, for the models cache. */
-export async function readAgentConfigStamp(agentDir = getAgentDir()): Promise<string> {
-  const stamps = await Promise.all(AGENT_CONFIG_FILES.map(async (name) => {
-    try {
-      return String((await stat(join(agentDir, name))).mtimeMs);
-    } catch {
-      return "-";
-    }
-  }));
+export async function readAgentConfigStamp(
+  agentDir = getAgentDir(),
+): Promise<string> {
+  const stamps = await Promise.all(
+    AGENT_CONFIG_FILES.map(async (name) => {
+      try {
+        return String((await stat(join(agentDir, name))).mtimeMs);
+      } catch {
+        return "-";
+      }
+    }),
+  );
   return stamps.join(":");
 }

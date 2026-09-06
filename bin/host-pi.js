@@ -22,12 +22,14 @@ function validationError(reason, executable) {
 }
 
 function assertSupportedPlatform(platform, env) {
-  const termux = platform === "linux" && (
-    typeof env.TERMUX_VERSION === "string"
-    || /^\/data\/data\/com\.termux(?:\/|$)/.test(env.PREFIX || "")
-  );
+  const termux =
+    platform === "linux" &&
+    (typeof env.TERMUX_VERSION === "string" ||
+      /^\/data\/data\/com\.termux(?:\/|$)/.test(env.PREFIX || ""));
   if (!["linux", "darwin", "win32"].includes(platform) || termux) {
-    throw validationError(`unsupported platform ${termux ? "Termux" : platform}`);
+    throw validationError(
+      `unsupported platform ${termux ? "Termux" : platform}`,
+    );
   }
 }
 
@@ -49,7 +51,10 @@ function executableNames(platform, env) {
   return (env.PATHEXT || ".COM;.EXE;.BAT;.CMD")
     .split(";")
     .filter(Boolean)
-    .map((extension) => `pi${extension.startsWith(".") ? extension : `.${extension}`}`);
+    .map(
+      (extension) =>
+        `pi${extension.startsWith(".") ? extension : `.${extension}`}`,
+    );
 }
 
 function isExecutable(file, platform) {
@@ -67,10 +72,17 @@ function findPiExecutable(env, platform, checkoutDir) {
   // npm puts <checkoutDir>/node_modules/.bin first on PATH for every script. A
   // checkout that still holds a Pi install from before this project stopped
   // depending on one must not be mistaken for the host installation.
-  const localCandidates = new Set(names.map((name) => (
-    comparablePath(path.join(checkoutDir, "node_modules", ".bin", name), platform)
-  )));
-  for (const rawDir of (env.PATH || "").split(platform === "win32" ? ";" : path.delimiter)) {
+  const localCandidates = new Set(
+    names.map((name) =>
+      comparablePath(
+        path.join(checkoutDir, "node_modules", ".bin", name),
+        platform,
+      ),
+    ),
+  );
+  for (const rawDir of (env.PATH || "").split(
+    platform === "win32" ? ";" : path.delimiter,
+  )) {
     const dir = rawDir.replace(/^"|"$/g, "") || ".";
     for (const name of names) {
       const candidate = path.resolve(dir, name);
@@ -83,7 +95,9 @@ function findPiExecutable(env, platform, checkoutDir) {
 
 function readPackage(packageDir, expectedName) {
   try {
-    const packageJson = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8"));
+    const packageJson = JSON.parse(
+      fs.readFileSync(path.join(packageDir, "package.json"), "utf8"),
+    );
     if (packageJson.name !== expectedName) return undefined;
     return { dir: fs.realpathSync(packageDir), packageJson };
   } catch {
@@ -93,7 +107,7 @@ function readPackage(packageDir, expectedName) {
 
 function ancestors(start) {
   const result = [];
-  for (let current = path.resolve(start);;) {
+  for (let current = path.resolve(start); ;) {
     result.push(current);
     const parent = path.dirname(current);
     if (parent === current) return result;
@@ -103,70 +117,110 @@ function ancestors(start) {
 
 function sameFile(left, right, platform) {
   try {
-    return comparablePath(fs.realpathSync(left), platform) === comparablePath(fs.realpathSync(right), platform);
+    return (
+      comparablePath(fs.realpathSync(left), platform) ===
+      comparablePath(fs.realpathSync(right), platform)
+    );
   } catch {
     return false;
   }
 }
 
 function piBin(packageJson) {
-  return typeof packageJson.bin === "string" ? packageJson.bin : packageJson.bin?.pi;
+  return typeof packageJson.bin === "string"
+    ? packageJson.bin
+    : packageJson.bin?.pi;
 }
 
 function findCodingAgent(executable, platform) {
   const realExecutable = fs.realpathSync(executable);
-  const starts = [...new Set([path.dirname(realExecutable), path.dirname(executable)])];
+  const starts = [
+    ...new Set([path.dirname(realExecutable), path.dirname(executable)]),
+  ];
 
   for (const start of starts) {
     for (const ancestor of ancestors(start)) {
       const direct = readPackage(ancestor, CODING_AGENT);
       const directBin = direct && piBin(direct.packageJson);
-      if (directBin && sameFile(path.join(direct.dir, directBin), realExecutable, platform)) {
+      if (
+        directBin &&
+        sameFile(path.join(direct.dir, directBin), realExecutable, platform)
+      ) {
         return { ...direct, cli: path.join(direct.dir, directBin) };
       }
 
-      const dependency = readPackage(path.join(ancestor, "node_modules", ...CODING_AGENT.split("/")), CODING_AGENT);
+      const dependency = readPackage(
+        path.join(ancestor, "node_modules", ...CODING_AGENT.split("/")),
+        CODING_AGENT,
+      );
       if (!dependency) continue;
       const bin = piBin(dependency.packageJson);
       const executableDir = path.dirname(executable);
       // Isolated package managers install Pi behind their own node_modules/.bin
       // script, which is neither the package's own bin file nor adjacent to it.
-      const adjacentShim = comparableDirectory(executableDir, platform) === comparableDirectory(ancestor, platform)
-        || path.basename(executableDir).toLowerCase() === ".bin";
-      if (bin && (sameFile(path.join(dependency.dir, bin), realExecutable, platform) || adjacentShim)) {
+      const adjacentShim =
+        comparableDirectory(executableDir, platform) ===
+          comparableDirectory(ancestor, platform) ||
+        path.basename(executableDir).toLowerCase() === ".bin";
+      if (
+        bin &&
+        (sameFile(path.join(dependency.dir, bin), realExecutable, platform) ||
+          adjacentShim)
+      ) {
         return { ...dependency, cli: path.join(dependency.dir, bin) };
       }
     }
   }
 
   const via = realExecutable === executable ? "" : ` -> ${realExecutable}`;
-  throw new Error(`the first pi on PATH (${executable}${via}) is not inside ${CODING_AGENT}; a version-manager shim does not count`);
+  throw new Error(
+    `the first pi on PATH (${executable}${via}) is not inside ${CODING_AGENT}; a version-manager shim does not count`,
+  );
 }
 
 function findDependency(codingDir, packageName) {
   for (const ancestor of ancestors(codingDir)) {
-    const found = readPackage(path.join(ancestor, "node_modules", ...packageName.split("/")), packageName);
+    const found = readPackage(
+      path.join(ancestor, "node_modules", ...packageName.split("/")),
+      packageName,
+    );
     if (found) return found;
   }
-  throw new Error(`${packageName} is missing from ${CODING_AGENT}'s dependency graph`);
+  throw new Error(
+    `${packageName} is missing from ${CODING_AGENT}'s dependency graph`,
+  );
 }
 
 // An isolated package manager installs each tool in its own tree and puts that
 // tree's node_modules/.bin on PATH, even when the directory holds no executable.
 // Walking those ancestors reaches the checkout first, which must never supply a
 // Pi package: `npm install` without `-g` would otherwise be silently accepted.
-function findStandaloneDependency(env, platform, checkoutDir, packageName, version) {
+function findStandaloneDependency(
+  env,
+  platform,
+  checkoutDir,
+  packageName,
+  version,
+) {
   const checkout = comparableDirectory(checkoutDir, platform);
-  for (const rawDir of (env.PATH || "").split(platform === "win32" ? ";" : path.delimiter)) {
+  for (const rawDir of (env.PATH || "").split(
+    platform === "win32" ? ";" : path.delimiter,
+  )) {
     const start = rawDir.replace(/^"|"$/g, "") || ".";
     for (const ancestor of ancestors(start)) {
-      const found = readPackage(path.join(ancestor, "node_modules", ...packageName.split("/")), packageName);
+      const found = readPackage(
+        path.join(ancestor, "node_modules", ...packageName.split("/")),
+        packageName,
+      );
       if (!found || found.packageJson.version !== version) continue;
       const dir = comparableDirectory(found.dir, platform);
-      if (dir !== checkout && !dir.startsWith(`${checkout}${path.sep}`)) return found;
+      if (dir !== checkout && !dir.startsWith(`${checkout}${path.sep}`))
+        return found;
     }
   }
-  throw new Error(`${packageName} ${version} is missing from ${CODING_AGENT}'s dependency graph and PATH`);
+  throw new Error(
+    `${packageName} ${version} is missing from ${CODING_AGENT}'s dependency graph and PATH`,
+  );
 }
 
 function pickTarget(value) {
@@ -182,12 +236,19 @@ function pickTarget(value) {
 function rootEntry(found, packageName) {
   const packageJson = found.packageJson;
   const hasExports = packageJson.exports !== undefined;
-  const exported = Object.prototype.hasOwnProperty.call(packageJson.exports || {}, ".")
+  const exported = Object.prototype.hasOwnProperty.call(
+    packageJson.exports || {},
+    ".",
+  )
     ? packageJson.exports["."]
     : packageJson.exports;
   const exportTarget = pickTarget(exported);
   const target = hasExports ? exportTarget : packageJson.main;
-  if (typeof target !== "string" || path.isAbsolute(target) || (exportTarget && !target.startsWith("./"))) {
+  if (
+    typeof target !== "string" ||
+    path.isAbsolute(target) ||
+    (exportTarget && !target.startsWith("./"))
+  ) {
     throw new Error(`${packageName} has no valid root import export`);
   }
   const requestedEntry = path.resolve(found.dir, target.replace(/^\.\//, ""));
@@ -196,11 +257,19 @@ function rootEntry(found, packageName) {
     entry = fs.realpathSync(requestedEntry);
     if (!fs.statSync(entry).isFile()) throw new Error();
   } catch {
-    throw new Error(`${packageName} root import entry does not exist: ${requestedEntry}`);
+    throw new Error(
+      `${packageName} root import entry does not exist: ${requestedEntry}`,
+    );
   }
   const relative = path.relative(found.dir, entry);
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    throw new Error(`${packageName} root import entry leaves its package: ${entry}`);
+  if (
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    throw new Error(
+      `${packageName} root import entry leaves its package: ${entry}`,
+    );
   }
   return entry;
 }
@@ -216,7 +285,8 @@ function resolveHostPi({
   try {
     const coding = findCodingAgent(executable, platform);
     const version = coding.packageJson.version;
-    if (typeof version !== "string") throw new Error(`${CODING_AGENT} has no version`);
+    if (typeof version !== "string")
+      throw new Error(`${CODING_AGENT} has no version`);
     const packages = {};
     for (const packageName of PI_PACKAGES) {
       let found;
@@ -226,11 +296,19 @@ function resolveHostPi({
           found = findDependency(coding.dir, packageName);
         } catch (error) {
           if (packageName !== PI_SERVER) throw error;
-          found = findStandaloneDependency(env, platform, checkoutDir, packageName, version);
+          found = findStandaloneDependency(
+            env,
+            platform,
+            checkoutDir,
+            packageName,
+            version,
+          );
         }
       }
       if (found.packageJson.version !== version) {
-        throw new Error(`${packageName} has version ${found.packageJson.version ?? "(missing)"}; required ${version}`);
+        throw new Error(
+          `${packageName} has version ${found.packageJson.version ?? "(missing)"}; required ${version}`,
+        );
       }
       packages[packageName] = {
         dir: found.dir,
@@ -241,7 +319,10 @@ function resolveHostPi({
 
     return { executable, cli: coding.cli, packages };
   } catch (error) {
-    throw validationError(error instanceof Error ? error.message : String(error), executable);
+    throw validationError(
+      error instanceof Error ? error.message : String(error),
+      executable,
+    );
   }
 }
 

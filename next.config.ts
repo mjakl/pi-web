@@ -4,7 +4,9 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
 const configDir = dirname(fileURLToPath(import.meta.url));
-const { version } = JSON.parse(readFileSync(join(configDir, "package.json"), "utf8")) as { version: string };
+const { version } = JSON.parse(
+  readFileSync(join(configDir, "package.json"), "utf8"),
+) as { version: string };
 
 const nextConfig: NextConfig = {
   agentRules: false,
@@ -24,7 +26,10 @@ const nextConfig: NextConfig = {
       {
         source: "/",
         headers: [
-          { key: "Cache-Control", value: "private, no-cache, max-age=0, must-revalidate" },
+          {
+            key: "Cache-Control",
+            value: "private, no-cache, max-age=0, must-revalidate",
+          },
         ],
       },
       {

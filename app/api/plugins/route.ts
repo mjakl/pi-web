@@ -42,20 +42,32 @@ function getPackageSource(entry: PackageSource): string {
 function isDisabledPackage(entry: PackageSource): boolean {
   if (typeof entry === "string") return false;
   return (
-    Array.isArray(entry.extensions) && entry.extensions.length === 0 &&
-    Array.isArray(entry.skills) && entry.skills.length === 0 &&
-    Array.isArray(entry.prompts) && entry.prompts.length === 0 &&
-    Array.isArray(entry.themes) && entry.themes.length === 0
+    Array.isArray(entry.extensions) &&
+    entry.extensions.length === 0 &&
+    Array.isArray(entry.skills) &&
+    entry.skills.length === 0 &&
+    Array.isArray(entry.prompts) &&
+    entry.prompts.length === 0 &&
+    Array.isArray(entry.themes) &&
+    entry.themes.length === 0
   );
 }
 
-function getDisabledPackages(settingsManager: SettingsManager): Map<string, boolean> {
+function getDisabledPackages(
+  settingsManager: SettingsManager,
+): Map<string, boolean> {
   const disabled = new Map<string, boolean>();
   for (const entry of settingsManager.getGlobalSettings().packages ?? []) {
-    disabled.set(keyFor(getPackageSource(entry), "global"), isDisabledPackage(entry));
+    disabled.set(
+      keyFor(getPackageSource(entry), "global"),
+      isDisabledPackage(entry),
+    );
   }
   for (const entry of settingsManager.getProjectSettings().packages ?? []) {
-    disabled.set(keyFor(getPackageSource(entry), "project"), isDisabledPackage(entry));
+    disabled.set(
+      keyFor(getPackageSource(entry), "project"),
+      isDisabledPackage(entry),
+    );
   }
   return disabled;
 }
@@ -66,9 +78,10 @@ function setPackageDisabled(
   scope: PluginScope,
   disabled: boolean,
 ): boolean {
-  const current = scope === "project"
-    ? settingsManager.getProjectSettings().packages ?? []
-    : settingsManager.getGlobalSettings().packages ?? [];
+  const current =
+    scope === "project"
+      ? (settingsManager.getProjectSettings().packages ?? [])
+      : (settingsManager.getGlobalSettings().packages ?? []);
   let changed = false;
   const next = current.map((entry): PackageSource => {
     if (getPackageSource(entry) !== source) return entry;
@@ -90,16 +103,21 @@ function setPackageDisabled(
   return true;
 }
 
-function addCount(counts: PluginResourceCounts, kind: keyof PluginResourceCounts): void {
+function addCount(
+  counts: PluginResourceCounts,
+  kind: keyof PluginResourceCounts,
+): void {
   counts[kind] += 1;
 }
 
 function getResourceName(path: string, kind: PluginResourceKind): string {
   const file = basename(path);
   const ext = extname(file);
-  if (kind === "skill" && file.toLowerCase() === "skill.md") return basename(dirname(path));
+  if (kind === "skill" && file.toLowerCase() === "skill.md")
+    return basename(dirname(path));
   if ((kind === "extension" || kind === "theme" || kind === "prompt") && ext) {
-    if (kind === "extension" && /^index\.(ts|js)$/.test(file)) return basename(dirname(path));
+    if (kind === "extension" && /^index\.(ts|js)$/.test(file))
+      return basename(dirname(path));
     return file.slice(0, -ext.length);
   }
   return file;
@@ -116,7 +134,9 @@ function getConfiguredVersion(source: string): string | undefined {
   const npmSpec = source.startsWith("npm:") ? source.slice(4) : undefined;
   if (npmSpec) {
     const lastAt = npmSpec.lastIndexOf("@");
-    const packageNameEnd = npmSpec.startsWith("@") ? npmSpec.indexOf("/", 1) : 0;
+    const packageNameEnd = npmSpec.startsWith("@")
+      ? npmSpec.indexOf("/", 1)
+      : 0;
     if (lastAt > packageNameEnd) return npmSpec.slice(lastAt + 1) || undefined;
     return undefined;
   }
@@ -125,12 +145,16 @@ function getConfiguredVersion(source: string): string | undefined {
     const lastAt = source.lastIndexOf("@");
     const lastSlash = source.lastIndexOf("/");
     const lastColon = source.lastIndexOf(":");
-    if (lastAt > Math.max(lastSlash, lastColon)) return source.slice(lastAt + 1) || undefined;
+    if (lastAt > Math.max(lastSlash, lastColon))
+      return source.slice(lastAt + 1) || undefined;
   }
   return undefined;
 }
 
-function readPackageMetadata(installedPath?: string): { packageName?: string; version?: string } {
+function readPackageMetadata(installedPath?: string): {
+  packageName?: string;
+  version?: string;
+} {
   if (!installedPath) return {};
   try {
     const stats = statSync(installedPath);
@@ -167,13 +191,14 @@ function collectResource(
   addCount(totals, kind);
   countsByPackage.set(key, counts);
   const resources = resourcesByPackage.get(key) ?? [];
-  const resourceKind = kind === "extensions"
-    ? "extension"
-    : kind === "skills"
-      ? "skill"
-      : kind === "prompts"
-        ? "prompt"
-        : "theme";
+  const resourceKind =
+    kind === "extensions"
+      ? "extension"
+      : kind === "skills"
+        ? "skill"
+        : kind === "prompts"
+          ? "prompt"
+          : "theme";
   resources.push({
     kind: resourceKind,
     name: getResourceName(resource.path, resourceKind),
@@ -191,10 +216,38 @@ function collectResources(paths: ResolvedPaths): {
   const countsByPackage = new Map<string, PluginResourceCounts>();
   const resourcesByPackage = new Map<string, PluginResourceInfo[]>();
   const totals = emptyCounts();
-  for (const resource of paths.extensions) collectResource(resource, "extensions", countsByPackage, resourcesByPackage, totals);
-  for (const resource of paths.skills) collectResource(resource, "skills", countsByPackage, resourcesByPackage, totals);
-  for (const resource of paths.prompts) collectResource(resource, "prompts", countsByPackage, resourcesByPackage, totals);
-  for (const resource of paths.themes) collectResource(resource, "themes", countsByPackage, resourcesByPackage, totals);
+  for (const resource of paths.extensions)
+    collectResource(
+      resource,
+      "extensions",
+      countsByPackage,
+      resourcesByPackage,
+      totals,
+    );
+  for (const resource of paths.skills)
+    collectResource(
+      resource,
+      "skills",
+      countsByPackage,
+      resourcesByPackage,
+      totals,
+    );
+  for (const resource of paths.prompts)
+    collectResource(
+      resource,
+      "prompts",
+      countsByPackage,
+      resourcesByPackage,
+      totals,
+    );
+  for (const resource of paths.themes)
+    collectResource(
+      resource,
+      "themes",
+      countsByPackage,
+      resourcesByPackage,
+      totals,
+    );
   return { countsByPackage, resourcesByPackage, totals };
 }
 
@@ -225,7 +278,8 @@ async function readPlugins(cwd: string): Promise<PluginsResponse> {
       });
       return "skip";
     });
-    ({ countsByPackage, resourcesByPackage, totals } = collectResources(resolved));
+    ({ countsByPackage, resourcesByPackage, totals } =
+      collectResources(resolved));
   } catch (error) {
     diagnostics.push({
       type: "error",
@@ -239,7 +293,8 @@ async function readPlugins(cwd: string): Promise<PluginsResponse> {
     const disabled = disabledByPackage.get(key) ?? false;
     const counts = countsByPackage.get(key) ?? emptyCounts();
     const resources = resourcesByPackage.get(key) ?? [];
-    const resourceCount = counts.extensions + counts.skills + counts.prompts + counts.themes;
+    const resourceCount =
+      counts.extensions + counts.skills + counts.prompts + counts.themes;
     const packageMetadata = readPackageMetadata(pkg.installedPath);
     if (!pkg.installedPath) {
       diagnostics.push({
@@ -259,7 +314,13 @@ async function readPlugins(cwd: string): Promise<PluginsResponse> {
       configuredVersion: getConfiguredVersion(pkg.source),
       counts,
       resources,
-      status: disabled ? "disabled" : resourceCount > 0 ? "loaded" : pkg.installedPath ? "installed" : "missing",
+      status: disabled
+        ? "disabled"
+        : resourceCount > 0
+          ? "loaded"
+          : pkg.installedPath
+            ? "installed"
+            : "missing",
     } satisfies PluginPackageInfo;
   });
 
@@ -279,7 +340,10 @@ export async function GET(req: Request) {
   try {
     const authorized = await authorizeDirectory(cwd);
     if ("error" in authorized) {
-      return Response.json({ error: authorized.error }, { status: authorized.status });
+      return Response.json(
+        { error: authorized.error },
+        { status: authorized.status },
+      );
     }
     return Response.json(await readPlugins(cwd));
   } catch (error) {
@@ -290,17 +354,22 @@ export async function GET(req: Request) {
 // POST /api/plugins body: { action, source?, scope?, cwd }
 export async function POST(req: Request) {
   try {
-    const body = await req.json() as {
+    const body = (await req.json()) as {
       action?: PluginAction;
       source?: string;
       scope?: PluginScope;
       cwd?: string;
     };
-    if (!body.cwd) return Response.json({ error: "cwd required" }, { status: 400 });
-    if (!body.action) return Response.json({ error: "action required" }, { status: 400 });
+    if (!body.cwd)
+      return Response.json({ error: "cwd required" }, { status: 400 });
+    if (!body.action)
+      return Response.json({ error: "action required" }, { status: 400 });
     const authorized = await authorizeDirectory(body.cwd);
     if ("error" in authorized) {
-      return Response.json({ error: authorized.error }, { status: authorized.status });
+      return Response.json(
+        { error: authorized.error },
+        { status: authorized.status },
+      );
     }
 
     const agentDir = getAgentDir();
@@ -311,7 +380,10 @@ export async function POST(req: Request) {
     const scope = toPluginScope(body.scope);
     if (scope === "project" && !projectTrust.trusted) {
       return Response.json(
-        { error: "Project resources must be trusted before modifying project plugins" },
+        {
+          error:
+            "Project resources must be trusted before modifying project plugins",
+        },
         { status: 403 },
       );
     }
@@ -324,23 +396,30 @@ export async function POST(req: Request) {
     const local = scope === "project";
 
     if (body.action === "install") {
-      if (!source) return Response.json({ error: "source required" }, { status: 400 });
+      if (!source)
+        return Response.json({ error: "source required" }, { status: 400 });
       await packageManager.installAndPersist(source, { local });
     } else if (body.action === "remove") {
-      if (!source) return Response.json({ error: "source required" }, { status: 400 });
+      if (!source)
+        return Response.json({ error: "source required" }, { status: 400 });
       await packageManager.removeAndPersist(source, { local });
     } else if (body.action === "update") {
       await packageManager.update(source);
     } else if (body.action === "disable") {
-      if (!source) return Response.json({ error: "source required" }, { status: 400 });
+      if (!source)
+        return Response.json({ error: "source required" }, { status: 400 });
       setPackageDisabled(settingsManager, source, scope, true);
       await settingsManager.flush();
     } else if (body.action === "enable") {
-      if (!source) return Response.json({ error: "source required" }, { status: 400 });
+      if (!source)
+        return Response.json({ error: "source required" }, { status: 400 });
       setPackageDisabled(settingsManager, source, scope, false);
       await settingsManager.flush();
     } else {
-      return Response.json({ error: `Unsupported action: ${body.action}` }, { status: 400 });
+      return Response.json(
+        { error: `Unsupported action: ${body.action}` },
+        { status: 400 },
+      );
     }
 
     return Response.json(await readPlugins(body.cwd));

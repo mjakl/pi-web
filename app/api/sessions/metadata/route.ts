@@ -10,20 +10,26 @@ interface MetadataRequestEntry extends SessionMetadataFingerprint {
 }
 
 function parseEntries(value: unknown): MetadataRequestEntry[] | null {
-  if (!Array.isArray(value) || value.length === 0 || value.length > SESSION_METADATA_BATCH_SIZE) return null;
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.length > SESSION_METADATA_BATCH_SIZE
+  )
+    return null;
   const entries: MetadataRequestEntry[] = [];
   const seen = new Set<string>();
   for (const candidate of value) {
     if (!candidate || typeof candidate !== "object") return null;
     const { id, fileSize, modified } = candidate as Record<string, unknown>;
     if (
-      !isValidSessionId(id)
-      || typeof fileSize !== "number"
-      || !Number.isSafeInteger(fileSize)
-      || fileSize < 0
-      || typeof modified !== "string"
-      || !Number.isFinite(Date.parse(modified))
-    ) return null;
+      !isValidSessionId(id) ||
+      typeof fileSize !== "number" ||
+      !Number.isSafeInteger(fileSize) ||
+      fileSize < 0 ||
+      typeof modified !== "string" ||
+      !Number.isFinite(Date.parse(modified))
+    )
+      return null;
     if (seen.has(id)) continue;
     seen.add(id);
     entries.push({ id, fileSize, modified });
@@ -38,10 +44,14 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  const entries = parseEntries((body as { sessions?: unknown } | null)?.sessions);
+  const entries = parseEntries(
+    (body as { sessions?: unknown } | null)?.sessions,
+  );
   if (!entries) {
     return Response.json(
-      { error: `sessions must contain 1-${SESSION_METADATA_BATCH_SIZE} valid inventory entries` },
+      {
+        error: `sessions must contain 1-${SESSION_METADATA_BATCH_SIZE} valid inventory entries`,
+      },
       { status: 400 },
     );
   }

@@ -1,5 +1,9 @@
 import { resolve } from "path";
-import { createAgentSessionServices, getAgentDir, type SettingsManager } from "@earendil-works/pi-coding-agent";
+import {
+  createAgentSessionServices,
+  getAgentDir,
+  type SettingsManager,
+} from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { readAgentConfigStamp } from "@/lib/agent-config-stamp";
 import {
@@ -8,19 +12,27 @@ import {
   withSafeModelLoadFailure,
   type ModelsData,
 } from "@/lib/models-cache";
-import { resolveVisibleModels, selectInitialModelScope } from "@/lib/model-scope";
+import {
+  resolveVisibleModels,
+  selectInitialModelScope,
+} from "@/lib/model-scope";
 import { authorizeDirectory } from "@/lib/file-access";
 import { projectTrustReloadOptions } from "@/lib/project-trust";
 
-const modelNameCollator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+const modelNameCollator = new Intl.Collator("en", {
+  numeric: true,
+  sensitivity: "base",
+});
 
 function compareModelEntries(
   a: { id: string; name: string; provider: string },
-  b: { id: string; name: string; provider: string }
+  b: { id: string; name: string; provider: string },
 ): number {
-  return modelNameCollator.compare(a.name || a.id, b.name || b.id)
-    || modelNameCollator.compare(a.provider, b.provider)
-    || modelNameCollator.compare(a.id, b.id);
+  return (
+    modelNameCollator.compare(a.name || a.id, b.name || b.id) ||
+    modelNameCollator.compare(a.provider, b.provider) ||
+    modelNameCollator.compare(a.id, b.id)
+  );
 }
 
 async function loadModels(cwd: string): Promise<ModelsData> {
@@ -38,7 +50,9 @@ async function loadModels(cwd: string): Promise<ModelsData> {
   const services = await createAgentSessionServices({
     cwd,
     agentDir,
-    ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
+    ...(trustReloadOptions
+      ? { resourceLoaderReloadOptions: trustReloadOptions }
+      : {}),
   });
   const modelError = services.modelRuntime.getError();
   const settings: SettingsManager = services.settingsManager;
@@ -49,11 +63,13 @@ async function loadModels(cwd: string): Promise<ModelsData> {
     settings.getEnabledModels(),
   );
   const { visible, thinkingLevelPins, warnings } = scope;
-  modelList = visible.map((m) => ({
-    id: m.id,
-    name: m.name,
-    provider: m.provider,
-  })).sort(compareModelEntries);
+  modelList = visible
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider: m.provider,
+    }))
+    .sort(compareModelEntries);
   for (const m of visible) {
     const key = `${m.provider}:${m.id}`;
     nameMap.set(key, m.name);
@@ -69,7 +85,10 @@ async function loadModels(cwd: string): Promise<ModelsData> {
       : {}),
   });
   if (initial.model) {
-    defaultModel = { provider: initial.model.provider, modelId: initial.model.id };
+    defaultModel = {
+      provider: initial.model.provider,
+      modelId: initial.model.id,
+    };
   }
 
   return withModelRuntimeError(
@@ -96,17 +115,23 @@ const EMPTY_MODELS: ModelsData = {
 };
 
 export async function GET(req: Request) {
-  const requestedCwd = new URL(req.url).searchParams.get("cwd") || process.cwd();
+  const requestedCwd =
+    new URL(req.url).searchParams.get("cwd") || process.cwd();
   const cwd = resolve(requestedCwd);
 
   const authorized = await authorizeDirectory(cwd);
   if ("error" in authorized) {
-    return Response.json({ error: authorized.error }, { status: authorized.status });
+    return Response.json(
+      { error: authorized.error },
+      { status: authorized.status },
+    );
   }
 
   try {
     const stamp = await readAgentConfigStamp();
-    return Response.json(await loadModelsWithCache(cwd, stamp, () => loadModels(cwd)));
+    return Response.json(
+      await loadModelsWithCache(cwd, stamp, () => loadModels(cwd)),
+    );
   } catch {
     return Response.json(withSafeModelLoadFailure(EMPTY_MODELS));
   }

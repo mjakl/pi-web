@@ -16,11 +16,17 @@ export async function GET(
   // walk start to an older entry so the client can page upward without
   // re-fetching the whole active branch.
   const rawTail = Number(url.searchParams.get("tail"));
-  const tail = Number.isFinite(rawTail) && rawTail > 0 ? Math.min(rawTail, SESSION_TAIL_MAX) : SESSION_TAIL_DEFAULT;
+  const tail =
+    Number.isFinite(rawTail) && rawTail > 0
+      ? Math.min(rawTail, SESSION_TAIL_MAX)
+      : SESSION_TAIL_DEFAULT;
   const before = url.searchParams.get("before") ?? undefined;
   const throughEntryId = url.searchParams.get("through") ?? undefined;
   if (throughEntryId && !before) {
-    return Response.json({ error: "A history cursor is required" }, { status: 400 });
+    return Response.json(
+      { error: "A history cursor is required" },
+      { status: 400 },
+    );
   }
 
   try {
@@ -34,17 +40,24 @@ export async function GET(
     const sm = liveRpc?.inner.sessionManager ?? SessionManager.open(filePath!);
     // `before` is the oldest entry already on the client; fetch its ancestors
     // only (excludeLeaf) so prepending the page does not duplicate `before`.
-    const context = buildSessionContext(sm.getEntries() as never, before ?? leafId, {
-      deferThinking,
-      deferToolResultImages,
-      tail,
-      excludeLeaf: Boolean(before),
-      throughEntryId,
-      sessionId: id,
-    });
+    const context = buildSessionContext(
+      sm.getEntries() as never,
+      before ?? leafId,
+      {
+        deferThinking,
+        deferToolResultImages,
+        tail,
+        excludeLeaf: Boolean(before),
+        throughEntryId,
+        sessionId: id,
+      },
+    );
 
     return Response.json({ context, tail, before: before ?? null });
   } catch (error) {
-    return Response.json({ error: String(error) }, { status: error instanceof RangeError ? 400 : 500 });
+    return Response.json(
+      { error: String(error) },
+      { status: error instanceof RangeError ? 400 : 500 },
+    );
   }
 }

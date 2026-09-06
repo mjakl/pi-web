@@ -13,7 +13,7 @@ export async function GET(
       return Response.json({ active: true, running: rpc.isRunning(), state });
     }
 
-    if (!await resolveSessionPath(id)) {
+    if (!(await resolveSessionPath(id))) {
       return Response.json({ error: "Session not found" }, { status: 404 });
     }
     return Response.json({ active: false, running: false });

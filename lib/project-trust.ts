@@ -1,7 +1,13 @@
-import { hasTrustRequiringProjectResources, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
+import {
+  hasTrustRequiringProjectResources,
+  ProjectTrustStore,
+} from "@earendil-works/pi-coding-agent";
 import type { ProjectTrustStatus } from "./api-types";
 
-export function getProjectTrustStatus(cwd: string, agentDir: string): ProjectTrustStatus {
+export function getProjectTrustStatus(
+  cwd: string,
+  agentDir: string,
+): ProjectTrustStatus {
   const requiresTrust = Boolean(cwd) && hasTrustRequiringProjectResources(cwd);
   if (!requiresTrust) return { requiresTrust: false, trusted: true };
 
@@ -12,7 +18,10 @@ export function getProjectTrustStatus(cwd: string, agentDir: string): ProjectTru
   };
 }
 
-export function trustProject(cwd: string, agentDir: string): ProjectTrustStatus {
+export function trustProject(
+  cwd: string,
+  agentDir: string,
+): ProjectTrustStatus {
   const status = getProjectTrustStatus(cwd, agentDir);
   if (!status.requiresTrust) return status;
 

@@ -8,15 +8,38 @@ const jiti = createJiti(import.meta.url, {
 });
 const React = await jiti.import("react");
 const { renderToStaticMarkup } = await jiti.import("react-dom/server");
-const { ChatInput, ModelErrorBanner, ModelScopeWarningBanner, canClearBuiltinCommandInput, canRestoreUserMessage, canRunBuiltinSlashCommandWhileStreaming, compressImageFile, cycleInputHistory, filterModelOptions, getAnchoredMenuMaxHeight, getUserMessageText, getUserMessageDraftImages, isExactSlashCommand, shouldCompressImageFile } = await jiti.import("./ChatInput.tsx");
+const {
+  ChatInput,
+  ModelErrorBanner,
+  ModelScopeWarningBanner,
+  canClearBuiltinCommandInput,
+  canRestoreUserMessage,
+  canRunBuiltinSlashCommandWhileStreaming,
+  compressImageFile,
+  cycleInputHistory,
+  filterModelOptions,
+  getAnchoredMenuMaxHeight,
+  getUserMessageText,
+  getUserMessageDraftImages,
+  isExactSlashCommand,
+  shouldCompressImageFile,
+} = await jiti.import("./ChatInput.tsx");
 const { CompactButton } = await jiti.import("./CompactButton.tsx");
 const { ModelSelector } = await jiti.import("./ModelSelector.tsx");
-const { clearDraft, getDraft, mergeRestoredSubmissionDraft, mergeRestoredSubmissionText, rekeyDraft, setDraft } = await jiti.import("@/lib/draft-store.ts");
+const {
+  clearDraft,
+  getDraft,
+  mergeRestoredSubmissionDraft,
+  mergeRestoredSubmissionText,
+  rekeyDraft,
+  setDraft,
+} = await jiti.import("@/lib/draft-store.ts");
 
 test("renders the upstream model error", () => {
   const html = renderToStaticMarkup(
     React.createElement(ModelErrorBanner, {
-      error: "Invalid models.json schema:\nproviders.custom.models.0.id must not be empty",
+      error:
+        "Invalid models.json schema:\nproviders.custom.models.0.id must not be empty",
     }),
   );
 
@@ -26,7 +49,12 @@ test("renders the upstream model error", () => {
 });
 
 test("does not render an empty model error", () => {
-  assert.equal(renderToStaticMarkup(React.createElement(ModelErrorBanner, { error: null })), "");
+  assert.equal(
+    renderToStaticMarkup(
+      React.createElement(ModelErrorBanner, { error: null }),
+    ),
+    "",
+  );
 });
 
 test("renders enabledModels scope warnings", () => {
@@ -38,7 +66,12 @@ test("renders enabledModels scope warnings", () => {
 
   assert.match(html, /Model scope warning/);
   assert.match(html, /ghost-gateway/);
-  assert.equal(renderToStaticMarkup(React.createElement(ModelScopeWarningBanner, { warnings: [] })), "");
+  assert.equal(
+    renderToStaticMarkup(
+      React.createElement(ModelScopeWarningBanner, { warnings: [] }),
+    ),
+    "",
+  );
 });
 
 test("renders the composer as one stable input region", () => {
@@ -72,11 +105,18 @@ test("keeps the model selector visible when a model error leaves no options", ()
 });
 
 test("combines model and reasoning and keeps compaction out of the composer", () => {
-  const html = renderToStaticMarkup(React.createElement(ChatInput, {
-    onSend() {}, onAbort() {}, onModelChange() {}, onThinkingLevelChange() {},
-    isStreaming: true, model: { provider: "openai", modelId: "gpt-5.4" },
-    modelList: [{ provider: "openai", id: "gpt-5.4", name: "GPT-5.4" }], thinkingLevel: "high",
-  }));
+  const html = renderToStaticMarkup(
+    React.createElement(ChatInput, {
+      onSend() {},
+      onAbort() {},
+      onModelChange() {},
+      onThinkingLevelChange() {},
+      isStreaming: true,
+      model: { provider: "openai", modelId: "gpt-5.4" },
+      modelList: [{ provider: "openai", id: "gpt-5.4", name: "GPT-5.4" }],
+      thinkingLevel: "high",
+    }),
+  );
   assert.match(html, /aria-label="Model and reasoning"/);
   assert.match(html, /class="composer-model-detail">high/);
   assert.doesNotMatch(html, /Compact context/);
@@ -106,7 +146,13 @@ test("shows and locks the optimistic model while a switch is pending", () => {
       onModelChange() {},
       isStreaming: false,
       model: { provider: "deepseek", modelId: "deepseek-v4-flash" },
-      modelList: [{ provider: "deepseek", id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" }],
+      modelList: [
+        {
+          provider: "deepseek",
+          id: "deepseek-v4-flash",
+          name: "DeepSeek V4 Flash",
+        },
+      ],
       modelSwitching: true,
     }),
   );
@@ -121,7 +167,11 @@ test("shows and locks the optimistic model while a switch is pending", () => {
 test("filters model options by name and id", () => {
   const options = [
     { provider: "ollama", modelId: "qwen3:latest", name: "Qwen 3" },
-    { provider: "anthropic", modelId: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
+    {
+      provider: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      name: "Claude Sonnet 4.6",
+    },
     { provider: "openai", modelId: "gpt-5.4", name: "GPT-5.4" },
   ];
 
@@ -136,7 +186,9 @@ test("filters model options by name and id", () => {
 test("renders the shared field model selector as a disabled gray control", () => {
   const html = renderToStaticMarkup(
     React.createElement(ModelSelector, {
-      options: [{ provider: "openai", modelId: "gpt-5.6-sol", name: "GPT-5.6 Sol" }],
+      options: [
+        { provider: "openai", modelId: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
+      ],
       value: null,
       onChange() {},
       onClear() {},
@@ -156,7 +208,9 @@ test("renders the shared field model selector as a disabled gray control", () =>
 test("labels the model selector from the English message package", () => {
   const html = renderToStaticMarkup(
     React.createElement(ModelSelector, {
-      options: [{ provider: "openai", modelId: "gpt-5.6-sol", name: "GPT-5.6 Sol" }],
+      options: [
+        { provider: "openai", modelId: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
+      ],
       value: null,
       onChange() {},
       ariaLabel: "Model",
@@ -168,32 +222,70 @@ test("labels the model selector from the English message package", () => {
 });
 
 test("shows Send while idle and Stop for an empty draft or non-steerable work", () => {
-  const render = (props) => renderToStaticMarkup(React.createElement(ChatInput, { onSend() {}, onAbort() {}, ...props }));
-  assert.match(render({ isStreaming: false }), /data-action="send"[^>]*disabled=""/);
-  for (const props of [{ isStreaming: true }, { isStreaming: true, onSteer() {}, onFollowUp() {} }]) {
+  const render = (props) =>
+    renderToStaticMarkup(
+      React.createElement(ChatInput, { onSend() {}, onAbort() {}, ...props }),
+    );
+  assert.match(
+    render({ isStreaming: false }),
+    /data-action="send"[^>]*disabled=""/,
+  );
+  for (const props of [
+    { isStreaming: true },
+    { isStreaming: true, onSteer() {}, onFollowUp() {} },
+  ]) {
     const html = render(props);
     assert.match(html, /data-action="stop"[^>]*aria-label="Stop agent"/);
-    assert.doesNotMatch(html, /Select run action|rgba\(234,179,8|rgba\(129,140,248/);
+    assert.doesNotMatch(
+      html,
+      /Select run action|rgba\(234,179,8|rgba\(129,140,248/,
+    );
     assert.match(html, /class="composer-surface"/);
   }
 });
 
 test("an image-only draft offers Steer, while a shell command stays stoppable", () => {
   const draftKey = "composer-action-image";
-  setDraft(draftKey, { value: "", images: [{ data: "AQID", mimeType: "image/png" }] });
+  setDraft(draftKey, {
+    value: "",
+    images: [{ data: "AQID", mimeType: "image/png" }],
+  });
   try {
-    const render = (props) => renderToStaticMarkup(React.createElement(ChatInput, { onSend() {}, onAbort() {}, isStreaming: true, draftKey, ...props }));
+    const render = (props) =>
+      renderToStaticMarkup(
+        React.createElement(ChatInput, {
+          onSend() {},
+          onAbort() {},
+          isStreaming: true,
+          draftKey,
+          ...props,
+        }),
+      );
     const html = render({ onSteer() {}, onFollowUp() {} });
     assert.match(html, /data-action="steer"[^>]*aria-label="Steer"/);
-    assert.ok(html.indexOf('class="composer-surface"') < html.indexOf('aria-label="Remove image"'));
+    assert.ok(
+      html.indexOf('class="composer-surface"') <
+        html.indexOf('aria-label="Remove image"'),
+    );
     assert.match(render({}), /data-action="stop"/);
-  } finally { clearDraft(draftKey); }
+  } finally {
+    clearDraft(draftKey);
+  }
 });
 
 test("compresses large images while preserving small images and GIFs", async () => {
-  assert.equal(shouldCompressImageFile({ size: 1024 * 1024, type: "image/png" }), false);
-  assert.equal(shouldCompressImageFile({ size: 1024 * 1024 + 1, type: "image/png" }), true);
-  assert.equal(shouldCompressImageFile({ size: 2 * 1024 * 1024, type: "image/gif" }), false);
+  assert.equal(
+    shouldCompressImageFile({ size: 1024 * 1024, type: "image/png" }),
+    false,
+  );
+  assert.equal(
+    shouldCompressImageFile({ size: 1024 * 1024 + 1, type: "image/png" }),
+    true,
+  );
+  assert.equal(
+    shouldCompressImageFile({ size: 2 * 1024 * 1024, type: "image/gif" }),
+    false,
+  );
 
   const originals = {
     FileReader: globalThis.FileReader,
@@ -217,19 +309,31 @@ test("compresses large images while preserving small images and GIFs", async () 
   };
   globalThis.createImageBitmap = async () => {
     bitmapCalls += 1;
-    return { width: 2048, height: 1024, close() { closed = true; } };
+    return {
+      width: 2048,
+      height: 1024,
+      close() {
+        closed = true;
+      },
+    };
   };
   globalThis.document = { createElement: () => canvas };
 
   try {
-    assert.deepEqual(await compressImageFile({ size: 1024, type: "image/png" }), {
-      data: "ORIGINAL",
-      mimeType: "image/png",
-    });
-    assert.deepEqual(await compressImageFile({ size: 2 * 1024 * 1024, type: "image/png" }), {
-      data: "COMPRESSED",
-      mimeType: "image/jpeg",
-    });
+    assert.deepEqual(
+      await compressImageFile({ size: 1024, type: "image/png" }),
+      {
+        data: "ORIGINAL",
+        mimeType: "image/png",
+      },
+    );
+    assert.deepEqual(
+      await compressImageFile({ size: 2 * 1024 * 1024, type: "image/png" }),
+      {
+        data: "COMPRESSED",
+        mimeType: "image/jpeg",
+      },
+    );
     assert.equal(bitmapCalls, 1);
     assert.equal(canvas.width, 1024);
     assert.equal(canvas.height, 512);
@@ -247,7 +351,10 @@ test("recognizes exact slash commands for one-Enter submission", () => {
   assert.equal(isExactSlashCommand("  /copy  ", builtin), true);
   assert.equal(isExactSlashCommand("/co", builtin), false);
   assert.equal(isExactSlashCommand("/copy extra", builtin), false);
-  assert.equal(isExactSlashCommand("/copy", { ...builtin, source: "extension" }), false);
+  assert.equal(
+    isExactSlashCommand("/copy", { ...builtin, source: "extension" }),
+    false,
+  );
 });
 
 test("clears a completed built-in only while its submitted input is unchanged", () => {
@@ -268,11 +375,17 @@ test("restores text and base64 images when editing a user message", () => {
     role: "user",
     content: [
       { type: "text", text: "Review this image @src/example.ts " },
-      { type: "image", source: { type: "base64", media_type: "image/png", data: "AQID" } },
+      {
+        type: "image",
+        source: { type: "base64", media_type: "image/png", data: "AQID" },
+      },
     ],
   };
 
-  assert.equal(getUserMessageText(message), "Review this image @src/example.ts ");
+  assert.equal(
+    getUserMessageText(message),
+    "Review this image @src/example.ts ",
+  );
   assert.deepEqual(getUserMessageDraftImages(message), [
     { data: "AQID", mimeType: "image/png" },
   ]);
@@ -281,9 +394,7 @@ test("restores text and base64 images when editing a user message", () => {
 test("restores legacy flat image entries when editing a user message", () => {
   const message = {
     role: "user",
-    content: [
-      { type: "image", data: "AQID", mimeType: "image/jpeg" },
-    ],
+    content: [{ type: "image", data: "AQID", mimeType: "image/jpeg" }],
   };
 
   assert.deepEqual(getUserMessageDraftImages(message), [
@@ -342,7 +453,9 @@ test("keeps a failed first submission recoverable across a composer remount", ()
 
 test("preserves duplicate image attachments when restoring a submission", () => {
   const image = { data: "AQID", mimeType: "image/png" };
-  const restored = mergeRestoredSubmissionDraft("", [image, image], "", [image]);
+  const restored = mergeRestoredSubmissionDraft("", [image, image], "", [
+    image,
+  ]);
 
   assert.deepEqual(restored.images, [image, image, image]);
 });
@@ -372,7 +485,10 @@ test("rekey keeps a synchronously restored draft when React state is still empty
   const sessionKey = "session-rekey-race";
   clearDraft(provisionalKey);
   clearDraft(sessionKey);
-  setDraft(provisionalKey, { value: "restored before state flush", images: [] });
+  setDraft(provisionalKey, {
+    value: "restored before state flush",
+    images: [],
+  });
 
   assert.deepEqual(
     rekeyDraft(provisionalKey, sessionKey, { value: "", images: [] }),
@@ -388,19 +504,36 @@ test("rekey keeps a synchronously restored draft when React state is still empty
 });
 
 test("the top-bar compaction control exposes warning, disabled, and cancel states", () => {
-  const render = (props) => renderToStaticMarkup(React.createElement(CompactButton, props));
+  const render = (props) =>
+    renderToStaticMarkup(React.createElement(CompactButton, props));
   assert.equal(render({ control: null }), "");
-  assert.equal(render({ hidden: true, control: { disabled: false, compacting: false, onClick() {} } }), "");
-  const warning = render({ warning: true, control: { disabled: false, compacting: false, onClick() {} } });
+  assert.equal(
+    render({
+      hidden: true,
+      control: { disabled: false, compacting: false, onClick() {} },
+    }),
+    "",
+  );
+  const warning = render({
+    warning: true,
+    control: { disabled: false, compacting: false, onClick() {} },
+  });
   assert.match(warning, /data-warning="true"/);
   assert.match(warning, /aria-label="Compact context"/);
   assert.equal(warning.replace(/<[^>]*>/g, "").trim(), "");
-  assert.match(render({ control: { disabled: true, compacting: false, onClick() {} } }), /disabled=""/);
-  assert.match(render({ control: { disabled: false, compacting: true, onClick() {} } }), /aria-label="Stop compaction"/);
+  assert.match(
+    render({ control: { disabled: true, compacting: false, onClick() {} } }),
+    /disabled=""/,
+  );
+  assert.match(
+    render({ control: { disabled: false, compacting: true, onClick() {} } }),
+    /aria-label="Stop compaction"/,
+  );
 });
 
 test("renders compact errors above the input as a wrapping alert", () => {
-  const error = "Compaction failed: OpenAI API error (403): <html>request forbidden</html>";
+  const error =
+    "Compaction failed: OpenAI API error (403): <html>request forbidden</html>";
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
       onSend() {},
@@ -423,26 +556,47 @@ test("walks back through prompts with ArrowUp, newest first", () => {
 
   const first = cycleInputHistory(history, null, "up");
   assert.deepEqual(first, { cycle: 0, text: "newest" });
-  assert.deepEqual(cycleInputHistory(history, first.cycle, "up"), { cycle: 1, text: "middle" });
-  assert.deepEqual(cycleInputHistory(history, 1, "up"), { cycle: 2, text: "oldest" });
+  assert.deepEqual(cycleInputHistory(history, first.cycle, "up"), {
+    cycle: 1,
+    text: "middle",
+  });
+  assert.deepEqual(cycleInputHistory(history, 1, "up"), {
+    cycle: 2,
+    text: "oldest",
+  });
 });
 
 test("stops at the oldest prompt instead of wrapping", () => {
   const history = ["oldest", "middle", "newest"];
 
-  assert.deepEqual(cycleInputHistory(history, 2, "up"), { cycle: 2, text: "oldest" });
+  assert.deepEqual(cycleInputHistory(history, 2, "up"), {
+    cycle: 2,
+    text: "oldest",
+  });
 });
 
 test("walks forward and restores the empty composer off the end", () => {
   const history = ["oldest", "middle", "newest"];
 
-  assert.deepEqual(cycleInputHistory(history, 2, "down"), { cycle: 1, text: "middle" });
-  assert.deepEqual(cycleInputHistory(history, 0, "down"), { cycle: null, text: "" });
+  assert.deepEqual(cycleInputHistory(history, 2, "down"), {
+    cycle: 1,
+    text: "middle",
+  });
+  assert.deepEqual(cycleInputHistory(history, 0, "down"), {
+    cycle: null,
+    text: "",
+  });
 });
 
 test("does nothing with no history to cycle", () => {
-  assert.deepEqual(cycleInputHistory([], null, "up"), { cycle: null, text: "" });
-  assert.deepEqual(cycleInputHistory([], null, "down"), { cycle: null, text: "" });
+  assert.deepEqual(cycleInputHistory([], null, "up"), {
+    cycle: null,
+    text: "",
+  });
+  assert.deepEqual(cycleInputHistory([], null, "down"), {
+    cycle: null,
+    text: "",
+  });
 });
 
 test("clamps an upward menu to the visible top of its container", () => {

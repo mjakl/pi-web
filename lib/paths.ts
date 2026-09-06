@@ -25,7 +25,11 @@ import { normalize, posix, win32 } from "path";
 const WINDOWS_ABSOLUTE_RE = /^[a-zA-Z]:[\\/]/;
 
 export function isWindowsAbsolutePath(filePath: string): boolean {
-  return WINDOWS_ABSOLUTE_RE.test(filePath) || filePath.startsWith("\\\\") || filePath.startsWith("//");
+  return (
+    WINDOWS_ABSOLUTE_RE.test(filePath) ||
+    filePath.startsWith("\\\\") ||
+    filePath.startsWith("//")
+  );
 }
 
 /**
@@ -61,7 +65,10 @@ export function toSlashPath(p: string): string {
  * filesystem operations; use the key only for grouping and equality. The
  * explicit platform argument keeps the Windows rules testable on other hosts.
  */
-export function pathIdentityKey(p: string, platform: NodeJS.Platform = process.platform): string {
+export function pathIdentityKey(
+  p: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
   if (!p) return p;
   const pathApi = platform === "win32" ? win32 : posix;
   const normalized = pathApi.normalize(p);

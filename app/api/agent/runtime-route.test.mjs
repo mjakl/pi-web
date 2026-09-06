@@ -12,10 +12,9 @@ const jiti = createJiti(import.meta.url, {
 });
 const { DELETE: stopSession } = await jiti.import("./[id]/route.ts");
 const { GET: getRuntimeSnapshot } = await jiti.import("./running/route.ts");
-const {
-  cacheSessionPath,
-  invalidateSessionPathCache,
-} = await jiti.import("../../../lib/session-reader.ts");
+const { cacheSessionPath, invalidateSessionPathCache } = await jiti.import(
+  "../../../lib/session-reader.ts",
+);
 
 function context(id) {
   return { params: Promise.resolve({ id }) };
@@ -60,13 +59,16 @@ test("stopping a persisted inactive runtime returns false", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "pi-web-stop-route-"));
   const id = "stop-persisted-runtime";
   const file = join(dir, "session.jsonl");
-  await writeFile(file, `${JSON.stringify({
-    type: "session",
-    version: 3,
-    id,
-    timestamp: "2026-01-01T00:00:00.000Z",
-    cwd: dir,
-  })}\n`);
+  await writeFile(
+    file,
+    `${JSON.stringify({
+      type: "session",
+      version: 3,
+      id,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      cwd: dir,
+    })}\n`,
+  );
   cacheSessionPath(id, file);
   globalThis.__piSessions = new Map();
   globalThis.__piSessionLifecycles = new Map();
@@ -108,23 +110,34 @@ test("stopping an unknown runtime returns 404", async (t) => {
 test("runtime snapshot exposes active IDs separately from running IDs", async (t) => {
   const previousRegistry = globalThis.__piSessions;
   globalThis.__piSessions = new Map([
-    ["idle", {
-      sessionId: "idle",
-      isAlive: () => true,
-      isActive: () => true,
-      isRunning: () => false,
-    }],
-    ["running", {
-      sessionId: "running",
-      isActive: () => true,
-      isRunning: () => true,
-    }],
+    [
+      "idle",
+      {
+        sessionId: "idle",
+        isAlive: () => true,
+        isActive: () => true,
+        isRunning: () => false,
+      },
+    ],
+    [
+      "running",
+      {
+        sessionId: "running",
+        isActive: () => true,
+        isRunning: () => true,
+      },
+    ],
   ]);
-  t.after(() => { globalThis.__piSessions = previousRegistry; });
+  t.after(() => {
+    globalThis.__piSessions = previousRegistry;
+  });
 
   const response = await getRuntimeSnapshot();
   const body = await response.json();
 
-  assert.deepEqual(new Set(body.activeSessionIds), new Set(["idle", "running"]));
+  assert.deepEqual(
+    new Set(body.activeSessionIds),
+    new Set(["idle", "running"]),
+  );
   assert.deepEqual(body.runningSessionIds, ["running"]);
 });

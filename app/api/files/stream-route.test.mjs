@@ -13,11 +13,14 @@ const jiti = createJiti(import.meta.url, {
 const { GET } = await jiti.import("./[...path]/route.ts");
 const { allowFileRoot } = await jiti.import("@/lib/file-access");
 
-const SVG = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
+const SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
 
 async function readAllowedFile(t, name, content, headers = {}) {
   const agentDir = await mkdtemp(join(tmpdir(), "pi-web-stream-route-agent-"));
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-web-stream-route-")));
+  const dir = await realpath(
+    await mkdtemp(join(tmpdir(), "pi-web-stream-route-")),
+  );
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const previousRoots = globalThis.__piAdditionalAllowedRoots;
   process.env.PI_CODING_AGENT_DIR = agentDir;
@@ -44,8 +47,14 @@ async function readAllowedFile(t, name, content, headers = {}) {
 function assertSvgDocumentPolicy(response) {
   assert.equal(response.headers.get("Content-Type"), "image/svg+xml");
   assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
-  assert.match(response.headers.get("Content-Security-Policy"), /^default-src 'none';/);
-  assert.match(response.headers.get("Content-Security-Policy"), /frame-ancestors 'self'/);
+  assert.match(
+    response.headers.get("Content-Security-Policy"),
+    /^default-src 'none';/,
+  );
+  assert.match(
+    response.headers.get("Content-Security-Policy"),
+    /frame-ancestors 'self'/,
+  );
   assert.equal(response.headers.get("Referrer-Policy"), "no-referrer");
 }
 
@@ -58,15 +67,25 @@ test("inline SVG previews carry a script-blocking content security policy", asyn
 });
 
 test("ranged and rejected-range SVG responses keep the same security headers", async (t) => {
-  const partial = await readAllowedFile(t, "probe.svg", SVG, { Range: "bytes=0-3" });
+  const partial = await readAllowedFile(t, "probe.svg", SVG, {
+    Range: "bytes=0-3",
+  });
   assert.equal(partial.response.status, 206);
-  assert.equal(partial.response.headers.get("Content-Range"), `bytes 0-3/${SVG.length}`);
+  assert.equal(
+    partial.response.headers.get("Content-Range"),
+    `bytes 0-3/${SVG.length}`,
+  );
   assertSvgDocumentPolicy(partial.response);
   assert.equal(partial.body.toString("utf8"), SVG.slice(0, 4));
 
-  const rejected = await readAllowedFile(t, "probe.svg", SVG, { Range: `bytes=${SVG.length}-` });
+  const rejected = await readAllowedFile(t, "probe.svg", SVG, {
+    Range: `bytes=${SVG.length}-`,
+  });
   assert.equal(rejected.response.status, 416);
-  assert.equal(rejected.response.headers.get("Content-Range"), `bytes */${SVG.length}`);
+  assert.equal(
+    rejected.response.headers.get("Content-Range"),
+    `bytes */${SVG.length}`,
+  );
   assertSvgDocumentPolicy(rejected.response);
   assert.equal(rejected.body.length, 0);
 });
@@ -84,7 +103,9 @@ test("other streamed previews are nosniff without a document policy", async (t) 
 
 test("rejects a path-like sessionId reference for a file outside the allowed roots", async (t) => {
   const agentDir = await mkdtemp(join(tmpdir(), "pi-web-stream-route-agent-"));
-  const outside = await realpath(await mkdtemp(join(tmpdir(), "pi-web-stream-route-outside-")));
+  const outside = await realpath(
+    await mkdtemp(join(tmpdir(), "pi-web-stream-route-outside-")),
+  );
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const previousRoots = globalThis.__piAdditionalAllowedRoots;
   process.env.PI_CODING_AGENT_DIR = agentDir;
@@ -102,7 +123,9 @@ test("rejects a path-like sessionId reference for a file outside the allowed roo
 
   const sessionId = encodeURIComponent("../../sessions/foo");
   const response = await GET(
-    new Request(`http://localhost/api/files${filePath}?type=read&sessionId=${sessionId}`),
+    new Request(
+      `http://localhost/api/files${filePath}?type=read&sessionId=${sessionId}`,
+    ),
     { params: Promise.resolve({ path: filePath.split("/").filter(Boolean) }) },
   );
 

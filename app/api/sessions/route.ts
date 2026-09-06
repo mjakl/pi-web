@@ -15,15 +15,17 @@ export async function GET() {
       listAllSessions(),
       attachSessionProjectInfo(getRpcSessionInfos()),
     ]);
-    const sessions = mergeSessionLists(persistedSessions, runtimeSessions).map((session) => {
-      const inventory = { ...session };
-      if (!inventory.transient) {
-        delete inventory.name;
-        delete inventory.messageCount;
-        delete inventory.firstMessage;
-      }
-      return inventory;
-    });
+    const sessions = mergeSessionLists(persistedSessions, runtimeSessions).map(
+      (session) => {
+        const inventory = { ...session };
+        if (!inventory.transient) {
+          delete inventory.name;
+          delete inventory.messageCount;
+          delete inventory.firstMessage;
+        }
+        return inventory;
+      },
+    );
     return Response.json(
       {
         sessions,

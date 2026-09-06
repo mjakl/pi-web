@@ -1,12 +1,16 @@
-const ANSI_ESCAPE_RE = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
-const ANSI_ESCAPE_AT_START_RE = /^\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/;
+const ANSI_ESCAPE_RE =
+  /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
+const ANSI_ESCAPE_AT_START_RE =
+  /^\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/;
 const TUI_CURSOR_MARKER_RE = /\x1B_pi:c\x07/g;
 
 export function stripAnsi(text: string): string {
   return text.replace(TUI_CURSOR_MARKER_RE, "").replace(ANSI_ESCAPE_RE, "");
 }
 
-function visibleCharPositions(text: string): Array<{ start: number; end: number; char: string }> {
+function visibleCharPositions(
+  text: string,
+): Array<{ start: number; end: number; char: string }> {
   const positions: Array<{ start: number; end: number; char: string }> = [];
   let i = 0;
   while (i < text.length) {
@@ -72,7 +76,10 @@ export function normalizeCustomPanelLines(lines: string[]): string[] {
     }
 
     const rightBorderIndex = lastNonSpaceVisibleCharIndex(line);
-    const rightBorder = rightBorderIndex >= 0 ? visibleCharPositions(line)[rightBorderIndex]?.char : undefined;
+    const rightBorder =
+      rightBorderIndex >= 0
+        ? visibleCharPositions(line)[rightBorderIndex]?.char
+        : undefined;
     if (rightBorder === "│" || rightBorder === "┃") {
       line = removeVisibleCharAt(line, rightBorderIndex);
     }
@@ -80,7 +87,12 @@ export function normalizeCustomPanelLines(lines: string[]): string[] {
     normalized.push(trimEndVisibleSpaces(line));
   }
 
-  while (normalized.length > 0 && stripAnsi(normalized[0]).trim() === "") normalized.shift();
-  while (normalized.length > 0 && stripAnsi(normalized[normalized.length - 1]).trim() === "") normalized.pop();
+  while (normalized.length > 0 && stripAnsi(normalized[0]).trim() === "")
+    normalized.shift();
+  while (
+    normalized.length > 0 &&
+    stripAnsi(normalized[normalized.length - 1]).trim() === ""
+  )
+    normalized.pop();
   return normalized.length ? normalized : lines;
 }

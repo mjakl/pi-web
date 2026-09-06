@@ -7,8 +7,15 @@ import { createJiti } from "jiti";
 
 const jiti = createJiti(import.meta.url, { tsconfigPaths: true });
 const { GET } = await jiti.import("./route.ts");
-const { getAdditionalAllowedRoots } = await jiti.import("../../../lib/allowed-roots.ts");
-const request = (q, cwd) => GET(new Request(`http://localhost/api/file-completion?${new URLSearchParams({ q, ...(cwd ? { cwd } : {}) })}`));
+const { getAdditionalAllowedRoots } = await jiti.import(
+  "../../../lib/allowed-roots.ts",
+);
+const request = (q, cwd) =>
+  GET(
+    new Request(
+      `http://localhost/api/file-completion?${new URLSearchParams({ q, ...(cwd ? { cwd } : {}) })}`,
+    ),
+  );
 
 test("completes outside the project without granting file access", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "pi-web-completion-route-"));
@@ -20,9 +27,14 @@ test("completes outside the project without granting file access", async (t) => 
   const response = await request("../out", cwd);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
-  assert.deepEqual(await response.json(), { matches: [{ path: path.join(root, "outside.txt"), isDir: false }] });
+  assert.deepEqual(await response.json(), {
+    matches: [{ path: path.join(root, "outside.txt"), isDir: false }],
+  });
   assert.deepEqual([...getAdditionalAllowedRoots()], allowedBefore);
-  assert.equal((await request(path.join(root, "missing") + path.sep)).status, 404);
+  assert.equal(
+    (await request(path.join(root, "missing") + path.sep)).status,
+    404,
+  );
   assert.equal((await request("../out")).status, 400);
   assert.equal((await request("report", cwd)).status, 400);
 });

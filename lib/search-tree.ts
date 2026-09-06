@@ -23,7 +23,12 @@ export function buildSearchTree(paths: string[]): SearchTreeNode[] {
       currentPath = currentPath ? `${currentPath}/${segments[i]}` : segments[i];
       let node = byPath.get(currentPath);
       if (!node) {
-        node = { name: segments[i], path: currentPath, isDir: i < segments.length - 1, children: [] };
+        node = {
+          name: segments[i],
+          path: currentPath,
+          isDir: i < segments.length - 1,
+          children: [],
+        };
         byPath.set(currentPath, node);
         current.push(node);
       }
@@ -31,7 +36,13 @@ export function buildSearchTree(paths: string[]): SearchTreeNode[] {
     }
   }
   const sort = (nodes: SearchTreeNode[]) => {
-    nodes.sort((a, b) => (a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : a.name.localeCompare(b.name, "en")));
+    nodes.sort((a, b) =>
+      a.isDir !== b.isDir
+        ? a.isDir
+          ? -1
+          : 1
+        : a.name.localeCompare(b.name, "en"),
+    );
     nodes.forEach((n) => sort(n.children));
   };
   sort(roots);

@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo, type RefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+  type RefObject,
+} from "react";
 import { isMessageGroupAnchor } from "@/lib/message-display";
 import { formatTimestamp } from "@/lib/i18n/format";
 import type { AgentMessage, SessionContext } from "@/lib/types";
@@ -84,24 +91,47 @@ export function ChatMinimap({
     gap: MAX_NODE_GAP,
     fillsHeight: false,
   });
-  const activeNodeLockRef = useRef<{ index: number; until: number } | null>(null);
+  const activeNodeLockRef = useRef<{ index: number; until: number } | null>(
+    null,
+  );
   const pendingNavigationRef = useRef<string | null>(null);
   const navigationLoadingRef = useRef(false);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
-  const loadedAnchorIds = useMemo(() => messages.flatMap((message, index) => (
-    isMessageGroupAnchor(message) ? [entryIds[index] ?? `live:${index - entryIds.length}`] : []
-  )), [messages, entryIds]);
-  const anchorIds = useMemo(() => [...new Set([...(historyAnchors ?? []).map((anchor) => anchor.id), ...loadedAnchorIds])], [historyAnchors, loadedAnchorIds]);
+  const loadedAnchorIds = useMemo(
+    () =>
+      messages.flatMap((message, index) =>
+        isMessageGroupAnchor(message)
+          ? [entryIds[index] ?? `live:${index - entryIds.length}`]
+          : [],
+      ),
+    [messages, entryIds],
+  );
+  const anchorIds = useMemo(
+    () => [
+      ...new Set([
+        ...(historyAnchors ?? []).map((anchor) => anchor.id),
+        ...loadedAnchorIds,
+      ]),
+    ],
+    [historyAnchors, loadedAnchorIds],
+  );
   const timestamps = useMemo(() => {
-    const result = new Map((historyAnchors ?? []).map(({ id, timestamp }) => [id, timestamp]));
+    const result = new Map(
+      (historyAnchors ?? []).map(({ id, timestamp }) => [id, timestamp]),
+    );
     messages.forEach((message, index) => {
       if (isMessageGroupAnchor(message) && message.timestamp !== undefined) {
-        result.set(entryIds[index] ?? `live:${index - entryIds.length}`, message.timestamp);
+        result.set(
+          entryIds[index] ?? `live:${index - entryIds.length}`,
+          message.timestamp,
+        );
       }
     });
     return result;
@@ -124,27 +154,33 @@ export function ChatMinimap({
     setActiveIndex(index);
   }, []);
 
-  const syncActiveNode = useCallback((scrollEl: HTMLDivElement, nextNodes: NodeInfo[]) => {
-    const activeLock = activeNodeLockRef.current;
-    if (activeLock && Date.now() < activeLock.until) {
-      setActiveIndex(activeLock.index);
-      return;
-    }
-    activeNodeLockRef.current = null;
+  const syncActiveNode = useCallback(
+    (scrollEl: HTMLDivElement, nextNodes: NodeInfo[]) => {
+      const activeLock = activeNodeLockRef.current;
+      if (activeLock && Date.now() < activeLock.until) {
+        setActiveIndex(activeLock.index);
+        return;
+      }
+      activeNodeLockRef.current = null;
 
-    const measuredNodes = nextNodes.filter((node) => node.scrollTop !== null);
-    if (measuredNodes.length === 0) {
-      setActiveIndex(null);
-      return;
-    }
-    const focusTop = scrollEl.scrollTop + scrollEl.clientHeight * 0.3;
-    const nextActiveNode = measuredNodes.reduce((bestNode, node) => (
-      Math.abs((node.scrollTop ?? 0) - focusTop) < Math.abs((bestNode.scrollTop ?? 0) - focusTop)
-        ? node
-        : bestNode
-    ), measuredNodes[0]);
-    setActiveIndex(nextActiveNode.index);
-  }, []);
+      const measuredNodes = nextNodes.filter((node) => node.scrollTop !== null);
+      if (measuredNodes.length === 0) {
+        setActiveIndex(null);
+        return;
+      }
+      const focusTop = scrollEl.scrollTop + scrollEl.clientHeight * 0.3;
+      const nextActiveNode = measuredNodes.reduce(
+        (bestNode, node) =>
+          Math.abs((node.scrollTop ?? 0) - focusTop) <
+          Math.abs((bestNode.scrollTop ?? 0) - focusTop)
+            ? node
+            : bestNode,
+        measuredNodes[0],
+      );
+      setActiveIndex(nextActiveNode.index);
+    },
+    [],
+  );
 
   const updateScroll = useCallback(() => {
     const scrollEl = scrollContainer.current;
@@ -166,7 +202,9 @@ export function ChatMinimap({
       const refs = messageRefs.current;
       const containerRect = scrollEl.getBoundingClientRect();
       const nextNodes: NodeInfo[] = [];
-      const refIndices = new Map(anchorsRef.current.loadedAnchorIds.map((id, index) => [id, index]));
+      const refIndices = new Map(
+        anchorsRef.current.loadedAnchorIds.map((id, index) => [id, index]),
+      );
       for (const id of anchorsRef.current.anchorIds) {
         const refIndex = refIndices.get(id);
         const element = refIndex === undefined ? null : refs?.[refIndex];
@@ -184,7 +222,10 @@ export function ChatMinimap({
       setMinimapHeight(Math.max(1, minimapEl.clientHeight - MINIMAP_FOOTER));
       allNodesRef.current = nextNodes;
       setAllNodes(nextNodes);
-      setVisible(scrollEl.scrollHeight - scrollEl.clientHeight > 20 || nextNodes.length > 1);
+      setVisible(
+        scrollEl.scrollHeight - scrollEl.clientHeight > 20 ||
+          nextNodes.length > 1,
+      );
       syncActiveNode(scrollEl, nextNodes);
 
       // A jump requested before the target had been measured retries here.
@@ -255,21 +296,24 @@ export function ChatMinimap({
     }
   }, [measureNodes, onLoadThrough]);
 
-  const scrollToNode = useCallback((node: NodeInfo, behavior: ScrollBehavior) => {
-    const scrollEl = scrollContainer.current;
-    if (!scrollEl) return;
-    lockActiveNode(node.index);
-    pendingNavigationRef.current = null;
-    if (node.scrollTop === null) {
-      pendingNavigationRef.current = node.id;
-      void loadPendingNavigation();
-      return;
-    }
-    scrollEl.scrollTo({
-      top: Math.max(0, node.scrollTop - scrollEl.clientHeight * 0.3),
-      behavior,
-    });
-  }, [loadPendingNavigation, lockActiveNode, scrollContainer]);
+  const scrollToNode = useCallback(
+    (node: NodeInfo, behavior: ScrollBehavior) => {
+      const scrollEl = scrollContainer.current;
+      if (!scrollEl) return;
+      lockActiveNode(node.index);
+      pendingNavigationRef.current = null;
+      if (node.scrollTop === null) {
+        pendingNavigationRef.current = node.id;
+        void loadPendingNavigation();
+        return;
+      }
+      scrollEl.scrollTo({
+        top: Math.max(0, node.scrollTop - scrollEl.clientHeight * 0.3),
+        behavior,
+      });
+    },
+    [loadPendingNavigation, lockActiveNode, scrollContainer],
+  );
 
   const findNearestNode = useCallback((ratio: number): NodeInfo | null => {
     const { nodes, gap, fillsHeight } = nodeLayoutRef.current;
@@ -290,44 +334,58 @@ export function ChatMinimap({
     return nearestNode;
   }, []);
 
-  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (!visible) return;
+  const handleMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!visible) return;
 
-    draggingRef.current = true;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const jumpToPointer = (clientY: number, behavior: ScrollBehavior) => {
-      const ratio = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-      const node = findNearestNode(ratio);
-      if (node) scrollToNode(node, behavior);
-    };
+      draggingRef.current = true;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const jumpToPointer = (clientY: number, behavior: ScrollBehavior) => {
+        const ratio = Math.max(
+          0,
+          Math.min(1, (clientY - rect.top) / rect.height),
+        );
+        const node = findNearestNode(ratio);
+        if (node) scrollToNode(node, behavior);
+      };
 
-    jumpToPointer(event.clientY, "smooth");
-    const onMove = (moveEvent: MouseEvent) => {
-      if (!draggingRef.current) return;
-      jumpToPointer(moveEvent.clientY, "auto");
-    };
-    const onUp = () => {
-      draggingRef.current = false;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }, [findNearestNode, scrollToNode, visible]);
+      jumpToPointer(event.clientY, "smooth");
+      const onMove = (moveEvent: MouseEvent) => {
+        if (!draggingRef.current) return;
+        jumpToPointer(moveEvent.clientY, "auto");
+      };
+      const onUp = () => {
+        draggingRef.current = false;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [findNearestNode, scrollToNode, visible],
+  );
 
   if (!visible) return null;
 
-  const lastNodeTop = positionedNodes.length > 0
-    ? positionedNodes[positionedNodes.length - 1].topRatio * minimapHeight
-    : MINIMAP_PADDING;
+  const lastNodeTop =
+    positionedNodes.length > 0
+      ? positionedNodes[positionedNodes.length - 1].topRatio * minimapHeight
+      : MINIMAP_PADDING;
   const railHeight = Math.max(1, lastNodeTop - MINIMAP_PADDING);
-  const hoveredTimestamp = hoveredIndex === null ? undefined : timestamps.get(positionedNodes[hoveredIndex]?.id);
+  const hoveredTimestamp =
+    hoveredIndex === null
+      ? undefined
+      : timestamps.get(positionedNodes[hoveredIndex]?.id);
 
   return (
     <div
       ref={containerRef}
       className="chat-minimap"
-      title={hoveredTimestamp !== undefined && Number.isFinite(hoveredTimestamp) ? formatTimestamp(hoveredTimestamp) : undefined}
+      title={
+        hoveredTimestamp !== undefined && Number.isFinite(hoveredTimestamp)
+          ? formatTimestamp(hoveredTimestamp)
+          : undefined
+      }
       onMouseDown={handleMouseDown}
       onMouseMove={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
@@ -390,7 +448,9 @@ export function ChatMinimap({
                 width: 8,
                 height: 8,
                 borderRadius: 2,
-                background: isActive ? "rgba(128,128,128,0.42)" : "rgba(128,128,128,0.16)",
+                background: isActive
+                  ? "rgba(128,128,128,0.42)"
+                  : "rgba(128,128,128,0.16)",
                 border: `1.5px solid ${isActive ? "rgba(128,128,128,0.95)" : "rgba(128,128,128,0.58)"}`,
                 boxShadow: isActive ? "0 0 0 2px var(--bg-panel)" : "none",
                 transition: "transform 0.1s, background 0.1s",

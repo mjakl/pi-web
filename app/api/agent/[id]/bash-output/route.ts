@@ -14,7 +14,7 @@ import { isBashOutputPathReferencedByEntries } from "@/lib/session-file-referenc
 // size-limited; download responses stream the file without buffering it.
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   let path: string | null = null;
@@ -36,18 +36,26 @@ export async function GET(
     return Response.json({ error: "invalid path" }, { status: 400 });
   }
 
-  if (!await isReferencedBySession(resolved, id, isBashOutputPathReferencedByEntries)) {
+  if (
+    !(await isReferencedBySession(
+      resolved,
+      id,
+      isBashOutputPathReferencedByEntries,
+    ))
+  ) {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
 
   try {
     if (download) {
       const { handle } = await openRegularFileNoFollow(resolved);
-      const stream = Readable.toWeb(handle.createReadStream()) as ReadableStream<Uint8Array>;
+      const stream = Readable.toWeb(
+        handle.createReadStream(),
+      ) as ReadableStream<Uint8Array>;
       return new Response(stream, {
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
-          "Content-Disposition": "attachment; filename=\"bash-output.log\"",
+          "Content-Disposition": 'attachment; filename="bash-output.log"',
           "Cache-Control": "no-store",
         },
       });
@@ -55,10 +63,13 @@ export async function GET(
 
     const result = await readUtf8FileWithinLimit(resolved);
     if (result.tooLarge) {
-      return Response.json({
-        error: `Full output is too large to display (limit ${MAX_INLINE_BASH_OUTPUT_BYTES} bytes)`,
-        data: { size: result.size, maxBytes: MAX_INLINE_BASH_OUTPUT_BYTES },
-      }, { status: 413 });
+      return Response.json(
+        {
+          error: `Full output is too large to display (limit ${MAX_INLINE_BASH_OUTPUT_BYTES} bytes)`,
+          data: { size: result.size, maxBytes: MAX_INLINE_BASH_OUTPUT_BYTES },
+        },
+        { status: 413 },
+      );
     }
     return Response.json({ success: true, data: { output: result.content } });
   } catch {

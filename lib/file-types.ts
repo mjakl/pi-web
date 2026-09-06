@@ -51,10 +51,14 @@ export function getAudioMime(filePath: string): string | null {
 }
 
 export function getDocumentMime(filePath: string): string | null {
-  return DOCUMENT_EXT_TO_MIME[getFileExt(filePath) as DocumentPreviewKind] ?? null;
+  return (
+    DOCUMENT_EXT_TO_MIME[getFileExt(filePath) as DocumentPreviewKind] ?? null
+  );
 }
 
-export function documentPreviewKind(filePath: string): DocumentPreviewKind | null {
+export function documentPreviewKind(
+  filePath: string,
+): DocumentPreviewKind | null {
   const ext = getFileExt(filePath);
   if (ext === "pdf" || ext === "docx") return ext;
   return null;

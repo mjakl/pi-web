@@ -13,33 +13,48 @@ export async function POST(req: Request) {
   let commandType: string | undefined;
   let promptAccepted = false;
   try {
-    const body = await req.json() as { cwd?: string; [key: string]: unknown };
+    const body = (await req.json()) as { cwd?: string; [key: string]: unknown };
     const { cwd, ...command } = body;
     commandType = typeof command.type === "string" ? command.type : undefined;
 
     if (!cwd || typeof cwd !== "string") {
-      return Response.json({
-        error: "cwd is required",
-        ...(commandType === "prompt"
-          ? { code: "prompt_rejected", accepted: false }
-          : {}),
-      }, { status: 400 });
+      return Response.json(
+        {
+          error: "cwd is required",
+          ...(commandType === "prompt"
+            ? { code: "prompt_rejected", accepted: false }
+            : {}),
+        },
+        { status: 400 },
+      );
     }
     if (!existsSync(cwd)) {
-      return Response.json({
-        error: `Directory does not exist: ${cwd}`,
-        ...(commandType === "prompt"
-          ? { code: "prompt_rejected", accepted: false }
-          : {}),
-      }, { status: 400 });
+      return Response.json(
+        {
+          error: `Directory does not exist: ${cwd}`,
+          ...(commandType === "prompt"
+            ? { code: "prompt_rejected", accepted: false }
+            : {}),
+        },
+        { status: 400 },
+      );
     }
 
     // Use a one-time key so startRpcSession's lock doesn't conflict with real session ids
-    const { provider, modelId, toolNames, thinkingLevel, ...promptCommand } = command as { provider?: string; modelId?: string; toolNames?: string[]; thinkingLevel?: unknown; [key: string]: unknown };
+    const { provider, modelId, toolNames, thinkingLevel, ...promptCommand } =
+      command as {
+        provider?: string;
+        modelId?: string;
+        toolNames?: string[];
+        thinkingLevel?: unknown;
+        [key: string]: unknown;
+      };
     if ((provider && !modelId) || (!provider && modelId)) {
       throw new Error("provider and modelId must be provided together");
     }
-    const explicitThinkingLevel = isThinkingLevel(thinkingLevel) ? thinkingLevel : undefined;
+    const explicitThinkingLevel = isThinkingLevel(thinkingLevel)
+      ? thinkingLevel
+      : undefined;
     if (thinkingLevel !== undefined && explicitThinkingLevel === undefined) {
       throw new Error(`Invalid thinking level: ${String(thinkingLevel)}`);
     }
@@ -51,7 +66,9 @@ export async function POST(req: Request) {
     const { session, realSessionId } = await startRpcSession(tempKey, "", cwd, {
       ...(toolNames ? { toolNames } : {}),
       ...(provider && modelId ? { initialModel: { provider, modelId } } : {}),
-      ...(explicitThinkingLevel ? { thinkingLevel: explicitThinkingLevel } : {}),
+      ...(explicitThinkingLevel
+        ? { thinkingLevel: explicitThinkingLevel }
+        : {}),
     });
 
     // Keep the files-route allowed-roots cache (see app/api/files/[...path]/route.ts)
@@ -59,7 +76,7 @@ export async function POST(req: Request) {
     // a file request under a brand-new cwd would 403 for up to the cache TTL.
     allowFileRoot(cwd);
 
-    const state = await session.send({ type: "get_state" }) as {
+    const state = (await session.send({ type: "get_state" })) as {
       model?: { id: string; provider: string };
       thinkingLevel?: string;
     };
@@ -89,11 +106,14 @@ export async function POST(req: Request) {
       thinkingLevel: state.thinkingLevel,
     });
   } catch (error) {
-    return Response.json({
-      error: errorMessage(error),
-      ...(commandType === "prompt" && !promptAccepted
-        ? { code: "prompt_rejected", accepted: false }
-        : {}),
-    }, { status: 500 });
+    return Response.json(
+      {
+        error: errorMessage(error),
+        ...(commandType === "prompt" && !promptAccepted
+          ? { code: "prompt_rejected", accepted: false }
+          : {}),
+      },
+      { status: 500 },
+    );
   }
 }

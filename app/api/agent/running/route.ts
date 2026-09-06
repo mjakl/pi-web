@@ -1,4 +1,7 @@
-import { getActiveRpcSessionIds, getRunningRpcSessionIds } from "@/lib/rpc-manager";
+import {
+  getActiveRpcSessionIds,
+  getRunningRpcSessionIds,
+} from "@/lib/rpc-manager";
 
 // GET /api/agent/running - Lightweight snapshot for visible-tab polling.
 export async function GET() {

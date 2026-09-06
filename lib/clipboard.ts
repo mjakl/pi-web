@@ -17,7 +17,9 @@ export function copyText(text: string): Promise<void> {
     ta.select();
     const copied = document.execCommand("copy");
     document.body.removeChild(ta);
-    return copied ? Promise.resolve() : Promise.reject(new Error(translateMessage("chat.copyRefused")));
+    return copied
+      ? Promise.resolve()
+      : Promise.reject(new Error(translateMessage("chat.copyRefused")));
   } catch (error) {
     return Promise.reject(error);
   }

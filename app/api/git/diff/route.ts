@@ -1,6 +1,9 @@
 import { errorMessage } from "@/lib/error-message";
 import { getAllowedFileRoots } from "@/lib/file-access";
-import { isExistingPathWithinRoots, isPathWithinRoots } from "@/lib/path-security";
+import {
+  isExistingPathWithinRoots,
+  isPathWithinRoots,
+} from "@/lib/path-security";
 import { isAbsolutePath } from "@/lib/paths";
 import { getGitFileDiff } from "@/lib/git-changes";
 
@@ -10,14 +13,23 @@ export async function GET(request: Request) {
     const cwd = params.get("cwd")?.trim() ?? "";
     const filePath = params.get("path")?.trim() ?? "";
     if (!cwd || !isAbsolutePath(cwd)) {
-      return Response.json({ error: "cwd must be an absolute path" }, { status: 400 });
+      return Response.json(
+        { error: "cwd must be an absolute path" },
+        { status: 400 },
+      );
     }
     if (!filePath || !isAbsolutePath(filePath)) {
-      return Response.json({ error: "path must be an absolute path" }, { status: 400 });
+      return Response.json(
+        { error: "path must be an absolute path" },
+        { status: 400 },
+      );
     }
 
     const allowedRoots = await getAllowedFileRoots();
-    if (!isPathWithinRoots(cwd, allowedRoots) || !isPathWithinRoots(filePath, allowedRoots)) {
+    if (
+      !isPathWithinRoots(cwd, allowedRoots) ||
+      !isPathWithinRoots(filePath, allowedRoots)
+    ) {
       return Response.json({ error: "Access denied" }, { status: 403 });
     }
     // The cwd must resolve inside an allowed root. The file itself may no

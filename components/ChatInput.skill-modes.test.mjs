@@ -25,10 +25,10 @@ test("keeps normal slash ordering and includes Manual skill commands", () => {
     source: "builtin",
   };
 
-  const layout = buildSlashCommandLayout(
-    [manual, modelVisible, builtin],
-    { alpha: true, beta: false },
-  );
+  const layout = buildSlashCommandLayout([manual, modelVisible, builtin], {
+    alpha: true,
+    beta: false,
+  });
 
   assert.deepEqual(
     layout.commands.map((command) => command.name),

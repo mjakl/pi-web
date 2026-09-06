@@ -16,7 +16,9 @@ function extractFrontmatter(markdown: string): string | null {
     .replace(/(?:\r\n|\n|\r)$/, "");
 }
 
-export function parseFrontmatter(markdown: string): Record<string, unknown> | null {
+export function parseFrontmatter(
+  markdown: string,
+): Record<string, unknown> | null {
   const yaml = extractFrontmatter(markdown);
   if (yaml === null) return null;
 
@@ -39,7 +41,8 @@ export function formatFrontmatterValue(value: unknown): string {
 function formatValue(value: unknown, ancestors: WeakSet<object>): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "number" || typeof value === "boolean")
+    return String(value);
 
   if (Array.isArray(value)) {
     if (ancestors.has(value)) return "[Circular]";
@@ -67,6 +70,7 @@ function formatValue(value: unknown, ancestors: WeakSet<object>): string {
 
 export function getFrontmatterTitle(value: unknown): string | null {
   if (typeof value === "string") return value.trim() || null;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "number" || typeof value === "boolean")
+    return String(value);
   return null;
 }

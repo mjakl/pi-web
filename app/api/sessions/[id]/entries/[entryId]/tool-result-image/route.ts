@@ -1,8 +1,13 @@
 import { getSessionEntries, resolveSessionPath } from "@/lib/session-reader";
-import { MAX_TOOL_RESULT_IMAGE_BYTES, TOOL_RESULT_IMAGE_MIMES } from "@/lib/tool-result-images";
+import {
+  MAX_TOOL_RESULT_IMAGE_BYTES,
+  TOOL_RESULT_IMAGE_MIMES,
+} from "@/lib/tool-result-images";
 import { isRecord } from "@/lib/types";
 
-function readBase64Image(block: unknown): { data: string; mime: string } | null {
+function readBase64Image(
+  block: unknown,
+): { data: string; mime: string } | null {
   if (!isRecord(block) || block.type !== "image") return null;
 
   if (typeof block.data === "string" && typeof block.mimeType === "string") {
@@ -25,7 +30,7 @@ function decodeBoundedBase64(data: string): Uint8Array | null {
   // Reject malformed and obviously oversized payloads before allocating.
   if (
     data.length === 0 ||
-    data.length > Math.ceil(MAX_TOOL_RESULT_IMAGE_BYTES * 4 / 3) + 4 ||
+    data.length > Math.ceil((MAX_TOOL_RESULT_IMAGE_BYTES * 4) / 3) + 4 ||
     data.length % 4 !== 0 ||
     !/^[A-Za-z0-9+/]*={0,2}$/.test(data)
   ) {
@@ -33,7 +38,8 @@ function decodeBoundedBase64(data: string): Uint8Array | null {
   }
 
   const bytes = Buffer.from(data, "base64");
-  if (bytes.length === 0 || bytes.length > MAX_TOOL_RESULT_IMAGE_BYTES) return null;
+  if (bytes.length === 0 || bytes.length > MAX_TOOL_RESULT_IMAGE_BYTES)
+    return null;
   return new Uint8Array(bytes);
 }
 
@@ -43,28 +49,50 @@ export async function GET(
 ) {
   const { id, entryId } = await params;
   const blockIndexParam = new URL(req.url).searchParams.get("blockIndex");
-  const blockIndex = blockIndexParam === null ? Number.NaN : Number(blockIndexParam);
+  const blockIndex =
+    blockIndexParam === null ? Number.NaN : Number(blockIndexParam);
   if (!Number.isSafeInteger(blockIndex) || blockIndex < 0) {
-    return Response.json({ error: "Valid blockIndex is required" }, { status: 400 });
+    return Response.json(
+      { error: "Valid blockIndex is required" },
+      { status: 400 },
+    );
   }
 
   try {
     const filePath = await resolveSessionPath(id);
-    if (!filePath) return Response.json({ error: "Session not found" }, { status: 404 });
+    if (!filePath)
+      return Response.json({ error: "Session not found" }, { status: 404 });
 
-    const entry = getSessionEntries(filePath).find((candidate) => candidate.id === entryId);
-    if (!entry || entry.type !== "message" || entry.message.role !== "toolResult") {
+    const entry = getSessionEntries(filePath).find(
+      (candidate) => candidate.id === entryId,
+    );
+    if (
+      !entry ||
+      entry.type !== "message" ||
+      entry.message.role !== "toolResult"
+    ) {
       return Response.json({ error: "Tool result not found" }, { status: 404 });
     }
 
     const image = readBase64Image(entry.message.content[blockIndex]);
-    if (!image) return Response.json({ error: "Tool result image not found" }, { status: 404 });
+    if (!image)
+      return Response.json(
+        { error: "Tool result image not found" },
+        { status: 404 },
+      );
     if (!TOOL_RESULT_IMAGE_MIMES.has(image.mime)) {
-      return Response.json({ error: "Unsupported image type" }, { status: 415 });
+      return Response.json(
+        { error: "Unsupported image type" },
+        { status: 415 },
+      );
     }
 
     const bytes = decodeBoundedBase64(image.data);
-    if (!bytes) return Response.json({ error: "Invalid or oversized image data" }, { status: 413 });
+    if (!bytes)
+      return Response.json(
+        { error: "Invalid or oversized image data" },
+        { status: 413 },
+      );
 
     const body = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(body).set(bytes);

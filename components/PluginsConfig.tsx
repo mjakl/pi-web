@@ -47,21 +47,49 @@ function packageKey(pkg: Pick<PluginPackageInfo, "source" | "scope">): string {
   return `${pkg.scope}\0${pkg.source}`;
 }
 
-function resourceSummary(pkg: PluginPackageInfo, t: ReturnType<typeof useI18n>["t"]): string {
+function resourceSummary(
+  pkg: PluginPackageInfo,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
   if (pkg.disabled) return t("i18n.disabled");
   const parts = [
-    pkg.counts.extensions ? t("i18n.resourceCount", { count: pkg.counts.extensions, label: t("i18n.extensionShort") }) : "",
-    pkg.counts.skills ? t("i18n.resourceCount", { count: pkg.counts.skills, label: t("i18n.skillShort") }) : "",
-    pkg.counts.prompts ? t("i18n.resourceCount", { count: pkg.counts.prompts, label: t("i18n.promptShort") }) : "",
-    pkg.counts.themes ? t("i18n.resourceCount", { count: pkg.counts.themes, label: t("i18n.themeShort") }) : "",
+    pkg.counts.extensions
+      ? t("i18n.resourceCount", {
+          count: pkg.counts.extensions,
+          label: t("i18n.extensionShort"),
+        })
+      : "",
+    pkg.counts.skills
+      ? t("i18n.resourceCount", {
+          count: pkg.counts.skills,
+          label: t("i18n.skillShort"),
+        })
+      : "",
+    pkg.counts.prompts
+      ? t("i18n.resourceCount", {
+          count: pkg.counts.prompts,
+          label: t("i18n.promptShort"),
+        })
+      : "",
+    pkg.counts.themes
+      ? t("i18n.resourceCount", {
+          count: pkg.counts.themes,
+          label: t("i18n.themeShort"),
+        })
+      : "",
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : t("i18n.noResources");
 }
 
-function versionSummary(pkg: PluginPackageInfo, t: ReturnType<typeof useI18n>["t"]): string {
+function versionSummary(
+  pkg: PluginPackageInfo,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
   const parts = [];
-  if (pkg.version) parts.push(t("i18n.installedVersion", { version: pkg.version }));
-  if (pkg.configuredVersion) parts.push(t("i18n.configuredVersion", { version: pkg.configuredVersion }));
+  if (pkg.version)
+    parts.push(t("i18n.installedVersion", { version: pkg.version }));
+  if (pkg.configuredVersion)
+    parts.push(t("i18n.configuredVersion", { version: pkg.configuredVersion }));
   return parts.length ? parts.join(" · ") : t("i18n.unknown");
 }
 
@@ -77,10 +105,16 @@ function findInstalledPackage(
   scope: PluginScope,
 ): PluginPackageInfo | undefined {
   const trimmed = source.trim();
-  const withoutNpmPrefix = trimmed.startsWith("npm:") ? trimmed.slice(4) : trimmed;
-  return packages.find((pkg) => pkg.scope === scope && pkg.source === trimmed)
-    ?? packages.find((pkg) => pkg.scope === scope && pkg.source === `npm:${withoutNpmPrefix}`)
-    ?? packages.find((pkg) => pkg.scope === scope && pkg.source.endsWith(trimmed));
+  const withoutNpmPrefix = trimmed.startsWith("npm:")
+    ? trimmed.slice(4)
+    : trimmed;
+  return (
+    packages.find((pkg) => pkg.scope === scope && pkg.source === trimmed) ??
+    packages.find(
+      (pkg) => pkg.scope === scope && pkg.source === `npm:${withoutNpmPrefix}`,
+    ) ??
+    packages.find((pkg) => pkg.scope === scope && pkg.source.endsWith(trimmed))
+  );
 }
 
 function statusColor(status: PluginPackageInfo["status"]): string {
@@ -92,12 +126,14 @@ function statusColor(status: PluginPackageInfo["status"]): string {
 
 function ResourceList({ pkg }: { pkg: PluginPackageInfo }) {
   const { t } = useI18n();
-  const groups = ([
-    ["extension", t("i18n.extensions")],
-    ["skill", t("i18n.skills")],
-    ["prompt", t("i18n.prompts")],
-    ["theme", t("i18n.themes")],
-  ] as const)
+  const groups = (
+    [
+      ["extension", t("i18n.extensions")],
+      ["skill", t("i18n.skills")],
+      ["prompt", t("i18n.prompts")],
+      ["theme", t("i18n.themes")],
+    ] as const
+  )
     .map(([kind, label]) => ({
       kind,
       label,
@@ -108,7 +144,9 @@ function ResourceList({ pkg }: { pkg: PluginPackageInfo }) {
   if (groups.length === 0) {
     return (
       <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
-        {pkg.disabled ? t("i18n.packageDisabled") : t("i18n.noResolvedResources")}
+        {pkg.disabled
+          ? t("i18n.packageDisabled")
+          : t("i18n.noResolvedResources")}
       </div>
     );
   }
@@ -142,7 +180,10 @@ function ResourceList({ pkg }: { pkg: PluginPackageInfo }) {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {group.resources.map((resource) => (
-              <div key={`${resource.kind}:${resource.path}`} style={{ minWidth: 0 }}>
+              <div
+                key={`${resource.kind}:${resource.path}`}
+                style={{ minWidth: 0 }}
+              >
                 <div
                   style={{
                     fontSize: 12,
@@ -187,8 +228,12 @@ function ScopeTag({ scope }: { scope: PluginScope }) {
         padding: "1px 5px",
         borderRadius: 3,
         flexShrink: 0,
-        background: scope === "project" ? "rgba(99,102,241,0.12)" : "rgba(120,120,120,0.12)",
-        color: scope === "project" ? "rgba(99,102,241,0.85)" : "var(--text-dim)",
+        background:
+          scope === "project"
+            ? "rgba(99,102,241,0.12)"
+            : "rgba(120,120,120,0.12)",
+        color:
+          scope === "project" ? "rgba(99,102,241,0.85)" : "var(--text-dim)",
       }}
     >
       {scope}
@@ -219,7 +264,11 @@ function AddPluginPanel({
 }) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
-  const examples = ["npm:@scope/pi-plugin", "git:https://github.com/user/repo", "/absolute/path/to/plugin"];
+  const examples = [
+    "npm:@scope/pi-plugin",
+    "git:https://github.com/user/repo",
+    "/absolute/path/to/plugin",
+  ];
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -228,7 +277,15 @@ function AddPluginPanel({
   return (
     <ConfigDetailStack className="is-fill">
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
           <ConfigDetailTitle>{t("i18n.addPlugin")}</ConfigDetailTitle>
           <a
             href="https://pi.dev/packages"
@@ -244,7 +301,14 @@ function AddPluginPanel({
               whiteSpace: "nowrap",
             }}
           >
-            <svg width="28" height="28" viewBox="0 0 800 800" aria-hidden="true" focusable="false" style={{ flexShrink: 0 }}>
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 800 800"
+              aria-hidden="true"
+              focusable="false"
+              style={{ flexShrink: 0 }}
+            >
               <path
                 fill="#000"
                 fillRule="evenodd"
@@ -255,7 +319,13 @@ function AddPluginPanel({
             pi.dev/packages
           </a>
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
+        <div
+          style={{
+            fontSize: 12,
+            color: "var(--text-dim)",
+            fontFamily: "var(--font-mono)",
+          }}
+        >
           {installLocation(scope, cwd)}
         </div>
       </div>
@@ -273,7 +343,9 @@ function AddPluginPanel({
             e.preventDefault();
             onSourceChange(normalized);
           }}
-          onBlur={(e) => onSourceChange(normalizePluginSourceInput(e.currentTarget.value))}
+          onBlur={(e) =>
+            onSourceChange(normalizePluginSourceInput(e.currentTarget.value))
+          }
           placeholder="npm:@scope/package"
           style={{
             width: "100%",
@@ -293,7 +365,14 @@ function AddPluginPanel({
         />
       </ConfigField>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          flexWrap: "wrap",
+        }}
+      >
         <ConfigScopePicker
           value={scope}
           projectEnabled={projectResourcesLoaded}
@@ -310,7 +389,9 @@ function AddPluginPanel({
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>
+        <div
+          style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}
+        >
           Examples
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -348,7 +429,13 @@ function AddPluginPanel({
       </div>
 
       {actionError && (
-        <div style={{ fontSize: 12, color: "var(--danger)", whiteSpace: "pre-wrap" }}>
+        <div
+          style={{
+            fontSize: 12,
+            color: "var(--danger)",
+            whiteSpace: "pre-wrap",
+          }}
+        >
           {actionError}
         </div>
       )}
@@ -398,18 +485,20 @@ function PackageDetail({
             >
               {t("i18n.disabled")}
             </span>
-          ) : pkg.filtered && (
-            <span
-              style={{
-                fontSize: 10,
-                padding: "1px 5px",
-                borderRadius: 3,
-                background: "rgba(245,158,11,0.12)",
-                color: "var(--warning)",
-              }}
-            >
-              {t("i18n.filtered")}
-            </span>
+          ) : (
+            pkg.filtered && (
+              <span
+                style={{
+                  fontSize: 10,
+                  padding: "1px 5px",
+                  borderRadius: 3,
+                  background: "rgba(245,158,11,0.12)",
+                  color: "var(--warning)",
+                }}
+              >
+                {t("i18n.filtered")}
+              </span>
+            )
           )}
           <span
             style={{
@@ -431,15 +520,21 @@ function PackageDetail({
             onClick={() => onAction("update", pkg)}
             disabled={busy || reloadBusy}
           >
-             {busyKey === `update:${key}` ? t("i18n.updating") : t("i18n.update")}
+            {busyKey === `update:${key}`
+              ? t("i18n.updating")
+              : t("i18n.update")}
           </ConfigButton>
           <ConfigButton
             size="small"
             onClick={onReloadSession}
             disabled={!sessionId || reloadBusy || busy}
-             title={sessionId ? t("i18n.reloadSession") : t("i18n.openSessionToReload")}
+            title={
+              sessionId
+                ? t("i18n.reloadSession")
+                : t("i18n.openSessionToReload")
+            }
           >
-             {reloadBusy ? t("i18n.reloading") : t("i18n.reloadSession")}
+            {reloadBusy ? t("i18n.reloading") : t("i18n.reloadSession")}
           </ConfigButton>
           <ConfigButton
             variant="danger"
@@ -447,13 +542,17 @@ function PackageDetail({
             onClick={() => onAction("remove", pkg)}
             disabled={busy || reloadBusy}
           >
-             {busyKey === `remove:${key}` ? t("i18n.removing") : t("i18n.remove")}
+            {busyKey === `remove:${key}`
+              ? t("i18n.removing")
+              : t("i18n.remove")}
           </ConfigButton>
           <ConfigSwitch
             checked={enabled}
             loading={busy || reloadBusy}
             onChange={() => onAction(pkg.disabled ? "enable" : "disable", pkg)}
-            label={pkg.disabled ? t("i18n.enablePackage") : t("i18n.disablePackage")}
+            label={
+              pkg.disabled ? t("i18n.enablePackage") : t("i18n.disablePackage")
+            }
           />
         </ConfigDetailActions>
       </ConfigDetailHeader>
@@ -468,16 +567,37 @@ function PackageDetail({
         }}
       >
         <div style={{ color: "var(--text-dim)" }}>{t("i18n.status")}</div>
-        <div style={{ color: statusColor(pkg.status), textTransform: "capitalize" }}>{pkg.status}</div>
+        <div
+          style={{
+            color: statusColor(pkg.status),
+            textTransform: "capitalize",
+          }}
+        >
+          {pkg.status}
+        </div>
         <div style={{ color: "var(--text-dim)" }}>{t("i18n.version")}</div>
-         <div style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{versionSummary(pkg, t)}</div>
+        <div
+          style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}
+        >
+          {versionSummary(pkg, t)}
+        </div>
         <div style={{ color: "var(--text-dim)" }}>{t("i18n.package")}</div>
-        <div style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", overflowWrap: "anywhere" }}>
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontFamily: "var(--font-mono)",
+            overflowWrap: "anywhere",
+          }}
+        >
           {pkg.packageName ?? t("i18n.unknown")}
         </div>
         <div style={{ color: "var(--text-dim)" }}>{t("i18n.resources")}</div>
-         <div style={{ color: "var(--text-muted)" }}>{resourceSummary(pkg, t)}</div>
-        <div style={{ color: "var(--text-dim)" }}>{t("i18n.installedPath")}</div>
+        <div style={{ color: "var(--text-muted)" }}>
+          {resourceSummary(pkg, t)}
+        </div>
+        <div style={{ color: "var(--text-dim)" }}>
+          {t("i18n.installedPath")}
+        </div>
         <div
           style={{
             color: pkg.installedPath ? "var(--text-muted)" : "var(--danger)",
@@ -485,10 +605,18 @@ function PackageDetail({
             overflowWrap: "anywhere",
           }}
         >
-          {pkg.installedPath ? shortenPath(pkg.installedPath) : t("i18n.notFound")}
+          {pkg.installedPath
+            ? shortenPath(pkg.installedPath)
+            : t("i18n.notFound")}
         </div>
         <div style={{ color: "var(--text-dim)" }}>{t("i18n.cwd")}</div>
-        <div style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", overflowWrap: "anywhere" }}>
+        <div
+          style={{
+            color: "var(--text-dim)",
+            fontFamily: "var(--font-mono)",
+            overflowWrap: "anywhere",
+          }}
+        >
           {shortenPath(cwd)}
         </div>
       </div>
@@ -504,7 +632,13 @@ function PackageDetail({
         </div>
       )}
       {actionError && (
-        <div style={{ fontSize: 12, color: "var(--danger)", whiteSpace: "pre-wrap" }}>
+        <div
+          style={{
+            fontSize: 12,
+            color: "var(--danger)",
+            whiteSpace: "pre-wrap",
+          }}
+        >
           {actionError}
         </div>
       )}
@@ -525,7 +659,9 @@ export function PluginsConfig({
   const [data, setData] = useState<PluginsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(() => getLastSettingsSelection("plugins", cwd));
+  const [selected, setSelected] = useState<string | null>(() =>
+    getLastSettingsSelection("plugins", cwd),
+  );
   const [addMode, setAddMode] = useState(false);
   const [installSource, setInstallSource] = useState("");
   const [installScope, setInstallScope] = useState<PluginScope>("global");
@@ -534,12 +670,16 @@ export function PluginsConfig({
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const packages = useMemo(() => data?.packages ?? [], [data?.packages]);
-  const selectedPackage = packages.find((pkg) => packageKey(pkg) === selected) ?? null;
+  const selectedPackage =
+    packages.find((pkg) => packageKey(pkg) === selected) ?? null;
   const projectResourcesLoaded = data?.projectResourcesLoaded ?? true;
 
   const groupedPackages = useMemo(() => {
     return (["project", "global"] as PluginScope[])
-      .map((scope) => ({ scope, packages: packages.filter((pkg) => pkg.scope === scope) }))
+      .map((scope) => ({
+        scope,
+        packages: packages.filter((pkg) => pkg.scope === scope),
+      }))
       .filter((group) => group.packages.length > 0);
   }, [packages]);
 
@@ -549,11 +689,13 @@ export function PluginsConfig({
     try {
       const res = await fetch(`/api/plugins?cwd=${encodeURIComponent(cwd)}`);
       const next = (await res.json()) as PluginsResponse & { error?: string };
-      if (!res.ok || next.error) throw new Error(next.error ?? `HTTP ${res.status}`);
+      if (!res.ok || next.error)
+        throw new Error(next.error ?? `HTTP ${res.status}`);
       setData(next);
       setAddMode((current) => next.packages.length === 0 || current);
       setSelected((current) => {
-        if (current && next.packages.some((pkg) => packageKey(pkg) === current)) return current;
+        if (current && next.packages.some((pkg) => packageKey(pkg) === current))
+          return current;
         return next.packages[0] ? packageKey(next.packages[0]) : null;
       });
     } catch (err) {
@@ -571,39 +713,48 @@ export function PluginsConfig({
     if (selected) setLastSettingsSelection("plugins", selected, cwd);
   }, [cwd, selected]);
 
-  const runAction = useCallback(async (action: PluginAction, pkg: PluginPackageInfo) => {
-    const key = packageKey(pkg);
-    setBusyKey(`${action}:${key}`);
-    setActionError(null);
-    setActionMessage(null);
-    try {
-      const res = await fetch("/api/plugins", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, source: pkg.source, scope: pkg.scope, cwd }),
-      });
-      const next = (await res.json()) as PluginsResponse & { error?: string };
-      if (!res.ok || next.error) throw new Error(next.error ?? `HTTP ${res.status}`);
-      setData(next);
-      if (action === "remove") {
-        setSelected(next.packages[0] ? packageKey(next.packages[0]) : null);
-        if (next.packages.length === 0) setAddMode(true);
-        setActionMessage(t("i18n.packageRemoved"));
-      } else {
-        const messageKeys: Record<Exclude<PluginAction, "remove">, string> = {
-          install: "i18n.packageInstalled",
-          update: "i18n.packageUpdated",
-          disable: "i18n.packageDisabled",
-          enable: "i18n.packageEnabled",
-        };
-        setActionMessage(t(messageKeys[action]));
+  const runAction = useCallback(
+    async (action: PluginAction, pkg: PluginPackageInfo) => {
+      const key = packageKey(pkg);
+      setBusyKey(`${action}:${key}`);
+      setActionError(null);
+      setActionMessage(null);
+      try {
+        const res = await fetch("/api/plugins", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action,
+            source: pkg.source,
+            scope: pkg.scope,
+            cwd,
+          }),
+        });
+        const next = (await res.json()) as PluginsResponse & { error?: string };
+        if (!res.ok || next.error)
+          throw new Error(next.error ?? `HTTP ${res.status}`);
+        setData(next);
+        if (action === "remove") {
+          setSelected(next.packages[0] ? packageKey(next.packages[0]) : null);
+          if (next.packages.length === 0) setAddMode(true);
+          setActionMessage(t("i18n.packageRemoved"));
+        } else {
+          const messageKeys: Record<Exclude<PluginAction, "remove">, string> = {
+            install: "i18n.packageInstalled",
+            update: "i18n.packageUpdated",
+            disable: "i18n.packageDisabled",
+            enable: "i18n.packageEnabled",
+          };
+          setActionMessage(t(messageKeys[action]));
+        }
+      } catch (err) {
+        setActionError(errorMessage(err));
+      } finally {
+        setBusyKey(null);
       }
-    } catch (err) {
-      setActionError(errorMessage(err));
-    } finally {
-      setBusyKey(null);
-    }
-  }, [cwd, t]);
+    },
+    [cwd, t],
+  );
 
   const installPlugin = useCallback(async () => {
     const source = normalizePluginSourceInput(installSource).trim();
@@ -617,12 +768,22 @@ export function PluginsConfig({
       const res = await fetch("/api/plugins", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "install", source, scope: installScope, cwd }),
+        body: JSON.stringify({
+          action: "install",
+          source,
+          scope: installScope,
+          cwd,
+        }),
       });
       const next = (await res.json()) as PluginsResponse & { error?: string };
-      if (!res.ok || next.error) throw new Error(next.error ?? `HTTP ${res.status}`);
+      if (!res.ok || next.error)
+        throw new Error(next.error ?? `HTTP ${res.status}`);
       setData(next);
-      const installed = findInstalledPackage(next.packages, source, installScope);
+      const installed = findInstalledPackage(
+        next.packages,
+        source,
+        installScope,
+      );
       setSelected(installed ? packageKey(installed) : key);
       setAddMode(false);
       setInstallSource("");
@@ -655,74 +816,74 @@ export function PluginsConfig({
 
   return (
     <ConfigPanelShell>
+      {!projectResourcesLoaded && (
+        <div role="status" className="config-trust-notice">
+          {t("trust.pluginsNotLoaded")}
+        </div>
+      )}
 
-        {!projectResourcesLoaded && (
-          <div role="status" className="config-trust-notice">
-            {t("trust.pluginsNotLoaded")}
-          </div>
-        )}
-
-        <ConfigSplitView>
-          <ConfigSidebar>
-            <ConfigSidebarList>
-              {loading ? (
-                <div className="config-sidebar-message">
-                  {t("i18n.loading")}
-                </div>
-              ) : error ? (
-                <div className="config-sidebar-message is-error">
-                  {error}
-                </div>
-              ) : packages.length === 0 ? (
-                <div className="config-sidebar-message is-empty">
-                  {t("i18n.noPluginsConfigured")}
-                </div>
-              ) : (
-                groupedPackages.map((group) => (
-                  <div key={group.scope} className="config-sidebar-group">
-                    <ConfigSidebarGroupLabel>
-                      {group.scope}
-                    </ConfigSidebarGroupLabel>
-                    {group.packages.map((pkg) => {
-                      const key = packageKey(pkg);
-                      const isSelected = !addMode && selected === key;
-                      return (
-                        <ConfigSidebarItem
-                          key={key}
-                          active={isSelected}
-                          onClick={() => {
-                            setSelected(key);
-                            setAddMode(false);
-                            setActionError(null);
-                            setActionMessage(null);
-                          }}
+      <ConfigSplitView>
+        <ConfigSidebar>
+          <ConfigSidebarList>
+            {loading ? (
+              <div className="config-sidebar-message">{t("i18n.loading")}</div>
+            ) : error ? (
+              <div className="config-sidebar-message is-error">{error}</div>
+            ) : packages.length === 0 ? (
+              <div className="config-sidebar-message is-empty">
+                {t("i18n.noPluginsConfigured")}
+              </div>
+            ) : (
+              groupedPackages.map((group) => (
+                <div key={group.scope} className="config-sidebar-group">
+                  <ConfigSidebarGroupLabel>
+                    {group.scope}
+                  </ConfigSidebarGroupLabel>
+                  {group.packages.map((pkg) => {
+                    const key = packageKey(pkg);
+                    const isSelected = !addMode && selected === key;
+                    return (
+                      <ConfigSidebarItem
+                        key={key}
+                        active={isSelected}
+                        onClick={() => {
+                          setSelected(key);
+                          setAddMode(false);
+                          setActionError(null);
+                          setActionMessage(null);
+                        }}
+                      >
+                        <ConfigStatusDot
+                          active={!pkg.disabled}
+                          color={statusColor(pkg.status)}
+                        />
+                        <ConfigSidebarText
+                          className={`is-grow${pkg.disabled ? " is-muted" : ""}`}
                         >
-                          <ConfigStatusDot active={!pkg.disabled} color={statusColor(pkg.status)} />
-                          <ConfigSidebarText className={`is-grow${pkg.disabled ? " is-muted" : ""}`}>
-                            {pkg.source}
-                          </ConfigSidebarText>
-                        </ConfigSidebarItem>
-                      );
-                    })}
-                  </div>
-                ))
-              )}
-            </ConfigSidebarList>
-            <ConfigListAction
-                active={addMode}
-                onClick={() => {
-                  setAddMode(true);
-                  setActionError(null);
-                  setActionMessage(null);
-                }}
-              >
-                 {t("i18n.addPlugin")}
-            </ConfigListAction>
-          </ConfigSidebar>
+                          {pkg.source}
+                        </ConfigSidebarText>
+                      </ConfigSidebarItem>
+                    );
+                  })}
+                </div>
+              ))
+            )}
+          </ConfigSidebarList>
+          <ConfigListAction
+            active={addMode}
+            onClick={() => {
+              setAddMode(true);
+              setActionError(null);
+              setActionMessage(null);
+            }}
+          >
+            {t("i18n.addPlugin")}
+          </ConfigListAction>
+        </ConfigSidebar>
 
-          <ConfigDetail>
-            <ConfigDetailStack className="is-fill">
-              {addMode ? (
+        <ConfigDetail>
+          <ConfigDetailStack className="is-fill">
+            {addMode ? (
               <AddPluginPanel
                 cwd={cwd}
                 source={installSource}
@@ -746,31 +907,49 @@ export function PluginsConfig({
                 onAction={runAction}
                 onReloadSession={reloadSession}
               />
-              ) : (
-                <ConfigEmptyState>{t("i18n.selectPackage")}</ConfigEmptyState>
-              )}
-            </ConfigDetailStack>
-          </ConfigDetail>
-        </ConfigSplitView>
-
-        <ConfigFooter status={
-            data?.diagnostics.length ? (
-              <span
-                title={data.diagnostics.map((d) => `${d.type}: ${d.source ? `${d.source}: ` : ""}${d.message}`).join("\n")}
-                style={{ color: data.diagnostics.some((d) => d.type === "error") ? "var(--danger)" : "var(--warning)" }}
-              >
-                {data.diagnostics.length} diagnostic{data.diagnostics.length === 1 ? "" : "s"}
-              </span>
             ) : (
-              <span>
-                {data ? `${data.totals.extensions} ext · ${data.totals.skills} skills · ${data.totals.prompts} prompts · ${data.totals.themes} themes` : ""}
-              </span>
+              <ConfigEmptyState>{t("i18n.selectPackage")}</ConfigEmptyState>
             )}
+          </ConfigDetailStack>
+        </ConfigDetail>
+      </ConfigSplitView>
+
+      <ConfigFooter
+        status={
+          data?.diagnostics.length ? (
+            <span
+              title={data.diagnostics
+                .map(
+                  (d) =>
+                    `${d.type}: ${d.source ? `${d.source}: ` : ""}${d.message}`,
+                )
+                .join("\n")}
+              style={{
+                color: data.diagnostics.some((d) => d.type === "error")
+                  ? "var(--danger)"
+                  : "var(--warning)",
+              }}
+            >
+              {data.diagnostics.length} diagnostic
+              {data.diagnostics.length === 1 ? "" : "s"}
+            </span>
+          ) : (
+            <span>
+              {data
+                ? `${data.totals.extensions} ext · ${data.totals.skills} skills · ${data.totals.prompts} prompts · ${data.totals.themes} themes`
+                : ""}
+            </span>
+          )
+        }
+      >
+        <ConfigButton
+          variant="secondary"
+          onClick={() => void loadPlugins()}
+          disabled={loading || busyKey !== null}
         >
-          <ConfigButton variant="secondary" onClick={() => void loadPlugins()} disabled={loading || busyKey !== null}>
-             {t("i18n.refresh")}
-          </ConfigButton>
-        </ConfigFooter>
+          {t("i18n.refresh")}
+        </ConfigButton>
+      </ConfigFooter>
     </ConfigPanelShell>
   );
 }

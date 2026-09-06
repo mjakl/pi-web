@@ -5,7 +5,10 @@ import type { ContextUsage } from "../pi-types";
 export type TranslationParams = Record<string, string | number>;
 
 /** Replaces simple interpolation placeholders in an English UI message. */
-export function interpolateMessage(message: string, params: TranslationParams = {}): string {
+export function interpolateMessage(
+  message: string,
+  params: TranslationParams = {},
+): string {
   return message.replace(/\{([\w.-]+)\}/g, (token, name: string) => {
     const value = params[name];
     return value === undefined ? token : String(value);
@@ -13,10 +16,14 @@ export function interpolateMessage(message: string, params: TranslationParams = 
 }
 
 /** Resolves and interpolates an English UI message, or returns its key. */
-export function translateMessage(key: string, params: TranslationParams = {}): string {
+export function translateMessage(
+  key: string,
+  params: TranslationParams = {},
+): string {
   const message = enMessages[key];
   if (message === undefined) {
-    if (process.env.NODE_ENV !== "production") console.warn(`[i18n] Missing translation: ${key}`);
+    if (process.env.NODE_ENV !== "production")
+      console.warn(`[i18n] Missing translation: ${key}`);
     return key;
   }
   return interpolateMessage(message, params);
@@ -33,9 +40,14 @@ export function formatCompactCount(value: number): string {
 }
 
 /** Current context usage, distinct from cumulative session token totals. */
-export function formatContextUsage(usage: ContextUsage | null | undefined): { summary: string; size: string; percent: string } | null {
+export function formatContextUsage(
+  usage: ContextUsage | null | undefined,
+): { summary: string; size: string; percent: string } | null {
   if (!usage?.contextWindow) return null;
-  const percent = usage.percent === null ? "?" : `${usage.percent.toLocaleString("en", { maximumFractionDigits: 1 })}%`;
+  const percent =
+    usage.percent === null
+      ? "?"
+      : `${usage.percent.toLocaleString("en", { maximumFractionDigits: 1 })}%`;
   return {
     summary: translateMessage("session.contextSummary", {
       used: usage.tokens === null ? "?" : formatCompactCount(usage.tokens),
@@ -53,9 +65,10 @@ export function formatContextUsage(usage: ContextUsage | null | undefined): { su
 /** Formats a message timestamp in English with a 24-hour clock. */
 export function formatTimestamp(timestamp: number, now = new Date()): string {
   const date = new Date(timestamp);
-  const isToday = date.getFullYear() === now.getFullYear()
-    && date.getMonth() === now.getMonth()
-    && date.getDate() === now.getDate();
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
   const time = date.toLocaleTimeString("en", {
     hour: "2-digit",
     minute: "2-digit",
@@ -71,19 +84,26 @@ export function formatTimestamp(timestamp: number, now = new Date()): string {
 }
 
 /** Formats a relative timestamp in English. */
-export function formatRelativeTime(date: Date | string, now = new Date()): string {
+export function formatRelativeTime(
+  date: Date | string,
+  now = new Date(),
+): string {
   const target = date instanceof Date ? date : new Date(date);
   const diffMs = target.getTime() - now.getTime();
   const absMs = Math.abs(diffMs);
-  const [unit, divisor] = absMs < 60_000
-    ? ["second", 1_000]
-    : absMs < 3_600_000
-      ? ["minute", 60_000]
-      : absMs < 86_400_000
-        ? ["hour", 3_600_000]
-        : ["day", 86_400_000];
+  const [unit, divisor] =
+    absMs < 60_000
+      ? ["second", 1_000]
+      : absMs < 3_600_000
+        ? ["minute", 60_000]
+        : absMs < 86_400_000
+          ? ["hour", 3_600_000]
+          : ["day", 86_400_000];
   const value = Math.round(diffMs / divisor);
-  return new Intl.RelativeTimeFormat("en", { numeric: "always" }).format(value, unit as Intl.RelativeTimeFormatUnit);
+  return new Intl.RelativeTimeFormat("en", { numeric: "always" }).format(
+    value,
+    unit as Intl.RelativeTimeFormatUnit,
+  );
 }
 
 /** Compact elapsed time for tool calls, expressed in whole seconds. */

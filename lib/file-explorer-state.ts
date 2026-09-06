@@ -2,7 +2,9 @@ import { getBrowserStorage, type StorageLike } from "./browser-storage";
 
 const EXPLORER_OPEN_STORAGE_KEY = "pi-web:file-explorer:open";
 
-export function loadExplorerOpen(storage: StorageLike | null = getBrowserStorage()): boolean {
+export function loadExplorerOpen(
+  storage: StorageLike | null = getBrowserStorage(),
+): boolean {
   if (!storage) return true;
   try {
     return storage.getItem(EXPLORER_OPEN_STORAGE_KEY) !== "false";

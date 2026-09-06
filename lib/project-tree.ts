@@ -19,7 +19,8 @@ type ProjectableTreeNode<T> = {
 };
 
 function appendPreviewText(current: string, value: unknown): string {
-  if (typeof value !== "string" || current.length > MAX_BRANCH_PREVIEW_LENGTH) return current;
+  if (typeof value !== "string" || current.length > MAX_BRANCH_PREVIEW_LENGTH)
+    return current;
   const normalized = value.replace(/\s+/g, " ").trim();
   if (!normalized) return current;
   const separator = current ? " " : "";
@@ -32,7 +33,11 @@ function appendPreviewText(current: string, value: unknown): string {
 }
 
 function previewForEntry(entry: ProjectableEntry): BranchPreview | undefined {
-  if (entry.type !== "message" || !isRecord(entry.message) || typeof entry.message.role !== "string") {
+  if (
+    entry.type !== "message" ||
+    !isRecord(entry.message) ||
+    typeof entry.message.role !== "string"
+  ) {
     return undefined;
   }
 
@@ -60,9 +65,10 @@ function previewForEntry(entry: ProjectableEntry): BranchPreview | undefined {
         : "message";
   }
 
-  const role = entry.message.role === "user" || entry.message.role === "assistant"
-    ? entry.message.role
-    : undefined;
+  const role =
+    entry.message.role === "user" || entry.message.role === "assistant"
+      ? entry.message.role
+      : undefined;
   return { ...(role ? { role } : {}), text };
 }
 
@@ -73,7 +79,7 @@ function previewForEntry(entry: ProjectableEntry): BranchPreview | undefined {
  * visible node so the UI can still recognize an active leaf inside the chain.
  */
 export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
-  nodes: T[]
+  nodes: T[],
 ): T[] {
   const keep = new Set<T>();
   const roots = new Set(nodes);
@@ -85,10 +91,7 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
     if (seen.has(node)) continue;
     seen.add(node);
 
-    if (
-      roots.has(node) ||
-      node.children.length !== 1
-    ) {
+    if (roots.has(node) || node.children.length !== 1) {
       keep.add(node);
     }
 
@@ -97,13 +100,19 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
     }
   }
 
-  const cloneNode = (node: T, compressedEntryIds?: string[], branchPreview?: BranchPreview): T => ({
+  const cloneNode = (
+    node: T,
+    compressedEntryIds?: string[],
+    branchPreview?: BranchPreview,
+  ): T => ({
     ...node,
     children: [],
     ...(compressedEntryIds?.length ? { compressedEntryIds } : {}),
     ...(branchPreview ? { branchPreview } : {}),
   });
-  const projectedRoots = nodes.map((node) => cloneNode(node, undefined, previewForEntry(node.entry)));
+  const projectedRoots = nodes.map((node) =>
+    cloneNode(node, undefined, previewForEntry(node.entry)),
+  );
   const tasks = nodes.map((source, index) => ({
     source,
     projected: projectedRoots[index],
@@ -111,11 +120,13 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
   }));
 
   const appendFlattenedKeptDescendants = (source: T, projectedParent: T) => {
-    const pending = [{
-      node: source,
-      compressedEntryIds: [] as string[],
-      branchPreview: undefined as BranchPreview | undefined,
-    }];
+    const pending = [
+      {
+        node: source,
+        compressedEntryIds: [] as string[],
+        branchPreview: undefined as BranchPreview | undefined,
+      },
+    ];
     const flattenedSeen = new Set<T>();
 
     while (pending.length > 0) {
@@ -125,7 +136,9 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
       const nextPreview = branchPreview ?? previewForEntry(node.entry);
 
       if (keep.has(node)) {
-        projectedParent.children.push(cloneNode(node, compressedEntryIds, nextPreview));
+        projectedParent.children.push(
+          cloneNode(node, compressedEntryIds, nextPreview),
+        );
       }
 
       for (let i = node.children.length - 1; i >= 0; i--) {
@@ -163,9 +176,17 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
         continue;
       }
 
-      const projectedChild = cloneNode(child, compressedEntryIds, branchPreview);
+      const projectedChild = cloneNode(
+        child,
+        compressedEntryIds,
+        branchPreview,
+      );
       projected.children.push(projectedChild);
-      tasks.push({ source: child, projected: projectedChild, depth: depth + 1 });
+      tasks.push({
+        source: child,
+        projected: projectedChild,
+        depth: depth + 1,
+      });
     }
   }
 
