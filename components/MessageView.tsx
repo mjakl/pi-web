@@ -111,10 +111,6 @@ function estimateUpdatedTokens(
 const MAX_THINKING_CACHE_ENTRIES = 100;
 const thinkingContentCache = new Map<string, Promise<string>>();
 
-// Cap the user "sent" bubble's height so an abnormally long message does not
-// push the conversation off screen; overflow scrolls inside the bubble.
-const USER_BUBBLE_MAX_HEIGHT = 300;
-
 function loadThinkingContent(
   sessionId: string,
   entryId: string,
@@ -470,14 +466,10 @@ function UserMessageView({
               lineHeight: 1.6,
               color: "var(--text)",
               wordBreak: "break-word",
-              maxHeight: USER_BUBBLE_MAX_HEIGHT,
-              overflow: "hidden",
             }}
           >
             <div
               style={{
-                minHeight: 0,
-                overflowY: "auto",
                 marginRight: 4,
                 padding: "0 8px 0 12px",
               }}
