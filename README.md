@@ -285,6 +285,18 @@ just test-one --test-name-pattern "first pi" bin/host-pi.test.mjs
 npm run test:one -- --test-name-pattern "first pi" bin/host-pi.test.mjs
 ```
 
+The unread-glow animation also has a standalone Chromium regression check. With
+`agent-browser` and its browser already installed, run:
+
+```bash
+npm run test:one -- scripts/session-glow.browser.test.mjs
+```
+
+It renders the real session indicator with the application stylesheet, checks
+the applied animation and reduced motion, then closes its browser and temporary
+loopback server. It runs separately from `just ci`, which does not require a
+browser.
+
 QA and CI are **non-mutating validation of source**, not zero-write commands.
 `npm ci` prepares host-package shims in `node_modules`; full and focused tests
 refresh them. TypeScript may write `tsconfig.tsbuildinfo`, and tests create
