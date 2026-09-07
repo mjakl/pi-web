@@ -1113,3 +1113,88 @@ for (const estimated of [false, true]) {
     }
   });
 }
+
+test("clearing sidebar stars refreshes the count and refreshes the transcript selected when the request completes", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const [initiallySelected, selectedAtCompletion] of [
+      [true, true],
+      [false, false],
+      [false, true],
+      [true, false],
+    ]) {
+      let session = { ...sidebarSession, starCount: 2 };
+      const refreshes = [];
+      const pendingClear = deferred();
+      let inventoryAttempt = 0;
+      globalThis.fetch = async (url, init) => {
+        if (
+          url === `/api/sessions/${session.id}/stars` &&
+          init?.method === "DELETE"
+        ) {
+          await pendingClear.promise;
+          session = { ...session, starCount: 0, fileSize: 200 };
+          return Response.json({ starredEntryIds: [], starCount: 0 });
+        }
+        if (url === "/api/sessions/metadata")
+          return Response.json({ metadata: [session] });
+        if (String(url).startsWith("/api/sessions"))
+          return Response.json({
+            sessions: [session],
+            activeSessionIds: [],
+            runningSessionIds: [],
+          });
+        return emptyInventoryResponse();
+      };
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      const render = (selected) =>
+        act(async () => {
+          root.render(
+            React.createElement(SessionSidebar, {
+              selectedSessionId: selected ? session.id : "another-session",
+              onSelectSession() {},
+              onRefreshSelectedSession: async () => {
+                refreshes.push(selected);
+                return true;
+              },
+              beginSessionInventoryAttempt: () => ++inventoryAttempt,
+              actionsAvailable: true,
+            }),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+      try {
+        await render(initiallySelected);
+        assert.equal(
+          container.querySelector(".session-star-count").textContent,
+          "2",
+        );
+        await click(
+          container.querySelector(".session-row button[aria-controls]"),
+        );
+        await click(
+          [...container.querySelectorAll('[role="group"] button')].find(
+            (button) => button.textContent === "Clear all stars",
+          ),
+        );
+        await render(selectedAtCompletion);
+        await act(async () => {
+          pendingClear.resolve();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        assert.equal(
+          Boolean(container.querySelector(".session-star-count")),
+          false,
+        );
+        assert.deepEqual(refreshes, selectedAtCompletion ? [true] : []);
+      } finally {
+        await act(() => root.unmount());
+        container.remove();
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

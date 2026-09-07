@@ -65,6 +65,14 @@ export function setSessionStar(
   return readSessionStars(manager.getEntries());
 }
 
+/** Clear stars across the entire session tree without changing its messages. */
+export function clearSessionStars(manager: SessionManager): string[] {
+  for (const targetId of readSessionStars(manager.getEntries())) {
+    manager.appendCustomEntry(SESSION_STAR_TYPE, { targetId, starred: false });
+  }
+  return [];
+}
+
 /** A copied branch may contain stale star records or omit later annotations. */
 export function copySessionStars(
   source: readonly unknown[],

@@ -32,3 +32,21 @@ export async function PATCH(
     return Response.json({ error: errorMessage(error) }, { status: 400 });
   }
 }
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const operation = beginRpcSessionOperation(id);
+  try {
+    const filePath = await resolveSessionPath(id);
+    if (!filePath)
+      return Response.json({ error: "Session not found" }, { status: 404 });
+    return Response.json(
+      await setRpcSessionStar(operation, filePath, null, false),
+    );
+  } catch (error) {
+    return Response.json({ error: errorMessage(error) }, { status: 400 });
+  }
+}

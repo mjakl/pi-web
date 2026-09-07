@@ -391,6 +391,14 @@ export function SessionSidebar({
   );
   const drainMetadataQueueRef = useRef<() => void>(() => {});
   const refreshSessionInventoryRef = useRef<() => void>(() => {});
+  const selectedSessionRefreshRef = useRef({
+    selectedSessionId,
+    onRefreshSelectedSession,
+  });
+  selectedSessionRefreshRef.current = {
+    selectedSessionId,
+    onRefreshSelectedSession,
+  };
   const allSessionsRef = useRef(allSessions);
   allSessionsRef.current = allSessions;
 
@@ -1118,6 +1126,18 @@ export function SessionSidebar({
     });
   }, []);
 
+  const handleStarsCleared = useCallback(
+    (id: string) => {
+      setError(null);
+      void loadSessions();
+      // A pending clear may finish after the user switches sessions.
+      const current = selectedSessionRefreshRef.current;
+      if (id === current.selectedSessionId)
+        void current.onRefreshSelectedSession?.();
+    },
+    [loadSessions],
+  );
+
   const handleSessionDeleted = useCallback(
     (id: string) => {
       onSessionDeleted?.(id);
@@ -1673,6 +1693,8 @@ export function SessionSidebar({
             onActivationFailed={setError}
             onStopped={handleSessionStopped}
             onDeleted={handleSessionDeleted}
+            onStarsCleared={handleStarsCleared}
+            onActionFailed={setError}
           />
         ))}
       </div>

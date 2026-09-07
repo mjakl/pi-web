@@ -1,4 +1,5 @@
 import {
+  clearSessionStars,
   copySessionStars,
   readSessionStars,
   setSessionStar,
@@ -465,10 +466,12 @@ export class AgentSessionWrapper {
     if (file) cacheSessionPath(this.inner.sessionId, file);
   }
 
-  setStar(targetId: string, starred: boolean): string[] {
+  setStar(targetId: string | null, starred: boolean): string[] {
     if (!this.isActive() || this.sessionReplacement)
       throw new Error("Session history is being changed");
-    return setSessionStar(this.inner.sessionManager, targetId, starred);
+    return targetId === null
+      ? clearSessionStars(this.inner.sessionManager)
+      : setSessionStar(this.inner.sessionManager, targetId, starred);
   }
 
   onEvent(listener: EventListener): () => void {
@@ -1503,11 +1506,11 @@ export async function sendRpcSessionCommand(
   return session.send(command);
 }
 
-/** Annotate without starting an agent; wait for any startup already reading this file. */
+/** Annotate without starting an agent; null clears all stars. Wait for in-flight startup. */
 export async function setRpcSessionStar(
   operation: RpcSessionOperation,
   filePath: string,
-  targetId: string,
+  targetId: string | null,
   starred: boolean,
 ) {
   await assertRpcSessionOperationCurrent(operation);
@@ -1518,7 +1521,9 @@ export async function setRpcSessionStar(
   const existing = getRpcSession(operation.sessionId);
   const starredEntryIds = existing?.isAlive()
     ? existing.setStar(targetId, starred)
-    : setSessionStar(SessionManager.open(filePath), targetId, starred);
+    : targetId === null
+      ? clearSessionStars(SessionManager.open(filePath))
+      : setSessionStar(SessionManager.open(filePath), targetId, starred);
   const stats = statSync(filePath);
   return {
     starredEntryIds,
