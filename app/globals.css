@@ -2843,7 +2843,7 @@ span.linenumber {
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg-panel);
+  background: var(--user-band-bg);
   color: var(--text);
   font-size: 13px;
   line-height: 1.5;
