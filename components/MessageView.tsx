@@ -573,6 +573,7 @@ function UserMessageView({
                   {imageBlocksNode}
                   {content && (
                     <SafeMarkdownBody
+                      fullHeight
                       className="markdown-user-message"
                       cwd={cwd}
                       onOpenFile={onOpenFile}
