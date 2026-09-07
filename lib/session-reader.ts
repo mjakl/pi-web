@@ -567,6 +567,8 @@ function getSessionSettings(
 }
 
 export interface BuildSessionContextOptions {
+  /** Explicitly view the empty branch before the first entry. */
+  root?: boolean;
   deferThinking?: boolean;
   deferToolResultImages?: boolean;
   tail?: number;
@@ -583,12 +585,9 @@ export function buildSessionContext(
   options: BuildSessionContextOptions = {},
 ): SessionContext {
   const { tail, excludeLeaf, throughEntryId } = options;
-  const branch = sliceActiveBranch(
-    entries,
-    leafId ?? null,
-    entries.length,
-    excludeLeaf,
-  );
+  const branch = options.root
+    ? []
+    : sliceActiveBranch(entries, leafId ?? null, entries.length, excludeLeaf);
   const throughIndex = throughEntryId
     ? branch.findIndex((entry) => entry.id === throughEntryId)
     : -1;
@@ -625,7 +624,7 @@ export function buildSessionContext(
   // Paged chat history must retain compacted turns, in transcript order.
   // The unpaged SDK context remains available to context consumers.
   const contextEntries =
-    tail || throughEntryId
+    tail || throughEntryId || options.root
       ? sliced
       : piBuildContextEntries(entries as unknown as PiSessionEntry[], leafId);
   const historyAnchors = excludeLeaf

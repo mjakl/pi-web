@@ -44,8 +44,12 @@ export async function GET(
     // only (excludeLeaf) so prepending the page does not duplicate `before`.
     const context = buildSessionContext(
       sm.getEntries() as never,
-      before ?? leafId,
+      before ?? leafId ?? sm.getLeafId(),
       {
+        root:
+          !before &&
+          (url.searchParams.has("root") ||
+            (leafId === undefined && sm.getLeafId() === null)),
         deferThinking,
         deferToolResultImages,
         tail,
