@@ -642,6 +642,10 @@ export function buildSessionContext(
         .map((entry) => ({
           id: entry.id,
           ...(stars.has(entry.id) ? { starred: true } : {}),
+          ...(entry.type === "compaction" ||
+          (entry.type === "custom_message" && entry.customType === "compaction")
+            ? { compaction: true }
+            : {}),
           timestamp:
             entry.type === "message"
               ? (entry.message.timestamp ??

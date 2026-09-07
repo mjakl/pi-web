@@ -89,6 +89,20 @@ export function ChatMinimap({
 }: Props) {
   const { t } = useI18n();
   const stars = useMemo(() => new Set(starredEntryIds), [starredEntryIds]);
+  const compactions = useMemo(
+    () =>
+      new Set([
+        ...(historyAnchors ?? [])
+          .filter((anchor) => anchor.compaction)
+          .map((anchor) => anchor.id),
+        ...messages.flatMap((message, index) =>
+          message.role === "custom" && message.customType === "compaction"
+            ? [entryIds[index] ?? `live:${index - entryIds.length}`]
+            : [],
+        ),
+      ]),
+    [historyAnchors, messages, entryIds],
+  );
   const [visible, setVisible] = useState(false);
   const [allNodes, setAllNodes] = useState<NodeInfo[]>([]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -479,7 +493,20 @@ export function ChatMinimap({
               zIndex: 2,
             }}
           >
-            {stars.has(node.id) ? (
+            {compactions.has(node.id) ? (
+              <div
+                role="separator"
+                aria-label={t("chat.compaction.divider")}
+                style={{
+                  width: 18,
+                  height: 2,
+                  borderRadius: 1,
+                  background: "var(--text-muted)",
+                  opacity: isActive || isNearest ? 1 : 0.6,
+                  boxShadow: "0 0 0 2px var(--bg-panel)",
+                }}
+              />
+            ) : stars.has(node.id) ? (
               <button
                 type="button"
                 className="minimap-star"

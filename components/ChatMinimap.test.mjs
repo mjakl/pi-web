@@ -351,3 +351,86 @@ test("outlined answer stars jump to answer refs without displacing prompt refs",
     container.remove();
   }
 });
+
+test("compactions render as neutral dividers for unloaded, loaded and live history", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scroll = document.createElement("div");
+  Object.defineProperty(scroll, "scrollHeight", { get: () => 2000 });
+  const loads = [];
+  const jumps = [];
+  scroll.scrollTo = (options) => jumps.push(options.top);
+  const scrollContainer = { current: scroll };
+  const messageRefs = { current: [] };
+  const render = async (loaded) => {
+    messageRefs.current = loaded
+      ? [300, 600, 900, 1200].map((top) => ({
+          getBoundingClientRect: () => rect(top),
+        }))
+      : [{ getBoundingClientRect: () => rect(900) }];
+    await React.act(() =>
+      root.render(
+        React.createElement(ChatMinimap, {
+          messages: loaded
+            ? [
+                { role: "user" },
+                { role: "custom", customType: "compaction" },
+                { role: "user" },
+                { role: "custom", customType: "compaction" },
+              ]
+            : [{ role: "user" }],
+          entryIds: loaded ? ["old", "compact", "recent"] : ["recent"],
+          historyAnchors: [
+            { id: "old" },
+            { id: "compact", compaction: true },
+            { id: "recent" },
+          ],
+          scrollContainer,
+          messageRefs,
+          onLoadThrough: async (id) => {
+            loads.push(id);
+            return false;
+          },
+        }),
+      ),
+    );
+    await settle();
+  };
+  const select = async (node) =>
+    React.act(() => {
+      container.querySelector(".chat-minimap").dispatchEvent(
+        new window.MouseEvent("mousedown", {
+          bubbles: true,
+          clientY: Number.parseFloat(node.style.top) * 6,
+        }),
+      );
+      window.dispatchEvent(new window.MouseEvent("mouseup"));
+    });
+  try {
+    await render(false);
+    const divider = container.querySelector('[role="separator"]');
+    assert.equal(divider.getAttribute("aria-label"), "Conversation compacted");
+    assert.equal(divider.style.background, "var(--text-muted)");
+    assert.ok(
+      Number.parseFloat(divider.style.width) >
+        Number.parseFloat(divider.style.height),
+    );
+    assert.equal(divider.parentElement.dataset.minimapEntryId, "compact");
+    await select(divider.parentElement);
+    assert.deepEqual(loads, ["compact"]);
+    await render(true);
+    assert.equal(container.querySelectorAll('[role="separator"]').length, 2);
+    await select(container.querySelector('[data-minimap-entry-id="compact"]'));
+    assert.equal(jumps.at(-1), 420);
+    await select(container.querySelector('[data-minimap-entry-id="recent"]'));
+    assert.equal(
+      jumps.at(-1),
+      720,
+      "compactions keep later prompt refs aligned",
+    );
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+  }
+});
