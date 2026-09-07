@@ -3,9 +3,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useTheme, type ThemePreference } from "@/hooks/useTheme";
-import { errorMessage } from "@/lib/error-message";
-import { sendAgentCommand } from "@/lib/agent-client";
-import type { ShellToolSettingsResponse } from "@/lib/api-types";
 import {
   setLastSettingsSection,
   type SettingsSection,
@@ -124,76 +121,21 @@ function ThemeIcon({ preference }: { preference: ThemePreference }) {
 }
 
 function GeneralSettings({
-  sessionId,
   soundEnabled,
   onSoundToggle,
   dumbZoneTokens,
   onDumbZoneTokensChange,
-  onSessionReloaded,
 }: Pick<
   Props,
-  | "sessionId"
-  | "soundEnabled"
-  | "onSoundToggle"
-  | "dumbZoneTokens"
-  | "onDumbZoneTokensChange"
-  | "onSessionReloaded"
+  "soundEnabled" | "onSoundToggle" | "dumbZoneTokens" | "onDumbZoneTokensChange"
 >) {
   const { t } = useI18n();
   const { preference, setThemePreference } = useTheme();
-  const [shellSettings, setShellSettings] =
-    useState<ShellToolSettingsResponse | null>(null);
-  const [shellSaving, setShellSaving] = useState(false);
-  const [shellError, setShellError] = useState<string | null>(null);
   const themeOptions: { id: ThemePreference; label: string }[] = [
     { id: "light", label: t("settings.themeLight") },
     { id: "dark", label: t("settings.themeDark") },
     { id: "auto", label: t("settings.themeSystem") },
   ];
-  useEffect(() => {
-    let cancelled = false;
-    void fetch("/api/tools/settings")
-      .then(async (response) => {
-        const data = (await response.json()) as ShellToolSettingsResponse & {
-          error?: string;
-        };
-        if (!response.ok || data.error)
-          throw new Error(data.error ?? `HTTP ${response.status}`);
-        if (!cancelled) setShellSettings(data);
-      })
-      .catch((cause: unknown) => {
-        if (!cancelled) setShellError(errorMessage(cause));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const togglePowerShell = async (enabled: boolean) => {
-    setShellSaving(true);
-    setShellError(null);
-    try {
-      const response = await fetch("/api/tools/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-      });
-      const data = (await response.json()) as ShellToolSettingsResponse & {
-        error?: string;
-      };
-      if (!response.ok || data.error)
-        throw new Error(data.error ?? `HTTP ${response.status}`);
-      setShellSettings(data);
-      if (sessionId) {
-        await sendAgentCommand(sessionId, { type: "reload" });
-        onSessionReloaded();
-      }
-    } catch (cause) {
-      setShellError(errorMessage(cause));
-    } finally {
-      setShellSaving(false);
-    }
-  };
 
   return (
     <div className="settings-general">
@@ -237,7 +179,7 @@ function GeneralSettings({
         <p className="settings-general-description">
           {t("settings.dumbZoneDescription")}
         </p>
-        <div className="settings-shell-option">
+        <div className="settings-general-option">
           <label htmlFor="dumb-zone-tokens">
             {t("settings.dumbZoneTokenThreshold")}
           </label>
@@ -264,7 +206,7 @@ function GeneralSettings({
         <p className="settings-general-description">
           {t("settings.completionSoundDescription")}
         </p>
-        <div className="settings-shell-option">
+        <div className="settings-general-option">
           <span>{t("settings.completionSound")}</span>
           <ConfigSwitch
             checked={soundEnabled}
@@ -273,31 +215,6 @@ function GeneralSettings({
           />
         </div>
       </section>
-
-      {shellSettings?.isWindows && (
-        <section className="settings-general-section">
-          <h3 className="settings-general-heading">
-            {t("settings.shellTool")}
-          </h3>
-          <p className="settings-general-description">
-            {t("settings.shellToolDescription")}
-          </p>
-          <div className="settings-shell-option">
-            <span>{t("settings.usePowerShell")}</span>
-            <ConfigSwitch
-              checked={shellSettings.powerShellEnabled}
-              loading={shellSaving}
-              label={t("settings.usePowerShell")}
-              onChange={(enabled) => void togglePowerShell(enabled)}
-            />
-          </div>
-          {shellError && (
-            <p role="alert" className="settings-general-error">
-              {shellError}
-            </p>
-          )}
-        </section>
-      )}
     </div>
   );
 }
@@ -447,12 +364,10 @@ export function SettingsPanel({
           {sectionHost(
             "general",
             <GeneralSettings
-              sessionId={sessionId}
               soundEnabled={soundEnabled}
               onSoundToggle={onSoundToggle}
               dumbZoneTokens={dumbZoneTokens}
               onDumbZoneTokensChange={onDumbZoneTokensChange}
-              onSessionReloaded={onSessionReloaded}
             />,
           )}
           {cwd && sectionHost("skills", <SkillsConfig key={cwd} cwd={cwd} />)}

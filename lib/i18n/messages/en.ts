@@ -58,10 +58,6 @@ export const enMessages: Record<string, string> = {
   "settings.dumbZoneTokenThreshold": "Token threshold",
   "settings.completionSound": "Completion sound",
   "settings.completionSoundDescription": "Play a tone when a task finishes.",
-  "settings.shellTool": "Shell tool",
-  "settings.shellToolDescription":
-    "Choose which shell the model uses for commands. Direct ! and !! commands still use Bash.",
-  "settings.usePowerShell": "Use PowerShell instead of Bash",
   "settings.projectRequired": "Open a project to configure this section",
   "skills.scope.global": "global",
   "skills.scope.project": "project",

@@ -876,7 +876,7 @@
   white-space: nowrap;
 }
 
-.settings-shell-option {
+.settings-general-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -905,12 +905,6 @@
 
 .settings-number-input:focus {
   border-color: var(--accent);
-}
-
-.settings-general-error {
-  margin: 8px 0 0;
-  color: var(--danger);
-  font-size: 11px;
 }
 
 @media (max-width: 640px) {
