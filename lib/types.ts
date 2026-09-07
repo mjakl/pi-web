@@ -358,7 +358,12 @@ export interface SessionInfo {
 
 export interface SessionContext {
   /** All turn anchors on the selected branch, independent of the loaded page. */
-  historyAnchors?: { id: string; timestamp?: number; starred?: boolean }[];
+  historyAnchors?: {
+    id: string;
+    timestamp?: number;
+    starred?: boolean;
+    compaction?: boolean;
+  }[];
   starredEntryIds?: string[];
   messages: AgentMessage[];
   entryIds: string[]; // parallel to messages — the session entry id for each message
