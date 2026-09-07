@@ -6,6 +6,7 @@ import {
 import { assertWorkingDirectoryAvailable } from "./worktree";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import {
+  collectEntriesForBranchSummary,
   createAgentSessionFromServices,
   createAgentSessionServices,
   getAgentDir,
@@ -65,6 +66,46 @@ import {
   validateSessionToolSelection,
 } from "./session-tool-selection";
 
+function persistSessionManager(
+  manager: SessionManager,
+  entries?: ReturnType<SessionManager["getEntries"]>,
+): void {
+  const file = manager.getSessionFile();
+  if (!file || existsSync(file)) return;
+  const header = manager.getHeader();
+  if (!header) throw new Error("Session header is missing");
+  writeFileSync(
+    file,
+    [header, ...(entries ?? manager.getEntries())]
+      .map((entry) => JSON.stringify(entry))
+      .join("\n") + "\n",
+    { encoding: "utf8", flag: "wx" },
+  );
+  // Pi normally defers this flush until an assistant response (also used for bash-only sessions).
+  (manager as unknown as { flushed: boolean }).flushed = true;
+}
+
+function messageActionTarget(manager: SessionManager, entryId: unknown) {
+  const entry =
+    typeof entryId === "string" ? manager.getEntry(entryId) : undefined;
+  if (
+    !entry ||
+    !["message", "custom_message", "compaction", "branch_summary"].includes(
+      entry.type,
+    )
+  )
+    throw new Error("Select an existing conversation message");
+  const message =
+    entry.type === "message" && entry.message.role === "user"
+      ? entry.message
+      : undefined;
+  return {
+    entryId: entry.id,
+    leafId: message ? entry.parentId : entry.id,
+    message,
+  };
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -85,7 +126,11 @@ const IDLE_RESET_EVENT_TYPES = new Set([
 ]);
 const SESSION_SHUTDOWN_TIMEOUT_MS = 5_000;
 
-const SESSION_REPLACEMENT_COMMAND_TYPES = new Set(["fork", "clone", "rewind"]);
+const SESSION_REPLACEMENT_COMMAND_TYPES = new Set([
+  "clone",
+  "rewind",
+  "branch_from_message",
+]);
 const COMMANDS_ALLOWED_DURING_SESSION_REPLACEMENT = new Set([
   "get_state",
   "get_session_stats",
@@ -145,7 +190,8 @@ export class AgentSessionWrapper {
   });
   private pendingPromptCount = 0;
   private activeMutatingCommands = 0;
-  private sessionReplacement: "fork" | "clone" | "rewind" | null = null;
+  private branchAbortController: AbortController | null = null;
+  private sessionReplacement: "clone" | "rewind" | "branch" | null = null;
   private agentRunNeedsCompletion = false;
   private promptAdmissionTail: Promise<void> = Promise.resolve();
   private extensionsBound = false;
@@ -413,23 +459,9 @@ export class AgentSessionWrapper {
 
   private persistBashOnlySession(): void {
     const manager = this.inner.sessionManager;
-    const sessionFile = manager.getSessionFile();
-    if (!sessionFile || existsSync(sessionFile)) return;
-
-    const header = manager.getHeader();
-    if (!header) return;
-
-    const content =
-      [header, ...manager.getEntries()]
-        .map((entry) => JSON.stringify(entry))
-        .join("\n") + "\n";
-    writeFileSync(sessionFile, content, { encoding: "utf8", flag: "wx" });
-
-    // Pi normally delays the first flush until an assistant message exists.
-    // A leading shell command has no assistant message, so mark this SDK
-    // manager as flushed after writing its own generated entries.
-    (manager as unknown as { flushed: boolean }).flushed = true;
-    cacheSessionPath(this.inner.sessionId, sessionFile);
+    persistSessionManager(manager);
+    const file = manager.getSessionFile();
+    if (file) cacheSessionPath(this.inner.sessionId, file);
   }
 
   setStar(targetId: string, starred: boolean): string[] {
@@ -451,7 +483,7 @@ export class AgentSessionWrapper {
   }
 
   private async withSessionReplacement<T>(
-    replacement: "fork" | "clone" | "rewind",
+    replacement: "clone" | "rewind" | "branch",
     operation: () => Promise<T>,
   ): Promise<T> {
     if (this.sessionReplacement)
@@ -694,58 +726,103 @@ export class AgentSessionWrapper {
         }
 
         case "fork": {
-          if (this.isSessionRunningForReplacement()) {
-            throw new Error("Cannot fork while the session is running");
-          }
-          // Replacement admission is held by withSessionReplacement; send's
-          // mutation accounting intentionally ends before the returned work settles.
-          // Keep the async callback's rejection timing for synchronous SDK failures.
-          // oxlint-disable-next-line typescript/return-await, typescript/require-await
-          return this.withSessionReplacement("fork", async () => {
-            const entryId = command["entryId"] as string;
-            const sessionManager = this.inner.sessionManager;
-            const currentSessionFile = this.inner.sessionFile;
+          const manager = this.inner.sessionManager;
+          const sourceFile = manager.getSessionFile();
+          if (!manager.isPersisted() || !sourceFile) return { cancelled: true };
+          const target = messageActionTarget(manager, command["entryId"]);
+          // Copy a fixed path synchronously. The source manager and its active run
+          // remain untouched; pending output can only append to the source.
+          let child = SessionManager.create(
+            manager.getCwd(),
+            manager.getSessionDir(),
+            { parentSession: sourceFile },
+          );
+          const header = manager.getHeader();
+          if (!header) throw new Error("Session header is missing");
+          const snapshot = SessionManager.inMemory(
+            manager.getCwd(),
+            undefined,
+            [header, ...manager.getEntries()],
+          );
+          if (target.leafId !== null)
+            snapshot.createBranchedSession(target.leafId);
+          persistSessionManager(
+            child,
+            target.leafId === null ? [] : snapshot.getEntries(),
+          );
+          const file = child.getSessionFile();
+          if (!file) throw new Error("Failed to create session");
+          child = SessionManager.open(file, manager.getSessionDir());
+          copySessionStars(manager.getEntries(), child);
+          const newSessionFile = child.getSessionFile();
+          if (!newSessionFile) throw new Error("Failed to create session");
+          cacheSessionPath(child.getSessionId(), newSessionFile);
+          return {
+            cancelled: false,
+            newSessionId: child.getSessionId(),
+            message: target.message,
+          };
+        }
 
-            if (!sessionManager.isPersisted()) return { cancelled: true };
-            if (!currentSessionFile)
-              throw new Error("Persisted session is missing a session file");
-
-            const entry = sessionManager.getEntry(entryId);
-            if (!entry) throw new Error("Invalid entry ID for forking");
-
-            const sessionDir = sessionManager.getSessionDir();
-            let newSessionFile: string;
-
-            if (!entry.parentId) {
-              // Fork before the first message: create an empty session linked to this one
-              const newManager = SessionManager.create(
-                sessionManager.getCwd(),
-                sessionDir,
-              );
-              newManager.newSession({ parentSession: currentSessionFile });
-              // create/newSession allocates a file path; only in-memory managers lack one.
-              // Keep that API distinction without introducing a forbidden non-null assertion.
-              // oxlint-disable-next-line typescript/non-nullable-type-assertion-style
-              newSessionFile = newManager.getSessionFile() as string;
-            } else {
-              // Fork after some history: copy path up to (but not including) the fork point
-              const sourceManager = SessionManager.open(
-                currentSessionFile,
-                sessionDir,
-              );
-              const forkedPath = sourceManager.createBranchedSession(
-                entry.parentId,
-              );
-              if (!forkedPath)
-                throw new Error("Failed to create forked session");
-              newSessionFile = forkedPath;
+        case "branch_from_message": {
+          if (this.isSessionRunningForReplacement())
+            throw new Error(
+              "Wait for the current operation to finish before branching",
+            );
+          return await this.withSessionReplacement("branch", async () => {
+            await this.waitForExtensionsBound();
+            if (!this.isActive()) throw new Error("Session is stopped");
+            const manager = this.inner.sessionManager;
+            const target = messageActionTarget(manager, command["entryId"]);
+            const state = this.inner.agent.state;
+            if (!state) throw new Error("Session context is unavailable");
+            const oldLeafId = manager.getLeafId();
+            const controller = new AbortController();
+            this.branchAbortController = controller;
+            try {
+              const { entries: entriesToSummarize, commonAncestorId } =
+                collectEntriesForBranchSummary(
+                  manager,
+                  oldLeafId,
+                  target.entryId,
+                );
+              const result = await this.inner.extensionRunner.emit({
+                type: "session_before_tree",
+                preparation: {
+                  targetId: target.entryId,
+                  oldLeafId,
+                  commonAncestorId,
+                  entriesToSummarize,
+                  userWantsSummary: false,
+                },
+                signal: controller.signal,
+              });
+              if (
+                result?.cancel ||
+                controller.signal.aborted ||
+                !this.isActive()
+              )
+                return { cancelled: true };
+              // Use Pi's public tree/context primitives for exact before/after
+              // semantics. Its navigateTree treats custom messages as editable.
+              if (target.leafId === null) manager.resetLeaf();
+              else manager.branch(target.leafId);
+              if (result?.label)
+                manager.appendLabelChange(target.entryId, result.label);
+              state.messages = manager.buildSessionContext().messages;
+              await this.inner.extensionRunner.emit({
+                type: "session_tree",
+                oldLeafId,
+                newLeafId: manager.getLeafId(),
+              });
+              return {
+                cancelled: false,
+                leafId: manager.getLeafId(),
+                message: target.message,
+              };
+            } finally {
+              this.branchAbortController = null;
             }
-
-            const child = SessionManager.open(newSessionFile, sessionDir);
-            copySessionStars(sessionManager.getEntries(), child);
-            const newSessionId = child.getSessionId();
-            cacheSessionPath(newSessionId, newSessionFile);
-            return { cancelled: false, newSessionId };
           });
         }
 
@@ -1068,6 +1145,7 @@ export class AgentSessionWrapper {
   destroy(afterDispose?: () => void): void {
     if (!this._alive) return;
     this._stopping = true;
+    this.branchAbortController?.abort();
     this.agentRunNeedsCompletion = false;
     this._alive = false;
     if (this.idleTimer) clearTimeout(this.idleTimer);
@@ -1114,6 +1192,7 @@ export class AgentSessionWrapper {
     const emitStopped =
       options.manual && this._alive && !this.sessionStoppedEmitted;
     this._stopping = true;
+    this.branchAbortController?.abort();
     this.agentRunNeedsCompletion = false;
     if (options.manual) this.cancelActiveWork();
     if (emitStopped) {

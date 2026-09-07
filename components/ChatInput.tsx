@@ -73,6 +73,7 @@ interface Props {
     images?: AttachedImage[],
   ) => void;
   isStreaming: boolean;
+  submissionDisabled?: boolean;
   model?: { provider: string; modelId: string } | null;
   isAutoModelSelection?: boolean;
   modelNames?: Record<string, string>;
@@ -130,7 +131,7 @@ interface Props {
 export interface ChatInputHandle {
   insertText: (text: string) => void;
   insertIfEmpty: (text: string) => void;
-  replaceMessage: (message: UserMessage) => void;
+  replaceMessage: (message: UserMessage, overwrite?: boolean) => void;
   prependText: (text: string) => void;
   addImages: (files: File[]) => void;
   rekeyDraft: (previousKey: string, nextKey: string) => void;
@@ -616,6 +617,7 @@ export function ChatInput({
   onSteer,
   onFollowUp,
   isStreaming,
+  submissionDisabled = false,
   model,
   isAutoModelSelection,
   modelNames,
@@ -716,6 +718,7 @@ export function ChatInput({
   const valueRef = useRef(value);
   const attachedImagesRef = useRef(attachedImages);
   const pendingImageCountRef = useRef(0);
+  const imageBatchVersionRef = useRef(0);
   valueRef.current = value;
   attachedImagesRef.current = attachedImages;
 
@@ -732,10 +735,11 @@ export function ChatInput({
         ta.focus();
       });
     },
-    replaceMessage(message: UserMessage) {
+    replaceMessage(message: UserMessage, overwrite = false) {
       const ta = textareaRef.current;
       const current = ta ? ta.value : value;
       if (
+        !overwrite &&
         !canRestoreUserMessage(
           current,
           attachedImagesRef.current.length,
@@ -744,6 +748,7 @@ export function ChatInput({
       )
         return;
 
+      if (overwrite) imageBatchVersionRef.current += 1;
       const restoredText = getUserMessageText(message);
       const restoredImages = draftImagesToAttachedImages(
         getUserMessageDraftImages(message),
@@ -929,6 +934,7 @@ export function ChatInput({
         )
         .slice(0, remaining);
       if (!imageFiles.length) return;
+      const imageBatchVersion = imageBatchVersionRef.current;
       pendingImageCountRef.current += imageFiles.length;
       const newImages: AttachedImage[] = [];
       try {
@@ -939,6 +945,7 @@ export function ChatInput({
             image: await compressImageFile(file),
           })),
         );
+        if (imageBatchVersion !== imageBatchVersionRef.current) return;
         for (const { file, image } of prepared) {
           newImages.push({ ...image, previewUrl: URL.createObjectURL(file) });
         }
@@ -1054,6 +1061,7 @@ export function ChatInput({
   );
 
   const handleSend = useCallback(async () => {
+    if (submissionDisabled) return;
     const msg = value.trim();
     if (!msg && !attachedImages.length) return;
     onAudioUnlock?.();
@@ -1067,6 +1075,7 @@ export function ChatInput({
     value,
     attachedImages,
     isStreaming,
+    submissionDisabled,
     runBuiltinCommand,
     onSend,
     clearInput,
@@ -1353,6 +1362,7 @@ export function ChatInput({
 
   const sendQueued = useCallback(
     (mode: StreamingAction) => {
+      if (submissionDisabled) return;
       const msg = value.trim();
       if (!msg && !attachedImages.length) return;
       onAudioUnlock?.();
@@ -1384,6 +1394,7 @@ export function ChatInput({
     [
       value,
       attachedImages,
+      submissionDisabled,
       onBuiltinCommand,
       onPromptWithStreamingBehavior,
       onSteer,
@@ -2519,7 +2530,10 @@ export function ChatInput({
                 }
                 aria-label={actionLabel}
                 title={actionTitle}
-                disabled={!isStreaming && !canQueueStreamingMessage}
+                disabled={
+                  submissionDisabled ||
+                  (!isStreaming && !canQueueStreamingMessage)
+                }
                 onMouseDown={(event) => {
                   event.preventDefault();
                 }}

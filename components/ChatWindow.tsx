@@ -19,7 +19,6 @@ import type {
   SessionInfo,
   SessionTreeNode,
   ToolResultMessage,
-  UserMessage,
 } from "@/lib/types";
 import { normalizeCustomPanelLines } from "@/lib/ansi";
 import { asBracketedPaste, toTerminalKeyData } from "@/lib/terminal-input";
@@ -36,12 +35,7 @@ import {
   type WrittenFile,
 } from "@/lib/turn-written-files";
 import { MessageView } from "./MessageView";
-import {
-  ChatInput,
-  getUserMessageText,
-  getUserMessageDraftImages,
-  type ChatInputHandle,
-} from "./ChatInput";
+import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import type { CompactionControl } from "./CompactButton";
 import { ChatJumpToLatest } from "./ChatJumpToLatest";
 import { ChatMinimap } from "./ChatMinimap";
@@ -320,14 +314,6 @@ export function ChatWindow({
     onAgentEnd?.();
   }, [onAgentEnd]);
 
-  // Keep onEditContent stable so React.memo does not rerender historical messages.
-  const handleEditContent = useCallback(
-    (message: UserMessage) => {
-      chatInputRef?.current?.replaceMessage(message);
-    },
-    [chatInputRef],
-  );
-
   const {
     historyAnchors,
     starredEntryIds,
@@ -353,7 +339,9 @@ export function ChatWindow({
     thinkingLevel,
     retryInfo,
     contextUsage,
-    forkingEntryId,
+    messageActionEntryId,
+    branchStatus,
+    retryBranchContext,
     isCompacting,
     compactError,
     compactResult,
@@ -379,8 +367,8 @@ export function ChatWindow({
     handleSend,
     handleAbort,
     handleFork,
+    handleBranchMessage,
     handleRewind,
-    handleNavigate,
     handleModelChange,
     handleCompact,
     handleSteer,
@@ -415,17 +403,44 @@ export function ChatWindow({
     onSessionMetadataChange,
     onSessionStatsPanelOpen,
   });
-  const handleForkMessage = useCallback(
-    (entryId: string, message: UserMessage) => {
-      void handleFork(entryId, {
-        value: getUserMessageText(message),
-        images: getUserMessageDraftImages(message),
-      });
-    },
-    [handleFork],
-  );
   const sessionBusy = agentRunning || bashRunning;
   const readOnly = session?.cwdAvailable === false;
+  const historyActions = useMemo(
+    () =>
+      readOnly
+        ? undefined
+        : {
+            onFork: (id: string) => {
+              void handleFork(id);
+            },
+            onBranch: (id: string) => {
+              void handleBranchMessage(id);
+            },
+            branchDisabledReason:
+              sessionBusy || isCompacting ? t("chat.branchBusy") : undefined,
+            pending: messageActionEntryId !== null,
+          },
+    [
+      readOnly,
+      handleFork,
+      handleBranchMessage,
+      sessionBusy,
+      isCompacting,
+      messageActionEntryId,
+      t,
+    ],
+  );
+  const toolEntryIds = useMemo(
+    () =>
+      new Map(
+        messages.flatMap((message, index) =>
+          message.role === "toolResult" && entryIds[index]
+            ? [[message.toolCallId, entryIds[index]] as [string, string]]
+            : [],
+        ),
+      ),
+    [messages, entryIds],
+  );
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const initialScrollDoneRef = useRef(false);
   const liveFollowAttachedRef = useRef(true);
@@ -932,6 +947,7 @@ export function ChatWindow({
           : undefined
       }
       isStreaming={sessionBusy}
+      submissionDisabled={branchStatus !== null}
       model={displayModelValue}
       isAutoModelSelection={isAutoModelSelection}
       modelNames={modelNames}
@@ -1143,10 +1159,6 @@ export function ChatWindow({
                   } = {},
                 ): ReactNode => {
                   const previousMessage = messages[idx - 1];
-                  const prevAssistantEntryId =
-                    msg.role === "user" && previousMessage?.role === "assistant"
-                      ? entryIds[idx - 1]
-                      : undefined;
                   const isVisible =
                     isMessageGroupAnchor(msg) || msg.role === "assistant";
                   const currentRefIdx = anchorRefIndexByMessage.get(idx);
@@ -1188,37 +1200,19 @@ export function ChatWindow({
                           ? handleStar
                           : undefined
                       }
-                      onFork={
-                        readOnly ||
-                        sessionBusy ||
-                        isNew ||
-                        (idx === 0 && msg.role === "user")
-                          ? undefined
-                          : handleForkMessage
-                      }
-                      forking={forkingEntryId === entryIds[idx]}
+                      historyActions={historyActions}
+                      toolEntryIds={toolEntryIds}
                       onRewind={
                         readOnly ||
                         sessionBusy ||
                         isCompacting ||
                         isNew ||
-                        forkingEntryId
+                        messageActionEntryId
                           ? undefined
                           : (...args) => {
                               void handleRewind(...args);
                             }
                       }
-                      onNavigate={
-                        readOnly || sessionBusy
-                          ? undefined
-                          : (...args) => {
-                              void handleNavigate(...args);
-                            }
-                      }
-                      prevAssistantEntryId={
-                        sessionBusy ? undefined : prevAssistantEntryId
-                      }
-                      onEditContent={readOnly ? undefined : handleEditContent}
                       showTimestamp={showTimestamp}
                       prevTimestamp={previousMessage?.timestamp}
                       sessionId={
@@ -1428,6 +1422,31 @@ export function ChatWindow({
       </div>
 
       <footer className="chat-composer">
+        {branchStatus && (
+          <div
+            className="branch-sync-notice"
+            role={branchStatus === "failed" ? "alert" : "status"}
+          >
+            <span>
+              {t(
+                branchStatus === "failed"
+                  ? "chat.branchSyncFailed"
+                  : "chat.branchSyncPending",
+              )}
+            </span>
+            {branchStatus === "failed" && (
+              <button
+                type="button"
+                className="history-action"
+                onClick={() => {
+                  void retryBranchContext();
+                }}
+              >
+                {t("chat.retryBranchHistory")}
+              </button>
+            )}
+          </div>
+        )}
         {chatInputElement}
         <ExtensionStatusBar
           statuses={extensionStatuses}

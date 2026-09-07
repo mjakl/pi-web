@@ -202,6 +202,15 @@ export type ThinkingLevelOption =
   | "xhigh"
   | "max";
 
+function messageActionDraft(message?: UserMessage): ChatDraft {
+  if (!message) return { value: "", images: [] };
+  const text = getUserMessageText(message);
+  return {
+    value: skillExpansionToCommand(text) ?? text,
+    images: getUserMessageDraftImages(message),
+  };
+}
+
 const PROMPT_SETTLE_INITIAL_DELAY_MS = 800;
 const PROMPT_SETTLE_POLL_MS = 600;
 const PROMPT_SETTLE_MAX_MS = 20_000;
@@ -325,7 +334,18 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   } | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
   const [systemTools, setSystemTools] = useState<ToolEntry[] | null>(null);
-  const [forkingEntryId, setForkingEntryId] = useState<string | null>(null);
+  const messageActionPendingRef = useRef(false);
+  const branchActionRef = useRef<{
+    sessionId: string;
+    result?: { leafId: string | null; message?: UserMessage };
+    loading: boolean;
+  } | null>(null);
+  const [branchStatus, setBranchStatus] = useState<"pending" | "failed" | null>(
+    null,
+  );
+  const [messageActionEntryId, setMessageActionEntryId] = useState<
+    string | null
+  >(null);
   const [currentModelOverride, setCurrentModelOverride] = useState<{
     provider: string;
     modelId: string;
@@ -762,6 +782,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           deferMedia: "1",
         });
         if (leafId) params.set("leafId", leafId);
+        else if (branchRequest && leafId === null) params.set("root", "1");
         // Page upward: ask the server for the `tail` ancestors preceding `before`,
         // then prepend them. Omitting `before` fetches the selected branch.
         if (before) params.set("before", before);
@@ -1195,6 +1216,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   );
 
   const refreshTranscript = useCallback(async (): Promise<boolean> => {
+    if (branchActionRef.current) return false;
     const sid = sessionPropIdRef.current;
     if (!sid || sessionIdRef.current !== sid) return false;
 
@@ -1944,7 +1966,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     async (message: string, images?: AttachedImage[]) => {
       const trimmedMessage = message.trim();
       if (!trimmedMessage && !images?.length) return;
-      if (agentRunningRef.current || bashRunningRef.current) {
+      if (
+        branchActionRef.current ||
+        agentRunningRef.current ||
+        bashRunningRef.current
+      ) {
         restoreSubmission(message, images, composerDraftKey);
         return;
       }
@@ -2172,31 +2198,141 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, []);
 
   const handleFork = useCallback(
-    async (entryId: string, draft: ChatDraft) => {
-      if (bashRunningRef.current) return;
+    async (entryId: string) => {
       const sid = sessionIdRef.current;
-      if (!sid) return;
-      setForkingEntryId(entryId);
+      if (!sid || messageActionPendingRef.current) return;
+      messageActionPendingRef.current = true;
+      setMessageActionEntryId(entryId);
       try {
         const result = await sendAgentCommand<{
           cancelled?: boolean;
           newSessionId?: string;
-        }>(sid, {
-          type: "fork",
-          entryId,
-        });
-        const { cancelled, newSessionId } = result ?? {};
-        if (!cancelled && newSessionId) {
-          setDraft(newSessionId, draft);
-          onSessionForked?.(newSessionId);
+          message?: UserMessage;
+        }>(sid, { type: "fork", entryId });
+        if (!result?.cancelled && result?.newSessionId) {
+          setDraft(result.newSessionId, messageActionDraft(result.message));
+          if (sessionHookMountedRef.current && sessionIdRef.current === sid)
+            onSessionForked?.(result.newSessionId);
         }
-      } catch (e) {
-        console.error("Fork failed:", e);
+      } catch (error) {
+        if (sessionHookMountedRef.current && sessionIdRef.current === sid)
+          reportActionError(
+            t("chat.newSessionFailed", { error: errorMessage(error) }),
+          );
       } finally {
-        setForkingEntryId(null);
+        messageActionPendingRef.current = false;
+        if (sessionHookMountedRef.current) setMessageActionEntryId(null);
       }
     },
-    [onSessionForked],
+    [onSessionForked, reportActionError, t],
+  );
+
+  const finishBranchAction = useCallback(() => {
+    branchActionRef.current = null;
+    messageActionPendingRef.current = false;
+    if (sessionHookMountedRef.current) {
+      setBranchStatus(null);
+      setMessageActionEntryId(null);
+    }
+  }, []);
+
+  const retryBranchContext = useCallback(async () => {
+    const action = branchActionRef.current;
+    if (
+      !action?.result ||
+      action.loading ||
+      action.sessionId !== sessionIdRef.current
+    )
+      return;
+    action.loading = true;
+    setBranchStatus("pending");
+    const branchRequest: BranchContextRequest = {
+      intentOrder: ++persistedOrderRef.current,
+      sessionId: action.sessionId,
+      runId: promptRunIdRef.current,
+    };
+    // A successful mutation must reconcile before the next prompt is admitted.
+    acceptedTranscriptOrderRef.current = branchRequest.intentOrder;
+    const loaded = await loadContext(
+      action.sessionId,
+      action.result.leafId,
+      undefined,
+      branchRequest,
+    );
+    if (
+      !sessionHookMountedRef.current ||
+      sessionIdRef.current !== action.sessionId ||
+      branchActionRef.current !== action
+    )
+      return;
+    action.loading = false;
+    if (!loaded) {
+      setBranchStatus("failed");
+      return;
+    }
+    setActiveLeafId(action.result.leafId);
+    const draft = messageActionDraft(action.result.message);
+    setDraft(action.sessionId, draft);
+    opts.chatInputRef?.current?.replaceMessage(
+      {
+        role: "user",
+        content: [
+          { type: "text", text: draft.value },
+          ...draft.images.map((image) => ({
+            type: "image" as const,
+            ...image,
+          })),
+        ],
+      },
+      true,
+    );
+    finishBranchAction();
+  }, [finishBranchAction, loadContext, opts.chatInputRef]);
+
+  const handleBranchMessage = useCallback(
+    async (entryId: string) => {
+      const sid = sessionIdRef.current;
+      if (!sid || messageActionPendingRef.current) return;
+      messageActionPendingRef.current = true;
+      const action = { sessionId: sid, loading: false };
+      branchActionRef.current = action;
+      setBranchStatus("pending");
+      setMessageActionEntryId(entryId);
+      commitLocalSnapshotMutation();
+      try {
+        const result = await runPersistedWrite(() =>
+          sendAgentCommand<{
+            cancelled: boolean;
+            leafId: string | null;
+            message?: UserMessage;
+          }>(sid, { type: "branch_from_message", entryId }),
+        );
+        if (
+          result.cancelled ||
+          !sessionHookMountedRef.current ||
+          sessionIdRef.current !== sid
+        ) {
+          finishBranchAction();
+          return;
+        }
+        branchActionRef.current = { ...action, result };
+        await retryBranchContext();
+      } catch (error) {
+        finishBranchAction();
+        if (sessionHookMountedRef.current && sessionIdRef.current === sid)
+          reportActionError(
+            t("chat.branchFailed", { error: errorMessage(error) }),
+          );
+      }
+    },
+    [
+      commitLocalSnapshotMutation,
+      finishBranchAction,
+      runPersistedWrite,
+      retryBranchContext,
+      reportActionError,
+      t,
+    ],
   );
 
   const rewindingRef = useRef(false);
@@ -2248,7 +2384,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const navigateTranscriptBranch = useCallback(
     async (leafId: string | null) => {
-      if (bashRunningRef.current) return;
+      if (branchActionRef.current || bashRunningRef.current) return;
       const sid = sessionIdRef.current;
       if (!sid) return;
       const branchRequest: BranchContextRequest = {
@@ -2425,6 +2561,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const handleBuiltinSlashCommand = useCallback(
     async (text: string): Promise<BuiltinSlashCommandResult> => {
+      if (branchActionRef.current)
+        return { handled: true, error: t("chat.branchSyncPending") };
       if (!text.startsWith("/")) return { handled: false };
       const match = text.match(/^\/([^\s]+)(?:\s+([\s\S]*))?$/);
       if (!match) return { handled: false };
@@ -2620,6 +2758,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       const restore = () => {
         restoreSubmission(message, images, composerDraftKey);
       };
+      if (branchActionRef.current) {
+        restore();
+        return;
+      }
       if (!sid) {
         restore();
         addNotice({
@@ -2972,7 +3114,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     thinkingLevel,
     retryInfo,
     contextUsage,
-    forkingEntryId,
+    messageActionEntryId,
+    branchStatus,
+    retryBranchContext,
     tree: data?.tree ?? NO_BRANCHES,
     systemPrompt,
     systemTools,
@@ -3002,6 +3146,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     handleSend,
     handleAbort,
     handleFork,
+    handleBranchMessage,
     handleRewind,
     handleNavigate,
     handleModelChange,

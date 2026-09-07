@@ -58,6 +58,7 @@ export async function GET(
       const leafId = sm.getLeafId();
       const tree = projectTreeForResponse(sm.getTree());
       const context = buildSessionContext(entries as never, leafId, {
+        root: leafId === null,
         deferThinking,
         deferToolResultImages,
         tail,

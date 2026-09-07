@@ -1,5 +1,7 @@
 import type {
   AgentSessionEvent,
+  SessionBeforeTreeEvent,
+  SessionTreeEvent,
   BashOperations,
   ExtensionCommandContextActions,
   ExtensionError,
@@ -80,12 +82,17 @@ interface ResourceLoaderLike {
 }
 
 interface ExtensionRunnerLike {
+  emit(
+    event: SessionBeforeTreeEvent,
+  ): Promise<{ cancel?: boolean; label?: string } | undefined>;
+  emit(
+    event: SessionTreeEvent | { type: "session_shutdown"; reason: "quit" },
+  ): Promise<unknown>;
   getRegisteredCommands(): Array<{
     invocationName: string;
     description?: string;
     sourceInfo: SlashCommandInfo["sourceInfo"];
   }>;
-  emit(event: { type: "session_shutdown"; reason: "quit" }): Promise<unknown>;
   setUIContext(
     uiContext?: unknown,
     mode?: "tui" | "rpc" | "json" | "print",
@@ -174,6 +181,7 @@ export interface AgentSessionLike {
       systemPrompt?: string;
       thinkingLevel?: string;
       streamingMessage?: PiAgentMessage;
+      messages?: PiAgentMessage[];
     };
     prepareNextTurnWithContext?: (
       context: PrepareNextTurnContext,
