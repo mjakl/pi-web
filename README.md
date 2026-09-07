@@ -1,39 +1,35 @@
 # Pi Web
 
-**Your Pi conversations, project files, and changes in one clear workspace.**
+**Your Pi conversations, project files, and changes in one workspace.**
 
-Read the answer. Open the diff beside it. Follow up while the details are still
-in view. Pi Web gives your
-[Pi coding agent](https://github.com/earendil-works/pi) a browser workspace
-built around the conversation and the work it produces.
+Read an answer, review its diff, and write the next request with both still in
+view. Pi Web gives your [Pi coding agent](https://github.com/earendil-works/pi)
+a browser interface for everyday project work.
 
 It uses the Pi configuration and session files already on your computer. Pick up
-a terminal session in the browser, choose a model, and keep going without
-importing conversations or maintaining a second set of settings.
+a terminal session in the browser, choose a model, and keep going. Your history
+stays with Pi.
 
-**[Get started](#get-started)** · [Explore the interface](#look-closer)
+**[Get started](#get-started)** · [Explore the interface](#look-closer) ·
+[What you can do](#what-you-can-do)
 
-![Pi Web in dark mode with grouped sessions, distinct user messages, a compaction divider, and a working-tree diff beside the answer](./docs/images/file-diff.png)
+![Pi Web in dark mode with a starred answer, collapsed process details, a Git diff, and a follow-up draft](./docs/images/file-diff.png)
 
-_Review the change in context, with the next request ready in the composer. All
-screenshots use the current UI with fictional sessions in a local example
-project._
+_The answer and the working-tree diff share the screen. The next request is
+ready in the composer. All screenshots show the current UI with fictional
+sessions and a local example project._
 
 ## Why Pi Web
 
 - **Little magic.** Pi's session files stay authoritative. Live turns run
-  through Pi's SDK in the server process, and tools and orchestration come from
-  Pi and your extensions. The browser gives you access to that work without
-  adding another agent system.
-- **Care in the details.** Your messages stand out, compaction appears as a
-  quiet divider, and process details fold away when you want the answer. Tool
-  output, diffs, and subagent results have their own views. Model and reasoning
-  controls sit in the composer; history, context, and files stay within reach.
+  through Pi's SDK in the server process; tools and orchestration come from Pi
+  and your extensions.
+- **Care in the details.** Distinct user messages, collapsible process details,
+  starred answers, and previews of earlier prompts help you find your place.
+  Files, diffs, model controls, and context information stay close to the work.
 - **Work only when needed.** Browsing saved sessions does not start an agent.
-  The session list reads bounded metadata, conversation history loads
-  progressively, and live updates stream to the browser. This avoids agent
-  startup just to browse and limits how much history the browser has to render
-  at once.
+  The session list reads bounded metadata, history loads progressively, and live
+  updates stream to the browser.
 
 This is a personalized fork of [agegr/pi-web](https://github.com/agegr/pi-web),
 shaped around its maintainer's daily workflow. It is not intended to stay
@@ -41,34 +37,50 @@ compatible with upstream.
 
 ## Look closer
 
-### Follow the work at your own pace
+### Find the answer you wanted to keep
 
-Expand process details to inspect a tool call or a subagent's result. Prompts,
-run details, and raw output stay available behind their own disclosures, so you
-can go deeper without losing your place.
+Star an answer to mark a decision, useful explanation, or result. The sidebar
+shows each session's star count, and stars in the desktop navigation rail take
+you back to those answers.
 
-![Expanded subagent review in dark mode, showing completion status, a readable result, and disclosures for the prompt, run details, and raw data](./docs/images/session-tools.png)
+Hover over a square in the rail to preview an earlier prompt before jumping to
+it. The popover shows up to 100 characters, with extra whitespace collapsed.
+Earlier prompts remain available as you browse a long session.
 
-_Subagent tools come from your installed Pi extensions. Pi Web gives their
-results a place in the conversation._
+![A starred release decision in dark mode, with sidebar star counts and a custom prompt preview beside the navigation rail](./docs/images/session-navigation.png)
 
-### Make room for the idea
+_Stars are saved in the Pi session. Remove them individually, or choose **Clear
+all stars** from the session menu when you're ready to start fresh._
 
-Tables, highlighted code, and Mermaid previews make plans easier to read and
-discuss. Switch a diagram between source and preview in place. Choose light,
-dark, or system appearance to suit your workspace.
+### Read the result, then inspect the process
 
-![Pi Web in light mode with a notebook plan, a formatted feature table, and an inline Mermaid diagram](./docs/images/conversation-light.png)
+Keep process details collapsed while you read the answer. Expand them to inspect
+reasoning, tool calls, command output, or a subagent's result. Subagent reviews
+show their completion status and readable results, with the original prompt, run
+details, and raw output available in separate disclosures.
 
-### Keep the conversation close
+![An expanded subagent review showing a completed correctness check, a second reviewer, and disclosures for prompts, run details, and raw output](./docs/images/session-tools.png)
 
-On a small screen, the conversation takes the space it needs. Session and file
-controls remain within reach, message actions stay visible, and the composer
-keeps model and reasoning choices together. Install Pi Web as a PWA for an app
+_Subagent tools come from your installed Pi extensions. Pi Web displays their
+results within the conversation._
+
+### Discuss a plan in more than plain text
+
+Read formatted tables and highlighted code alongside the answer. Mermaid blocks
+switch between source and diagram preview in place. Choose light, dark, or
+system appearance.
+
+![Pi Web in light mode with a release plan, a feature table, and an inline Mermaid diagram](./docs/images/conversation-light.png)
+
+### Keep working on a smaller screen
+
+The mobile layout gives the conversation the screen. Message actions stay
+visible, and the composer keeps model and reasoning choices together. Open the
+sidebar or file panel when you need them. Install Pi Web as a PWA for an app
 window of its own.
 
 <p align="center">
-  <img src="./docs/images/mobile.png" width="360" alt="Pi Web's mobile layout with distinct user messages, the red compaction divider, collapsed process details, and the composer" />
+  <img src="./docs/images/mobile.png" width="360" alt="Pi Web on a narrow screen with a user request, collapsed process details, a starred answer, visible message actions, and the composer" />
 </p>
 
 _The mobile layout, shown in browser emulation. Pi Web still runs on your host
@@ -77,9 +89,11 @@ device._
 
 ## What you can do
 
-- Browse, resume, rename, export, fork, clone, and delete Pi sessions. Rewind a
-  conversation to an earlier message or explore its full history. Sessions from
-  the same repository stay together.
+- Browse, activate, stop, rename, export, fork, clone, and delete Pi sessions.
+  Rewind to an earlier message, branch within a session, or copy history into a
+  new session. Sessions from the same repository stay together.
+- Star useful answers, jump between prompts and stars on the desktop rail, and
+  preview earlier prompts on hover. Clear a session's stars from its menu.
 - Run agent turns with model, reasoning-level, and tool controls. You can steer
   work in progress, queue a follow-up, compact context, stop a run, attach
   images, and use slash commands.
