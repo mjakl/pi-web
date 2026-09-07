@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
-import type { BranchPreview, SessionEntry, SessionTreeNode } from "@/lib/types";
+import type { BranchPreview, SessionTreeNode } from "@/lib/types";
 import { useI18n } from "@/hooks/useI18n";
 
 interface Props {
@@ -50,40 +50,29 @@ export function buildActivePath(
   return new Set();
 }
 
-function isMessageEntry(entry: SessionEntry): boolean {
-  return entry.type === "message" && "message" in entry;
-}
-
 // Compress a visible linear chain into the first branching/leaf node.
 // Server-side compressed IDs also count as skipped nodes.
 // branchPreview is the bounded preview of the first message on the source
-// chain. labelEntry keeps unprojected/test shapes working as a fallback.
+// chain. Selection always uses the representative, not the preview source.
 export function compressChain(node: SessionTreeNode): {
   node: SessionTreeNode;
   skipped: number;
   branchPreview?: BranchPreview;
-  labelEntry: SessionEntry;
 } {
   let current = node;
   let branchPreview = current.branchPreview;
-  let labelEntry: SessionEntry | null = isMessageEntry(current.entry)
-    ? current.entry
-    : null;
   let skipped = current.compressedEntryIds?.length ?? 0;
   let [onlyChild] = current.children;
   while (current.children.length === 1 && onlyChild) {
     current = onlyChild;
     [onlyChild] = current.children;
     branchPreview ??= current.branchPreview;
-    if (!labelEntry && isMessageEntry(current.entry))
-      labelEntry = current.entry;
     skipped += 1 + (current.compressedEntryIds?.length ?? 0);
   }
   return {
     node: current,
     skipped,
     branchPreview,
-    labelEntry: labelEntry ?? current.entry,
   };
 }
 
@@ -98,32 +87,6 @@ export function selectTopLevelBranches(
   if (!root) return [];
   const first = compressChain(root).node;
   return first.children.length > 1 ? first.children : [];
-}
-
-function getLabel(entry: SessionEntry): string {
-  if (entry.type === "message" && "message" in entry) {
-    const msg = entry.message as { role: string; content: unknown };
-    const content = msg.content;
-    let text = "";
-    if (typeof content === "string") {
-      text = content;
-    } else if (Array.isArray(content)) {
-      text = content
-        .filter(
-          (b: unknown): b is { type: "text"; text: string } =>
-            typeof b === "object" &&
-            b !== null &&
-            "type" in b &&
-            b.type === "text",
-        )
-        .map((b) => b.text)
-        .join(" ");
-    }
-    if (text.length > 40) text = text.slice(0, 40) + "…";
-    if (text) return text;
-    if (msg.role === "assistant") return "[assistant]";
-  }
-  return entry.type;
 }
 
 // Does the tree have any branching at all? Iterative: a linear chain has no
@@ -156,16 +119,12 @@ function TreeNodeView({
   parentLines,
   onSelect,
 }: TreeNodeProps) {
-  const { node: rep, skipped, branchPreview, labelEntry } = compressChain(node);
+  const { node: rep, skipped, branchPreview } = compressChain(node);
   const isActive = activePathIds.has(rep.entry.id);
   const isOnPath =
     activePathIds.has(node.entry.id) || activePathIds.has(rep.entry.id);
-  const label = branchPreview?.text ?? getLabel(labelEntry);
-  const role = branchPreview
-    ? (branchPreview.role ?? null)
-    : isMessageEntry(labelEntry)
-      ? (labelEntry as { message: { role: string } }).message.role
-      : null;
+  const label = branchPreview?.text ?? rep.entry.type;
+  const role = branchPreview?.role ?? null;
 
   return (
     <div>
