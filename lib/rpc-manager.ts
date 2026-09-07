@@ -10,6 +10,7 @@ import {
   createAgentSessionFromServices,
   createAgentSessionServices,
   getAgentDir,
+  estimateTokens,
   initTheme,
   SessionManager,
   SettingsManager,
@@ -675,7 +676,23 @@ export class AgentSessionWrapper {
 
         case "get_state": {
           const model = this.inner.model;
-          const contextUsage = this.inner.getContextUsage();
+          let contextUsage = this.inner.getContextUsage();
+          // Pi deliberately returns unknown usage after compaction. Reconstruct
+          // current context so reloads can recover the estimate without a cache.
+          if (contextUsage?.tokens === null && contextUsage.contextWindow > 0) {
+            const tokens = this.inner.sessionManager
+              .buildSessionContext()
+              .messages.reduce(
+                (total, message) => total + estimateTokens(message),
+                0,
+              );
+            contextUsage = {
+              ...contextUsage,
+              tokens,
+              percent: (tokens / contextUsage.contextWindow) * 100,
+              estimated: true,
+            };
+          }
           return {
             sessionId: this.inner.sessionId,
             sessionFile: this.inner.sessionFile ?? "",
@@ -699,6 +716,7 @@ export class AgentSessionWrapper {
                   percent: contextUsage.percent,
                   contextWindow: contextUsage.contextWindow,
                   tokens: contextUsage.tokens,
+                  ...(contextUsage.estimated ? { estimated: true } : {}),
                 }
               : null,
             systemPrompt: this.inner.agent.state?.systemPrompt ?? "",
