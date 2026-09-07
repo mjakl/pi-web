@@ -1689,7 +1689,14 @@ export function SessionSidebar({
             overflow: "hidden",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              flexShrink: 0,
+              minHeight: explorerOpen ? undefined : "var(--footer-row-height)",
+            }}
+          >
             <button
               onClick={() => {
                 setExplorerOpen((open) => {
