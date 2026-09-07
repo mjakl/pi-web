@@ -1,5 +1,10 @@
 /** Pi Web's English UI messages. */
 export const enMessages: Record<string, string> = {
+  "chat.starAnswer": "Star answer",
+  "chat.unstarAnswer": "Unstar answer",
+  "chat.starFailed": "Could not update star: {error}",
+  "chat.jumpStarredAnswer": "Jump to starred answer",
+  "sidebar.starCount": "{count} starred answers",
   "chat.subagent.title": "Subagent",
   "chat.subagent.agents": "{count} agents",
   "chat.subagent.completed": "Completed",

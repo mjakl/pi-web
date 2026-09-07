@@ -93,6 +93,7 @@ interface Props {
   /** The server's home directory, read once in the page rather than fetched. */
   homeDir: string;
   selectedSessionId: string | null;
+  selectedSessionMetadata?: SessionInfo | null;
   onSelectSession: (session: SessionInfo, isRestore?: boolean) => void;
   onNewSession?: (sessionId: string, cwd: string) => void;
   initialSessionId?: string | null;
@@ -301,6 +302,7 @@ function AnchoredMenu({
 export function SessionSidebar({
   homeDir,
   selectedSessionId,
+  selectedSessionMetadata,
   onSelectSession,
   onNewSession,
   initialSessionId,
@@ -391,6 +393,38 @@ export function SessionSidebar({
   const refreshSessionInventoryRef = useRef<() => void>(() => {});
   const allSessionsRef = useRef(allSessions);
   allSessionsRef.current = allSessions;
+
+  // A successful annotation write already has a current file fingerprint.
+  // Feed it into the row cache immediately rather than waiting for inventory refresh.
+  useEffect(() => {
+    if (
+      !selectedSessionMetadata ||
+      selectedSessionMetadata.starCount === undefined
+    )
+      return;
+    setAllSessions((current) => {
+      const existing = current.find(
+        (row) => row.id === selectedSessionMetadata.id,
+      );
+      if (
+        !existing ||
+        (existing.starCount === selectedSessionMetadata.starCount &&
+          sessionFingerprint(existing) ===
+            sessionFingerprint(selectedSessionMetadata))
+      )
+        return current;
+      return current.map((row) =>
+        row.id === selectedSessionMetadata.id
+          ? {
+              ...row,
+              starCount: selectedSessionMetadata.starCount,
+              fileSize: selectedSessionMetadata.fileSize,
+              modified: selectedSessionMetadata.modified,
+            }
+          : row,
+      );
+    });
+  }, [selectedSessionMetadata]);
 
   const scheduleMetadataRetry = useCallback((sessions: SessionInfo[]) => {
     let needsRetry = false;
@@ -486,6 +520,7 @@ export function SessionSidebar({
                 ...session,
                 name: metadata.name,
                 messageCount: metadata.messageCount,
+                starCount: metadata.starCount,
                 firstMessage: metadata.firstMessage,
               };
               const fingerprint = sessionFingerprint(hydrated);
@@ -626,6 +661,7 @@ export function SessionSidebar({
               ...session,
               name: previous.name,
               messageCount: previous.messageCount,
+              starCount: previous.starCount,
               firstMessage: previous.firstMessage,
             };
           });

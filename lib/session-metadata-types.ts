@@ -11,5 +11,6 @@ export interface SessionRowMetadata extends SessionMetadataFingerprint {
   id: string;
   name?: string;
   messageCount: number;
+  starCount?: number;
   firstMessage: string;
 }

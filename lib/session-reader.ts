@@ -1,3 +1,4 @@
+import { readSessionStars, SESSION_STAR_TYPE } from "./session-stars";
 import {
   SessionManager,
   buildContextEntries as piBuildContextEntries,
@@ -141,6 +142,7 @@ export function mergeSessionLists(
             ...persisted,
             name: runtime.name,
             messageCount: runtime.messageCount,
+            starCount: runtime.starCount,
             firstMessage: runtime.firstMessage,
             transient: false,
           }
@@ -592,11 +594,32 @@ export function buildSessionContext(
     : -1;
   if (throughEntryId && throughIndex < 0)
     throw new RangeError("History target is not before the current page");
+  const starredEntryIds = readSessionStars(entries);
+  const stars = new Set(starredEntryIds);
+  const throughStart =
+    throughIndex >= 0 && stars.has(throughEntryId ?? "")
+      ? Math.max(
+          0,
+          branch
+            .slice(0, throughIndex + 1)
+            .findLastIndex(
+              (entry) =>
+                (entry.type === "message" && entry.message.role === "user") ||
+                entry.type === "compaction" ||
+                entry.type === "branch_summary",
+            ),
+        )
+      : throughIndex;
   // ponytail: distant jumps load the intervening span; use bounded windows if rendering becomes costly.
   const sliced = throughEntryId
-    ? branch.slice(throughIndex)
+    ? branch.slice(throughStart)
     : tail && tail > 0
-      ? branch.slice(-tail)
+      ? branch
+          .filter(
+            (entry) =>
+              entry.type !== "custom" || entry.customType !== SESSION_STAR_TYPE,
+          )
+          .slice(-tail)
       : branch;
   const hasMore = Boolean(sliced[0]?.parentId);
   // Paged chat history must retain compacted turns, in transcript order.
@@ -610,7 +633,8 @@ export function buildSessionContext(
     : branch
         .filter(
           (entry) =>
-            (entry.type === "message" && entry.message.role === "user") ||
+            (entry.type === "message" &&
+              (entry.message.role === "user" || stars.has(entry.id))) ||
             entry.type === "compaction" ||
             (entry.type === "branch_summary" && Boolean(entry.summary)) ||
             (entry.type === "custom_message" &&
@@ -618,6 +642,7 @@ export function buildSessionContext(
         )
         .map((entry) => ({
           id: entry.id,
+          ...(stars.has(entry.id) ? { starred: true } : {}),
           timestamp:
             entry.type === "message"
               ? (entry.message.timestamp ??
@@ -656,6 +681,7 @@ export function buildSessionContext(
     messages,
     entryIds,
     ...(historyAnchors ? { historyAnchors } : {}),
+    starredEntryIds,
     oldestEntryId: sliced[0]?.id ?? null,
     hasMore,
     ...getSessionSettings(entries, leafId),

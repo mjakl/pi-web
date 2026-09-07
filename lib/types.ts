@@ -334,6 +334,7 @@ export interface SessionInfo {
   /** File size paired with modified as the row-metadata fingerprint. */
   fileSize?: number;
   messageCount?: number;
+  starCount?: number;
   firstMessage?: string;
   parentSessionId?: string; // source session for a fork
   /** Main repo root shared by all worktrees of this cwd (cwd itself for non-git dirs).
@@ -357,7 +358,8 @@ export interface SessionInfo {
 
 export interface SessionContext {
   /** All turn anchors on the selected branch, independent of the loaded page. */
-  historyAnchors?: { id: string; timestamp?: number }[];
+  historyAnchors?: { id: string; timestamp?: number; starred?: boolean }[];
+  starredEntryIds?: string[];
   messages: AgentMessage[];
   entryIds: string[]; // parallel to messages — the session entry id for each message
   oldestEntryId: string | null;

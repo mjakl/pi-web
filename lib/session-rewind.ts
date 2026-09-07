@@ -1,3 +1,4 @@
+import { parseSessionStar } from "./session-stars";
 import { randomUUID } from "crypto";
 import { readFileSync } from "fs";
 import { TOOL_SELECTION_TYPE } from "./session-tool-selection";
@@ -40,9 +41,12 @@ export function rewindSessionFile(
 
   // Rewind conversation history, not session preferences. In particular, an
   // explicit Chat-only selection must never turn into the legacy tool default.
+  const retainedIds = new Set(entries.slice(1, index).map((entry) => entry.id));
   let parentId = target.parentId;
   const preferences = entries.slice(index + 1).flatMap((entry) => {
+    const star = parseSessionStar(entry);
     if (
+      !(star && retainedIds.has(star.targetId)) &&
       entry.type !== "session_info" &&
       entry.type !== "model_change" &&
       entry.type !== "thinking_level_change" &&

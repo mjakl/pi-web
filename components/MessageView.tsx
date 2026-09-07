@@ -1,5 +1,6 @@
 "use client";
 
+import { StarIcon } from "./StarIcon";
 import {
   memo,
   useState,
@@ -158,6 +159,9 @@ interface Props {
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
   entryId?: string;
+  starred?: boolean;
+  starPending?: boolean;
+  onStar?: (entryId: string, starred: boolean) => Promise<void>;
   onFork?: (entryId: string, message: UserMessage) => void;
   forking?: boolean;
   onRewind?: (entryId: string) => void;
@@ -240,6 +244,9 @@ export const MessageView = memo(
     prevTimestamp,
     sessionId,
     writtenFiles,
+    starred,
+    starPending,
+    onStar,
   }: Props) {
     if (message.role === "user") {
       return (
@@ -274,6 +281,9 @@ export const MessageView = memo(
           sessionId={sessionId}
           entryId={entryId}
           writtenFiles={writtenFiles}
+          starred={starred}
+          starPending={starPending}
+          onStar={onStar}
         />
       );
     }
@@ -301,6 +311,9 @@ export const MessageView = memo(
   },
   (prev, next) => {
     return (
+      prev.starred === next.starred &&
+      prev.starPending === next.starPending &&
+      prev.onStar === next.onStar &&
       prev.message === next.message &&
       prev.onError === next.onError &&
       prev.isStreaming === next.isStreaming &&
@@ -816,6 +829,9 @@ function AssistantMessageView({
   sessionId,
   entryId,
   writtenFiles,
+  starred,
+  starPending,
+  onStar,
 }: {
   message: AssistantMessage;
   onError: (message: string) => void;
@@ -830,6 +846,9 @@ function AssistantMessageView({
   sessionId?: string;
   entryId?: string;
   writtenFiles?: WrittenFile[];
+  starred?: boolean;
+  starPending?: boolean;
+  onStar?: (entryId: string, starred: boolean) => Promise<void>;
 }) {
   const { t } = useI18n();
   const time = showTimestamp ? formatTime(message.timestamp) : null;
@@ -1001,11 +1020,28 @@ function AssistantMessageView({
           display: "grid",
           gridTemplateColumns: isStreaming
             ? "minmax(0, 1fr) 9ch 10ch"
-            : "minmax(0, 1fr)",
+            : onStar
+              ? "auto minmax(0, 1fr)"
+              : "minmax(0, 1fr)",
           alignItems: "center",
           columnGap: 6,
         }}
       >
+        {onStar && entryId && !isStreaming && (
+          <button
+            type="button"
+            className="answer-star-toggle"
+            aria-pressed={Boolean(starred)}
+            aria-label={t(starred ? "chat.unstarAnswer" : "chat.starAnswer")}
+            title={t(starred ? "chat.unstarAnswer" : "chat.starAnswer")}
+            disabled={starPending}
+            onClick={() => {
+              void onStar(entryId, !starred);
+            }}
+          >
+            <StarIcon filled={starred} />
+          </button>
+        )}
         <span
           title={modelLabel ?? undefined}
           style={{

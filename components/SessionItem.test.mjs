@@ -1074,7 +1074,7 @@ test("the right column reserves room for message counts without truncating them"
   assert.equal(rail.style.flexDirection, "column");
   assert.equal(rail.style.justifyContent, "space-between");
   assert.equal(rail.style.alignItems, "flex-end");
-  const count = rail.lastElementChild;
+  const count = rail.querySelector(".session-message-count");
   assert.equal(count.textContent, "1000 msgs");
   assert.equal(count.title, "1000 msgs");
   assert.equal(count.style.maxWidth, "");
@@ -1231,4 +1231,22 @@ test("unread activity decorates one status indicator and clears when read", asyn
       await view.unmount();
     }
   }
+});
+
+test("shows an outlined star after its count, before the aligned message count, and hides zero stars", () => {
+  const container = document.createElement("div");
+  container.innerHTML = renderItem({
+    ...baseSession,
+    starCount: 1,
+    messageCount: 123,
+  });
+  const counts = container.querySelector(".session-counts");
+  assert.equal(counts.firstElementChild.className, "session-star-count");
+  const star = counts.firstElementChild;
+  assert.equal(star.firstElementChild.textContent, "1");
+  assert.equal(star.lastElementChild.tagName.toLowerCase(), "svg");
+  assert.equal(star.lastElementChild.getAttribute("fill"), "none");
+  assert.equal(counts.lastElementChild.textContent, "123 msgs");
+  container.innerHTML = renderItem({ ...baseSession, starCount: 0 });
+  assert.equal(container.querySelector(".session-star-count"), null);
 });

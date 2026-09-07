@@ -296,3 +296,111 @@ test("Rewind runs without confirmation, retains the draft on failure, and restor
     window.confirm = originalConfirm;
   }
 });
+
+for (const partialPage of [false, true]) {
+  test(`stars only final answers${partialPage ? " on a partial history page" : ""}, updates metadata, and preserves the saved state on a failed toggle`, async () => {
+    const originalFetch = globalThis.fetch;
+    const updates = [];
+    const writes = [];
+    let fail = false;
+    globalThis.fetch = async (url, options) => {
+      const path = String(url);
+      if (path.endsWith("/stars")) {
+        const body = JSON.parse(options.body);
+        writes.push(body);
+        if (fail)
+          return Response.json({ error: "Disk unavailable" }, { status: 400 });
+        return Response.json({
+          starredEntryIds: body.starred ? [body.targetId] : [],
+          starCount: body.starred ? 1 : 0,
+          fileSize: 100,
+          modified: "2026-09-07T12:00:00.000Z",
+        });
+      }
+      if (path.startsWith("/api/sessions/fork-source?"))
+        return Response.json({
+          sessionId: session.id,
+          filePath: session.path,
+          info: {
+            ...session,
+            messageCount: 3,
+            firstMessage: "Question",
+            starCount: 0,
+          },
+          totalActiveMs: 0,
+          tree: [],
+          leafId: "answer",
+          context: {
+            messages: [
+              ...(partialPage ? [] : [history[0]]),
+              {
+                ...history[1],
+                content: [{ type: "text", text: "Working through it" }],
+              },
+              history[1],
+            ],
+            entryIds: [
+              ...(partialPage ? [] : ["question"]),
+              "process",
+              "answer",
+            ],
+            historyAnchors: [{ id: "question" }],
+            starredEntryIds: [],
+            hasMore: false,
+          },
+        });
+      if (path.endsWith("/state"))
+        return Response.json({ active: false, running: false });
+      if (path.startsWith("/api/models"))
+        return Response.json({ models: {}, modelList: [] });
+      return Response.json({});
+    };
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await React.act(async () => {
+        root.render(
+          React.createElement(ChatWindow, {
+            session,
+            newSessionCwd: null,
+            onSessionMetadataChange: (value) => updates.push(value),
+          }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      });
+      const buttons = container.querySelectorAll(".answer-star-toggle");
+      assert.equal(buttons.length, 1, "process messages have no star toggle");
+      const button = buttons[0];
+      assert.equal(button.getAttribute("aria-pressed"), "false");
+      await React.act(async () => {
+        button.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      assert.deepEqual(writes, [{ targetId: "answer", starred: true }]);
+      assert.equal(button.getAttribute("aria-pressed"), "true");
+      assert.equal(updates.at(-1).starCount, 1);
+      fail = true;
+      await React.act(async () => {
+        button.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      assert.equal(button.getAttribute("aria-pressed"), "true");
+      assert.match(
+        container.textContent,
+        /Could not update star: Disk unavailable/,
+      );
+      fail = false;
+      await React.act(async () => {
+        button.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      assert.equal(button.getAttribute("aria-pressed"), "false");
+      assert.equal(updates.at(-1).starCount, 0);
+    } finally {
+      await React.act(() => root.unmount());
+      container.remove();
+      globalThis.fetch = originalFetch;
+    }
+  });
+}
