@@ -429,6 +429,62 @@ test("outlined answer stars jump to answer refs without displacing prompt refs",
   }
 });
 
+test("clicking markers in a long rail selects their own scroll targets", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scroll = document.createElement("div");
+  Object.defineProperty(scroll, "scrollHeight", { get: () => 20000 });
+  const jumps = [];
+  scroll.scrollTo = (options) => jumps.push(options.top);
+  const ids = Array.from({ length: 25 }, (_, index) => `entry-${index}`);
+  try {
+    await React.act(() =>
+      root.render(
+        React.createElement(ChatMinimap, {
+          messages: ids.map((_, index) =>
+            index === 20
+              ? { role: "custom", customType: "compaction" }
+              : { role: "user" },
+          ),
+          entryIds: ids,
+          scrollContainer: { current: scroll },
+          messageRefs: {
+            current: ids.map((_, index) => ({
+              getBoundingClientRect: () => rect(300 + index * 300),
+            })),
+          },
+          onLoadThrough: async () =>
+            assert.fail("loaded markers must not fetch history"),
+        }),
+      ),
+    );
+    await settle();
+    const rail = container.querySelector(".chat-minimap");
+    for (const [index, id] of ids.entries()) {
+      const marker = rail.querySelector(`[data-minimap-entry-id="${id}"]`);
+      if (index === 20) assert.ok(marker.querySelector('[role="separator"]'));
+      await React.act(() => {
+        rail.dispatchEvent(
+          new window.MouseEvent("mousedown", {
+            bubbles: true,
+            clientY: Number.parseFloat(marker.style.top) * 6,
+          }),
+        );
+        window.dispatchEvent(new window.MouseEvent("mouseup"));
+      });
+      assert.equal(jumps.at(-1), 120 + index * 300, `${id} scroll target`);
+      assert.equal(
+        rail.querySelector("[data-minimap-node-active]").dataset.minimapEntryId,
+        id,
+      );
+    }
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+  }
+});
+
 test("compactions render as neutral dividers for unloaded, loaded and live history", async () => {
   const container = document.createElement("div");
   document.body.append(container);
