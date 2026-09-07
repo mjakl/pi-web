@@ -117,6 +117,7 @@ export const enMessages: Record<string, string> = {
   "session.cacheWrite": "Cache Write",
   "session.contextWindow": "Context window",
   "session.contextUsage": "Context usage",
+  "session.estimatedValue": "~{value}",
   "session.contextSummary": "{used} / {max} ({percent})",
   "session.contextSize": "{used} / {max} tokens",
   "session.contextTooltip": "Context: {size} ({percent})",
