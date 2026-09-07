@@ -414,11 +414,6 @@ export function ChatMinimap({
 
   if (!visible) return null;
 
-  const lastNode = positionedNodes.at(-1);
-  const lastNodeTop = lastNode
-    ? lastNode.topRatio * minimapHeight
-    : MINIMAP_PADDING;
-  const railHeight = Math.max(1, lastNodeTop - MINIMAP_PADDING);
   const hoveredNode =
     hoveredIndex === null ? undefined : positionedNodes[hoveredIndex];
   const hoveredTimestamp = hoveredNode
@@ -456,19 +451,6 @@ export function ChatMinimap({
         overflow: "visible",
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: MINIMAP_PADDING,
-          height: railHeight,
-          width: 1,
-          background: "var(--border)",
-          transform: "translateX(-50%)",
-          zIndex: 0,
-        }}
-      />
-
       {positionedNodes.map((node) => {
         const isNearest = hoveredIndex === node.index;
         const isActive = activeIndex === node.index;
