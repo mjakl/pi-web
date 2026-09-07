@@ -391,6 +391,14 @@ export function SessionSidebar({
   );
   const drainMetadataQueueRef = useRef<() => void>(() => {});
   const refreshSessionInventoryRef = useRef<() => void>(() => {});
+  const selectedSessionRefreshRef = useRef({
+    selectedSessionId,
+    onRefreshSelectedSession,
+  });
+  selectedSessionRefreshRef.current = {
+    selectedSessionId,
+    onRefreshSelectedSession,
+  };
   const allSessionsRef = useRef(allSessions);
   allSessionsRef.current = allSessions;
 
@@ -1122,9 +1130,12 @@ export function SessionSidebar({
     (id: string) => {
       setError(null);
       void loadSessions();
-      if (id === selectedSessionId) void onRefreshSelectedSession?.();
+      // A pending clear may finish after the user switches sessions.
+      const current = selectedSessionRefreshRef.current;
+      if (id === current.selectedSessionId)
+        void current.onRefreshSelectedSession?.();
     },
-    [loadSessions, selectedSessionId, onRefreshSelectedSession],
+    [loadSessions],
   );
 
   const handleSessionDeleted = useCallback(

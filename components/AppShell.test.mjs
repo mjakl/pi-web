@@ -1114,18 +1114,25 @@ for (const estimated of [false, true]) {
   });
 }
 
-test("clearing sidebar stars refreshes the count and only refreshes the transcript for the selected session", async () => {
+test("clearing sidebar stars refreshes the count and refreshes the transcript selected when the request completes", async () => {
   const originalFetch = globalThis.fetch;
   try {
-    for (const selected of [true, false]) {
+    for (const [initiallySelected, selectedAtCompletion] of [
+      [true, true],
+      [false, false],
+      [false, true],
+      [true, false],
+    ]) {
       let session = { ...sidebarSession, starCount: 2 };
-      let refreshes = 0;
+      const refreshes = [];
+      const pendingClear = deferred();
       let inventoryAttempt = 0;
       globalThis.fetch = async (url, init) => {
         if (
           url === `/api/sessions/${session.id}/stars` &&
           init?.method === "DELETE"
         ) {
+          await pendingClear.promise;
           session = { ...session, starCount: 0, fileSize: 200 };
           return Response.json({ starredEntryIds: [], starCount: 0 });
         }
@@ -1142,14 +1149,14 @@ test("clearing sidebar stars refreshes the count and only refreshes the transcri
       const container = document.createElement("div");
       document.body.append(container);
       const root = createRoot(container);
-      try {
-        await act(async () => {
+      const render = (selected) =>
+        act(async () => {
           root.render(
             React.createElement(SessionSidebar, {
               selectedSessionId: selected ? session.id : "another-session",
               onSelectSession() {},
               onRefreshSelectedSession: async () => {
-                refreshes += 1;
+                refreshes.push(selected);
                 return true;
               },
               beginSessionInventoryAttempt: () => ++inventoryAttempt,
@@ -1158,6 +1165,8 @@ test("clearing sidebar stars refreshes the count and only refreshes the transcri
           );
           await new Promise((resolve) => setTimeout(resolve, 0));
         });
+      try {
+        await render(initiallySelected);
         assert.equal(
           container.querySelector(".session-star-count").textContent,
           "2",
@@ -1170,11 +1179,16 @@ test("clearing sidebar stars refreshes the count and only refreshes the transcri
             (button) => button.textContent === "Clear all stars",
           ),
         );
+        await render(selectedAtCompletion);
+        await act(async () => {
+          pendingClear.resolve();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
         assert.equal(
           Boolean(container.querySelector(".session-star-count")),
           false,
         );
-        assert.equal(refreshes, selected ? 1 : 0);
+        assert.deepEqual(refreshes, selectedAtCompletion ? [true] : []);
       } finally {
         await act(() => root.unmount());
         container.remove();
