@@ -618,7 +618,7 @@ export function ChatWindow({
       ].join("|")
     : null;
   const ctxKey = contextUsage
-    ? `${contextUsage.percent ?? "null"}|${contextUsage.contextWindow}|${contextUsage.tokens ?? "null"}`
+    ? `${contextUsage.percent ?? "null"}|${contextUsage.contextWindow}|${contextUsage.tokens ?? "null"}|${contextUsage.estimated ? "estimated" : "reported"}`
     : null;
 
   // One publish for everything the shell only displays. The effect is keyed on
