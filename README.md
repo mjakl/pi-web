@@ -100,9 +100,9 @@ device._
 - Read the result without losing the process. Expand reasoning, tool calls,
   command output, and subagent results, with token usage, context, and active
   time available alongside them.
-- Work with project files beside the conversation. Browse or upload files,
-  preview common source and document formats, inspect Git changes, and insert
-  file or line references into the composer.
+- Work with project files beside the conversation. Browse files, preview common
+  source and document formats, inspect Git changes, and insert file or line
+  references into the composer.
 - Select existing working folders and Git worktrees from one project picker. A
   session remains readable even if its original folder no longer exists.
 - Manage Pi skills and plugin packages for the global scope or a trusted

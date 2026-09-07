@@ -34,7 +34,7 @@ import {
 import { workspaceKeyOf } from "@/lib/workspace-memory";
 import { useI18n } from "@/hooks/useI18n";
 import { DirectoryPicker } from "./DirectoryPicker";
-import { FileExplorer, type FileExplorerHandle } from "./FileExplorer";
+import { FileExplorer } from "./FileExplorer";
 import { ProjectFolderGroup } from "./ProjectFolderGroup";
 import { PiWebTitle } from "./PiWebTitle";
 import { SESSION_ITEM_HEIGHT, SessionItem } from "./SessionItem";
@@ -115,7 +115,6 @@ interface Props {
   explorerRefreshKey?: number;
   onExplorerRefresh?: () => void;
   onAtMention?: (relativePath: string, isDir: boolean) => void;
-  onAtMentions?: (relativePaths: string[]) => void;
   /** Fired when a session that is not currently selected finishes running.
    *  Lets the app play a cross-workspace completion tone. */
   onBackgroundTaskDone?: () => void;
@@ -316,7 +315,6 @@ export function SessionSidebar({
   explorerRefreshKey,
   onExplorerRefresh,
   onAtMention,
-  onAtMentions,
   onBackgroundTaskDone,
   onActiveSessionIdsChange,
   onRunningSessionIdsChange,
@@ -347,7 +345,6 @@ export function SessionSidebar({
   );
   const [explorerOpen, setExplorerOpen] = useState(true);
   const [explorerKey, setExplorerKey] = useState(0);
-  const [explorerUploadBusy, setExplorerUploadBusy] = useState(false);
   const [fileSearchOpen, setFileSearchOpen] = useState(false);
   const [changesCount, setChangesCount] = useState(0);
   const [changesCollapsed, setChangesCollapsed] = useState(true);
@@ -376,7 +373,6 @@ export function SessionSidebar({
   const explorerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const fileExplorerRef = useRef<FileExplorerHandle>(null);
   const sessionListRef = useRef<HTMLDivElement>(null);
   const metadataQueueRef = useRef<Map<string, SessionInfo>>(new Map());
   const metadataLoadedRef = useRef<Map<string, string>>(new Map());
@@ -1812,30 +1808,6 @@ export function SessionSidebar({
                 </svg>
               </ToolbarIconButton>
             )}
-            {explorerOpen && (
-              <ToolbarIconButton
-                onClick={() => fileExplorerRef.current?.openUploadPicker()}
-                disabled={explorerUploadBusy}
-                title={t("sidebar.uploadFilesTitle")}
-                color="var(--text-dim)"
-              >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <path d="m17 8-5-5-5 5" />
-                  <path d="M12 3v12" />
-                </svg>
-              </ToolbarIconButton>
-            )}
             <ToolbarIconButton
               onClick={() => {
                 if (onExplorerRefresh) onExplorerRefresh();
@@ -1888,13 +1860,10 @@ export function SessionSidebar({
           {explorerOpen && (
             <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
               <FileExplorer
-                ref={fileExplorerRef}
                 cwd={selectedCwd ?? selectedCwdProp ?? ""}
                 onOpenFile={onOpenFile ?? (() => {})}
                 refreshKey={explorerKey}
                 onAtMention={onAtMention}
-                onAtMentions={onAtMentions}
-                onUploadBusyChange={setExplorerUploadBusy}
                 changesCollapsed={changesCollapsed}
                 onChangesCountChange={setChangesCount}
                 fileSearchOpen={fileSearchOpen}
