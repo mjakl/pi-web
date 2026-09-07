@@ -38,6 +38,7 @@ import {
 } from "@/lib/turn-written-files";
 import { MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
+import { useSessionInputFocus } from "@/hooks/useSessionInputFocus";
 import type { CompactionControl } from "./CompactButton";
 import { ChatJumpToLatest } from "./ChatJumpToLatest";
 import { ChatMinimap } from "./ChatMinimap";
@@ -293,7 +294,7 @@ export function ChatWindow({
   onSessionCreated,
   onSessionForked,
   modelsRefreshKey,
-  chatInputRef,
+  chatInputRef: providedChatInputRef,
   onSessionMetadataChange,
   onSessionStatsPanelOpen,
   onOpenFile,
@@ -304,6 +305,8 @@ export function ChatWindow({
   unlockAudio,
 }: Props) {
   const { t } = useI18n();
+  const localChatInputRef = useRef<ChatInputHandle | null>(null);
+  const chatInputRef = providedChatInputRef ?? localChatInputRef;
 
   // Wrap onAgentEnd to play the completion sound.
   const playDoneSoundRef = useRef(playDoneSound);
@@ -407,6 +410,11 @@ export function ChatWindow({
   });
   const sessionBusy = agentRunning || bashRunning;
   const readOnly = session?.cwdAvailable === false;
+  useSessionInputFocus(
+    session?.id ?? newSessionDraftKey,
+    !loading && !error && !readOnly,
+    chatInputRef,
+  );
   const historyActions = useMemo(
     () =>
       readOnly
