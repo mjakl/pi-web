@@ -843,7 +843,7 @@ export const SessionItem = memo(function SessionItem({
                     })}
                   >
                     <span>{session.starCount?.toLocaleString("en")}</span>
-                    <StarIcon size={11} />
+                    <StarIcon size={11} filled />
                   </span>
                 )}
                 <span

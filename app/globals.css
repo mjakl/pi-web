@@ -2799,6 +2799,10 @@ span.linenumber {
 .session-star-count {
   gap: 4px;
 }
+.session-star-count svg,
+.minimap-star svg {
+  color: var(--warning);
+}
 .session-message-count {
   min-width: 8ch;
   text-align: right;

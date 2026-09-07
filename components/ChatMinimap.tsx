@@ -537,7 +537,7 @@ export const ChatMinimap = memo(function ChatMinimap({
                 }}
                 style={{ height: Math.max(1, Math.min(32, nodeGap)) }}
               >
-                <StarIcon />
+                <StarIcon filled />
               </button>
             ) : (
               <button

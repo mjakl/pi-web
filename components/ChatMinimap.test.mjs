@@ -383,7 +383,7 @@ test("shows unloaded turns and completes the latest requested jump after its mes
   }
 });
 
-test("outlined answer stars jump to answer refs without displacing prompt refs", async () => {
+test("filled answer stars jump to answer refs without displacing prompt refs", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -424,7 +424,10 @@ test("outlined answer stars jump to answer refs without displacing prompt refs",
       'button[aria-label="Jump to starred answer"]',
     );
     assert.ok(star);
-    assert.equal(star.querySelector("svg").getAttribute("fill"), "none");
+    assert.equal(
+      star.querySelector("svg").getAttribute("fill"),
+      "currentColor",
+    );
     await React.act(() => star.click());
     assert.equal(jumps.at(-1), 620);
     assert.equal(
