@@ -1,5 +1,5 @@
 import { isRecord } from "./types";
-import type { BranchPreview } from "@/lib/types";
+import type { BranchPreview, SessionTreeNode } from "@/lib/types";
 
 // BranchNavigator still traverses recursively, so keep the response tree shallow.
 export const MAX_PROJECTED_TREE_DEPTH = 200;
@@ -14,8 +14,7 @@ type ProjectableEntry = {
 type ProjectableTreeNode<T> = {
   entry: ProjectableEntry;
   children: T[];
-  compressedEntryIds?: string[];
-  branchPreview?: BranchPreview;
+  label?: string;
 };
 
 function appendPreviewText(current: string, value: unknown): string {
@@ -81,7 +80,7 @@ function previewForEntry(entry: ProjectableEntry): BranchPreview | undefined {
  */
 export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
   nodes: T[],
-): T[] {
+): SessionTreeNode[] {
   const keep = new Set<T>();
   const roots = new Set(nodes);
   const seen = new Set<T>();
@@ -104,9 +103,10 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
     node: T,
     compressedEntryIds?: string[],
     branchPreview?: BranchPreview,
-  ): T => ({
-    ...node,
+  ): SessionTreeNode => ({
+    entry: { id: node.entry.id, type: node.entry.type },
     children: [],
+    ...(node.label !== undefined ? { label: node.label } : {}),
     ...(compressedEntryIds?.length ? { compressedEntryIds } : {}),
     ...(branchPreview ? { branchPreview } : {}),
   });
@@ -117,7 +117,10 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
   }));
   const projectedRoots = tasks.map(({ projected }) => projected);
 
-  const appendFlattenedKeptDescendants = (source: T, projectedParent: T) => {
+  const appendFlattenedKeptDescendants = (
+    source: T,
+    projectedParent: SessionTreeNode,
+  ) => {
     const pending = [
       {
         node: source,

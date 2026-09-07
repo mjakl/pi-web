@@ -311,8 +311,9 @@ export interface BranchPreview {
   text: string;
 }
 
+/** Navigation-only response DTO; full entries belong to session context/storage. */
 export interface SessionTreeNode {
-  entry: SessionEntry;
+  entry: { id: string; type: string };
   children: SessionTreeNode[];
   label?: string;
   compressedEntryIds?: string[];
