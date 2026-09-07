@@ -6,7 +6,7 @@
       "sourceUrl": "git@github.com:mjakl/skills.git",
       "sourceType": "git",
       "skillPath": "skills/code-review/SKILL.md",
-      "computedHash": "fc1943e20ee9759a95fe1a99f0fade5185a98fe4f7a7fe3b5865e6e32989a753"
+      "computedHash": "47d8cb41e82f31047a12a52296b8a6591825d3beacb4d35bd801efaf80338241"
     },
     "commit-changes": {
       "source": "git@github.com:mjakl/skills.git",
@@ -20,14 +20,14 @@
       "sourceUrl": "git@github.com:mjakl/skills.git",
       "sourceType": "git",
       "skillPath": "skills/create-github-pr/SKILL.md",
-      "computedHash": "b93475256d5cafeaf12b28b490e5375b7a96653e0e4b27cb2c328623f91cfc0a"
+      "computedHash": "e2ffa65738bd3d85096caac7f29c9d4ba4f29e85403cd9cca263a501f7f3499e"
     },
     "design-hexagonal-deep-modules": {
       "source": "git@github.com:mjakl/skills.git",
       "sourceUrl": "git@github.com:mjakl/skills.git",
       "sourceType": "git",
       "skillPath": "skills/design-hexagonal-deep-modules/SKILL.md",
-      "computedHash": "6852cc44eed402de5efd877cf9bb024a7be86b322fe245e7d12147aa553dd6a6"
+      "computedHash": "bf454a8f8af3fedf130c65bcc9f69f03162c010deae28bd0cabb3f98cd5202cc"
     },
     "diagnose-bugs": {
       "source": "git@github.com:mjakl/skills.git",
@@ -76,7 +76,7 @@
       "sourceUrl": "git@github.com:mjakl/skills.git",
       "sourceType": "git",
       "skillPath": "skills/testing/SKILL.md",
-      "computedHash": "54144bfd250c5c9885e73b096f71294a23588178ba609390b7acdfeca3d63025"
+      "computedHash": "851566c4951ba40b1b657abb2ecc158745c59cacd2fa2610310b38543426f8bc"
     }
   }
 }

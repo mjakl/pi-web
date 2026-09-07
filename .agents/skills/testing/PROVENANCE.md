@@ -8,7 +8,7 @@ Provide one general testing skill rather than separate testing, TDD, regression,
 
 - `mattpocock/skills` `tdd` at `8b78b531ab965735c5dc74f6f7a219e1e37326df`
 - `cursor/plugins` pstack `principle-make-operations-idempotent` at `fd6dd6f7276956a532bb78a748a8d2818b6eb5f4`
-- Self-written Remy testing and testing-audit guidance
+- Self-written project testing and testing-audit guidance
 - User preference for outside-in tests at stable seams, following the classic TDD vocabulary
 
 ## Durable decisions

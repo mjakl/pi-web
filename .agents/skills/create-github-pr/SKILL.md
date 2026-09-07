@@ -74,12 +74,25 @@ Use this order of precedence:
 
 If several templates exist, choose the one that matches the change. Ask when the choice is unclear. Preserve required headings and checkbox structure. Use `N/A` only for a required field that is genuinely inapplicable.
 
+Write a cover note for a reviewer who has not followed the task. In the opening, explain the problem or need, why it matters, and the intended outcome before implementation details or constraints. Ground this context in the request, conversation, linked issue, or verified evidence, and keep it consistent with the committed change.
+
+Use recent pull requests for tone and format, not as a reason to copy mechanics-first openings. Preserve required template headings and order; put the context first in the appropriate description field rather than adding a mandatory section. Lead that field with the need and outcome, not an edit followed by its reason.
+
+Keep simple changes brief. A maintenance reason or technical guarantee can be the point; do not invent user benefits, urgency, root causes, or measurements to make it sound bigger.
+
+For example, with a verified stale-export bug:
+
+- Before: “Invalidate the report cache after edits.”
+- After: “Exported reports still show old values after an edit, so users cannot rely on them to reflect their corrections. This change makes subsequent exports include saved edits by invalidating the report cache.”
+
+Read only the opening: can an unfamiliar reviewer tell why the change exists and what it achieves? If not, revise it before listing the mechanics.
+
 Fallback body:
 
 ```markdown
 ## Summary
 
-<what changed and why>
+<problem or need, why it matters, and intended outcome; then key implementation details if useful>
 
 ## Validation
 

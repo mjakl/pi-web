@@ -6,10 +6,10 @@ Provide one audit-depth, read-only readiness review of the complete proposed bra
 
 ## Sources consulted
 
-- The former catalog `code-review`, synthesized from `mattpocock/skills` `code-review` at `8b78b531ab965735c5dc74f6f7a219e1e37326df`, self-written Remy review workflows, and Nexxar Nitpick state-and-lifecycle review experience
+- The former catalog `code-review`, synthesized from `mattpocock/skills` `code-review` at `8b78b531ab965735c5dc74f6f7a219e1e37326df`, self-written project review workflows, and state-and-lifecycle review experience
 - The former catalog `code-audit`, including its architecture, security, performance, testing, lifecycle, operational, confidence, and evidence rules
-- The former catalog `security-audit`, synthesized from self-written Remy conventions and security audit guidance
-- Self-written Remy `architecture-review`, `architecture-audit`, `performance-audit`, `testing-audit`, `change-review`, and `codebase-audit` workflows
+- The former catalog `security-audit`, synthesized from self-written project conventions and security audit guidance
+- Self-written architecture, performance, testing, change-review, and codebase-audit workflows
 - `addyosmani/agent-skills` `code-review-and-quality` at `df1edb2e05487d0aa6d93c747141e0aed1187f25`
 - `cursor/plugins` pstack `blast-radius` at `fd6dd6f7276956a532bb78a748a8d2818b6eb5f4`
 - The catalog's `design-hexagonal-deep-modules` architecture principles, adapted into a self-contained changed-surface lens rather than a skill dependency
