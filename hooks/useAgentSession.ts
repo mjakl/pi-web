@@ -202,6 +202,15 @@ export type ThinkingLevelOption =
   | "xhigh"
   | "max";
 
+function messageActionDraft(message?: UserMessage): ChatDraft {
+  if (!message) return { value: "", images: [] };
+  const text = getUserMessageText(message);
+  return {
+    value: skillExpansionToCommand(text) ?? text,
+    images: getUserMessageDraftImages(message),
+  };
+}
+
 const PROMPT_SETTLE_INITIAL_DELAY_MS = 800;
 const PROMPT_SETTLE_POLL_MS = 600;
 const PROMPT_SETTLE_MAX_MS = 20_000;
@@ -325,7 +334,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   } | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
   const [systemTools, setSystemTools] = useState<ToolEntry[] | null>(null);
-  const [forkingEntryId, setForkingEntryId] = useState<string | null>(null);
+  const messageActionPendingRef = useRef(false);
+  const [messageActionEntryId, setMessageActionEntryId] = useState<
+    string | null
+  >(null);
   const [currentModelOverride, setCurrentModelOverride] = useState<{
     provider: string;
     modelId: string;
@@ -762,6 +774,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           deferMedia: "1",
         });
         if (leafId) params.set("leafId", leafId);
+        else if (branchRequest && leafId === null) params.set("root", "1");
         // Page upward: ask the server for the `tail` ancestors preceding `before`,
         // then prepend them. Omitting `before` fetches the selected branch.
         if (before) params.set("before", before);
@@ -2172,31 +2185,106 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, []);
 
   const handleFork = useCallback(
-    async (entryId: string, draft: ChatDraft) => {
-      if (bashRunningRef.current) return;
+    async (entryId: string) => {
       const sid = sessionIdRef.current;
-      if (!sid) return;
-      setForkingEntryId(entryId);
+      if (!sid || messageActionPendingRef.current) return;
+      messageActionPendingRef.current = true;
+      setMessageActionEntryId(entryId);
       try {
         const result = await sendAgentCommand<{
           cancelled?: boolean;
           newSessionId?: string;
-        }>(sid, {
-          type: "fork",
-          entryId,
-        });
-        const { cancelled, newSessionId } = result ?? {};
-        if (!cancelled && newSessionId) {
-          setDraft(newSessionId, draft);
-          onSessionForked?.(newSessionId);
+          message?: UserMessage;
+        }>(sid, { type: "fork", entryId });
+        if (!result?.cancelled && result?.newSessionId) {
+          setDraft(result.newSessionId, messageActionDraft(result.message));
+          if (sessionHookMountedRef.current && sessionIdRef.current === sid)
+            onSessionForked?.(result.newSessionId);
         }
-      } catch (e) {
-        console.error("Fork failed:", e);
+      } catch (error) {
+        if (sessionHookMountedRef.current && sessionIdRef.current === sid)
+          reportActionError(
+            t("chat.newSessionFailed", { error: errorMessage(error) }),
+          );
       } finally {
-        setForkingEntryId(null);
+        messageActionPendingRef.current = false;
+        if (sessionHookMountedRef.current) setMessageActionEntryId(null);
       }
     },
-    [onSessionForked],
+    [onSessionForked, reportActionError, t],
+  );
+
+  const handleBranchMessage = useCallback(
+    async (entryId: string) => {
+      const sid = sessionIdRef.current;
+      if (!sid || messageActionPendingRef.current) return;
+      messageActionPendingRef.current = true;
+      setMessageActionEntryId(entryId);
+      const branchRequest: BranchContextRequest = {
+        intentOrder: ++persistedOrderRef.current,
+        sessionId: sid,
+        runId: promptRunIdRef.current,
+      };
+      commitLocalSnapshotMutation();
+      try {
+        const result = await runPersistedWrite(() =>
+          sendAgentCommand<{
+            cancelled: boolean;
+            leafId: string | null;
+            message?: UserMessage;
+          }>(sid, { type: "branch_from_message", entryId }),
+        );
+        if (
+          result.cancelled ||
+          !sessionHookMountedRef.current ||
+          sessionIdRef.current !== sid ||
+          promptRunIdRef.current !== branchRequest.runId ||
+          acceptedTranscriptOrderRef.current > branchRequest.intentOrder
+        )
+          return;
+        // Authority follows successful navigation, never an optimistic target.
+        acceptedTranscriptOrderRef.current = branchRequest.intentOrder;
+        const loaded = await loadContext(
+          sid,
+          result.leafId,
+          undefined,
+          branchRequest,
+        );
+        if (!loaded || sessionIdRef.current !== sid) return;
+        setActiveLeafId(result.leafId);
+        const draft = messageActionDraft(result.message);
+        setDraft(sid, draft);
+        opts.chatInputRef?.current?.replaceMessage(
+          {
+            role: "user",
+            content: [
+              { type: "text", text: draft.value },
+              ...draft.images.map((image) => ({
+                type: "image" as const,
+                ...image,
+              })),
+            ],
+          },
+          true,
+        );
+      } catch (error) {
+        if (sessionHookMountedRef.current && sessionIdRef.current === sid)
+          reportActionError(
+            t("chat.branchFailed", { error: errorMessage(error) }),
+          );
+      } finally {
+        messageActionPendingRef.current = false;
+        if (sessionHookMountedRef.current) setMessageActionEntryId(null);
+      }
+    },
+    [
+      commitLocalSnapshotMutation,
+      runPersistedWrite,
+      loadContext,
+      opts.chatInputRef,
+      reportActionError,
+      t,
+    ],
   );
 
   const rewindingRef = useRef(false);
@@ -2972,7 +3060,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     thinkingLevel,
     retryInfo,
     contextUsage,
-    forkingEntryId,
+    messageActionEntryId,
     tree: data?.tree ?? NO_BRANCHES,
     systemPrompt,
     systemTools,
@@ -3002,6 +3090,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     handleSend,
     handleAbort,
     handleFork,
+    handleBranchMessage,
     handleRewind,
     handleNavigate,
     handleModelChange,

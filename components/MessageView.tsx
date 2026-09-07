@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  HistoryActionButtons,
+  HistoryActionFrame,
+  type MessageHistoryActions,
+} from "./MessageHistoryActions";
 import { StarIcon } from "./StarIcon";
 import {
   memo,
@@ -154,6 +159,7 @@ interface Props {
   onError?: (message: string) => void;
   isStreaming?: boolean;
   toolResults?: Map<string, ToolResultMessage>;
+  toolEntryIds?: Map<string, string>;
   activeTools?: ToolActivities;
   modelNames?: Record<string, string>;
   cwd?: string;
@@ -162,12 +168,8 @@ interface Props {
   starred?: boolean;
   starPending?: boolean;
   onStar?: (entryId: string, starred: boolean) => Promise<void>;
-  onFork?: (entryId: string, message: UserMessage) => void;
-  forking?: boolean;
   onRewind?: (entryId: string) => void;
-  onNavigate?: (entryId: string) => void;
-  prevAssistantEntryId?: string;
-  onEditContent?: (message: UserMessage) => void;
+  historyActions?: MessageHistoryActions;
   showTimestamp?: boolean;
   prevTimestamp?: number;
   sessionId?: string;
@@ -229,17 +231,14 @@ export const MessageView = memo(
     onError = console.error,
     isStreaming,
     toolResults,
+    toolEntryIds,
+    historyActions,
     activeTools,
     modelNames,
     cwd,
     onOpenFile,
     entryId,
-    onFork,
-    forking,
     onRewind,
-    onNavigate,
-    prevAssistantEntryId,
-    onEditContent,
     showTimestamp,
     prevTimestamp,
     sessionId,
@@ -256,35 +255,35 @@ export const MessageView = memo(
           cwd={cwd}
           onOpenFile={onOpenFile}
           entryId={entryId}
-          onFork={onFork}
-          forking={forking}
           onRewind={onRewind}
-          onNavigate={onNavigate}
-          prevAssistantEntryId={prevAssistantEntryId}
-          onEditContent={onEditContent}
+          historyActions={historyActions}
         />
       );
     }
     if (message.role === "assistant") {
       return (
-        <AssistantMessageView
-          message={message}
-          onError={onError}
-          isStreaming={isStreaming}
-          toolResults={toolResults}
-          activeTools={activeTools}
-          modelNames={modelNames}
-          cwd={cwd}
-          onOpenFile={onOpenFile}
-          showTimestamp={showTimestamp}
-          prevTimestamp={prevTimestamp}
-          sessionId={sessionId}
-          entryId={entryId}
-          writtenFiles={writtenFiles}
-          starred={starred}
-          starPending={starPending}
-          onStar={onStar}
-        />
+        <HistoryActionFrame entryId={entryId} actions={historyActions}>
+          <AssistantMessageView
+            message={message}
+            onError={onError}
+            isStreaming={isStreaming}
+            toolResults={toolResults}
+            toolEntryIds={toolEntryIds}
+            historyActions={historyActions}
+            activeTools={activeTools}
+            modelNames={modelNames}
+            cwd={cwd}
+            onOpenFile={onOpenFile}
+            showTimestamp={showTimestamp}
+            prevTimestamp={prevTimestamp}
+            sessionId={sessionId}
+            entryId={entryId}
+            writtenFiles={writtenFiles}
+            starred={starred}
+            starPending={starPending}
+            onStar={onStar}
+          />
+        </HistoryActionFrame>
       );
     }
     if (message.role === "toolResult") {
@@ -293,24 +292,36 @@ export const MessageView = memo(
     }
     if (message.role === "custom") {
       if (message.customType === "compaction") {
-        return <CompactionMessageView message={message} />;
+        return (
+          <HistoryActionFrame entryId={entryId} actions={historyActions}>
+            <CompactionMessageView message={message} />
+          </HistoryActionFrame>
+        );
       }
       return (
-        <CustomMessageView
-          message={message}
-          onError={onError}
-          cwd={cwd}
-          onOpenFile={onOpenFile}
-        />
+        <HistoryActionFrame entryId={entryId} actions={historyActions}>
+          <CustomMessageView
+            message={message}
+            onError={onError}
+            cwd={cwd}
+            onOpenFile={onOpenFile}
+          />
+        </HistoryActionFrame>
       );
     }
     if (message.role === "bashExecution") {
-      return <BashExecutionView message={message} sessionId={sessionId} />;
+      return (
+        <HistoryActionFrame entryId={entryId} actions={historyActions}>
+          <BashExecutionView message={message} sessionId={sessionId} />
+        </HistoryActionFrame>
+      );
     }
     return null;
   },
   (prev, next) => {
     return (
+      prev.historyActions === next.historyActions &&
+      prev.toolEntryIds === next.toolEntryIds &&
       prev.starred === next.starred &&
       prev.starPending === next.starPending &&
       prev.onStar === next.onStar &&
@@ -331,12 +342,7 @@ export const MessageView = memo(
       prev.cwd === next.cwd &&
       prev.onOpenFile === next.onOpenFile &&
       prev.entryId === next.entryId &&
-      prev.onFork === next.onFork &&
       prev.onRewind === next.onRewind &&
-      prev.forking === next.forking &&
-      prev.onNavigate === next.onNavigate &&
-      prev.prevAssistantEntryId === next.prevAssistantEntryId &&
-      prev.onEditContent === next.onEditContent &&
       prev.showTimestamp === next.showTimestamp &&
       prev.prevTimestamp === next.prevTimestamp &&
       prev.sessionId === next.sessionId
@@ -350,24 +356,16 @@ function UserMessageView({
   cwd,
   onOpenFile,
   entryId,
-  onFork,
-  forking,
   onRewind,
-  onNavigate,
-  prevAssistantEntryId,
-  onEditContent,
+  historyActions,
 }: {
   message: UserMessage;
   onError: (message: string) => void;
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
   entryId?: string;
-  onFork?: (entryId: string, message: UserMessage) => void;
-  forking?: boolean;
   onRewind?: (entryId: string) => void;
-  onNavigate?: (entryId: string) => void;
-  prevAssistantEntryId?: string;
-  onEditContent?: (message: UserMessage) => void;
+  historyActions?: MessageHistoryActions;
 }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
@@ -399,12 +397,8 @@ function UserMessageView({
       : "";
 
   const time = formatTime(message.timestamp);
-  const canFork = !!entryId && !!onFork;
   const canRewind = !!entryId && !!onRewind;
   const copyTarget = commandText ?? content;
-  const editTarget = commandText
-    ? replaceUserMessageText(message, commandText)
-    : message;
 
   const imageBlocksNode = imageBlocks.length > 0 && (
     <div
@@ -439,7 +433,6 @@ function UserMessageView({
       })}
     </div>
   );
-  const canNavigate = !!prevAssistantEntryId && !!onNavigate;
 
   const copyContent = () => {
     copyText(copyTarget)
@@ -671,10 +664,10 @@ function UserMessageView({
             {copied ? t("i18n.copied") : t("i18n.copy")}
           </button>
         </div>
-        {(canFork || canNavigate || canRewind) && (
+        {(Boolean(historyActions) || canRewind) && (
           <div
             className="message-actions"
-            data-forking={forking ? true : undefined}
+            data-forking={historyActions?.pending ? true : undefined}
             style={{
               display: "flex",
               gap: 3,
@@ -707,104 +700,7 @@ function UserMessageView({
                 {t("chat.rewind")}
               </button>
             )}
-            {canNavigate && (
-              <button
-                onClick={() => {
-                  onNavigate(prevAssistantEntryId);
-                  onEditContent?.(editTarget);
-                }}
-                title={t("i18n.editFromHereTitle")}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  padding: "3px 8px",
-                  height: 22,
-                  background: "none",
-                  border: "none",
-                  borderRadius: 5,
-                  color: "var(--text-dim)",
-                  cursor: "pointer",
-                  fontSize: 11,
-                  fontWeight: 400,
-                  whiteSpace: "nowrap",
-                  transition: "color 0.12s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = "var(--accent)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = "var(--text-dim)";
-                }}
-              >
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="15 10 20 15 15 20" />
-                  <path d="M4 4v7a4 4 0 0 0 4 4h12" />
-                </svg>
-                {t("i18n.editFromHere")}
-              </button>
-            )}
-            {canFork && (
-              <button
-                onClick={() => {
-                  onFork(entryId, editTarget);
-                }}
-                disabled={forking}
-                title={
-                  forking
-                    ? t("i18n.creatingSession")
-                    : t("i18n.newSessionTitle")
-                }
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  padding: "3px 8px",
-                  height: 22,
-                  background: "none",
-                  border: "none",
-                  borderRadius: 5,
-                  color: forking ? "var(--accent)" : "var(--text-dim)",
-                  cursor: forking ? "not-allowed" : "pointer",
-                  fontSize: 11,
-                  fontWeight: 400,
-                  whiteSpace: "nowrap",
-                  transition: "color 0.12s",
-                }}
-                onMouseEnter={(e) => {
-                  if (!forking) e.currentTarget.style.color = "var(--accent)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!forking) e.currentTarget.style.color = "var(--text-dim)";
-                }}
-              >
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="6" y1="3" x2="6" y2="15" />
-                  <circle cx="18" cy="6" r="3" />
-                  <circle cx="6" cy="18" r="3" />
-                  <path d="M18 9a9 9 0 0 1-9 9" />
-                </svg>
-                {forking ? t("i18n.creating") : t("i18n.newSession")}
-              </button>
-            )}
+            <HistoryActionButtons entryId={entryId} actions={historyActions} />
           </div>
         )}
         {time && (
@@ -820,6 +716,8 @@ function AssistantMessageView({
   onError,
   isStreaming,
   toolResults,
+  toolEntryIds,
+  historyActions,
   activeTools,
   modelNames,
   cwd,
@@ -837,6 +735,8 @@ function AssistantMessageView({
   onError: (message: string) => void;
   isStreaming?: boolean;
   toolResults?: Map<string, ToolResultMessage>;
+  toolEntryIds?: Map<string, string>;
+  historyActions?: MessageHistoryActions;
   activeTools?: ToolActivities;
   modelNames?: Record<string, string>;
   cwd?: string;
@@ -1108,6 +1008,8 @@ function AssistantMessageView({
             key={`${entryId ?? "stream"}-${originalIndex}`}
             block={block}
             toolResults={toolResults}
+            toolEntryIds={toolEntryIds}
+            historyActions={historyActions}
             activeTools={activeTools}
             isStreaming={isStreaming}
             streamingDuration={
@@ -1240,6 +1142,8 @@ function AssistantMessageView({
 function BlockView({
   block,
   toolResults,
+  toolEntryIds,
+  historyActions,
   activeTools,
   isStreaming,
   streamingDuration,
@@ -1252,6 +1156,8 @@ function BlockView({
 }: {
   block: AssistantContentBlock;
   toolResults?: Map<string, ToolResultMessage>;
+  toolEntryIds?: Map<string, string>;
+  historyActions?: MessageHistoryActions;
   activeTools?: ToolActivities;
   isStreaming?: boolean;
   streamingDuration?: number;
@@ -1294,23 +1200,35 @@ function BlockView({
     const calls = getSubagentCalls(tc);
     if (calls)
       return (
-        <SubagentToolCall
-          block={tc}
-          calls={calls}
-          result={result}
-          duration={duration}
-          activity={activeTools?.get(tc.toolCallId)}
-          cwd={cwd}
-          onOpenFile={onOpenFile}
-          sessionId={sessionId}
-          images={getMessageImages(result?.content ?? []).map(
-            (image, index) => (
-              <AssistantImageBlock key={index} block={image} />
-            ),
-          )}
-        />
+        <HistoryActionFrame
+          entryId={toolEntryIds?.get(tc.toolCallId)}
+          actions={historyActions}
+        >
+          <SubagentToolCall
+            block={tc}
+            calls={calls}
+            result={result}
+            duration={duration}
+            activity={activeTools?.get(tc.toolCallId)}
+            cwd={cwd}
+            onOpenFile={onOpenFile}
+            sessionId={sessionId}
+            images={getMessageImages(result?.content ?? []).map(
+              (image, index) => (
+                <AssistantImageBlock key={index} block={image} />
+              ),
+            )}
+          />
+        </HistoryActionFrame>
       );
-    return <ToolCallBlock block={tc} result={result} duration={duration} />;
+    return (
+      <HistoryActionFrame
+        entryId={toolEntryIds?.get(tc.toolCallId)}
+        actions={historyActions}
+      >
+        <ToolCallBlock block={tc} result={result} duration={duration} />
+      </HistoryActionFrame>
+    );
   }
   return null;
 }

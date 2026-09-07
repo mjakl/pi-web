@@ -2829,3 +2829,49 @@ span.linenumber {
     height: 44px;
   }
 }
+
+.history-actions {
+  display: flex;
+  gap: 3px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.history-action-host:hover > .history-actions,
+.history-action-host:focus-within > .history-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.history-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  min-height: 22px;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.history-action:hover:not(:disabled) {
+  color: var(--accent);
+}
+.history-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.message-row:focus-within .message-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (max-width: 640px) {
+  .history-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}

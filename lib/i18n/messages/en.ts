@@ -1,5 +1,9 @@
 /** Pi Web's English UI messages. */
 export const enMessages: Record<string, string> = {
+  "chat.branchBusy":
+    "Wait for the current operation to finish before branching",
+  "chat.branchFailed": "Could not create branch: {error}",
+  "chat.newSessionFailed": "Could not create session: {error}",
   "chat.starAnswer": "Star answer",
   "chat.unstarAnswer": "Unstar answer",
   "chat.starFailed": "Could not update star: {error}",
@@ -469,10 +473,10 @@ export const enMessages: Record<string, string> = {
   "i18n.copyMessage": "Copy message",
   "i18n.editFromHere": "New branch",
   "i18n.editFromHereTitle":
-    "New branch — edit this message within the current session",
+    "New branch — continue from this point within the current session",
   "i18n.newSession": "New session",
   "i18n.newSessionTitle":
-    "New session — copy earlier history and edit this message in a separate session",
+    "New session — copy history to this point into a separate session",
   "i18n.estimatedTokens": "Estimated token count while streaming",
   "i18n.noOutput": "(no output)",
   "i18n.noSummary": "(no summary)",

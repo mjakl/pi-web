@@ -94,7 +94,9 @@ test("New session restores the selected message and images after switching, pres
       commands.push(JSON.parse(options.body));
       return Response.json({
         success: true,
-        data: cancelled ? { cancelled: true } : { newSessionId: "fork-copy" },
+        data: cancelled
+          ? { cancelled: true }
+          : { newSessionId: "fork-copy", message: selectedMessage },
       });
     }
     const id = path.match(/^\/api\/sessions\/(fork-source|fork-copy)\?/)?.[1];
@@ -139,9 +141,9 @@ test("New session restores the selected message and images after switching, pres
     );
   }
   const newSessionButton = () =>
-    [...container.querySelectorAll("button")].find(
-      (button) => button.textContent.trim() === "New session",
-    );
+    [...container.querySelectorAll("button")]
+      .filter((button) => button.textContent.trim() === "New session")
+      .at(-1);
   try {
     await React.act(async () => {
       renderSession(session.id);
@@ -404,3 +406,204 @@ for (const partialPage of [false, true]) {
     }
   });
 }
+
+for (const [name, message, entryId, leafId, draft] of [
+  [
+    "first user message",
+    selectedMessage,
+    "first",
+    null,
+    "/skill:review src/main.ts",
+  ],
+  ["assistant answer", history[1], "answer", "answer", ""],
+  [
+    "extension message",
+    {
+      role: "custom",
+      customType: "fixture",
+      content: "Extension context",
+      display: true,
+    },
+    "custom",
+    "custom",
+    "",
+  ],
+]) {
+  test(`New branch from the ${name} updates context and draft only after success`, async () => {
+    const originalFetch = globalThis.fetch;
+    let outcome = "cancel";
+    const commands = [];
+    const contextUrls = [];
+    globalThis.fetch = async (url, options) => {
+      const path = String(url);
+      if (path === "/api/agent/fork-source") {
+        commands.push(JSON.parse(options.body));
+        if (outcome === "fail")
+          return Response.json({ error: "fixture failure" }, { status: 500 });
+        return Response.json({
+          success: true,
+          data:
+            outcome === "cancel"
+              ? { cancelled: true }
+              : {
+                  cancelled: false,
+                  leafId,
+                  ...(message.role === "user" ? { message } : {}),
+                },
+        });
+      }
+      if (path.includes("/context?")) {
+        contextUrls.push(path);
+        return Response.json({
+          context: {
+            messages: leafId === null ? [] : [message],
+            entryIds: leafId === null ? [] : [entryId],
+            hasMore: false,
+          },
+        });
+      }
+      if (path.startsWith("/api/sessions/fork-source?"))
+        return Response.json({
+          sessionId: session.id,
+          filePath: session.path,
+          info: session,
+          tree: [],
+          leafId: entryId,
+          context: {
+            messages: [message],
+            entryIds: [entryId],
+            hasMore: true,
+            oldestEntryId: entryId,
+          },
+        });
+      if (path.endsWith("/state"))
+        return Response.json({ active: false, running: false });
+      if (path.startsWith("/api/models"))
+        return Response.json({ models: {}, modelList: [] });
+      return Response.json({});
+    };
+    setDraft(session.id, { value: "Unsent draft", images: [] });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const button = () =>
+      [...container.querySelectorAll("button")].find(
+        (b) => b.textContent.trim() === "New branch",
+      );
+    try {
+      await React.act(() =>
+        root.render(
+          React.createElement(ChatWindow, {
+            session,
+            newSessionCwd: null,
+            newSessionDraftKey: null,
+            chatInputRef: React.createRef(),
+          }),
+        ),
+      );
+      assert.ok(
+        button(),
+        "first loaded entry has actions even without a preceding assistant",
+      );
+      await React.act(() => button().click());
+      assert.equal(container.querySelector("textarea").value, "Unsent draft");
+      assert.equal(contextUrls.length, 0);
+      outcome = "fail";
+      await React.act(() => button().click());
+      assert.equal(container.querySelector("textarea").value, "Unsent draft");
+      assert.equal(contextUrls.length, 0);
+      outcome = "success";
+      await React.act(() => button().click());
+      assert.equal(
+        container.querySelector("textarea").value,
+        draft,
+        JSON.stringify({ commands, contextUrls, text: container.textContent }),
+      );
+      assert.deepEqual(
+        commands,
+        Array(3).fill({ type: "branch_from_message", entryId }),
+      );
+      assert.equal(contextUrls.length, 1);
+      assert.equal(
+        new URL(contextUrls[0], "http://localhost").searchParams.get(
+          leafId === null ? "root" : "leafId",
+        ),
+        leafId === null ? "1" : leafId,
+      );
+      if (message.role === "user")
+        assert.deepEqual(getDraft(session.id).images, [image]);
+      else assert.equal(getDraft(session.id), null);
+    } finally {
+      await React.act(() => root.unmount());
+      container.remove();
+      clearDraft(session.id);
+      globalThis.fetch = originalFetch;
+    }
+  });
+}
+
+test("running sessions expose copying and explain why branching is disabled", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalEventSource = globalThis.EventSource;
+  globalThis.EventSource = class {
+    close() {}
+  };
+  globalThis.fetch = async (url) => {
+    const path = String(url);
+    if (path.startsWith("/api/sessions/fork-source?"))
+      return Response.json({
+        sessionId: session.id,
+        filePath: session.path,
+        info: session,
+        tree: [],
+        leafId: "answer",
+        context: {
+          messages: history,
+          entryIds: ["question", "answer"],
+          hasMore: false,
+        },
+      });
+    if (path.endsWith("/state"))
+      return Response.json({
+        active: true,
+        running: true,
+        state: { isStreaming: true },
+      });
+    if (path.startsWith("/api/models"))
+      return Response.json({ models: {}, modelList: [] });
+    return Response.json({});
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await React.act(() =>
+      root.render(
+        React.createElement(ChatWindow, {
+          session,
+          sessionRunning: true,
+          newSessionCwd: null,
+          newSessionDraftKey: null,
+          chatInputRef: React.createRef(),
+        }),
+      ),
+    );
+    const branches = [...container.querySelectorAll("button")].filter(
+      (b) => b.textContent.trim() === "New branch",
+    );
+    assert.equal(branches.length, 2);
+    for (const button of branches) {
+      assert.equal(button.disabled, true);
+      assert.match(button.parentElement.title, /finish/i);
+    }
+    for (const button of [...container.querySelectorAll("button")].filter(
+      (b) => b.textContent.trim() === "New session",
+    ))
+      assert.equal(button.disabled, false);
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+    globalThis.fetch = originalFetch;
+    globalThis.EventSource = originalEventSource;
+  }
+});

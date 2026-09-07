@@ -304,10 +304,7 @@ test("hands the hover reveal of message actions to CSS", () => {
     { role: "user", content: "hello" },
     {
       entryId: "e1",
-      forking: true,
-      onFork: () => {},
-      onNavigate: () => {},
-      prevAssistantEntryId: "p1",
+      historyActions: { pending: true, onFork: () => {}, onBranch: () => {} },
     },
   );
   assert.match(user, /<div class="message-row"/);
