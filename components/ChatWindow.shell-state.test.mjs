@@ -318,6 +318,5 @@ test("unmount resets the displayed values", async () => {
     sessionStats: null,
     contextUsage: null,
     compactionControl: null,
-    toolPresetControl: null,
   });
 });

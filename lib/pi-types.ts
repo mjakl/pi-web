@@ -10,11 +10,7 @@ import type {
   SlashCommandInfo,
   Theme,
 } from "@earendil-works/pi-coding-agent";
-import type {
-  AgentLoopTurnUpdate,
-  AgentMessage as PiAgentMessage,
-  PrepareNextTurnContext,
-} from "@earendil-works/pi-agent-core";
+import type { AgentMessage as PiAgentMessage } from "@earendil-works/pi-agent-core";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 
 export interface ContextUsage {
@@ -185,13 +181,6 @@ export interface AgentSessionLike {
       streamingMessage?: PiAgentMessage;
       messages?: PiAgentMessage[];
     };
-    prepareNextTurnWithContext?: (
-      context: PrepareNextTurnContext,
-      signal?: AbortSignal,
-    ) =>
-      | Promise<AgentLoopTurnUpdate | undefined>
-      | AgentLoopTurnUpdate
-      | undefined;
     waitForIdle(): Promise<void>;
   };
   readonly extensionRunner: ExtensionRunnerLike;
@@ -275,7 +264,6 @@ export interface AgentSessionLike {
   clearQueue(): { steering: string[]; followUp: string[] };
   getAllTools(): ToolInfo[];
   getActiveToolNames(): string[];
-  setActiveToolsByName(names: string[]): void;
   abortCompaction(): void;
   getContextUsage(): ContextUsage | undefined;
 }

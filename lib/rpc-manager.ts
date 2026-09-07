@@ -22,11 +22,7 @@ import { resolve } from "path";
 import { ExtensionUiBridge } from "./extension-ui-bridge";
 import { validateAgentImages } from "./image-attachments";
 import { invalidateModelsCache } from "./models-cache";
-import {
-  isThinkingLevel,
-  resolveVisibleModels,
-  selectInitialModelScope,
-} from "./model-scope";
+import { resolveVisibleModels, selectInitialModelScope } from "./model-scope";
 import {
   createProjectCommandBashExtension,
   createProjectCommandBashOperations,
@@ -53,20 +49,9 @@ import type { AgentSessionLike, ToolInfo } from "./pi-types";
 import type {
   AgentEvent,
   ExtensionUiResponse,
-  SessionEntry,
   SessionInfo,
   SessionMessageEntry,
 } from "./types";
-import { resolveShellTools } from "./powershell-settings";
-import {
-  CHAT_ONLY_RESOURCE_LOADER_OPTIONS,
-  contextFilesSystemPrompt,
-} from "./chat-only";
-import {
-  appendSessionToolSelection,
-  readSessionToolSelection,
-  validateSessionToolSelection,
-} from "./session-tool-selection";
 
 function persistSessionManager(
   manager: SessionManager,
@@ -116,8 +101,6 @@ type EventListener = (event: AgentEvent) => void;
 type AgentRunCompleteListener = (sessionId: string) => void;
 
 type AgentSessionWrapperOptions = {
-  exactSystemPrompt?: () => string;
-  chatOnly?: boolean;
   onAgentRunComplete?: AgentRunCompleteListener;
 };
 
@@ -144,40 +127,8 @@ const COMMANDS_ALLOWED_DURING_SESSION_REPLACEMENT = new Set([
 ]);
 
 interface RpcSessionStartOptions {
-  toolNames?: string[];
   initialModel?: { provider: string; modelId: string };
-  allowInitialModelFallback?: boolean;
   thinkingLevel?: ThinkingLevel;
-}
-
-const CODING_TOOL_NAMES = [
-  "read",
-  "bash",
-  "powershell",
-  "edit",
-  "write",
-  "grep",
-  "find",
-  "ls",
-];
-
-function withExtensionTools(
-  session: AgentSessionLike,
-  toolNames: string[],
-): string[] {
-  if (toolNames.length === 0) return [];
-
-  const codingToolNames = new Set(CODING_TOOL_NAMES);
-  const selectedToolNames = resolveShellTools(
-    toolNames,
-    session.settingsManager.getDefaultTools(),
-  );
-  const extensionToolNames = session
-    .getAllTools()
-    .map((t) => t.name)
-    .filter((name) => !codingToolNames.has(name));
-
-  return [...new Set([...selectedToolNames, ...extensionToolNames])];
 }
 
 // ============================================================================
@@ -199,8 +150,6 @@ export class AgentSessionWrapper {
   private extensionsBound = false;
   private extensionBindingPromise: Promise<void> | null = null;
   private extensionBindingError: unknown = null;
-  private readonly exactSystemPrompt?: () => string;
-  private readonly chatOnly: boolean;
   private readonly onAgentRunComplete?: AgentRunCompleteListener;
   private unsubscribe: (() => void) | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -216,11 +165,7 @@ export class AgentSessionWrapper {
     public readonly inner: AgentSessionLike,
     options: AgentSessionWrapperOptions = {},
   ) {
-    this.exactSystemPrompt = options.exactSystemPrompt;
-    this.chatOnly = options.chatOnly ?? false;
     this.onAgentRunComplete = options.onAgentRunComplete;
-    this.installExactSystemPromptContinuation();
-    this.applyExactSystemPrompt();
   }
 
   get sessionId(): string {
@@ -261,10 +206,6 @@ export class AgentSessionWrapper {
     );
   }
 
-  isChatOnly(): boolean {
-    return this.chatOnly;
-  }
-
   start(): void {
     this.unsubscribe = this.inner.subscribe((event: AgentEvent) => {
       if (event.type === "agent_start") this.agentRunNeedsCompletion = true;
@@ -303,10 +244,7 @@ export class AgentSessionWrapper {
   }
 
   private ensureExtensionsBound(): Promise<void> {
-    if (this.extensionsBound) {
-      this.applyExactSystemPrompt();
-      return Promise.resolve();
-    }
+    if (this.extensionsBound) return Promise.resolve();
     if (this.extensionBindingPromise) return this.extensionBindingPromise;
 
     this.extensionBindingError = null;
@@ -336,7 +274,6 @@ export class AgentSessionWrapper {
         },
       });
       this.extensionsBound = true;
-      this.applyExactSystemPrompt();
       console.log(
         `[pi-web] session_start dispatched to extensions for session ${this.inner.sessionId}`,
       );
@@ -349,7 +286,6 @@ export class AgentSessionWrapper {
   }
 
   private async waitForExtensionsBound(): Promise<void> {
-    if (this.chatOnly) return;
     try {
       await this.ensureExtensionsBound();
     } catch (err) {
@@ -378,32 +314,6 @@ export class AgentSessionWrapper {
     } finally {
       this.resetIdleTimer();
     }
-  }
-
-  private applyExactSystemPrompt(): void {
-    if (!this.exactSystemPrompt || !this.inner.agent.state) return;
-    this.inner.agent.state.systemPrompt = this.exactSystemPrompt();
-  }
-
-  private installExactSystemPromptContinuation(): void {
-    const exactSystemPrompt = this.exactSystemPrompt;
-    if (!exactSystemPrompt) return;
-    const previous = this.inner.agent.prepareNextTurnWithContext;
-    this.inner.agent.prepareNextTurnWithContext = async (turn, signal) => {
-      const prepared = await previous?.(turn, signal);
-      return {
-        ...prepared,
-        context: {
-          ...(prepared?.context ?? turn.context),
-          systemPrompt: exactSystemPrompt(),
-        },
-      };
-    };
-  }
-
-  setActiveToolSelection(toolNames: string[]): void {
-    this.inner.setActiveToolsByName(withExtensionTools(this.inner, toolNames));
-    this.applyExactSystemPrompt();
   }
 
   private emit(event: AgentEvent): void {
@@ -621,7 +531,6 @@ export class AgentSessionWrapper {
                 // validation and extension preflight have accepted the submission.
                 preflightResult: (success) => {
                   if (success) {
-                    this.applyExactSystemPrompt();
                     acceptPreflight();
                   }
                 },
@@ -1057,20 +966,11 @@ export class AgentSessionWrapper {
           return { commands };
         }
 
-        case "set_tools": {
-          const toolNames = command["toolNames"] as string[];
-          this.setActiveToolSelection(toolNames);
-          return null;
-        }
-
         case "reload": {
-          const activeToolNames = this.inner.getActiveToolNames();
           await this.waitForExtensionsBound();
           this.extensionUi.resetForReload();
           this.syncProjectTrust();
           await this.inner.reload();
-          this.setActiveToolSelection(activeToolNames);
-          this.applyExactSystemPrompt();
           invalidateModelsCache();
           return { success: true };
         }
@@ -1285,7 +1185,6 @@ export class AgentSessionWrapper {
             );
           },
         });
-        this.applyExactSystemPrompt();
       },
     };
   }
@@ -1303,7 +1202,6 @@ export class AgentSessionWrapper {
 type RpcSessionLifecycle = {
   generation: number;
   stopping: Promise<boolean> | null;
-  toolChangeTail: Promise<void>;
 };
 
 export type RpcSessionOperation = {
@@ -1353,7 +1251,7 @@ function registerRpcWrapper(wrapper: AgentSessionWrapper): void {
   });
   registry.set(sessionId, wrapper);
   wrapper.start();
-  if (!wrapper.isChatOnly()) wrapper.beginExtensionBinding();
+  wrapper.beginExtensionBinding();
 }
 
 function getLocks(): Map<
@@ -1371,7 +1269,6 @@ function getLifecycle(sessionId: string): RpcSessionLifecycle {
     lifecycle = {
       generation: 0,
       stopping: null,
-      toolChangeTail: Promise.resolve(),
     };
     globalThis.__piSessionLifecycles.set(sessionId, lifecycle);
   }
@@ -1398,26 +1295,6 @@ async function assertRpcSessionOperationCurrent(
     getLifecycle(operation.sessionId).generation !== operation.generation
   ) {
     throw new Error("Session was stopped");
-  }
-}
-
-async function acquireRpcSessionToolChange(
-  operation: RpcSessionOperation,
-): Promise<() => void> {
-  await assertRpcSessionOperationCurrent(operation);
-  const lifecycle = getLifecycle(operation.sessionId);
-  const previous = lifecycle.toolChangeTail;
-  // No-value promise resolver; void is the Promise type argument, not a stored value.
-  // oxlint-disable-next-line typescript/no-invalid-void-type
-  const { promise: current, resolve: release } = Promise.withResolvers<void>();
-  lifecycle.toolChangeTail = previous.then(() => current);
-  await previous;
-  try {
-    await assertRpcSessionOperationCurrent(operation);
-    return release;
-  } catch (error) {
-    release();
-    throw error;
   }
 }
 
@@ -1456,12 +1333,6 @@ export function isRpcSessionActive(
   session: AgentSessionWrapper | undefined,
 ): boolean {
   return session?.isActive() ?? false;
-}
-
-interface SetRpcSessionToolsResult {
-  session: AgentSessionWrapper;
-  sessionId: string;
-  recreated: boolean;
 }
 
 export async function activateRpcSession(
@@ -1531,106 +1402,6 @@ export async function setRpcSessionStar(
     fileSize: stats.size,
     modified: stats.mtime.toISOString(),
   };
-}
-
-/** Persist a normal session's tool selection and rebuild when resource policy changes. */
-export async function setRpcSessionTools(
-  operation: RpcSessionOperation,
-  sessionFile: string | undefined,
-  requestedToolNames: unknown,
-): Promise<SetRpcSessionToolsResult> {
-  const releaseToolChange = await acquireRpcSessionToolChange(operation);
-  try {
-    const sessionId = operation.sessionId;
-    const toolNames = validateSessionToolSelection(requestedToolNames);
-    const existing = getRpcSession(sessionId);
-    if (existing?.isAlive() && !existing.isActive())
-      throw new Error("Session is stopping");
-
-    if (!existing?.isAlive()) {
-      if (!sessionFile) throw new Error("Session not found");
-      const manager = SessionManager.open(sessionFile, undefined);
-      assertWorkingDirectoryAvailable(manager.getCwd());
-      appendSessionToolSelection(manager, toolNames);
-      const started = await startRpcSession(
-        sessionId,
-        sessionFile,
-        undefined,
-        {},
-        operation,
-      );
-      await assertRpcSessionOperationCurrent(operation);
-      return {
-        session: started.session,
-        sessionId: started.realSessionId,
-        recreated: false,
-      };
-    }
-
-    assertWorkingDirectoryAvailable(existing.cwd);
-    if (existing.isRunning())
-      throw new Error("Cannot change tools while the session is running");
-
-    const crossesChatOnlyBoundary =
-      existing.isChatOnly() !== (toolNames.length === 0);
-    appendSessionToolSelection(existing.inner.sessionManager, toolNames);
-
-    if (!crossesChatOnlyBoundary) {
-      existing.setActiveToolSelection(toolNames);
-      return { session: existing, sessionId, recreated: false };
-    }
-
-    const persistedFile =
-      existing.sessionFile && existsSync(existing.sessionFile)
-        ? existing.sessionFile
-        : undefined;
-    const sessionCwd = existing.cwd;
-    const model = existing.inner.model;
-    const currentThinkingLevel = existing.inner.agent.state?.thinkingLevel;
-    await existing.shutdown();
-    await assertRpcSessionOperationCurrent(operation);
-
-    if (persistedFile) {
-      const started = await startRpcSession(
-        sessionId,
-        persistedFile,
-        undefined,
-        {},
-        operation,
-      );
-      await assertRpcSessionOperationCurrent(operation);
-      return {
-        session: started.session,
-        sessionId: started.realSessionId,
-        recreated: true,
-      };
-    }
-
-    const started = await startRpcSession(
-      `__recreate__${randomUUID()}`,
-      "",
-      sessionCwd,
-      {
-        toolNames,
-        ...(model
-          ? { initialModel: { provider: model.provider, modelId: model.id } }
-          : {}),
-        allowInitialModelFallback: true,
-        ...(isThinkingLevel(currentThinkingLevel)
-          ? { thinkingLevel: currentThinkingLevel }
-          : {}),
-      },
-      operation,
-    );
-    await assertRpcSessionOperationCurrent(operation);
-    return {
-      session: started.session,
-      sessionId: started.realSessionId,
-      recreated: true,
-    };
-  } finally {
-    releaseToolChange();
-  }
 }
 
 function runtimeMessageActivityMs(
@@ -1769,7 +1540,6 @@ export async function stopRpcSession(sessionId: string): Promise<boolean> {
  * For new sessions (sessionFile === ""), pi generates its own id.
  * New sessions resolve enabledModels before construction so the initial model,
  * thinking pin, and SDK scopedModels share one settings snapshot.
- * Pass options.toolNames to pre-configure active tools (empty = all disabled).
  */
 export async function startRpcSession(
   sessionId: string,
@@ -1778,11 +1548,7 @@ export async function startRpcSession(
   options: RpcSessionStartOptions = {},
   operation?: RpcSessionOperation,
 ): Promise<{ session: AgentSessionWrapper; realSessionId: string }> {
-  const { initialModel, allowInitialModelFallback, thinkingLevel } = options;
-  const requestedToolNames =
-    options.toolNames === undefined
-      ? undefined
-      : validateSessionToolSelection(options.toolNames);
+  const { initialModel, thinkingLevel } = options;
   if (operation) await assertRpcSessionOperationCurrent(operation);
   const lifecycleSessionId = operation?.sessionId ?? sessionId;
   const lifecycle = getLifecycle(lifecycleSessionId);
@@ -1815,52 +1581,35 @@ export async function startRpcSession(
   }
   const sessionCwd = sessionManager.getCwd();
   assertWorkingDirectoryAvailable(sessionCwd);
-  const persistedToolNames = readSessionToolSelection(
-    sessionManager.getEntries() as unknown as SessionEntry[],
-  );
-  const selectedToolNames = persistedToolNames ?? requestedToolNames;
-  if (persistedToolNames === undefined && requestedToolNames !== undefined) {
-    appendSessionToolSelection(sessionManager, requestedToolNames);
-  }
-  const chatOnly = selectedToolNames?.length === 0;
   const finishStartingSession = trackStartingSession(sessionCwd);
   const starting = (async () => {
     // Some extensions access the SDK's global theme even outside the terminal UI.
-    if (!chatOnly) initTheme();
+    initTheme();
     const agentDir = getAgentDir();
-
-    // Determine which tools to pass based on requested toolNames.
-    // Since v0.68.0, session creation expects string[] tool names instead of Tool[] instances.
-    // toolNames === [] -> "all off" (an empty allow-list disables every tool).
-    // Otherwise DO NOT pass a builtin-only allow-list: passing CODING_TOOL_NAMES
-    // set allowedToolNames to coding builtins only, which filtered every
-    // extension/package-provided tool out of the registry. Leaving the allow-list
-    // unset lets the SDK register all tools; we narrow the active set below.
-    const toolsOption = selectedToolNames?.length === 0 ? [] : undefined;
 
     // Build services first so extension-registered providers are available
     // before the SDK restores the saved model from the session file.
     // Gate untrusted project extensions so opening a repository does not run
     // its .pi/extensions code automatically (see lib/project-trust.ts, #236).
-    const trustReloadOptions = chatOnly
-      ? undefined
-      : projectTrustReloadOptions(sessionCwd, agentDir);
+    const trustReloadOptions = projectTrustReloadOptions(sessionCwd, agentDir);
     const settingsManager = SettingsManager.create(sessionCwd, agentDir);
     const services = await createAgentSessionServices({
       cwd: sessionCwd,
       agentDir,
       settingsManager,
-      resourceLoaderOptions: chatOnly
-        ? CHAT_ONLY_RESOURCE_LOADER_OPTIONS
-        : {
-            extensionFactories: [
-              createProjectCommandBashExtension({
-                cwd: sessionCwd,
-                settings: settingsManager,
-              }),
-            ],
-            extensionsOverride: preferUserBashExtension,
-          },
+      resourceLoaderOptions: {
+        appendSystemPromptOverride: (base) => [
+          ...base,
+          "Pi Web renders Markdown with tables, task lists, strikethrough, links, images, and syntax-highlighted code blocks. Use fenced mermaid blocks for diagrams; previews are available after streaming finishes. LaTeX/math typesetting is not supported; use plain text or code for math.",
+        ],
+        extensionFactories: [
+          createProjectCommandBashExtension({
+            cwd: sessionCwd,
+            settings: settingsManager,
+          }),
+        ],
+        extensionsOverride: preferUserBashExtension,
+      },
       ...(trustReloadOptions
         ? { resourceLoaderReloadOptions: trustReloadOptions }
         : {}),
@@ -1869,16 +1618,6 @@ export async function startRpcSession(
       services.modelRuntime,
       services.settingsManager.getEnabledModels(),
     );
-    const effectiveInitialModel =
-      initialModel &&
-      (!allowInitialModelFallback ||
-        scope.visible.some(
-          (model) =>
-            model.provider === initialModel.provider &&
-            model.id === initialModel.modelId,
-        ))
-        ? initialModel
-        : undefined;
     const defaultProvider = services.settingsManager.getDefaultProvider();
     const defaultModelId = services.settingsManager.getDefaultModel();
     const hasExistingMessages = sessionManager
@@ -1887,9 +1626,7 @@ export async function startRpcSession(
     const initial = hasExistingMessages
       ? { scopedModels: [...scope.scopedModels] }
       : selectInitialModelScope(scope, {
-          ...(effectiveInitialModel
-            ? { requestedModel: effectiveInitialModel }
-            : {}),
+          ...(initialModel ? { requestedModel: initialModel } : {}),
           ...(defaultProvider && defaultModelId
             ? {
                 defaultModel: {
@@ -1910,13 +1647,12 @@ export async function startRpcSession(
       ...(initial.scopedModels.length > 0
         ? { scopedModels: initial.scopedModels }
         : {}),
-      ...(toolsOption !== undefined ? { tools: toolsOption } : {}),
     });
 
     const persistedPreferences = await persistExplicitStartupPreferences(
       services.settingsManager,
       {
-        ...(effectiveInitialModel ? { model: effectiveInitialModel } : {}),
+        ...(initialModel ? { model: initialModel } : {}),
         ...(thinkingLevel ? { thinkingLevel } : {}),
       },
       {
@@ -1934,27 +1670,7 @@ export async function startRpcSession(
     );
     if (persistedPreferences.modelDefaultChanged) invalidateModelsCache();
 
-    // If specific tool names were requested (non-empty), set the active tools to the
-    // requested builtin coding tools PLUS all extension/package tools, so installed
-    // extensions stay usable in Pi Web just like in the `pi` CLI.
-    if (!chatOnly) {
-      inner.setActiveToolsByName(
-        withExtensionTools(
-          inner,
-          selectedToolNames ?? inner.getActiveToolNames(),
-        ),
-      );
-    }
-
-    const exactSystemPrompt = chatOnly
-      ? () =>
-          contextFilesSystemPrompt(
-            inner.resourceLoader.getAgentsFiles().agentsFiles,
-          )
-      : undefined;
     const wrapper = new AgentSessionWrapper(inner, {
-      exactSystemPrompt,
-      chatOnly,
       onAgentRunComplete: (completedSessionId) => {
         void notifySessionComplete(completedSessionId).catch(
           (error: unknown) => {

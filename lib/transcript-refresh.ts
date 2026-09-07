@@ -1,6 +1,5 @@
 import type { AgentMessage, SessionContext, SessionInfo } from "./types";
 import { userMessageKey } from "./prompt-recovery";
-import { getPresetFromToolNames } from "./tool-presets";
 
 export interface PersistedAuthority {
   acceptedSnapshotOrder: number;
@@ -267,7 +266,6 @@ export function projectPersistedSnapshot<
   T extends {
     info?: SessionInfo | null;
     leafId: string | null;
-    toolNames?: string[];
     context: SessionContext;
   },
 >(data: T) {
@@ -278,10 +276,6 @@ export function projectPersistedSnapshot<
     entryIds: data.context.entryIds,
     historyCursor: data.context.oldestEntryId,
     hasEarlierMessages: data.context.hasMore,
-    toolPreset:
-      data.toolNames === undefined
-        ? ("default" as const)
-        : getPresetFromToolNames(data.toolNames),
     thinkingLevel: getPersistedThinkingLevel(data.context.thinkingLevel),
     sessionStatsOverride: null,
     error: null,

@@ -106,7 +106,7 @@ device._
 - Select existing working folders and Git worktrees from one project picker. A
   session remains readable even if its original folder no longer exists.
 - Manage Pi skills and plugin packages for the global scope or a trusted
-  project. Choose between Chat only, Read only, Default, and Full tool presets.
+  project. Pi controls the runtime's tools and resource discovery.
 - Install Pi Web as a PWA and receive browser notifications when a task finishes
   or an extension needs input.
 

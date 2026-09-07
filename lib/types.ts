@@ -1,3 +1,11 @@
+export interface ToolEntry {
+  name: string;
+  description: string;
+  active: boolean;
+  parameters?: Record<string, unknown>;
+  promptGuidelines?: string[];
+}
+
 // Types mirrored from pi-mono coding-agent session-manager
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

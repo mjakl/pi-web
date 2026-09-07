@@ -1,10 +1,5 @@
 import type { ResourceDiagnostic } from "@earendil-works/pi-coding-agent";
 
-export interface ShellToolSettingsResponse {
-  isWindows: boolean;
-  powerShellEnabled: boolean;
-}
-
 export interface SkillSearchResult {
   package: string;
   installs: string;

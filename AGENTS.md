@@ -61,7 +61,7 @@ Start with these owners instead of a broad file inventory:
 | Extension dialogs, statuses, widgets, or custom UI            | `lib/extension-ui-bridge.ts`                                                                                                |
 | Browser streaming and reconciliation                          | `hooks/useAgentSession.ts`, `lib/agent-event-*.ts`, `lib/agent-client.ts`                                                   |
 | File access, path identity, Git, or worktrees                 | `lib/file-access.ts`, `lib/path-security.ts`, `lib/paths.ts`, `lib/worktree.ts`                                             |
-| Project resources, trust, plugins, or skills                  | `lib/project-trust.ts`, `lib/chat-only.ts`, `app/api/{project-trust,plugins,skills}/**`                                     |
+| Project resources, trust, plugins, or skills                  | `lib/project-trust.ts`, `app/api/{project-trust,plugins,skills}/**`                                                         |
 | Models and startup preferences                                | `lib/model-scope.ts`, `lib/models-cache.ts`, `lib/agent-config-stamp.ts`, `lib/startup-preferences.ts`, `app/api/models/**` |
 | Application shell and session workspace UI                    | `components/AppShell.tsx`, `components/SessionSidebar.tsx`, `components/ChatWindow.tsx`, `components/ChatInput.tsx`         |
 | Host Pi resolution, package shims, and Next.js startup        | `bin/host-pi.js`, `bin/host-pi-runtime.js`, `bin/link-host-pi.js`, `bin/run-next.js`                                        |
@@ -124,13 +124,10 @@ Start with these owners instead of a broad file inventory:
 
 ### Tools, resources, and project execution
 
-- When changing tool selection, Chat-only startup, resource snapshots, system
-  prompts, or wrapper rebuilds, read
-  [`docs/adr/0002-chat-only-tool-selection.md`](docs/adr/0002-chat-only-tool-selection.md).
-  Resolve the persisted policy before session services load: no selection is a
-  legacy default, while an explicit empty selection is Chat only. Crossing the
-  Chat-only boundary rebuilds the wrapper; a nonempty preset change may update
-  it in place.
+- Keep tool and resource defaults owned by Pi. Append Pi Web's rendering note
+  through the resource loader's `appendSystemPromptOverride`, preserving the
+  discovered append instructions and normal system prompt for new and resumed
+  runtimes. Do not inject it into conversation history.
 - Gate project-controlled extensions, project settings resources, and project
   skills through `projectTrustReloadOptions()` in `lib/project-trust.ts`.
   Opening an untrusted project must not execute its code. A trust change takes

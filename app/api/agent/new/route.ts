@@ -42,14 +42,12 @@ export async function POST(req: Request) {
     }
 
     // Use a one-time key so startRpcSession's lock doesn't conflict with real session ids
-    const { provider, modelId, toolNames, thinkingLevel, ...promptCommand } =
-      command as {
-        provider?: string;
-        modelId?: string;
-        toolNames?: string[];
-        thinkingLevel?: unknown;
-        [key: string]: unknown;
-      };
+    const { provider, modelId, thinkingLevel, ...promptCommand } = command as {
+      provider?: string;
+      modelId?: string;
+      thinkingLevel?: unknown;
+      [key: string]: unknown;
+    };
     if ((provider && !modelId) || (!provider && modelId)) {
       throw new Error("provider and modelId must be provided together");
     }
@@ -67,7 +65,6 @@ export async function POST(req: Request) {
     // requests in the same millisecond, merging two new sessions into one.
     const tempKey = `__new__${randomUUID()}`;
     const { session, realSessionId } = await startRpcSession(tempKey, "", cwd, {
-      ...(toolNames ? { toolNames } : {}),
       ...(provider && modelId ? { initialModel: { provider, modelId } } : {}),
       ...(explicitThinkingLevel
         ? { thinkingLevel: explicitThinkingLevel }

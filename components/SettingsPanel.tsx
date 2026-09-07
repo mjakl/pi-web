@@ -3,14 +3,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useTheme, type ThemePreference } from "@/hooks/useTheme";
-import { errorMessage } from "@/lib/error-message";
-import { sendAgentCommand } from "@/lib/agent-client";
-import type { ShellToolSettingsResponse } from "@/lib/api-types";
-import {
-  getPreferredToolPreset,
-  setPreferredToolPreset,
-} from "@/lib/tool-preset-preference";
-import type { ToolPreset } from "@/lib/tool-presets";
 import {
   setLastSettingsSection,
   type SettingsSection,
@@ -18,13 +10,11 @@ import {
 import { SkillsConfig } from "./SkillsConfig";
 import { PluginsConfig } from "./PluginsConfig";
 import { ConfigSwitch } from "./SettingsUi";
-import type { ToolPresetControl } from "./ChatWindow";
 
 interface Props {
   cwd: string | null;
   sessionId: string | null;
   initialSection: SettingsSection;
-  toolPresetControl: ToolPresetControl | null;
   soundEnabled: boolean;
   onSoundToggle: () => void;
   dumbZoneTokens: number;
@@ -131,96 +121,21 @@ function ThemeIcon({ preference }: { preference: ThemePreference }) {
 }
 
 function GeneralSettings({
-  sessionId,
-  toolPresetControl,
   soundEnabled,
   onSoundToggle,
   dumbZoneTokens,
   onDumbZoneTokensChange,
-  onSessionReloaded,
 }: Pick<
   Props,
-  | "sessionId"
-  | "toolPresetControl"
-  | "soundEnabled"
-  | "onSoundToggle"
-  | "dumbZoneTokens"
-  | "onDumbZoneTokensChange"
-  | "onSessionReloaded"
+  "soundEnabled" | "onSoundToggle" | "dumbZoneTokens" | "onDumbZoneTokensChange"
 >) {
   const { t } = useI18n();
   const { preference, setThemePreference } = useTheme();
-  const [preferredToolPreset, setPreferredToolPresetState] = useState(
-    getPreferredToolPreset,
-  );
-  const [shellSettings, setShellSettings] =
-    useState<ShellToolSettingsResponse | null>(null);
-  const [shellSaving, setShellSaving] = useState(false);
-  const [shellError, setShellError] = useState<string | null>(null);
   const themeOptions: { id: ThemePreference; label: string }[] = [
     { id: "light", label: t("settings.themeLight") },
     { id: "dark", label: t("settings.themeDark") },
     { id: "auto", label: t("settings.themeSystem") },
   ];
-  const toolPresetOptions: { id: ToolPreset; label: string }[] = [
-    { id: "none", label: t("settings.toolPresetChatOnly") },
-    { id: "read-only", label: t("settings.toolPresetReadOnly") },
-    { id: "default", label: t("settings.toolPresetDefault") },
-    { id: "full", label: t("settings.toolPresetFull") },
-  ];
-  const activeToolPreset = toolPresetControl?.preset ?? preferredToolPreset;
-
-  const selectToolPreset = (preset: ToolPreset) => {
-    setPreferredToolPreset(preset);
-    setPreferredToolPresetState(preset);
-    if (toolPresetControl?.preset !== preset)
-      toolPresetControl?.onChange(preset);
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetch("/api/tools/settings")
-      .then(async (response) => {
-        const data = (await response.json()) as ShellToolSettingsResponse & {
-          error?: string;
-        };
-        if (!response.ok || data.error)
-          throw new Error(data.error ?? `HTTP ${response.status}`);
-        if (!cancelled) setShellSettings(data);
-      })
-      .catch((cause: unknown) => {
-        if (!cancelled) setShellError(errorMessage(cause));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const togglePowerShell = async (enabled: boolean) => {
-    setShellSaving(true);
-    setShellError(null);
-    try {
-      const response = await fetch("/api/tools/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-      });
-      const data = (await response.json()) as ShellToolSettingsResponse & {
-        error?: string;
-      };
-      if (!response.ok || data.error)
-        throw new Error(data.error ?? `HTTP ${response.status}`);
-      setShellSettings(data);
-      if (sessionId) {
-        await sendAgentCommand(sessionId, { type: "reload" });
-        onSessionReloaded();
-      }
-    } catch (cause) {
-      setShellError(errorMessage(cause));
-    } finally {
-      setShellSaving(false);
-    }
-  };
 
   return (
     <div className="settings-general">
@@ -264,7 +179,7 @@ function GeneralSettings({
         <p className="settings-general-description">
           {t("settings.dumbZoneDescription")}
         </p>
-        <div className="settings-shell-option">
+        <div className="settings-general-option">
           <label htmlFor="dumb-zone-tokens">
             {t("settings.dumbZoneTokenThreshold")}
           </label>
@@ -286,47 +201,12 @@ function GeneralSettings({
 
       <section className="settings-general-section">
         <h3 className="settings-general-heading">
-          {t("settings.toolSelection")}
-        </h3>
-        <p className="settings-general-description">
-          {t("settings.toolSelectionDescription")}
-        </p>
-        <div
-          role="radiogroup"
-          aria-label={t("chat.changeToolPreset")}
-          className="settings-theme-options settings-tool-options"
-        >
-          {toolPresetOptions.map((option) => {
-            const selected = activeToolPreset === option.id;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                disabled={toolPresetControl?.disabled}
-                onClick={() => {
-                  selectToolPreset(option.id);
-                }}
-                className="settings-theme-option"
-              >
-                <span className="settings-theme-option-label">
-                  {option.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="settings-general-section">
-        <h3 className="settings-general-heading">
           {t("settings.completionSound")}
         </h3>
         <p className="settings-general-description">
           {t("settings.completionSoundDescription")}
         </p>
-        <div className="settings-shell-option">
+        <div className="settings-general-option">
           <span>{t("settings.completionSound")}</span>
           <ConfigSwitch
             checked={soundEnabled}
@@ -335,31 +215,6 @@ function GeneralSettings({
           />
         </div>
       </section>
-
-      {shellSettings?.isWindows && (
-        <section className="settings-general-section">
-          <h3 className="settings-general-heading">
-            {t("settings.shellTool")}
-          </h3>
-          <p className="settings-general-description">
-            {t("settings.shellToolDescription")}
-          </p>
-          <div className="settings-shell-option">
-            <span>{t("settings.usePowerShell")}</span>
-            <ConfigSwitch
-              checked={shellSettings.powerShellEnabled}
-              loading={shellSaving}
-              label={t("settings.usePowerShell")}
-              onChange={(enabled) => void togglePowerShell(enabled)}
-            />
-          </div>
-          {shellError && (
-            <p role="alert" className="settings-general-error">
-              {shellError}
-            </p>
-          )}
-        </section>
-      )}
     </div>
   );
 }
@@ -368,7 +223,6 @@ export function SettingsPanel({
   cwd,
   sessionId,
   initialSection,
-  toolPresetControl,
   soundEnabled,
   onSoundToggle,
   dumbZoneTokens,
@@ -510,13 +364,10 @@ export function SettingsPanel({
           {sectionHost(
             "general",
             <GeneralSettings
-              sessionId={sessionId}
-              toolPresetControl={toolPresetControl}
               soundEnabled={soundEnabled}
               onSoundToggle={onSoundToggle}
               dumbZoneTokens={dumbZoneTokens}
               onDumbZoneTokensChange={onDumbZoneTokensChange}
-              onSessionReloaded={onSessionReloaded}
             />,
           )}
           {cwd && sectionHost("skills", <SkillsConfig key={cwd} cwd={cwd} />)}

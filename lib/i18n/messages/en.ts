@@ -56,19 +56,8 @@ export const enMessages: Record<string, string> = {
   "settings.dumbZoneDescription":
     "Highlight context usage and Compact when the current context reaches this many tokens.",
   "settings.dumbZoneTokenThreshold": "Token threshold",
-  "settings.toolSelection": "Tool selection",
-  "settings.toolSelectionDescription":
-    "Choose tools for the current session and future sessions.",
-  "settings.toolPresetChatOnly": "Chat only",
-  "settings.toolPresetReadOnly": "Read only",
-  "settings.toolPresetDefault": "Default",
-  "settings.toolPresetFull": "Full",
   "settings.completionSound": "Completion sound",
   "settings.completionSoundDescription": "Play a tone when a task finishes.",
-  "settings.shellTool": "Shell tool",
-  "settings.shellToolDescription":
-    "Choose which shell the model uses for commands. Direct ! and !! commands still use Bash.",
-  "settings.usePowerShell": "Use PowerShell instead of Bash",
   "settings.projectRequired": "Open a project to configure this section",
   "skills.scope.global": "global",
   "skills.scope.project": "project",
@@ -310,7 +299,6 @@ export const enMessages: Record<string, string> = {
   "chat.outputLocal": "output stays local",
   "chat.outputModel": "output sent to model",
   "chat.changeReasoningLabel": "Change reasoning level",
-  "chat.changeToolPreset": "Change tool preset",
   "chat.stopCompaction": "Stop compaction",
   "chat.compactContext": "Compact context",
   "chat.stopAgent": "Stop agent",

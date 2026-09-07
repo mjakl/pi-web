@@ -123,18 +123,16 @@ test("combines model and reasoning and keeps compaction out of the composer", ()
   assert.doesNotMatch(html, /Steer now \/ queue follow-up/);
 });
 
-test("does not render tool or completion sound settings in the composer", () => {
+test("does not render completion sound settings in the composer", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
       onSend() {},
       onAbort() {},
-      onToolPresetChange() {},
       onSoundToggle() {},
       isStreaming: false,
     }),
   );
 
-  assert.doesNotMatch(html, /Change tool preset/);
   assert.doesNotMatch(html, /completion sound/i);
 });
 

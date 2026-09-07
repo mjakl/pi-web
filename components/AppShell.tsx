@@ -307,7 +307,6 @@ export function AppShell({ homeDir }: { homeDir: string }) {
     sessionStats,
     contextUsage,
     compactionControl,
-    toolPresetControl,
   } = chatDisplay;
   const contextStats = formatContextUsage(
     contextUsage ?? sessionStats?.contextUsage,
@@ -3075,7 +3074,6 @@ export function AppShell({ homeDir }: { homeDir: string }) {
           cwd={projectTrustCwd}
           sessionId={selectedSession?.id ?? null}
           initialSection={settingsSection}
-          toolPresetControl={toolPresetControl}
           soundEnabled={soundEnabled}
           onSoundToggle={onSoundToggle}
           dumbZoneTokens={dumbZoneTokens}
