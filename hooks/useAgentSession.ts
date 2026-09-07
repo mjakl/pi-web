@@ -74,11 +74,8 @@ import {
 import { skillExpansionToCommand } from "@/lib/slash-display";
 import { copyText } from "@/lib/clipboard";
 import { getSnapshotTail } from "@/lib/chat-lazy-load";
-import {
-  INITIAL_STREAMING_STATE,
-  streamReducer,
-  type ClientAssistantMessageEvent,
-} from "@/lib/streaming-message";
+import type { ClientAssistantMessageEvent } from "@/lib/streaming-message";
+import { useStreamingState } from "./useStreamingState";
 
 export interface SessionData {
   sessionId: string;
@@ -294,10 +291,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const starPendingRef = useRef(false);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [hasEarlierMessages, setHasEarlierMessages] = useState(false);
-  const [streamState, dispatch] = useReducer(
-    streamReducer,
-    INITIAL_STREAMING_STATE,
-  );
+  const [streamState, dispatch] = useStreamingState();
   const [agentRunning, setAgentRunning] = useState(false);
   const [bashRunning, setBashRunning] = useState(false);
   const [pendingBash, setPendingBash] = useState<{
@@ -1352,7 +1346,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     setRetryInfo(null);
     dispatch({ type: "end" });
     return wasRunning;
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     const wasActive = previousSessionActiveRef.current;
@@ -1950,6 +1944,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       addNotice,
       cancelEventStreamGrace,
       closeEvents,
+      dispatch,
       handleExtensionUiRequest,
       loadSession,
       notifyPromptStage,
@@ -2130,6 +2125,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       cancelEventStreamGrace,
       closeEvents,
       composerDraftKey,
+      dispatch,
       reconcileAgentState,
       restoreSubmission,
       t,
