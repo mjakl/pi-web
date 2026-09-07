@@ -18,6 +18,8 @@ import type {
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 
 export interface ContextUsage {
+  /** Usage inferred from compacted messages until Pi reports fresh usage. */
+  estimated?: boolean;
   percent: number | null;
   contextWindow: number;
   tokens: number | null;

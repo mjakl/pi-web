@@ -44,18 +44,30 @@ export function formatContextUsage(
   usage: ContextUsage | null | undefined,
 ): { summary: string; size: string; percent: string } | null {
   if (!usage?.contextWindow) return null;
+  const markEstimate = (value: string) =>
+    usage.estimated
+      ? translateMessage("session.estimatedValue", { value })
+      : value;
   const percent =
     usage.percent === null
       ? "?"
-      : `${usage.percent.toLocaleString("en", { maximumFractionDigits: 1 })}%`;
+      : markEstimate(
+          `${usage.percent.toLocaleString("en", { maximumFractionDigits: 1 })}%`,
+        );
   return {
     summary: translateMessage("session.contextSummary", {
-      used: usage.tokens === null ? "?" : formatCompactCount(usage.tokens),
+      used:
+        usage.tokens === null
+          ? "?"
+          : markEstimate(formatCompactCount(usage.tokens)),
       max: formatCompactCount(usage.contextWindow),
       percent,
     }),
     size: translateMessage("session.contextSize", {
-      used: usage.tokens === null ? "?" : usage.tokens.toLocaleString("en"),
+      used:
+        usage.tokens === null
+          ? "?"
+          : markEstimate(usage.tokens.toLocaleString("en")),
       max: usage.contextWindow.toLocaleString("en"),
     }),
     percent,

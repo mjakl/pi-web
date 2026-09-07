@@ -44,7 +44,7 @@ import {
   type ToolEntry,
   type ToolPreset,
 } from "@/lib/tool-presets";
-import type { SessionStatsInfo } from "@/lib/pi-types";
+import type { ContextUsage, SessionStatsInfo } from "@/lib/pi-types";
 import { mergeSessionStats, type SessionFileStats } from "@/lib/session-stats";
 import { userMessageKey } from "@/lib/prompt-recovery";
 import {
@@ -100,11 +100,7 @@ interface LastAssistantTextResponse {
 }
 
 type AgentStateResponse = {
-  contextUsage?: {
-    percent: number | null;
-    contextWindow: number;
-    tokens: number | null;
-  } | null;
+  contextUsage?: ContextUsage | null;
   systemPrompt?: string;
   thinkingLevel?: string;
   isStreaming?: boolean;
@@ -321,11 +317,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     maxAttempts: number;
     errorMessage?: string;
   } | null>(null);
-  const [contextUsage, setContextUsage] = useState<{
-    percent: number | null;
-    contextWindow: number;
-    tokens: number | null;
-  } | null>(null);
+  const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
   const [systemTools, setSystemTools] = useState<ToolEntry[] | null>(null);
   const messageActionPendingRef = useRef(false);
@@ -420,6 +412,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const latestRefreshOrderRef = useRef(0);
   const persistedWriteTailRef = useRef<Promise<void>>(Promise.resolve());
   const sessionStateLoadRequestIdRef = useRef(0);
+  const contextUsageRequestIdRef = useRef(0);
   const optimisticUserMessageKeyRef = useRef<string | null>(null);
   const modelSwitchPendingRef = useRef(false);
   const draftKeyAliasesRef = useRef(new Map<string, string>());
@@ -616,6 +609,40 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     [],
   );
 
+  // Every context read shares one order, including mount and reconciliation.
+  // Compaction admission invalidates pre-compaction reads before a new value exists.
+  const beginContextUsageRead = useCallback((sid: string) => {
+    const requestId = ++contextUsageRequestIdRef.current;
+    const runId = promptRunIdRef.current;
+    return (state: AgentStateResponse | undefined) => {
+      if (
+        !sessionHookMountedRef.current ||
+        sessionIdRef.current !== sid ||
+        promptRunIdRef.current !== runId ||
+        contextUsageRequestIdRef.current !== requestId ||
+        state?.isCompacting ||
+        state?.contextUsage === undefined
+      )
+        return;
+      setContextUsage(state.contextUsage);
+    };
+  }, []);
+
+  const refreshContextUsage = useCallback(
+    async (sid: string) => {
+      const accept = beginContextUsageRead(sid);
+      try {
+        const res = await fetch(`/api/agent/${encodeURIComponent(sid)}`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { state?: AgentStateResponse };
+        accept(data.state);
+      } catch {
+        // Existing state reconciliation or the next response retries this read.
+      }
+    },
+    [beginContextUsageRead],
+  );
+
   const loadSession = useCallback(
     async (sid: string, showLoading = false, includeState = false) => {
       const request: PersistedSnapshotRequest = {
@@ -692,6 +719,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           ? async () => {
               if (!isCurrentStateLoad()) return null;
               try {
+                const acceptContextUsage = beginContextUsageRead(sid);
                 const stateRes = await fetch(
                   `/api/sessions/${encodeURIComponent(sid)}/state`,
                 );
@@ -705,8 +733,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
                 const liveState = agentState.state;
                 if (liveState) {
-                  if (liveState.contextUsage !== undefined)
-                    setContextUsage(liveState.contextUsage ?? null);
+                  acceptContextUsage(liveState);
                   if (liveState.systemPrompt !== undefined)
                     setSystemPrompt(liveState.systemPrompt ?? null);
                   if (liveState.thinkingLevel !== undefined)
@@ -736,6 +763,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     },
     [
       loadedTail,
+      beginContextUsageRead,
       applyPersistedSnapshot,
       commitPersistedSnapshot,
       currentPersistedAuthority,
@@ -1585,6 +1613,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     async (sid: string) => {
       if (!agentRunningRef.current || sessionIdRef.current !== sid) return;
       const runId = promptRunIdRef.current;
+      const acceptContextUsage = beginContextUsageRead(sid);
       try {
         const res = await fetch(`/api/agent/${encodeURIComponent(sid)}`);
         if (!res.ok) return;
@@ -1598,6 +1627,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         if (sessionIdRef.current !== sid || promptRunIdRef.current !== runId)
           return;
         const state = data.state;
+        acceptContextUsage(state);
         // Mirror compaction state unconditionally: a missed compaction_end
         // would otherwise leave the "Stop compaction" UI stuck. No state
         // (wrapper destroyed) means nothing is compacting.
@@ -1616,8 +1646,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         }
         if (!agentRunningRef.current) return;
         if (state) {
-          if (state.contextUsage !== undefined)
-            setContextUsage(state.contextUsage ?? null);
           if (state.systemPrompt !== undefined)
             setSystemPrompt(state.systemPrompt ?? null);
           if (state.extensionStatuses !== undefined)
@@ -1630,7 +1658,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         // Network still down — the next poll / visibility / online tick retries.
       }
     },
-    [finishPromptWithoutStream],
+    [beginContextUsageRead, finishPromptWithoutStream],
   );
 
   // Recovery net for missed SSE events: while the agent is running, verify
@@ -1696,6 +1724,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           const runId = promptRunIdRef.current;
           if (sid) {
             void loadSession(sid);
+            const acceptContextUsage = beginContextUsageRead(sid);
             fetch(`/api/agent/${encodeURIComponent(sid)}`)
               .then((r) => r.json())
               .then((d: { state?: AgentStateResponse }) => {
@@ -1704,8 +1733,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                   promptRunIdRef.current !== runId
                 )
                   return;
-                if (d.state?.contextUsage !== undefined)
-                  setContextUsage(d.state.contextUsage ?? null);
+                acceptContextUsage(d.state);
                 if (d.state?.systemPrompt !== undefined)
                   setSystemPrompt(d.state.systemPrompt ?? null);
                 if (d.state?.extensionStatuses !== undefined)
@@ -1855,6 +1883,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             });
           } else if (completed) {
             setMessages((prev) => [...prev, normalizeToolCalls(completed)]);
+            if (completed.role === "assistant" && sessionIdRef.current)
+              void refreshContextUsage(sessionIdRef.current);
           }
           dispatch({ type: "end" });
           setAgentPhase({ kind: "waiting_model" });
@@ -1916,6 +1946,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           setRetryInfo(null);
           break;
         case "compaction_start":
+          contextUsageRequestIdRef.current += 1;
           setIsCompacting(true);
           setCompactError(null);
           setCompactResult(null);
@@ -1932,7 +1963,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                 (event["reason"] as string | undefined) ?? "auto",
               ),
             );
-            if (sessionIdRef.current) void loadSession(sessionIdRef.current);
+            if (sessionIdRef.current) {
+              void refreshContextUsage(sessionIdRef.current);
+              void loadSession(sessionIdRef.current);
+            }
           }
           break;
         case "extension_ui_request":
@@ -1946,6 +1980,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       closeEvents,
       dispatch,
       handleExtensionUiRequest,
+      beginContextUsageRead,
+      refreshContextUsage,
       loadSession,
       notifyPromptStage,
       observeActivity,
@@ -2497,18 +2533,19 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     setCompactResult(null);
     try {
       observeActivity("compaction_admission");
+      contextUsageRequestIdRef.current += 1;
       const result = await sendAgentCommand<CompactCommandResult>(sid, {
         type: "compact",
       });
       setCompactResult(readCompactResult(result, "manual"));
-      await loadSession(sid, true);
+      await Promise.all([loadSession(sid, true), refreshContextUsage(sid)]);
     } catch (e) {
       setCompactError(errorMessage(e));
       setCompactResult(null);
     } finally {
       setIsCompacting(false);
     }
-  }, [isCompacting, loadSession, observeActivity]);
+  }, [isCompacting, loadSession, observeActivity, refreshContextUsage]);
 
   const loadModels = useCallback(
     async (signal?: AbortSignal) => {
@@ -2593,12 +2630,17 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             setCompactError(null);
             setCompactResult(null);
             observeActivity("compaction_admission");
+            contextUsageRequestIdRef.current += 1;
             const result = await sendAgentCommand<CompactCommandResult>(sid, {
               type: "compact",
               ...(args ? { customInstructions: args } : {}),
             });
             setCompactResult(readCompactResult(result, "manual"));
-            if (await loadSession(sid, true)) promoteNewSession();
+            const [loaded] = await Promise.all([
+              loadSession(sid, true),
+              refreshContextUsage(sid),
+            ]);
+            if (loaded) promoteNewSession();
             return complete({
               handled: true,
               message: t("chat.compactedContext"),
@@ -2735,6 +2777,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       loadTools,
       observeActivity,
       promoteNewSession,
+      refreshContextUsage,
       onSessionForked,
       onSessionStatsPanelOpen,
       t,
@@ -2968,8 +3011,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         if (agentState?.state) {
           if (agentState.state.isCompacting !== undefined)
             setIsCompacting(agentState.state.isCompacting);
-          if (agentState.state.contextUsage !== undefined)
-            setContextUsage(agentState.state.contextUsage ?? null);
           if (agentState.state.systemPrompt !== undefined)
             setSystemPrompt(agentState.state.systemPrompt ?? null);
           if (agentState.state.thinkingLevel !== undefined)
@@ -3083,6 +3124,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     contextUsage?.tokens,
     contextUsage?.percent,
     contextUsage?.contextWindow,
+    contextUsage?.estimated,
   ]);
 
   return {
