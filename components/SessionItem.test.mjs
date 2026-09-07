@@ -1250,3 +1250,82 @@ test("shows a filled star after its count, before the aligned message count, and
   container.innerHTML = renderItem({ ...baseSession, starCount: 0 });
   assert.equal(container.querySelector(".session-star-count"), null);
 });
+
+test("Clear all stars is shown only for persisted sessions with stars", async () => {
+  for (const session of [
+    baseSession,
+    { ...baseSession, starCount: 0 },
+    { ...baseSession, starCount: 2 },
+    { ...baseSession, starCount: 2, transient: true },
+  ]) {
+    const view = await mountItem(session, { isActive: true });
+    try {
+      await click(view.container.querySelector("button[aria-controls]"));
+      const clear = [...document.querySelectorAll(".menu-item")].find(
+        (button) => button.textContent === "Clear all stars",
+      );
+      assert.equal(
+        Boolean(clear),
+        Boolean(session.starCount) && !session.transient,
+      );
+    } finally {
+      await view.unmount();
+    }
+  }
+});
+
+test("clearing stars closes the menu, prevents duplicate requests, and reports success or failure", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const ok of [true, false]) {
+      let finish;
+      const requests = [];
+      const cleared = [];
+      const errors = [];
+      globalThis.fetch = (url, init) => {
+        requests.push({ url, method: init.method });
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      };
+      const view = await mountItem(
+        { ...baseSession, starCount: 2 },
+        {
+          onStarsCleared: (id) => cleared.push(id),
+          onActionFailed: (error) => errors.push(error),
+        },
+      );
+      try {
+        const trigger = view.container.querySelector("button[aria-controls]");
+        await click(trigger);
+        const clear = [...document.querySelectorAll(".menu-item")].find(
+          (button) => button.textContent === "Clear all stars",
+        );
+        await click(clear);
+        await click(trigger);
+        assert.equal(document.querySelector(".menu-item"), null);
+        assert.deepEqual(requests, [
+          { url: `/api/sessions/${baseSession.id}/stars`, method: "DELETE" },
+        ]);
+        await act(async () => {
+          finish(
+            Response.json(
+              ok
+                ? { starredEntryIds: [], starCount: 0 }
+                : { error: "Session history is being changed" },
+              { status: ok ? 200 : 400 },
+            ),
+          );
+        });
+        assert.deepEqual(cleared, ok ? [baseSession.id] : []);
+        assert.equal(errors.length, ok ? 0 : 1);
+        if (!ok) assert.match(errors[0], /Session history is being changed/);
+        assert.equal(trigger.getAttribute("aria-disabled"), null);
+      } finally {
+        await view.unmount();
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

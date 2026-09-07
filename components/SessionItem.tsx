@@ -28,6 +28,7 @@ type MenuPosition = {
   anchorLeft: number;
   isActive: boolean;
   transient: boolean;
+  hasStars: boolean;
 };
 
 type ActionSurface =
@@ -49,10 +50,12 @@ function menuPositionFor(
   rect: Pick<DOMRect, "top" | "bottom" | "left" | "right">,
   isActive: boolean,
   transient: boolean,
+  hasStars: boolean,
 ): MenuPosition {
   const width = 144;
   const rowHeight = window.matchMedia("(pointer: coarse)").matches ? 44 : 34;
-  const height = (transient ? Number(isActive) : 3) * rowHeight + 10;
+  const height =
+    (transient ? Number(isActive) : 3 + Number(hasStars)) * rowHeight + 10;
   return {
     left: Math.max(
       8,
@@ -66,6 +69,7 @@ function menuPositionFor(
     anchorLeft: rect.left,
     isActive,
     transient,
+    hasStars,
   };
 }
 
@@ -194,6 +198,8 @@ export const SessionItem = memo(function SessionItem({
   onActivated,
   onActivationFailed,
   onDeleted,
+  onStarsCleared,
+  onActionFailed,
 }: {
   session: SessionInfo;
   shortcutLabel?: string;
@@ -208,6 +214,8 @@ export const SessionItem = memo(function SessionItem({
   onActivated?: (id: string) => void;
   onActivationFailed?: (error: string) => void;
   onDeleted?: (id: string) => void;
+  onStarsCleared?: (id: string) => void;
+  onActionFailed?: (error: string) => void;
 }) {
   const { t } = useI18n();
   const [actionSurface, setActionSurface] =
@@ -216,6 +224,8 @@ export const SessionItem = memo(function SessionItem({
   const [stopping, setStopping] = useState(false);
   const [activating, setActivating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [clearingStars, setClearingStars] = useState(false);
+  const clearingStarsRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
@@ -235,7 +245,7 @@ export const SessionItem = memo(function SessionItem({
   const menuId = useId();
   const eligibleForActions = (isActive ?? false) || !session.transient;
   const hasActions = actionsAvailable && eligibleForActions;
-  const actionPending = stopping || activating || deleting;
+  const actionPending = stopping || activating || deleting || clearingStars;
   const renderedSurface = actionsAvailable
     ? actionSurface
     : IDLE_ACTION_SURFACE;
@@ -309,11 +319,12 @@ export const SessionItem = memo(function SessionItem({
       rect,
       Boolean(isActive),
       Boolean(session.transient),
+      Boolean(session.starCount),
     );
     setActionSurface((current) =>
       current.kind === "menu" ? { kind: "menu", position } : current,
     );
-  }, [isActive, session.transient]);
+  }, [isActive, session.transient, session.starCount]);
 
   useLayoutEffect(() => {
     if (!menuPosition) return;
@@ -327,7 +338,8 @@ export const SessionItem = memo(function SessionItem({
     }
     if (
       rect.top !== menuPosition.anchorTop ||
-      rect.left !== menuPosition.anchorLeft
+      rect.left !== menuPosition.anchorLeft ||
+      menuPosition.hasStars !== Boolean(session.starCount)
     )
       repositionMenu();
   });
@@ -553,6 +565,7 @@ export const SessionItem = memo(function SessionItem({
         e.currentTarget.getBoundingClientRect(),
         Boolean(isActive),
         Boolean(session.transient),
+        Boolean(session.starCount),
       );
       transitionActionSurface({ kind: "menu", position }, "surface");
     },
@@ -561,22 +574,66 @@ export const SessionItem = memo(function SessionItem({
       isActive,
       menuPosition,
       session.transient,
+      session.starCount,
       transitionActionSurface,
     ],
   );
 
+  const performClearStars = useCallback(async () => {
+    if (clearingStarsRef.current || session.transient || !session.starCount)
+      return;
+    clearingStarsRef.current = true;
+    setClearingStars(true);
+    transitionActionSurface(IDLE_ACTION_SURFACE, "trigger");
+    try {
+      const response = await fetch(
+        `/api/sessions/${encodeURIComponent(session.id)}/stars`,
+        {
+          method: "DELETE",
+        },
+      );
+      if (!response.ok) {
+        const result = (await response.json()) as { error?: string };
+        throw new Error(result.error ?? `HTTP ${response.status}`);
+      }
+      onStarsCleared?.(session.id);
+    } catch (error) {
+      onActionFailed?.(
+        t("sidebar.clearStarsFailed", { error: errorMessage(error) }),
+      );
+    } finally {
+      clearingStarsRef.current = false;
+      setClearingStars(false);
+    }
+  }, [
+    session.id,
+    session.transient,
+    session.starCount,
+    transitionActionSurface,
+    onStarsCleared,
+    onActionFailed,
+    t,
+  ]);
+
   const chooseMenuAction = useCallback(
     (
       e: React.MouseEvent,
-      action: "activate" | "stop" | "rename" | "delete",
+      action: "activate" | "stop" | "rename" | "delete" | "clearStars",
     ) => {
       e.stopPropagation();
       if (action === "rename") startRename();
       else if (action === "activate") void performActivate();
       else if (action === "stop") void performStop();
+      else if (action === "clearStars") void performClearStars();
       else void performDelete();
     },
-    [performActivate, performDelete, performStop, startRename],
+    [
+      performActivate,
+      performDelete,
+      performStop,
+      performClearStars,
+      startRename,
+    ],
   );
 
   // Fixed-height outer wrapper — content swaps in place so the list never reflows.
@@ -932,6 +989,17 @@ export const SessionItem = memo(function SessionItem({
                   >
                     {t("sidebar.rename")}
                   </button>
+                  {Boolean(session.starCount) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        chooseMenuAction(e, "clearStars");
+                      }}
+                      className="menu-item"
+                    >
+                      {t("sidebar.clearStars")}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={(e) => {

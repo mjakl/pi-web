@@ -1118,6 +1118,15 @@ export function SessionSidebar({
     });
   }, []);
 
+  const handleStarsCleared = useCallback(
+    (id: string) => {
+      setError(null);
+      void loadSessions();
+      if (id === selectedSessionId) void onRefreshSelectedSession?.();
+    },
+    [loadSessions, selectedSessionId, onRefreshSelectedSession],
+  );
+
   const handleSessionDeleted = useCallback(
     (id: string) => {
       onSessionDeleted?.(id);
@@ -1673,6 +1682,8 @@ export function SessionSidebar({
             onActivationFailed={setError}
             onStopped={handleSessionStopped}
             onDeleted={handleSessionDeleted}
+            onStarsCleared={handleStarsCleared}
+            onActionFailed={setError}
           />
         ))}
       </div>

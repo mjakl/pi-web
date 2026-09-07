@@ -191,6 +191,8 @@ export const enMessages: Record<string, string> = {
   "sidebar.stop": "Stop",
   "sidebar.activate": "Activate",
   "sidebar.activationFailed": "Could not activate session: {error}",
+  "sidebar.clearStars": "Clear all stars",
+  "sidebar.clearStarsFailed": "Could not clear stars: {error}",
   "sidebar.rename": "Rename",
   "sidebar.renameSession": "Rename session {title}",
   "sidebar.delete": "Delete",
