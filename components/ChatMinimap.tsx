@@ -3,6 +3,8 @@
 import { useAnimationFrameCallback } from "@/hooks/useAnimationFrameCallback";
 
 import { StarIcon } from "./StarIcon";
+import { MessagePreviewPopover } from "./MessagePreviewPopover";
+import { getMessagePreview } from "@/lib/message-preview";
 import { useI18n } from "@/hooks/useI18n";
 import {
   useEffect,
@@ -10,11 +12,11 @@ import {
   useState,
   useCallback,
   useMemo,
+  useId,
   memo,
   type RefObject,
 } from "react";
 import { isMessageGroupAnchor } from "@/lib/message-display";
-import { formatTimestamp } from "@/lib/i18n/format";
 import type { AgentMessage, SessionContext } from "@/lib/types";
 
 interface Props {
@@ -114,6 +116,8 @@ export const ChatMinimap = memo(function ChatMinimap({
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [minimapHeight, setMinimapHeight] = useState(600);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const previewId = useId();
+  const markerRefs = useRef(new Map<string, HTMLButtonElement>());
   const draggingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const allNodesRef = useRef<NodeInfo[]>([]);
@@ -153,23 +157,20 @@ export const ChatMinimap = memo(function ChatMinimap({
     ],
     [historyAnchors, loadedAnchorIds],
   );
-  const timestamps = useMemo(() => {
+  const previews = useMemo(() => {
     const result = new Map(
-      (historyAnchors ?? []).map(({ id, timestamp }) => [id, timestamp]),
+      (historyAnchors ?? []).map(({ id, preview }) => [id, preview]),
     );
     messages.forEach((message, index) => {
-      if (
-        (isMessageGroupAnchor(message) || stars.has(entryIds[index] ?? "")) &&
-        message.timestamp !== undefined
-      ) {
+      if (message.role === "user") {
         result.set(
           entryIds[index] ?? `live:${index - entryIds.length}`,
-          message.timestamp,
+          getMessagePreview(message.content),
         );
       }
     });
     return result;
-  }, [historyAnchors, messages, entryIds, stars]);
+  }, [historyAnchors, messages, entryIds]);
   const promptAnchorIds = useMemo(
     () =>
       messages.flatMap((message, index) =>
@@ -439,21 +440,23 @@ export const ChatMinimap = memo(function ChatMinimap({
 
   if (!visible) return null;
 
-  const hoveredNode =
-    hoveredIndex === null ? undefined : positionedNodes[hoveredIndex];
-  const hoveredTimestamp = hoveredNode
-    ? timestamps.get(hoveredNode.id)
+  const previewIndex = hoveredIndex;
+  const previewNode =
+    previewIndex === null ? undefined : positionedNodes[previewIndex];
+  const previewText =
+    previewNode &&
+    !compactions.has(previewNode.id) &&
+    !stars.has(previewNode.id)
+      ? previews.get(previewNode.id)
+      : undefined;
+  const previewAnchor = previewNode
+    ? markerRefs.current.get(previewNode.id)
     : undefined;
 
   return (
     <div
       ref={containerRef}
       className="chat-minimap"
-      title={
-        hoveredTimestamp !== undefined && Number.isFinite(hoveredTimestamp)
-          ? formatTimestamp(hoveredTimestamp)
-          : undefined
-      }
       onMouseDown={handleMouseDown}
       onMouseMove={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
@@ -516,6 +519,7 @@ export const ChatMinimap = memo(function ChatMinimap({
             ) : stars.has(node.id) ? (
               <button
                 type="button"
+                tabIndex={-1}
                 className="minimap-star"
                 title={t("chat.jumpStarredAnswer")}
                 aria-label={t("chat.jumpStarredAnswer")}
@@ -530,24 +534,49 @@ export const ChatMinimap = memo(function ChatMinimap({
                 <StarIcon filled />
               </button>
             ) : (
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 2,
-                  background: isActive
-                    ? "rgba(128,128,128,0.42)"
-                    : "rgba(128,128,128,0.16)",
-                  border: `1.5px solid ${isActive ? "rgba(128,128,128,0.95)" : "rgba(128,128,128,0.58)"}`,
-                  boxShadow: isActive ? "0 0 0 2px var(--bg-panel)" : "none",
-                  transition: "transform 0.1s, background 0.1s",
-                  transform: isNearest ? "scale(1.25)" : "scale(1)",
+              <button
+                type="button"
+                tabIndex={-1}
+                className="minimap-message"
+                aria-label={t("chat.jumpHumanMessage")}
+                aria-describedby={
+                  previewNode?.id === node.id && previewText
+                    ? previewId
+                    : undefined
+                }
+                ref={(element) => {
+                  if (element) markerRefs.current.set(node.id, element);
+                  else markerRefs.current.delete(node.id);
                 }}
-              />
+                style={{ height: Math.max(1, Math.min(32, nodeGap)) }}
+              >
+                <div
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 2,
+                    background: isActive
+                      ? "rgba(128,128,128,0.42)"
+                      : "rgba(128,128,128,0.16)",
+                    border: `1.5px solid ${isActive ? "rgba(128,128,128,0.95)" : "rgba(128,128,128,0.58)"}`,
+                    boxShadow: isActive ? "0 0 0 2px var(--bg-panel)" : "none",
+                    transition: "transform 0.1s, background 0.1s",
+                    transform: isNearest ? "scale(1.25)" : "scale(1)",
+                  }}
+                />
+              </button>
             )}
           </div>
         );
       })}
+      {previewText && previewAnchor && previewNode && (
+        <MessagePreviewPopover
+          key={previewNode.id}
+          id={previewId}
+          text={previewText}
+          anchor={previewAnchor}
+        />
+      )}
     </div>
   );
 });

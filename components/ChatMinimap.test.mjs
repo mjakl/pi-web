@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
 import { Window } from "happy-dom";
 import { createJiti } from "jiti";
 import { readFileSync } from "node:fs";
 
 process.env.NODE_ENV = "test";
 const window = new Window({ url: "http://localhost" });
+after(async () => {
+  await window.happyDOM.close();
+});
 const resizeCallbacks = new Set();
 Object.assign(globalThis, {
   window,
@@ -255,9 +258,10 @@ test("empty and single-turn rails preserve hit testing and clear a removed hover
         }),
       ),
     );
-    assert.notEqual(container.querySelector(".chat-minimap").title, "");
+    await settle();
+    assert.ok(document.querySelector('[role="tooltip"]'));
     await render(["first"]);
-    assert.equal(container.querySelector(".chat-minimap").title, "");
+    assert.equal(document.querySelector('[role="tooltip"]'), null);
   } finally {
     await React.act(() => root.unmount());
     container.remove();
@@ -294,7 +298,11 @@ test("shows unloaded turns and completes the latest requested jump after its mes
           })),
           entryIds: ids,
           historyAnchors: [
-            { id: "old", timestamp: new Date(2025, 0, 2, 14, 35).getTime() },
+            {
+              id: "old",
+              preview: "An older prompt",
+              timestamp: new Date(2025, 0, 2, 14, 35).getTime(),
+            },
             { id: "middle" },
             { id: "recent" },
           ],
@@ -314,7 +322,8 @@ test("shows unloaded turns and completes the latest requested jump after its mes
         new window.MouseEvent("mousemove", { bubbles: true, clientY }),
       ),
     );
-    return node.parentElement.title;
+    await settle();
+    return document.querySelector('[role="tooltip"]')?.textContent ?? "";
   };
   const select = async (id) => {
     const node = container.querySelector(`[data-minimap-entry-id="${id}"]`);
@@ -332,17 +341,17 @@ test("shows unloaded turns and completes the latest requested jump after its mes
       container.querySelectorAll("[data-minimap-entry-id]").length,
       3,
     );
-    assert.match(await hover("old"), /14:35$/);
+    assert.equal(await hover("old"), "An older prompt");
     assert.equal(
       pending.length,
       0,
       "hovering unloaded history does not fetch it",
     );
-    assert.match(await hover("recent"), /16:42$/);
+    assert.equal(await hover("recent"), "prompt");
     assert.equal(
       await hover("middle"),
       "",
-      "a missing timestamp clears the previous tooltip",
+      "a missing preview clears the previous tooltip",
     );
     await select("old");
     assert.equal(pending[0].id, "old");
@@ -371,7 +380,6 @@ test("shows unloaded turns and completes the latest requested jump after its mes
   } finally {
     await React.act(() => root.unmount());
     container.remove();
-    await window.happyDOM.close();
   }
 });
 
@@ -569,4 +577,113 @@ test("compactions render as neutral dividers for unloaded, loaded and live histo
     await React.act(() => root.unmount());
     container.remove();
   }
+});
+
+test("rail markers stay out of tab order and pointer clicks do not pin previews", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scroll = document.createElement("div");
+  Object.defineProperty(scroll, "scrollHeight", { get: () => 2000 });
+  const jumps = [];
+  scroll.scrollTo = (options) => jumps.push(options.top);
+  let loads = 0;
+  const props = {
+    messages: [
+      { role: "user", content: "  **Hello**\n  Grüß 😀 " },
+      {
+        role: "user",
+        content: [{ type: "image", data: "abc", mimeType: "image/png" }],
+      },
+      { role: "custom", customType: "compaction" },
+      { role: "assistant", content: [] },
+    ],
+    entryIds: ["text", "image", "compact", "star"],
+    starredEntryIds: ["star"],
+    historyAnchors: [
+      { id: "text" },
+      { id: "image" },
+      { id: "compact", compaction: true },
+      { id: "star", starred: true, preview: "Must not appear" },
+    ],
+    scrollContainer: { current: scroll },
+    messageRefs: {
+      current: [
+        { getBoundingClientRect: () => rect(500) },
+        { getBoundingClientRect: () => rect(800) },
+        { getBoundingClientRect: () => rect(1000) },
+      ],
+    },
+    onLoadThrough: async () => {
+      loads++;
+      return false;
+    },
+  };
+  try {
+    await React.act(() => root.render(React.createElement(ChatMinimap, props)));
+    await settle();
+    const button = container.querySelector(
+      '[data-minimap-entry-id="text"] button',
+    );
+    const rail = container.querySelector(".chat-minimap");
+    assert.ok(
+      [...rail.querySelectorAll("button")].every(
+        (marker) => marker.tabIndex === -1,
+      ),
+    );
+    await React.act(() => button.focus());
+    assert.equal(document.querySelector('[role="tooltip"]'), null);
+    const hoverText = async () => {
+      await React.act(() =>
+        rail.dispatchEvent(
+          new window.MouseEvent("mousemove", { clientY: 12, bubbles: true }),
+        ),
+      );
+      await settle();
+    };
+    await hoverText();
+    const tip = document.querySelector('[role="tooltip"]');
+    assert.equal(tip.textContent, "**Hello** Grüß 😀");
+    assert.equal(tip.id, button.getAttribute("aria-describedby"));
+    assert.equal(
+      container.querySelector(".chat-minimap").hasAttribute("title"),
+      false,
+    );
+    await React.act(() => {
+      button.dispatchEvent(
+        new window.MouseEvent("mousedown", { clientY: 12, bubbles: true }),
+      );
+      window.dispatchEvent(new window.MouseEvent("mouseup"));
+      button.click();
+    });
+    assert.equal(jumps.at(-1), 320);
+    await React.act(() =>
+      rail.dispatchEvent(
+        new window.MouseEvent("mouseout", {
+          bubbles: true,
+          relatedTarget: document.body,
+        }),
+      ),
+    );
+    assert.equal(document.querySelector('[role="tooltip"]'), null);
+    await React.act(() => button.blur());
+    for (const id of ["image", "compact", "star"]) {
+      const marker = container.querySelector(`[data-minimap-entry-id="${id}"]`);
+      const clientY = Number.parseFloat(marker.style.top) * 6;
+      await React.act(() =>
+        marker.parentElement.dispatchEvent(
+          new window.MouseEvent("mousemove", { clientY, bubbles: true }),
+        ),
+      );
+      await settle();
+      assert.equal(document.querySelector('[role="tooltip"]'), null);
+    }
+    assert.equal(loads, 0);
+    await hoverText();
+    assert.ok(document.querySelector('[role="tooltip"]'));
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+  }
+  assert.equal(document.querySelector('[role="tooltip"]'), null);
 });
