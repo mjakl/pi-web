@@ -765,10 +765,6 @@ function AssistantMessageView({
   );
   const providerError = getAssistantErrorMessage(message, { isStreaming });
   const [copied, setCopied] = useState(false);
-  const streamStartRef = useRef<number | null>(null);
-  const [tps, setTps] = useState<number | null>(null);
-  const blockItemsRef = useRef(blockItems);
-  blockItemsRef.current = blockItems;
   const tokenEstimateCacheRef = useRef<Map<number, TokenEstimateCacheEntry>>(
     new Map(),
   );
@@ -792,8 +788,6 @@ function AssistantMessageView({
     tokenEstimateCacheRef.current = nextCache;
     return total;
   }, [blockItems, isStreaming]);
-  const estimatedTokensRef = useRef(estimatedTokens);
-  estimatedTokensRef.current = estimatedTokens;
 
   // Streaming-based timing for thinking blocks
   const blockStartTimesRef = useRef<Map<number, number>>(new Map());
@@ -844,61 +838,28 @@ function AssistantMessageView({
   };
 
   useEffect(() => {
-    if (!isStreaming) {
-      // Finalise any un-finished thinking block durations on stream end
-      const now = new Date().getTime();
-      setStreamingDurations((prev: Map<number, number>) => {
-        const next = new Map(prev);
-        for (const [idx, start] of blockStartTimesRef.current) {
-          if (!next.has(idx)) next.set(idx, Math.round((now - start) / 1000));
-        }
-        return next;
-      });
-      streamStartRef.current = null;
-      setTps(null);
-      return;
+    const now = Date.now();
+    // Block boundaries arrive with message updates; they do not need a timer.
+    for (const { originalIndex } of blockItems) {
+      if (isStreaming && !blockStartTimesRef.current.has(originalIndex))
+        blockStartTimesRef.current.set(originalIndex, now);
     }
-    const tick = () => {
-      const items = blockItemsRef.current;
-      const now = Date.now();
-
-      // Record start time for each block the first time we see it
-      items.forEach(({ originalIndex }) => {
-        if (!blockStartTimesRef.current.has(originalIndex))
-          blockStartTimesRef.current.set(originalIndex, now);
-      });
-
-      // When a non-last block has a successor already started, finalise its duration
-      setStreamingDurations((prev: Map<number, number>) => {
-        let changed = false;
-        const next = new Map(prev);
-        let previousIndex: number | undefined;
-        for (const { originalIndex: nextOriginalIndex } of items) {
-          const originalIndex = previousIndex;
-          previousIndex = nextOriginalIndex;
-          if (originalIndex === undefined) continue;
-          const start = blockStartTimesRef.current.get(originalIndex);
-          if (!next.has(originalIndex) && start !== undefined) {
-            const nextStart =
-              blockStartTimesRef.current.get(nextOriginalIndex) ?? now;
-            next.set(originalIndex, Math.round((nextStart - start) / 1000));
-            changed = true;
-          }
-        }
-        return changed ? next : prev;
-      });
-
-      const tokens = estimatedTokensRef.current;
-      if (tokens === 0) return;
-      streamStartRef.current ??= now;
-      const elapsed = (now - streamStartRef.current) / 1000;
-      if (elapsed > 0.5) setTps(tokens / elapsed);
-    };
-    const id = setInterval(tick, 300);
-    return () => {
-      clearInterval(id);
-    };
-  }, [isStreaming]);
+    setStreamingDurations((previous) => {
+      const next = new Map(previous);
+      for (const [position, { originalIndex }] of blockItems.entries()) {
+        if (next.has(originalIndex)) continue;
+        const successor = blockItems[position + 1];
+        if (isStreaming && !successor) continue;
+        const start = blockStartTimesRef.current.get(originalIndex);
+        if (start === undefined) continue;
+        const end = successor
+          ? (blockStartTimesRef.current.get(successor.originalIndex) ?? now)
+          : now;
+        next.set(originalIndex, Math.round((end - start) / 1000));
+      }
+      return next.size === previous.size ? previous : next;
+    });
+  }, [blockItems, isStreaming]);
 
   if (blocks.length === 0 && !isStreaming && !providerError) return null;
 
@@ -986,18 +947,7 @@ function AssistantMessageView({
                 </>
               )}
             </span>
-            <span
-              style={{
-                textAlign: "right",
-                color: "var(--text-dim)",
-                fontSize: 11,
-                fontWeight: 400,
-                fontVariantNumeric: "tabular-nums",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {tps !== null ? `${tps.toFixed(1)} t/s` : ""}
-            </span>
+            <StreamingSpeed estimatedTokens={estimatedTokens} />
           </>
         )}
       </div>
@@ -1231,6 +1181,39 @@ function BlockView({
     );
   }
   return null;
+}
+
+function StreamingSpeed({ estimatedTokens }: { estimatedTokens: number }) {
+  const tokensRef = useRef(estimatedTokens);
+  tokensRef.current = estimatedTokens;
+  const [tps, setTps] = useState<number | null>(null);
+  useEffect(() => {
+    let started: number | null = null;
+    const timer = setInterval(() => {
+      if (tokensRef.current === 0) return;
+      const now = Date.now();
+      started ??= now;
+      const elapsed = (now - started) / 1000;
+      if (elapsed > 0.5) setTps(tokensRef.current / elapsed);
+    }, 300);
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
+  return (
+    <span
+      style={{
+        textAlign: "right",
+        color: "var(--text-dim)",
+        fontSize: 11,
+        fontWeight: 400,
+        fontVariantNumeric: "tabular-nums",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {tps !== null ? `${tps.toFixed(1)} t/s` : ""}
+    </span>
+  );
 }
 
 function TextBlock({
