@@ -1,5 +1,7 @@
 "use client";
 
+import { useAnimationFrameCallback } from "@/hooks/useAnimationFrameCallback";
+
 import { StarIcon } from "./StarIcon";
 import { useI18n } from "@/hooks/useI18n";
 import {
@@ -8,6 +10,7 @@ import {
   useState,
   useCallback,
   useMemo,
+  memo,
   type RefObject,
 } from "react";
 import { isMessageGroupAnchor } from "@/lib/message-display";
@@ -77,7 +80,7 @@ function layoutNodes(allNodes: NodeInfo[], minimapHeight: number): NodeLayout {
   };
 }
 
-export function ChatMinimap({
+export const ChatMinimap = memo(function ChatMinimap({
   messages,
   entryIds,
   historyAnchors,
@@ -150,10 +153,14 @@ export function ChatMinimap({
     });
     return result;
   }, [historyAnchors, messages, entryIds, stars]);
-  const promptAnchorIds = messages.flatMap((message, index) =>
-    isMessageGroupAnchor(message)
-      ? [entryIds[index] ?? `live:${index - entryIds.length}`]
-      : [],
+  const promptAnchorIds = useMemo(
+    () =>
+      messages.flatMap((message, index) =>
+        isMessageGroupAnchor(message)
+          ? [entryIds[index] ?? `live:${index - entryIds.length}`]
+          : [],
+      ),
+    [messages, entryIds],
   );
   const anchorsRef = useRef({ anchorIds, promptAnchorIds });
   anchorsRef.current = { anchorIds, promptAnchorIds };
@@ -210,6 +217,8 @@ export function ChatMinimap({
     syncActiveNode(scrollEl, allNodesRef.current);
   }, [scrollContainer, syncActiveNode]);
 
+  const scheduleScroll = useAnimationFrameCallback(updateScroll);
+
   const measureThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const measureNodes = useCallback(() => {
     if (measureThrottleRef.current) return;
@@ -242,8 +251,20 @@ export function ChatMinimap({
       }
 
       setMinimapHeight(Math.max(1, minimapEl.clientHeight - MINIMAP_FOOTER));
-      allNodesRef.current = nextNodes;
-      setAllNodes(nextNodes);
+      // A growing response usually leaves every anchor at the same offset.
+      // Keep the rail stable instead of rendering a fresh identical node list.
+      const previous = allNodesRef.current;
+      if (
+        previous.length !== nextNodes.length ||
+        nextNodes.some(
+          (node, index) =>
+            node.id !== previous[index]?.id ||
+            node.scrollTop !== previous[index]?.scrollTop,
+        )
+      ) {
+        allNodesRef.current = nextNodes;
+        setAllNodes(nextNodes);
+      }
       setVisible(
         scrollEl.scrollHeight - scrollEl.clientHeight > 20 ||
           nextNodes.length > 1,
@@ -273,24 +294,25 @@ export function ChatMinimap({
   useEffect(() => {
     const el = scrollContainer.current;
     if (!el) return;
-    el.addEventListener("scroll", updateScroll, { passive: true });
+    el.addEventListener("scroll", scheduleScroll, { passive: true });
     return () => {
-      el.removeEventListener("scroll", updateScroll);
+      el.removeEventListener("scroll", scheduleScroll);
     };
-  }, [scrollContainer, updateScroll]);
+  }, [scrollContainer, scheduleScroll]);
 
   useEffect(() => {
     const el = scrollContainer.current;
     if (!el) return;
     const syncLayout = () => {
       measureNodes();
-      updateScroll();
+      scheduleScroll();
     };
     if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(syncLayout);
     ro.observe(el);
     if (el.firstElementChild) ro.observe(el.firstElementChild);
-    syncLayout();
+    measureNodes();
+    updateScroll();
     return () => {
       ro.disconnect();
       if (measureThrottleRef.current) {
@@ -298,17 +320,17 @@ export function ChatMinimap({
         measureThrottleRef.current = null;
       }
     };
-  }, [measureNodes, scrollContainer, updateScroll]);
+  }, [measureNodes, scrollContainer, scheduleScroll, updateScroll]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
       measureNodes();
-      updateScroll();
+      scheduleScroll();
     }, 50);
     return () => {
       clearTimeout(timeout);
     };
-  }, [anchorIds, loadedAnchorIds, measureNodes, updateScroll]);
+  }, [anchorIds, loadedAnchorIds, measureNodes, scheduleScroll]);
 
   const loadPendingNavigation = useCallback(async () => {
     if (navigationLoadingRef.current) return;
@@ -516,4 +538,4 @@ export function ChatMinimap({
       })}
     </div>
   );
-}
+});
