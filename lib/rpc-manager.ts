@@ -299,13 +299,7 @@ export class AgentSessionWrapper {
   }
 
   private shouldWaitForExtensions(type: string): boolean {
-    return (
-      type === "prompt" ||
-      type === "steer" ||
-      type === "follow_up" ||
-      type === "get_commands" ||
-      type === "get_state"
-    );
+    return type === "prompt" || type === "get_commands" || type === "get_state";
   }
 
   private async withFinalIdleReset<T>(operation: () => Promise<T>): Promise<T> {
@@ -464,7 +458,7 @@ export class AgentSessionWrapper {
         throw new Error("Session history is being changed");
       }
 
-      if (type === "prompt" || type === "steer" || type === "follow_up") {
+      if (type === "prompt") {
         const imageError = validateAgentImages(command["images"]);
         if (imageError) throw new Error(imageError);
       }
@@ -612,8 +606,6 @@ export class AgentSessionWrapper {
             isPromptRunning: this.pendingPromptCount > 0,
             isBashRunning: this.inner.isBashRunning,
             isCompacting: this.inner.isCompacting,
-            autoCompactionEnabled: this.inner.autoCompactionEnabled,
-            autoRetryEnabled: this.inner.autoRetryEnabled,
             model: model
               ? { id: model.id, provider: model.provider }
               : undefined,
@@ -895,37 +887,10 @@ export class AgentSessionWrapper {
           return { text: this.inner.getLastAssistantText() ?? "" };
         }
 
-        case "set_auto_compaction": {
-          this.inner.setAutoCompactionEnabled(command["enabled"] as boolean);
-          return null;
-        }
-
         case "clear_queue": {
           // Full clear only: pi has no single-item dequeue, and clear+requeue
           // races against the agent loop pulling messages mid-flight.
           return this.inner.clearQueue();
-        }
-
-        case "steer": {
-          const steerImages = command["images"] as
-            | Array<{ type: "image"; data: string; mimeType: string }>
-            | undefined;
-          await this.inner.steer(
-            command["message"] as string,
-            steerImages?.length ? steerImages : undefined,
-          );
-          return null;
-        }
-
-        case "follow_up": {
-          const followImages = command["images"] as
-            | Array<{ type: "image"; data: string; mimeType: string }>
-            | undefined;
-          await this.inner.followUp(
-            command["message"] as string,
-            followImages?.length ? followImages : undefined,
-          );
-          return null;
         }
 
         case "get_tools": {
@@ -990,11 +955,6 @@ export class AgentSessionWrapper {
             command["id"] as string,
             command["data"] as string,
           );
-          return null;
-        }
-
-        case "set_auto_retry": {
-          this.inner.setAutoRetryEnabled(command["enabled"] as boolean);
           return null;
         }
 
