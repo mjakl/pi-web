@@ -376,6 +376,106 @@ test("detail route never advertises a newer fingerprint for older content", asyn
   });
 });
 
+test("deferred detail reads serialize a navigation-only SDK tree", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-web-navigation-tree-"));
+  const id = "navigation-tree-route";
+  const path = join(dir, "session.jsonl");
+  const timestamp = "2026-01-01T00:00:00.000Z";
+  const entries = [
+    { type: "session", version: 3, id, cwd: dir, timestamp },
+    {
+      type: "message",
+      id: "root",
+      parentId: null,
+      timestamp,
+      message: { role: "user", content: "Question" },
+    },
+    {
+      type: "message",
+      id: "branch",
+      parentId: "root",
+      timestamp,
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "private-thinking".repeat(10000) },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    },
+    {
+      type: "custom",
+      id: "custom",
+      parentId: "branch",
+      timestamp,
+      customType: "fixture",
+      data: { body: "custom-body".repeat(10000) },
+    },
+    {
+      type: "message",
+      id: "image",
+      parentId: "branch",
+      timestamp,
+      message: {
+        role: "toolResult",
+        toolCallId: "tool",
+        toolName: "read",
+        content: [
+          {
+            type: "image",
+            mimeType: "image/png",
+            data: "image-body".repeat(10000),
+          },
+        ],
+        isError: false,
+      },
+    },
+  ];
+  await writeFile(
+    path,
+    entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n",
+  );
+  cacheSessionPath(id, path);
+  t.after(async () => {
+    invalidateSessionPathCache(id);
+    await rm(dir, { recursive: true, force: true });
+  });
+  const response = await getSessionDetail(
+    new Request(`http://localhost/api/sessions/${id}?deferThinking&deferMedia`),
+    { params: Promise.resolve({ id }) },
+  );
+  assert.equal(response.status, 200);
+  const detail = await response.json();
+  assert.deepEqual(detail.tree, [
+    {
+      entry: { id: "root", type: "message" },
+      children: [
+        {
+          entry: { id: "branch", type: "message" },
+          children: [
+            { entry: { id: "custom", type: "custom" }, children: [] },
+            {
+              entry: { id: "image", type: "message" },
+              children: [],
+              branchPreview: { text: "[image]" },
+            },
+          ],
+          branchPreview: { role: "assistant", text: "Answer" },
+        },
+      ],
+      branchPreview: { role: "user", text: "Question" },
+    },
+  ]);
+  assert.deepEqual(detail.context.entryIds, ["root", "branch", "image"]);
+  assert.equal(JSON.stringify(detail).includes("private-thinking"), false);
+  assert.equal(JSON.stringify(detail).includes("image-body"), false);
+  assert.equal(JSON.stringify(detail).includes("custom-body"), false);
+  assert.equal(
+    await readFile(path, "utf8"),
+    entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n",
+  );
+});
+
 test("detail and context routes bound history to the tail window", async (t) => {
   const previousRegistry = globalThis.__piSessions;
   const id = "live-pagination-route-test";
