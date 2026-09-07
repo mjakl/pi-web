@@ -12,6 +12,7 @@ export const enMessages: Record<string, string> = {
   "chat.unstarAnswer": "Unstar answer",
   "chat.starFailed": "Could not update star: {error}",
   "chat.jumpStarredAnswer": "Jump to starred answer",
+  "chat.compaction.divider": "Conversation compacted",
   "sidebar.starCount": "{count} starred answers",
   "chat.subagent.title": "Subagent",
   "chat.subagent.agents": "{count} agents",

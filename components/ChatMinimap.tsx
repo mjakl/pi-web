@@ -92,6 +92,20 @@ export const ChatMinimap = memo(function ChatMinimap({
 }: Props) {
   const { t } = useI18n();
   const stars = useMemo(() => new Set(starredEntryIds), [starredEntryIds]);
+  const compactions = useMemo(
+    () =>
+      new Set([
+        ...(historyAnchors ?? [])
+          .filter((anchor) => anchor.compaction)
+          .map((anchor) => anchor.id),
+        ...messages.flatMap((message, index) =>
+          message.role === "custom" && message.customType === "compaction"
+            ? [entryIds[index] ?? `live:${index - entryIds.length}`]
+            : [],
+        ),
+      ]),
+    [historyAnchors, messages, entryIds],
+  );
   const [visible, setVisible] = useState(false);
   const [allNodes, setAllNodes] = useState<NodeInfo[]>([]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -422,11 +436,6 @@ export const ChatMinimap = memo(function ChatMinimap({
 
   if (!visible) return null;
 
-  const lastNode = positionedNodes.at(-1);
-  const lastNodeTop = lastNode
-    ? lastNode.topRatio * minimapHeight
-    : MINIMAP_PADDING;
-  const railHeight = Math.max(1, lastNodeTop - MINIMAP_PADDING);
   const hoveredNode =
     hoveredIndex === null ? undefined : positionedNodes[hoveredIndex];
   const hoveredTimestamp = hoveredNode
@@ -464,19 +473,6 @@ export const ChatMinimap = memo(function ChatMinimap({
         overflow: "visible",
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: MINIMAP_PADDING,
-          height: railHeight,
-          width: 1,
-          background: "var(--border)",
-          transform: "translateX(-50%)",
-          zIndex: 0,
-        }}
-      />
-
       {positionedNodes.map((node) => {
         const isNearest = hoveredIndex === node.index;
         const isActive = activeIndex === node.index;
@@ -501,7 +497,20 @@ export const ChatMinimap = memo(function ChatMinimap({
               zIndex: 2,
             }}
           >
-            {stars.has(node.id) ? (
+            {compactions.has(node.id) ? (
+              <div
+                role="separator"
+                aria-label={t("chat.compaction.divider")}
+                style={{
+                  width: 18,
+                  height: 2,
+                  borderRadius: 1,
+                  background: "var(--text-muted)",
+                  opacity: isActive || isNearest ? 1 : 0.6,
+                  boxShadow: "0 0 0 2px var(--bg-panel)",
+                }}
+              />
+            ) : stars.has(node.id) ? (
               <button
                 type="button"
                 className="minimap-star"

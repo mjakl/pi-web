@@ -100,7 +100,15 @@ export function updateStarAnchors(
       const id = entryIds[index];
       if (!id) return [];
       if (isMessageGroupAnchor(message))
-        return [{ id, timestamp: message.timestamp }];
+        return [
+          {
+            id,
+            timestamp: message.timestamp,
+            ...(message.role === "custom" && message.customType === "compaction"
+              ? { compaction: true }
+              : {}),
+          },
+        ];
       return stars.has(id)
         ? [{ id, timestamp: message.timestamp, starred: true }]
         : [];
