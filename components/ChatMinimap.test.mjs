@@ -6,13 +6,20 @@ import { readFileSync } from "node:fs";
 
 process.env.NODE_ENV = "test";
 const window = new Window({ url: "http://localhost" });
+const resizeCallbacks = new Set();
 Object.assign(globalThis, {
   window,
   document: window.document,
   HTMLElement: window.HTMLElement,
   ResizeObserver: class {
+    constructor(callback) {
+      this.callback = callback;
+      resizeCallbacks.add(callback);
+    }
     observe() {}
-    disconnect() {}
+    disconnect() {
+      resizeCallbacks.delete(this.callback);
+    }
   },
   IS_REACT_ACT_ENVIRONMENT: true,
 });
@@ -38,6 +45,76 @@ Object.defineProperty(window.HTMLElement.prototype, "clientHeight", {
 window.HTMLElement.prototype.getBoundingClientRect = () => rect();
 const settle = () =>
   React.act(() => new Promise((resolve) => setTimeout(resolve, 230)));
+
+test("content growth keeps an unchanged rail stable but refreshes moved navigation targets", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scroll = document.createElement("div");
+  let height = 2000;
+  Object.defineProperty(scroll, "scrollHeight", { get: () => height });
+  let anchorTop = 500;
+  const jumps = [];
+  scroll.scrollTo = (options) => jumps.push(options.top);
+  let roleReads = 0;
+  const props = {
+    messages: [
+      {
+        get role() {
+          roleReads += 1;
+          return "user";
+        },
+        content: "Prompt",
+      },
+    ],
+    entryIds: ["u"],
+    scrollContainer: { current: scroll },
+    messageRefs: {
+      current: [{ getBoundingClientRect: () => rect(anchorTop) }],
+    },
+    onLoadThrough: async () => false,
+  };
+  const render = () =>
+    React.act(() => root.render(React.createElement(ChatMinimap, props)));
+  try {
+    await render();
+    await settle();
+    roleReads = 0;
+    for (let i = 0; i < 20; i += 1) await render();
+    assert.equal(
+      roleReads,
+      0,
+      "parent streaming updates must not rescan unchanged history",
+    );
+    height += 200;
+    await React.act(() => {
+      for (let i = 0; i < 20; i += 1)
+        for (const callback of resizeCallbacks) callback();
+    });
+    await settle();
+    anchorTop = 800;
+    await React.act(() => {
+      for (const callback of resizeCallbacks) callback();
+    });
+    await settle();
+    await React.act(() => {
+      container
+        .querySelector(".chat-minimap")
+        .dispatchEvent(
+          new window.MouseEvent("mousedown", { bubbles: true, clientY: 12 }),
+        );
+      window.dispatchEvent(new window.MouseEvent("mouseup"));
+    });
+    assert.equal(
+      jumps.at(-1),
+      620,
+      "navigation uses the refreshed anchor position",
+    );
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+  }
+});
 
 test("paints the rail on the whole chat pane only while desktop navigation is visible", async () => {
   const style = document.createElement("style");

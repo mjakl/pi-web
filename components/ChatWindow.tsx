@@ -1,4 +1,6 @@
 "use client";
+
+import { useAnimationFrameCallback } from "@/hooks/useAnimationFrameCallback";
 import { registerAbortHandler } from "@/hooks/useKeyboardShortcuts";
 import {
   Fragment,
@@ -839,6 +841,11 @@ export function ChatWindow({
     return groups;
   }, [messages, toolResultsMap, messageCwd]);
 
+  const scheduleScrollLayout = useAnimationFrameCallback(() => {
+    if (liveFollowAttachedRef.current) scrollToLatest();
+    else syncScrollPosition();
+  });
+
   useLayoutEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -869,10 +876,8 @@ export function ChatWindow({
     if (!initialScrollDoneRef.current) {
       initialScrollDoneRef.current = true;
       scrollToLatest();
-    } else if (liveFollowAttachedRef.current) {
-      scrollToLatest();
     } else {
-      syncScrollPosition();
+      scheduleScrollLayout();
     }
   }, [
     activeLeafId,
@@ -881,6 +886,7 @@ export function ChatWindow({
     entryIds,
     messages,
     pendingBash,
+    scheduleScrollLayout,
     scrollToLatest,
     streamState.streamingMessage,
     syncScrollPosition,
@@ -889,15 +895,14 @@ export function ChatWindow({
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      if (liveFollowAttachedRef.current) scrollToLatest();
-      else syncScrollPosition();
-    });
+    const observer = new ResizeObserver(scheduleScrollLayout);
     observer.observe(container);
+    if (container.firstElementChild)
+      observer.observe(container.firstElementChild);
     return () => {
       observer.disconnect();
     };
-  }, [error, loading, scrollToLatest, syncScrollPosition]);
+  }, [error, loading, scheduleScrollLayout]);
 
   const availableThinkingLevels = displayModelValue
     ? (modelThinkingLevels[

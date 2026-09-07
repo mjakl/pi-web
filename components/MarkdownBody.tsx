@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type MouseEvent } from "react";
+import { memo, useMemo, type MouseEvent } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { resolveLocalFileHref } from "@/lib/file-links";
 import { getFileApiUrl } from "@/lib/file-paths";
@@ -21,7 +21,7 @@ interface MarkdownBodyProps {
   onOpenFile?: (filePath: string) => void;
 }
 
-export function MarkdownBody({
+export const MarkdownBody = memo(function MarkdownBody({
   children,
   className,
   isStreaming,
@@ -163,4 +163,4 @@ export function MarkdownBody({
       </ReactMarkdown>
     </div>
   );
-}
+});

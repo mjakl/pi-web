@@ -2098,23 +2098,17 @@ span.linenumber {
   pointer-events: none;
   --notification-halo: color-mix(in srgb, var(--info) 25%, transparent);
   box-shadow:
-    0 0 0 3px var(--notification-halo),
-    0 0 7px 2px var(--notification-halo);
+    0 0 0 4px var(--notification-halo),
+    0 0 8px 2px var(--notification-halo);
   animation: session-notification-halo 1.5s ease-in-out infinite;
 }
 
 @keyframes session-notification-halo {
   0%,
   100% {
-    box-shadow:
-      0 0 0 1px var(--notification-halo),
-      0 0 3px var(--notification-halo);
-    opacity: 0.45;
+    opacity: 0.25;
   }
   50% {
-    box-shadow:
-      0 0 0 4px var(--notification-halo),
-      0 0 8px 2px var(--notification-halo);
     opacity: 1;
   }
 }
