@@ -1,5 +1,9 @@
 /** Pi Web's English UI messages. */
 export const enMessages: Record<string, string> = {
+  "chat.branchSyncPending": "Loading branch history. Sending is paused.",
+  "chat.branchSyncFailed":
+    "The branch changed, but its history could not be loaded. Sending is paused until it loads.",
+  "chat.retryBranchHistory": "Retry loading history",
   "chat.branchBusy":
     "Wait for the current operation to finish before branching",
   "chat.branchFailed": "Could not create branch: {error}",

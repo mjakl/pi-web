@@ -73,6 +73,7 @@ interface Props {
     images?: AttachedImage[],
   ) => void;
   isStreaming: boolean;
+  submissionDisabled?: boolean;
   model?: { provider: string; modelId: string } | null;
   isAutoModelSelection?: boolean;
   modelNames?: Record<string, string>;
@@ -616,6 +617,7 @@ export function ChatInput({
   onSteer,
   onFollowUp,
   isStreaming,
+  submissionDisabled = false,
   model,
   isAutoModelSelection,
   modelNames,
@@ -1059,6 +1061,7 @@ export function ChatInput({
   );
 
   const handleSend = useCallback(async () => {
+    if (submissionDisabled) return;
     const msg = value.trim();
     if (!msg && !attachedImages.length) return;
     onAudioUnlock?.();
@@ -1072,6 +1075,7 @@ export function ChatInput({
     value,
     attachedImages,
     isStreaming,
+    submissionDisabled,
     runBuiltinCommand,
     onSend,
     clearInput,
@@ -1358,6 +1362,7 @@ export function ChatInput({
 
   const sendQueued = useCallback(
     (mode: StreamingAction) => {
+      if (submissionDisabled) return;
       const msg = value.trim();
       if (!msg && !attachedImages.length) return;
       onAudioUnlock?.();
@@ -1389,6 +1394,7 @@ export function ChatInput({
     [
       value,
       attachedImages,
+      submissionDisabled,
       onBuiltinCommand,
       onPromptWithStreamingBehavior,
       onSteer,
@@ -2524,7 +2530,10 @@ export function ChatInput({
                 }
                 aria-label={actionLabel}
                 title={actionTitle}
-                disabled={!isStreaming && !canQueueStreamingMessage}
+                disabled={
+                  submissionDisabled ||
+                  (!isStreaming && !canQueueStreamingMessage)
+                }
                 onMouseDown={(event) => {
                   event.preventDefault();
                 }}

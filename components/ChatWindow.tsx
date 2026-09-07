@@ -340,6 +340,8 @@ export function ChatWindow({
     retryInfo,
     contextUsage,
     messageActionEntryId,
+    branchStatus,
+    retryBranchContext,
     isCompacting,
     compactError,
     compactResult,
@@ -945,6 +947,7 @@ export function ChatWindow({
           : undefined
       }
       isStreaming={sessionBusy}
+      submissionDisabled={branchStatus !== null}
       model={displayModelValue}
       isAutoModelSelection={isAutoModelSelection}
       modelNames={modelNames}
@@ -1419,6 +1422,31 @@ export function ChatWindow({
       </div>
 
       <footer className="chat-composer">
+        {branchStatus && (
+          <div
+            className="branch-sync-notice"
+            role={branchStatus === "failed" ? "alert" : "status"}
+          >
+            <span>
+              {t(
+                branchStatus === "failed"
+                  ? "chat.branchSyncFailed"
+                  : "chat.branchSyncPending",
+              )}
+            </span>
+            {branchStatus === "failed" && (
+              <button
+                type="button"
+                className="history-action"
+                onClick={() => {
+                  void retryBranchContext();
+                }}
+              >
+                {t("chat.retryBranchHistory")}
+              </button>
+            )}
+          </div>
+        )}
         {chatInputElement}
         <ExtensionStatusBar
           statuses={extensionStatuses}

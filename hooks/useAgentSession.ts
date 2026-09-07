@@ -335,6 +335,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
   const [systemTools, setSystemTools] = useState<ToolEntry[] | null>(null);
   const messageActionPendingRef = useRef(false);
+  const branchActionRef = useRef<{
+    sessionId: string;
+    result?: { leafId: string | null; message?: UserMessage };
+    loading: boolean;
+  } | null>(null);
+  const [branchStatus, setBranchStatus] = useState<"pending" | "failed" | null>(
+    null,
+  );
   const [messageActionEntryId, setMessageActionEntryId] = useState<
     string | null
   >(null);
@@ -1208,6 +1216,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   );
 
   const refreshTranscript = useCallback(async (): Promise<boolean> => {
+    if (branchActionRef.current) return false;
     const sid = sessionPropIdRef.current;
     if (!sid || sessionIdRef.current !== sid) return false;
 
@@ -1957,7 +1966,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     async (message: string, images?: AttachedImage[]) => {
       const trimmedMessage = message.trim();
       if (!trimmedMessage && !images?.length) return;
-      if (agentRunningRef.current || bashRunningRef.current) {
+      if (
+        branchActionRef.current ||
+        agentRunningRef.current ||
+        bashRunningRef.current
+      ) {
         restoreSubmission(message, images, composerDraftKey);
         return;
       }
@@ -2214,17 +2227,77 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     [onSessionForked, reportActionError, t],
   );
 
+  const finishBranchAction = useCallback(() => {
+    branchActionRef.current = null;
+    messageActionPendingRef.current = false;
+    if (sessionHookMountedRef.current) {
+      setBranchStatus(null);
+      setMessageActionEntryId(null);
+    }
+  }, []);
+
+  const retryBranchContext = useCallback(async () => {
+    const action = branchActionRef.current;
+    if (
+      !action?.result ||
+      action.loading ||
+      action.sessionId !== sessionIdRef.current
+    )
+      return;
+    action.loading = true;
+    setBranchStatus("pending");
+    const branchRequest: BranchContextRequest = {
+      intentOrder: ++persistedOrderRef.current,
+      sessionId: action.sessionId,
+      runId: promptRunIdRef.current,
+    };
+    // A successful mutation must reconcile before the next prompt is admitted.
+    acceptedTranscriptOrderRef.current = branchRequest.intentOrder;
+    const loaded = await loadContext(
+      action.sessionId,
+      action.result.leafId,
+      undefined,
+      branchRequest,
+    );
+    if (
+      !sessionHookMountedRef.current ||
+      sessionIdRef.current !== action.sessionId ||
+      branchActionRef.current !== action
+    )
+      return;
+    action.loading = false;
+    if (!loaded) {
+      setBranchStatus("failed");
+      return;
+    }
+    setActiveLeafId(action.result.leafId);
+    const draft = messageActionDraft(action.result.message);
+    setDraft(action.sessionId, draft);
+    opts.chatInputRef?.current?.replaceMessage(
+      {
+        role: "user",
+        content: [
+          { type: "text", text: draft.value },
+          ...draft.images.map((image) => ({
+            type: "image" as const,
+            ...image,
+          })),
+        ],
+      },
+      true,
+    );
+    finishBranchAction();
+  }, [finishBranchAction, loadContext, opts.chatInputRef]);
+
   const handleBranchMessage = useCallback(
     async (entryId: string) => {
       const sid = sessionIdRef.current;
       if (!sid || messageActionPendingRef.current) return;
       messageActionPendingRef.current = true;
+      const action = { sessionId: sid, loading: false };
+      branchActionRef.current = action;
+      setBranchStatus("pending");
       setMessageActionEntryId(entryId);
-      const branchRequest: BranchContextRequest = {
-        intentOrder: ++persistedOrderRef.current,
-        sessionId: sid,
-        runId: promptRunIdRef.current,
-      };
       commitLocalSnapshotMutation();
       try {
         const result = await runPersistedWrite(() =>
@@ -2237,51 +2310,26 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         if (
           result.cancelled ||
           !sessionHookMountedRef.current ||
-          sessionIdRef.current !== sid ||
-          promptRunIdRef.current !== branchRequest.runId ||
-          acceptedTranscriptOrderRef.current > branchRequest.intentOrder
-        )
+          sessionIdRef.current !== sid
+        ) {
+          finishBranchAction();
           return;
-        // Authority follows successful navigation, never an optimistic target.
-        acceptedTranscriptOrderRef.current = branchRequest.intentOrder;
-        const loaded = await loadContext(
-          sid,
-          result.leafId,
-          undefined,
-          branchRequest,
-        );
-        if (!loaded || sessionIdRef.current !== sid) return;
-        setActiveLeafId(result.leafId);
-        const draft = messageActionDraft(result.message);
-        setDraft(sid, draft);
-        opts.chatInputRef?.current?.replaceMessage(
-          {
-            role: "user",
-            content: [
-              { type: "text", text: draft.value },
-              ...draft.images.map((image) => ({
-                type: "image" as const,
-                ...image,
-              })),
-            ],
-          },
-          true,
-        );
+        }
+        branchActionRef.current = { ...action, result };
+        await retryBranchContext();
       } catch (error) {
+        finishBranchAction();
         if (sessionHookMountedRef.current && sessionIdRef.current === sid)
           reportActionError(
             t("chat.branchFailed", { error: errorMessage(error) }),
           );
-      } finally {
-        messageActionPendingRef.current = false;
-        if (sessionHookMountedRef.current) setMessageActionEntryId(null);
       }
     },
     [
       commitLocalSnapshotMutation,
+      finishBranchAction,
       runPersistedWrite,
-      loadContext,
-      opts.chatInputRef,
+      retryBranchContext,
       reportActionError,
       t,
     ],
@@ -2336,7 +2384,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const navigateTranscriptBranch = useCallback(
     async (leafId: string | null) => {
-      if (bashRunningRef.current) return;
+      if (branchActionRef.current || bashRunningRef.current) return;
       const sid = sessionIdRef.current;
       if (!sid) return;
       const branchRequest: BranchContextRequest = {
@@ -2513,6 +2561,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const handleBuiltinSlashCommand = useCallback(
     async (text: string): Promise<BuiltinSlashCommandResult> => {
+      if (branchActionRef.current)
+        return { handled: true, error: t("chat.branchSyncPending") };
       if (!text.startsWith("/")) return { handled: false };
       const match = text.match(/^\/([^\s]+)(?:\s+([\s\S]*))?$/);
       if (!match) return { handled: false };
@@ -2708,6 +2758,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       const restore = () => {
         restoreSubmission(message, images, composerDraftKey);
       };
+      if (branchActionRef.current) {
+        restore();
+        return;
+      }
       if (!sid) {
         restore();
         addNotice({
@@ -3061,6 +3115,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     retryInfo,
     contextUsage,
     messageActionEntryId,
+    branchStatus,
+    retryBranchContext,
     tree: data?.tree ?? NO_BRANCHES,
     systemPrompt,
     systemTools,

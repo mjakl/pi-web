@@ -607,3 +607,267 @@ test("running sessions expose copying and explain why branching is disabled", as
     globalThis.EventSource = originalEventSource;
   }
 });
+
+test("branching blocks submission until history and draft reconcile, including a failed reload and retry", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalEventSource = globalThis.EventSource;
+  globalThis.EventSource = class {
+    readyState = 1;
+    constructor() {
+      queueMicrotask(() =>
+        this.onmessage?.({
+          data: JSON.stringify({ type: "connected", isStreaming: false }),
+        }),
+      );
+    }
+    close() {}
+  };
+  let releaseBranch;
+  let releaseContext;
+  let contextReads = 0;
+  const commands = [];
+  globalThis.fetch = async (url, options) => {
+    const path = String(url);
+    if (path === "/api/agent/fork-source" && options?.body) {
+      const command = JSON.parse(options.body);
+      commands.push(command);
+      if (command.type === "branch_from_message") {
+        await new Promise((resolve) => {
+          releaseBranch = resolve;
+        });
+        return Response.json({
+          success: true,
+          data: {
+            cancelled: false,
+            leafId: "answer",
+            message: selectedMessage,
+          },
+        });
+      }
+      return Response.json({ success: true, data: {} });
+    }
+    if (path.includes("/context?")) {
+      contextReads += 1;
+      if (contextReads === 1)
+        return Response.json({ error: "temporary failure" }, { status: 503 });
+      await new Promise((resolve) => {
+        releaseContext = resolve;
+      });
+      return Response.json({
+        context: {
+          messages: history,
+          entryIds: ["question", "answer"],
+          hasMore: false,
+        },
+      });
+    }
+    if (path.startsWith("/api/sessions/fork-source?"))
+      return Response.json({
+        sessionId: session.id,
+        filePath: session.path,
+        info: session,
+        tree: [],
+        leafId: "selected",
+        context: {
+          messages: [...history, selectedMessage],
+          entryIds: ["question", "answer", "selected"],
+          hasMore: false,
+        },
+      });
+    if (path.endsWith("/state"))
+      return Response.json({ active: false, running: false });
+    if (path.startsWith("/api/models"))
+      return Response.json({ models: {}, modelList: [] });
+    return Response.json({});
+  };
+  setDraft(session.id, { value: "Old composer draft", images: [] });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const button = (label) =>
+    [...container.querySelectorAll("button")].find(
+      (b) =>
+        b.textContent.trim() === label ||
+        b.getAttribute("aria-label") === label,
+    );
+  const pressEnter = () =>
+    container.querySelector("textarea").dispatchEvent(
+      new window.KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  try {
+    await React.act(async () =>
+      root.render(
+        React.createElement(ChatWindow, {
+          session,
+          newSessionCwd: null,
+          newSessionDraftKey: null,
+          chatInputRef: React.createRef(),
+        }),
+      ),
+    );
+    await React.act(async () =>
+      [...container.querySelectorAll("button")]
+        .filter((b) => b.textContent.trim() === "New branch")
+        .at(-1)
+        .click(),
+    );
+    assert.equal(
+      button("Send").disabled,
+      true,
+      "sending is blocked before the branch response",
+    );
+    await React.act(async () => {
+      pressEnter();
+    });
+    assert.equal(
+      container.querySelector("textarea").value,
+      "Old composer draft",
+    );
+    assert.equal(commands.length, 1);
+    await React.act(async () => releaseBranch());
+    assert.match(
+      container.querySelector('[role="alert"]').textContent,
+      /history/i,
+    );
+    assert.ok(button("Retry loading history"));
+    assert.equal(
+      button("Send").disabled,
+      true,
+      "a failed context request does not reopen submission",
+    );
+    await React.act(async () => {
+      pressEnter();
+    });
+    assert.equal(commands.length, 1);
+    await React.act(async () => button("Retry loading history").click());
+    assert.equal(
+      button("Send").disabled,
+      true,
+      "retry keeps submission blocked",
+    );
+    await React.act(async () => releaseContext());
+    assert.equal(contextReads, 2);
+    assert.equal(
+      commands.filter((c) => c.type === "branch_from_message").length,
+      1,
+    );
+    assert.equal(button("Retry loading history"), undefined);
+    assert.equal(
+      container.querySelector("textarea").value,
+      "/skill:review src/main.ts",
+    );
+    assert.deepEqual(getDraft(session.id).images, [image]);
+    assert.equal(button("Send").disabled, false);
+    await React.act(async () => button("Send").click());
+    assert.equal(commands.at(-1).type, "prompt");
+    assert.equal(commands.at(-1).message, "/skill:review src/main.ts");
+  } finally {
+    releaseBranch?.();
+    releaseContext?.();
+    await React.act(async () => root.unmount());
+    container.remove();
+    clearDraft(session.id);
+    globalThis.fetch = originalFetch;
+    globalThis.EventSource = originalEventSource;
+  }
+});
+
+test("the session hook refuses direct prompt and command admission during branch reconciliation", async () => {
+  const { useAgentSession } = await jiti.import("../hooks/useAgentSession.ts");
+  const originalFetch = globalThis.fetch;
+  const commands = [];
+  const restored = [];
+  let releaseBranch;
+  let action;
+  let api;
+  globalThis.fetch = async (url, options) => {
+    const path = String(url);
+    if (path === "/api/agent/fork-source" && options?.body) {
+      const command = JSON.parse(options.body);
+      commands.push(command);
+      if (command.type === "branch_from_message") {
+        await new Promise((resolve) => {
+          releaseBranch = resolve;
+        });
+        return Response.json({ success: true, data: { cancelled: true } });
+      }
+      return Response.json({ success: true, data: {} });
+    }
+    if (path.startsWith("/api/sessions/fork-source?"))
+      return Response.json({
+        sessionId: session.id,
+        filePath: session.path,
+        info: session,
+        tree: [],
+        leafId: "answer",
+        context: {
+          messages: history,
+          entryIds: ["question", "answer"],
+          hasMore: false,
+        },
+      });
+    if (path.endsWith("/state"))
+      return Response.json({ active: false, running: false });
+    if (path.startsWith("/api/models"))
+      return Response.json({ models: {}, modelList: [] });
+    return Response.json({});
+  };
+  const inputRef = {
+    current: { restoreSubmission: (text) => restored.push(text) },
+  };
+  function Probe() {
+    api = useAgentSession({
+      session,
+      newSessionCwd: null,
+      newSessionDraftKey: null,
+      chatInputRef: inputRef,
+    });
+    return null;
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await React.act(async () => {
+      root.render(React.createElement(Probe));
+    });
+    await React.act(async () => {
+      action = api.handleBranchMessage("question");
+      // Submit in the same event turn, before the disabled button can render.
+      await api.handleSend("Old composer draft");
+      await api.handleSend("!echo must-not-run");
+      await api.handlePromptWithStreamingBehavior("/extension", "steer");
+      const builtin = await api.handleBuiltinSlashCommand("/compact");
+      assert.equal(builtin.handled, true);
+      assert.ok(builtin.error);
+    });
+    assert.deepEqual(commands, [
+      { type: "branch_from_message", entryId: "question" },
+    ]);
+    assert.deepEqual(restored, [
+      "Old composer draft",
+      "!echo must-not-run",
+      "/extension",
+    ]);
+    assert.deepEqual(api.messages, history);
+    assert.equal(api.branchStatus, "pending");
+    await React.act(async () => {
+      releaseBranch();
+      await action;
+    });
+    assert.equal(api.branchStatus, null);
+    assert.deepEqual(api.messages, history);
+  } finally {
+    releaseBranch?.();
+    await React.act(async () => {
+      await action;
+      root.unmount();
+    });
+    container.remove();
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -2875,3 +2875,19 @@ span.linenumber {
     pointer-events: auto;
   }
 }
+
+.branch-sync-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 820px;
+  margin: 8px auto 0;
+  padding: 8px 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.branch-sync-notice[role="alert"] {
+  color: var(--danger);
+}
