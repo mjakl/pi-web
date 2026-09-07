@@ -22,7 +22,7 @@ function renderMessage(message, props = {}) {
   );
 }
 
-test("keeps long human messages scrollable inside the band and actions outside", async () => {
+test("shows long human messages in full with actions outside the band", async () => {
   const window = new Window();
   try {
     window.document.body.innerHTML = renderMessage({
@@ -30,19 +30,19 @@ test("keeps long human messages scrollable inside the band and actions outside",
       content: "A long paragraph.\n\n".repeat(80),
     });
     const content = window.document.querySelector(".markdown-user-message");
-    const scroller = content.parentElement;
-    const shell = scroller.parentElement;
-    assert.equal(scroller.style.overflowY, "auto");
-    assert.equal(scroller.style.minHeight, "0");
-    assert.equal(shell.style.overflow, "hidden");
-    assert.equal(shell.style.maxHeight, "300px");
-    assert.equal(shell.style.paddingTop, "14px");
-    assert.equal(shell.style.paddingBottom, "14px");
+    for (
+      let ancestor = content.parentElement;
+      ancestor;
+      ancestor = ancestor.parentElement
+    ) {
+      assert.ok(["", "none"].includes(ancestor.style.maxHeight));
+      assert.ok(["", "visible"].includes(ancestor.style.overflow));
+      assert.ok(["", "visible"].includes(ancestor.style.overflowY));
+    }
     const band = content.closest(".user-message-band");
     assert.ok(band);
     assert.equal(band.querySelector("button"), null);
     assert.ok(band.parentElement.querySelector(".message-actions button"));
-    assert.equal(scroller.style.marginRight, "4px");
     assert.equal(content.querySelectorAll("p").length, 80);
     assert.equal(content.lastElementChild.textContent, "A long paragraph.");
   } finally {

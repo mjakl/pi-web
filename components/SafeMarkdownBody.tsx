@@ -22,8 +22,9 @@ function formatMessageBytes(n: number): string {
 export function SafeMarkdownBody({
   children,
   className,
+  fullHeight = false,
   ...props
-}: React.ComponentProps<typeof MarkdownBody>) {
+}: React.ComponentProps<typeof MarkdownBody> & { fullHeight?: boolean }) {
   const { t } = useI18n();
   const [showRaw, setShowRaw] = useState(false);
 
@@ -65,8 +66,8 @@ export function SafeMarkdownBody({
     <div
       className={className}
       style={{
-        maxHeight: 420,
-        overflow: "auto",
+        maxHeight: fullHeight ? undefined : 420,
+        overflow: fullHeight ? undefined : "auto",
         fontSize: 12,
         lineHeight: 1.5,
       }}
