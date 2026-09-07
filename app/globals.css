@@ -1,4 +1,5 @@
 :root {
+  --footer-row-height: 35px;
   --menu-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
   --bg: #ffffff;
   --bg-panel: #f5f5f5;
@@ -165,7 +166,7 @@ body {
   flex: 1 1 100%;
   align-items: stretch;
   min-width: 0;
-  height: 35px;
+  height: var(--footer-row-height);
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
@@ -302,7 +303,7 @@ button.extension-widget-trigger:focus-visible {
   flex: 1 1 0;
   align-items: flex-start;
   min-width: 0;
-  min-height: 35px;
+  min-height: var(--footer-row-height);
   max-height: min(144px, 18dvh);
   padding: 8px 12px;
   overflow-y: auto;
