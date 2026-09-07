@@ -1,6 +1,7 @@
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { AgentMessage, SessionContext } from "./types";
 import { isMessageGroupAnchor } from "./message-display";
+import { getMessagePreview } from "./message-preview";
 
 export const SESSION_STAR_TYPE = "pi-web:star";
 
@@ -104,6 +105,9 @@ export function updateStarAnchors(
           {
             id,
             timestamp: message.timestamp,
+            ...(message.role === "user"
+              ? { preview: getMessagePreview(message.content) }
+              : {}),
             ...(message.role === "custom" && message.customType === "compaction"
               ? { compaction: true }
               : {}),

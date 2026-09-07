@@ -524,4 +524,5 @@ export const enMessages: Record<string, string> = {
     "Pi Web could not render this screen. Your sessions are stored on disk and are not affected.",
   "error.tryAgain": "Try again",
   "error.reload": "Reload page",
+  "chat.jumpHumanMessage": "Jump to human message",
 };

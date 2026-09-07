@@ -360,6 +360,8 @@ export interface SessionContext {
   /** All turn anchors on the selected branch, independent of the loaded page. */
   historyAnchors?: {
     id: string;
+    /** Bounded, whitespace-normalized human-message text for rail previews. */
+    preview?: string;
     timestamp?: number;
     starred?: boolean;
     compaction?: boolean;

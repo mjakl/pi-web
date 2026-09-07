@@ -1,4 +1,5 @@
 import { readSessionStars, SESSION_STAR_TYPE } from "./session-stars";
+import { getMessagePreview } from "./message-preview";
 import {
   SessionManager,
   buildContextEntries as piBuildContextEntries,
@@ -641,6 +642,9 @@ export function buildSessionContext(
         )
         .map((entry) => ({
           id: entry.id,
+          ...(entry.type === "message" && entry.message.role === "user"
+            ? { preview: getMessagePreview(entry.message.content) }
+            : {}),
           ...(stars.has(entry.id) ? { starred: true } : {}),
           ...(entry.type === "compaction" ||
           (entry.type === "custom_message" && entry.customType === "compaction")
