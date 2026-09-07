@@ -1137,6 +1137,9 @@ function BlockView({
       <ThinkingBlock
         block={block}
         duration={streamingDuration}
+        isStreaming={isStreaming}
+        cwd={cwd}
+        onOpenFile={onOpenFile}
         sessionId={sessionId}
         entryId={entryId}
         blockIndex={blockIndex}
@@ -1273,12 +1276,18 @@ function AssistantImageBlock({ block }: { block: ImageContent }) {
 function ThinkingBlock({
   block,
   duration,
+  isStreaming,
+  cwd,
+  onOpenFile,
   sessionId,
   entryId,
   blockIndex,
 }: {
   block: ThinkingContent;
   duration?: number;
+  isStreaming?: boolean;
+  cwd?: string;
+  onOpenFile?: (filePath: string) => void;
   sessionId?: string;
   entryId?: string;
   blockIndex: number;
@@ -1319,6 +1328,8 @@ function ThinkingBlock({
       }}
     >
       <button
+        type="button"
+        aria-expanded={expanded}
         onClick={() => void toggle()}
         style={{
           display: "flex",
@@ -1347,6 +1358,24 @@ function ThinkingBlock({
             {duration}s
           </span>
         )}
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          fill="none"
+          stroke="var(--text-dim)"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          style={{
+            marginLeft: duration === undefined ? "auto" : undefined,
+            flexShrink: 0,
+            transform: expanded ? "rotate(180deg)" : "none",
+          }}
+        >
+          <polyline points="2 3.5 5 6.5 8 3.5" />
+        </svg>
       </button>
       {expanded && (
         <div
@@ -1355,14 +1384,24 @@ function ThinkingBlock({
             color: error ? "var(--danger)" : "var(--text-muted)",
             fontSize: 12,
             lineHeight: 1.6,
-            whiteSpace: "pre-wrap",
             background: "var(--bg-panel)",
             borderTop: "1px solid var(--border)",
           }}
         >
           {loading
             ? t("i18n.loadingThinking")
-            : (error ?? (block.deferred ? content : block.thinking))}
+            : (error ?? (
+                <TextBlock
+                  block={{
+                    type: "text",
+                    text: (block.deferred ? content : block.thinking) ?? "",
+                  }}
+                  isStreaming={isStreaming}
+                  cwd={cwd}
+                  onOpenFile={onOpenFile}
+                  sessionId={sessionId}
+                />
+              ))}
         </div>
       )}
     </div>
