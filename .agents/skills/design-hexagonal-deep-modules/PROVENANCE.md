@@ -2,7 +2,7 @@
 
 ## Origin
 
-This skill was promoted from the self-written project skill at `.agents/skills/design-hexagonal-deep-modules/` in `ACalmCo/remy`, copied from commit `12af4b3958b1c68c162b7a40f86ea0601f1442d3`.
+This skill was promoted from a self-written project skill.
 
 Its bundled offline source digest synthesizes ideas from Alistair Cockburn, John Ousterhout, Joshua Bloch, Martin Fowler, AWS guidance, Netflix, Arho Huttunen, codecentric, the C4 model, and contract-testing literature. Exact optional links remain in `references/provenance-optional.md`.
 
