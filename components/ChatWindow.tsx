@@ -20,6 +20,7 @@ import type {
   ExtensionUiRequest,
   SessionInfo,
   SessionTreeNode,
+  ToolEntry,
   ToolResultMessage,
 } from "@/lib/types";
 import { normalizeCustomPanelLines } from "@/lib/ansi";
@@ -50,7 +51,6 @@ import type { NoticeItem } from "@/lib/notice-queue";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { useMessageRefs } from "@/hooks/useMessageRefs";
 import type { ContextUsage, SessionStatsInfo } from "@/lib/pi-types";
-import type { ToolEntry } from "@/lib/types";
 import {
   captureScrollDistance,
   didPrependHistory,

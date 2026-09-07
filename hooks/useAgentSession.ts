@@ -19,6 +19,7 @@ import type {
   SessionContext,
   SessionInfo,
   SessionTreeNode,
+  ToolEntry,
   UserMessage,
 } from "@/lib/types";
 import { errorMessage } from "@/lib/error-message";
@@ -34,7 +35,6 @@ import {
   setDraft,
   type ChatDraft,
 } from "@/lib/draft-store";
-import type { ToolEntry } from "@/lib/types";
 import type { ContextUsage, SessionStatsInfo } from "@/lib/pi-types";
 import { mergeSessionStats, type SessionFileStats } from "@/lib/session-stats";
 import { userMessageKey } from "@/lib/prompt-recovery";
