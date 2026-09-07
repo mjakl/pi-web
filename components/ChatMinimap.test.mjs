@@ -579,7 +579,7 @@ test("compactions render as neutral dividers for unloaded, loaded and live histo
   }
 });
 
-test("previews only human text, supports keyboard navigation and Escape, and cleans up", async () => {
+test("rail markers stay out of tab order and pointer clicks do not pin previews", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -625,7 +625,23 @@ test("previews only human text, supports keyboard navigation and Escape, and cle
     const button = container.querySelector(
       '[data-minimap-entry-id="text"] button',
     );
+    const rail = container.querySelector(".chat-minimap");
+    assert.ok(
+      [...rail.querySelectorAll("button")].every(
+        (marker) => marker.tabIndex === -1,
+      ),
+    );
     await React.act(() => button.focus());
+    assert.equal(document.querySelector('[role="tooltip"]'), null);
+    const hoverText = async () => {
+      await React.act(() =>
+        rail.dispatchEvent(
+          new window.MouseEvent("mousemove", { clientY: 12, bubbles: true }),
+        ),
+      );
+      await settle();
+    };
+    await hoverText();
     const tip = document.querySelector('[role="tooltip"]');
     assert.equal(tip.textContent, "**Hello** Grüß 😀");
     assert.equal(tip.id, button.getAttribute("aria-describedby"));
@@ -633,11 +649,20 @@ test("previews only human text, supports keyboard navigation and Escape, and cle
       container.querySelector(".chat-minimap").hasAttribute("title"),
       false,
     );
-    await React.act(() => button.click());
+    await React.act(() => {
+      button.dispatchEvent(
+        new window.MouseEvent("mousedown", { clientY: 12, bubbles: true }),
+      );
+      window.dispatchEvent(new window.MouseEvent("mouseup"));
+      button.click();
+    });
     assert.equal(jumps.at(-1), 320);
     await React.act(() =>
-      button.dispatchEvent(
-        new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      rail.dispatchEvent(
+        new window.MouseEvent("mouseout", {
+          bubbles: true,
+          relatedTarget: document.body,
+        }),
       ),
     );
     assert.equal(document.querySelector('[role="tooltip"]'), null);
@@ -654,7 +679,7 @@ test("previews only human text, supports keyboard navigation and Escape, and cle
       assert.equal(document.querySelector('[role="tooltip"]'), null);
     }
     assert.equal(loads, 0);
-    await React.act(() => button.focus());
+    await hoverText();
     assert.ok(document.querySelector('[role="tooltip"]'));
   } finally {
     await React.act(() => root.unmount());

@@ -7,14 +7,12 @@ export function MessagePreviewPopover({
   id,
   text,
   anchor,
-  immediate,
 }: {
   id: string;
   text: string;
   anchor: HTMLElement;
-  immediate: boolean;
 }) {
-  const [visible, setVisible] = useState(immediate);
+  const [visible, setVisible] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{
     left: number;
@@ -23,16 +21,13 @@ export function MessagePreviewPopover({
   } | null>(null);
 
   useEffect(() => {
-    const timer = setTimeout(
-      () => {
-        setVisible(true);
-      },
-      immediate ? 0 : 180,
-    );
+    const timer = setTimeout(() => {
+      setVisible(true);
+    }, 180);
     return () => {
       clearTimeout(timer);
     };
-  }, [immediate]);
+  }, []);
 
   useLayoutEffect(() => {
     if (!visible) return;

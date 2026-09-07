@@ -116,7 +116,6 @@ export const ChatMinimap = memo(function ChatMinimap({
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [minimapHeight, setMinimapHeight] = useState(600);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const previewId = useId();
   const markerRefs = useRef(new Map<string, HTMLButtonElement>());
   const draggingRef = useRef(false);
@@ -441,7 +440,7 @@ export const ChatMinimap = memo(function ChatMinimap({
 
   if (!visible) return null;
 
-  const previewIndex = hoveredIndex ?? focusedIndex;
+  const previewIndex = hoveredIndex;
   const previewNode =
     previewIndex === null ? undefined : positionedNodes[previewIndex];
   const previewText =
@@ -458,12 +457,6 @@ export const ChatMinimap = memo(function ChatMinimap({
     <div
       ref={containerRef}
       className="chat-minimap"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          setHoveredIndex(null);
-          setFocusedIndex(null);
-        }
-      }}
       onMouseDown={handleMouseDown}
       onMouseMove={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
@@ -526,6 +519,7 @@ export const ChatMinimap = memo(function ChatMinimap({
             ) : stars.has(node.id) ? (
               <button
                 type="button"
+                tabIndex={-1}
                 className="minimap-star"
                 title={t("chat.jumpStarredAnswer")}
                 aria-label={t("chat.jumpStarredAnswer")}
@@ -542,6 +536,7 @@ export const ChatMinimap = memo(function ChatMinimap({
             ) : (
               <button
                 type="button"
+                tabIndex={-1}
                 className="minimap-message"
                 aria-label={t("chat.jumpHumanMessage")}
                 aria-describedby={
@@ -552,17 +547,6 @@ export const ChatMinimap = memo(function ChatMinimap({
                 ref={(element) => {
                   if (element) markerRefs.current.set(node.id, element);
                   else markerRefs.current.delete(node.id);
-                }}
-                onFocus={() => {
-                  setHoveredIndex(null);
-                  setFocusedIndex(node.index);
-                }}
-                onBlur={() => {
-                  setFocusedIndex(null);
-                }}
-                onClick={(event) => {
-                  // Pointer navigation (including dragging) belongs to the rail.
-                  if (event.detail === 0) scrollToNode(node, "smooth");
                 }}
                 style={{ height: Math.max(1, Math.min(32, nodeGap)) }}
               >
@@ -591,7 +575,6 @@ export const ChatMinimap = memo(function ChatMinimap({
           id={previewId}
           text={previewText}
           anchor={previewAnchor}
-          immediate={focusedIndex !== null}
         />
       )}
     </div>
