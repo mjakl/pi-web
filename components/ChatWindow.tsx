@@ -50,7 +50,7 @@ import type { NoticeItem } from "@/lib/notice-queue";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { useMessageRefs } from "@/hooks/useMessageRefs";
 import type { ContextUsage, SessionStatsInfo } from "@/lib/pi-types";
-import type { ToolEntry, ToolPreset } from "@/lib/tool-presets";
+import type { ToolEntry } from "@/lib/types";
 import {
   captureScrollDistance,
   didPrependHistory,
@@ -58,12 +58,6 @@ import {
   isScrollAtTail,
   restoreScrollTop,
 } from "@/lib/chat-lazy-load";
-
-export interface ToolPresetControl {
-  preset: ToolPreset;
-  disabled: boolean;
-  onChange: (preset: ToolPreset) => void;
-}
 
 /** What the shell displays on ChatWindow's behalf. Values only: this is held in
  *  AppShell state and compared, so everything here must be cheap to compare. */
@@ -75,7 +69,6 @@ export interface ChatDisplayState {
   sessionStats: SessionStatsInfo | null;
   contextUsage: ContextUsage | null;
   compactionControl: CompactionControl | null;
-  toolPresetControl: ToolPresetControl | null;
 }
 
 /** What the shell invokes on ChatWindow's behalf. Callables only: this is held
@@ -95,7 +88,6 @@ export const EMPTY_CHAT_DISPLAY: ChatDisplayState = {
   sessionStats: null,
   contextUsage: null,
   compactionControl: null,
-  toolPresetControl: null,
 };
 
 interface Props {
@@ -340,7 +332,6 @@ export function ChatWindow({
     modelScopeWarnings,
     modelThinkingLevels,
     modelThinkingLevelMaps,
-    toolPreset,
     thinkingLevel,
     retryInfo,
     contextUsage,
@@ -382,7 +373,6 @@ export function ChatWindow({
     handleAbortCompaction,
     handleRecallQueue,
     handleBuiltinSlashCommand,
-    handleToolPresetChange,
     handleThinkingLevelChange,
     loadSlashCommands,
     loadEarlierMessages,
@@ -494,15 +484,6 @@ export function ChatWindow({
     ).matches;
     scrollToLatest(reducedMotion ? "auto" : "smooth");
   }, [scrollToLatest]);
-
-  const toolPresetControl = useMemo(
-    () => ({
-      preset: toolPreset,
-      disabled: loading || Boolean(error) || sessionBusy || readOnly,
-      onChange: handleToolPresetChange,
-    }),
-    [error, handleToolPresetChange, loading, sessionBusy, toolPreset, readOnly],
-  );
 
   const compactionControl = useMemo(
     () =>
@@ -641,7 +622,6 @@ export function ChatWindow({
     sessionStats,
     contextUsage,
     compactionControl,
-    toolPresetControl,
   };
   useEffect(() => {
     onChatDisplayChange?.(chatDisplayRef.current);
@@ -654,7 +634,6 @@ export function ChatWindow({
     tree,
     activeLeafId,
     compactionControl,
-    toolPresetControl,
   ]);
   useEffect(
     () => () => onChatDisplayChange?.(EMPTY_CHAT_DISPLAY),

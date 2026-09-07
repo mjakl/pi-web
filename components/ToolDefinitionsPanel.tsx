@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { ToolEntry } from "@/lib/tool-presets";
+import type { ToolEntry } from "@/lib/types";
 
 type Translate = (
   key: string,

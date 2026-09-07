@@ -7,7 +7,6 @@ import {
   useCallback,
   useRef,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useReducer,
 } from "react";
@@ -35,15 +34,7 @@ import {
   setDraft,
   type ChatDraft,
 } from "@/lib/draft-store";
-import {
-  getPreferredToolPreset,
-  setPreferredToolPreset,
-} from "@/lib/tool-preset-preference";
-import {
-  getToolNamesForPreset,
-  type ToolEntry,
-  type ToolPreset,
-} from "@/lib/tool-presets";
+import type { ToolEntry } from "@/lib/types";
 import type { ContextUsage, SessionStatsInfo } from "@/lib/pi-types";
 import { mergeSessionStats, type SessionFileStats } from "@/lib/session-stats";
 import { userMessageKey } from "@/lib/prompt-recovery";
@@ -84,7 +75,6 @@ export interface SessionData {
   totalActiveMs: number;
   tree: SessionTreeNode[];
   leafId: string | null;
-  toolNames?: string[];
   context: SessionContext;
   /** Cumulative usage over ALL session-file entries (incl. compacted history). */
   stats?: SessionFileStats;
@@ -309,7 +299,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   );
   const [newSessionDefaultModel, setNewSessionDefaultModel] =
     useState<SelectedModel | null>(null);
-  const [toolPreset, setToolPresetState] = useState<ToolPreset>("default");
   const [thinkingLevel, setThinkingLevel] =
     useState<ThinkingLevelOption>("auto");
   const [retryInfo, setRetryInfo] = useState<{
@@ -442,13 +431,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     },
   });
   const eventConnection = eventConnectionRef.current;
-
-  const existingSessionId = session?.id;
-
-  useLayoutEffect(() => {
-    if (!existingSessionId && (!isNew || sessionIdRef.current)) return;
-    setToolPresetState(getPreferredToolPreset());
-  }, [existingSessionId, isNew, setToolPresetState]);
 
   const currentModel =
     currentModelOverride ?? data?.context.model ?? pendingModel ?? null;
@@ -587,7 +569,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setEntryIds(next.entryIds);
       setHistoryCursor(next.historyCursor);
       setHasEarlierMessages(next.hasEarlierMessages);
-      setToolPresetState(next.toolPreset);
       setCurrentModelOverride((current) =>
         modelSwitchPendingRef.current ? current : null,
       );
@@ -596,7 +577,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setError(next.error);
       if (next.metadata) onSessionMetadataChange?.(next.metadata);
     },
-    [onSessionMetadataChange, setToolPresetState],
+    [onSessionMetadataChange],
   );
 
   // Ask the snapshot endpoint for at least what is already loaded. Without
@@ -890,29 +871,24 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     [loadContext],
   );
 
-  const loadTools = useCallback(
-    async (sid: string) => {
-      try {
-        const tools = await sendAgentCommand<ToolEntry[]>(sid, {
-          type: "get_tools",
-        });
-        if (
-          !tools ||
-          !sessionHookMountedRef.current ||
-          sessionIdRef.current !== sid
-        )
-          return null;
-        const { getPresetFromTools } = await import("@/lib/tool-presets");
-        setToolPresetState(getPresetFromTools(tools));
-        setSystemTools(tools);
-        return tools;
-      } catch (e) {
-        console.error("Failed to load tools:", e);
+  const loadTools = useCallback(async (sid: string) => {
+    try {
+      const tools = await sendAgentCommand<ToolEntry[]>(sid, {
+        type: "get_tools",
+      });
+      if (
+        !tools ||
+        !sessionHookMountedRef.current ||
+        sessionIdRef.current !== sid
+      )
         return null;
-      }
-    },
-    [setToolPresetState],
-  );
+      setSystemTools(tools);
+      return tools;
+    } catch (e) {
+      console.error("Failed to load tools:", e);
+      return null;
+    }
+  }, []);
 
   const promoteNewSession = useCallback(
     (messageCount = 0, firstMessage = "(no messages)") => {
@@ -963,14 +939,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       const selectedModel = newSessionModelOverrideRef.current;
       const selectedThinkingLevel = thinkingLevelOverrideRef.current;
       if (selectedModel) setPendingModel(selectedModel);
-      const toolNames = getToolNamesForPreset(toolPreset);
       const res = await fetch("/api/agent/new", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cwd: newSessionCwd,
           type: "ensure_session",
-          toolNames,
           ...(selectedModel
             ? {
                 provider: selectedModel.provider,
@@ -1012,7 +986,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } finally {
       ensuringNewSessionRef.current = null;
     }
-  }, [isNew, newSessionCwd, toolPreset]);
+  }, [isNew, newSessionCwd]);
 
   // Opening the System or Tools panel may initialize an otherwise dormant
   // session. This is deliberately a non-prompt command: it creates no message
@@ -2913,63 +2887,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     [commitLocalSnapshotMutation, isNew, runPersistedWrite],
   );
 
-  const handleToolPresetChange = useCallback(
-    async (preset: ToolPreset) => {
-      commitLocalSnapshotMutation();
-      const toolNames = getToolNamesForPreset(preset);
-      setPreferredToolPreset(preset);
-      setToolPresetState(preset);
-      const sid = sessionIdRef.current ?? (await ensuringNewSessionRef.current);
-      if (!sid) return;
-      try {
-        const { result, activeSessionId } = await runPersistedWrite(
-          async () => {
-            const result = await sendAgentCommand<{
-              sessionId?: string;
-              recreated?: boolean;
-            }>(sid, { type: "set_tools", toolNames });
-            const activeSessionId = result?.sessionId ?? sid;
-            if (result?.recreated || activeSessionId !== sid) {
-              cancelEventStreamGrace();
-              closeEvents();
-              sessionIdRef.current = activeSessionId;
-            }
-            return { result, activeSessionId };
-          },
-        );
-        if (result?.recreated && sessionHookMountedRef.current) {
-          await ensureEventsConnected(activeSessionId);
-        }
-        setSlashCommands([]);
-        setExtensionStatuses([]);
-        setExtensionWidgets([]);
-        const [state] = await Promise.all([
-          sendAgentCommand<AgentStateResponse>(activeSessionId, {
-            type: "get_state",
-          }),
-          loadTools(activeSessionId),
-        ]);
-        if (
-          sessionHookMountedRef.current &&
-          sessionIdRef.current === activeSessionId
-        ) {
-          setSystemPrompt(state.systemPrompt ?? "");
-        }
-      } catch (e) {
-        console.error("Failed to set tools:", e);
-      }
-    },
-    [
-      cancelEventStreamGrace,
-      closeEvents,
-      commitLocalSnapshotMutation,
-      ensureEventsConnected,
-      loadTools,
-      runPersistedWrite,
-      setToolPresetState,
-    ],
-  );
-
   // Load session on mount
   useEffect(() => {
     sessionHookMountedRef.current = true;
@@ -3148,7 +3065,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     modelScopeWarnings,
     modelThinkingLevels,
     modelThinkingLevelMaps,
-    toolPreset,
     thinkingLevel,
     retryInfo,
     contextUsage,
@@ -3196,7 +3112,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     handleRecallQueue,
     handleBuiltinSlashCommand,
     setNoticePaused: setPausedNoticeId,
-    handleToolPresetChange,
     handleThinkingLevelChange,
     loadSlashCommands,
     loadContext,

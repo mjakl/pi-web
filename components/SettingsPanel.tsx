@@ -7,24 +7,17 @@ import { errorMessage } from "@/lib/error-message";
 import { sendAgentCommand } from "@/lib/agent-client";
 import type { ShellToolSettingsResponse } from "@/lib/api-types";
 import {
-  getPreferredToolPreset,
-  setPreferredToolPreset,
-} from "@/lib/tool-preset-preference";
-import type { ToolPreset } from "@/lib/tool-presets";
-import {
   setLastSettingsSection,
   type SettingsSection,
 } from "@/lib/settings-navigation";
 import { SkillsConfig } from "./SkillsConfig";
 import { PluginsConfig } from "./PluginsConfig";
 import { ConfigSwitch } from "./SettingsUi";
-import type { ToolPresetControl } from "./ChatWindow";
 
 interface Props {
   cwd: string | null;
   sessionId: string | null;
   initialSection: SettingsSection;
-  toolPresetControl: ToolPresetControl | null;
   soundEnabled: boolean;
   onSoundToggle: () => void;
   dumbZoneTokens: number;
@@ -132,7 +125,6 @@ function ThemeIcon({ preference }: { preference: ThemePreference }) {
 
 function GeneralSettings({
   sessionId,
-  toolPresetControl,
   soundEnabled,
   onSoundToggle,
   dumbZoneTokens,
@@ -141,7 +133,6 @@ function GeneralSettings({
 }: Pick<
   Props,
   | "sessionId"
-  | "toolPresetControl"
   | "soundEnabled"
   | "onSoundToggle"
   | "dumbZoneTokens"
@@ -150,9 +141,6 @@ function GeneralSettings({
 >) {
   const { t } = useI18n();
   const { preference, setThemePreference } = useTheme();
-  const [preferredToolPreset, setPreferredToolPresetState] = useState(
-    getPreferredToolPreset,
-  );
   const [shellSettings, setShellSettings] =
     useState<ShellToolSettingsResponse | null>(null);
   const [shellSaving, setShellSaving] = useState(false);
@@ -162,21 +150,6 @@ function GeneralSettings({
     { id: "dark", label: t("settings.themeDark") },
     { id: "auto", label: t("settings.themeSystem") },
   ];
-  const toolPresetOptions: { id: ToolPreset; label: string }[] = [
-    { id: "none", label: t("settings.toolPresetChatOnly") },
-    { id: "read-only", label: t("settings.toolPresetReadOnly") },
-    { id: "default", label: t("settings.toolPresetDefault") },
-    { id: "full", label: t("settings.toolPresetFull") },
-  ];
-  const activeToolPreset = toolPresetControl?.preset ?? preferredToolPreset;
-
-  const selectToolPreset = (preset: ToolPreset) => {
-    setPreferredToolPreset(preset);
-    setPreferredToolPresetState(preset);
-    if (toolPresetControl?.preset !== preset)
-      toolPresetControl?.onChange(preset);
-  };
-
   useEffect(() => {
     let cancelled = false;
     void fetch("/api/tools/settings")
@@ -286,41 +259,6 @@ function GeneralSettings({
 
       <section className="settings-general-section">
         <h3 className="settings-general-heading">
-          {t("settings.toolSelection")}
-        </h3>
-        <p className="settings-general-description">
-          {t("settings.toolSelectionDescription")}
-        </p>
-        <div
-          role="radiogroup"
-          aria-label={t("chat.changeToolPreset")}
-          className="settings-theme-options settings-tool-options"
-        >
-          {toolPresetOptions.map((option) => {
-            const selected = activeToolPreset === option.id;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                disabled={toolPresetControl?.disabled}
-                onClick={() => {
-                  selectToolPreset(option.id);
-                }}
-                className="settings-theme-option"
-              >
-                <span className="settings-theme-option-label">
-                  {option.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="settings-general-section">
-        <h3 className="settings-general-heading">
           {t("settings.completionSound")}
         </h3>
         <p className="settings-general-description">
@@ -368,7 +306,6 @@ export function SettingsPanel({
   cwd,
   sessionId,
   initialSection,
-  toolPresetControl,
   soundEnabled,
   onSoundToggle,
   dumbZoneTokens,
@@ -511,7 +448,6 @@ export function SettingsPanel({
             "general",
             <GeneralSettings
               sessionId={sessionId}
-              toolPresetControl={toolPresetControl}
               soundEnabled={soundEnabled}
               onSoundToggle={onSoundToggle}
               dumbZoneTokens={dumbZoneTokens}

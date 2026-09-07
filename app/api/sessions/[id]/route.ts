@@ -14,7 +14,6 @@ import { projectTreeForResponse } from "@/lib/project-tree";
 import { computeSessionTotalActiveMs } from "@/lib/session-timing";
 import { computeSessionStats } from "@/lib/session-stats";
 import type { SessionEntry } from "@/lib/types";
-import { readSessionToolSelection } from "@/lib/session-tool-selection";
 import {
   extractTextContent,
   readStableSessionFile,
@@ -79,7 +78,6 @@ export async function GET(
       const parentSessionId = header?.parentSession
         ? await resolveSessionIdByPath(header.parentSession)
         : undefined;
-      const toolNames = readSessionToolSelection(entries as never);
       const info = header
         ? (
             await attachSessionProjectInfo([
@@ -112,7 +110,6 @@ export async function GET(
         context,
         stats,
         totalActiveMs,
-        ...(toolNames !== undefined ? { toolNames } : {}),
       };
     };
 

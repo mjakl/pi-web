@@ -1,7 +1,6 @@
 import { parseSessionStar } from "./session-stars";
 import { randomUUID } from "crypto";
 import { readFileSync } from "fs";
-import { TOOL_SELECTION_TYPE } from "./session-tool-selection";
 import { writePrivateFileAtomicSync } from "./atomic-file";
 import type { SessionEntry, SessionHeader, UserMessage } from "./types";
 
@@ -39,8 +38,7 @@ export function rewindSessionFile(
     throw new Error("Rewind target has no earlier parent");
   }
 
-  // Rewind conversation history, not session preferences. In particular, an
-  // explicit Chat-only selection must never turn into the legacy tool default.
+  // Rewind conversation history, not session preferences.
   const retainedIds = new Set(entries.slice(1, index).map((entry) => entry.id));
   let parentId = target.parentId;
   const preferences = entries.slice(index + 1).flatMap((entry) => {
@@ -49,8 +47,7 @@ export function rewindSessionFile(
       !(star && retainedIds.has(star.targetId)) &&
       entry.type !== "session_info" &&
       entry.type !== "model_change" &&
-      entry.type !== "thinking_level_change" &&
-      !(entry.type === "custom" && entry.customType === TOOL_SELECTION_TYPE)
+      entry.type !== "thinking_level_change"
     )
       return [];
     const retained = { ...entry, parentId };

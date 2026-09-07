@@ -5,7 +5,6 @@ import {
   getRpcSession,
   isRpcSessionActive,
   sendRpcSessionCommand,
-  setRpcSessionTools,
   stopRpcSession,
 } from "@/lib/rpc-manager";
 
@@ -22,31 +21,11 @@ export async function POST(
   try {
     const body = (await req.json()) as { type: string; [key: string]: unknown };
     commandType = typeof body.type === "string" ? body.type : undefined;
-    const requestedToolNames = body["toolNames"];
-    if (
-      requestedToolNames !== undefined &&
-      (!Array.isArray(requestedToolNames) ||
-        requestedToolNames.some((name) => typeof name !== "string"))
-    ) {
-      throw new Error("toolNames must be an array of strings");
-    }
-    const toolNames = requestedToolNames as string[] | undefined;
     const existing = getRpcSession(id);
     const filePath =
       (existing?.sessionFile ?? "") ||
       ((await resolveSessionPath(id)) ?? "") ||
       undefined;
-
-    if (body.type === "set_tools") {
-      if (!isRpcSessionActive(existing) && !filePath) {
-        return Response.json({ error: "Session not found" }, { status: 404 });
-      }
-      const changed = await setRpcSessionTools(operation, filePath, toolNames);
-      return Response.json({
-        success: true,
-        data: { sessionId: changed.sessionId, recreated: changed.recreated },
-      });
-    }
 
     if (!isRpcSessionActive(existing) && !filePath) {
       return Response.json(
@@ -60,9 +39,7 @@ export async function POST(
       );
     }
 
-    const result = await sendRpcSessionCommand(operation, filePath, body, {
-      ...(toolNames !== undefined ? { toolNames } : {}),
-    });
+    const result = await sendRpcSessionCommand(operation, filePath, body);
     promptAccepted = body.type === "prompt";
     return Response.json({ success: true, data: result });
   } catch (error) {

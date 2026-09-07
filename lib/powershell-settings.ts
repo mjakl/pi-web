@@ -34,17 +34,6 @@ function replaceShellTool(
   ];
 }
 
-export function resolveShellTools(
-  toolNames: readonly string[],
-  defaultTools: readonly string[] | undefined,
-  platform: NodeJS.Platform = process.platform,
-): string[] {
-  return replaceShellTool(
-    toolNames,
-    isPowerShellToolEnabled(defaultTools, platform),
-  );
-}
-
 function getPowerShellSettingsPath(agentDir = getAgentDir()): string {
   return join(agentDir, "settings.json");
 }
