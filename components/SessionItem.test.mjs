@@ -1233,7 +1233,7 @@ test("unread activity decorates one status indicator and clears when read", asyn
   }
 });
 
-test("shows an outlined star after its count, before the aligned message count, and hides zero stars", () => {
+test("shows a filled star after its count, before the aligned message count, and hides zero stars", () => {
   const container = document.createElement("div");
   container.innerHTML = renderItem({
     ...baseSession,
@@ -1245,7 +1245,7 @@ test("shows an outlined star after its count, before the aligned message count, 
   const star = counts.firstElementChild;
   assert.equal(star.firstElementChild.textContent, "1");
   assert.equal(star.lastElementChild.tagName.toLowerCase(), "svg");
-  assert.equal(star.lastElementChild.getAttribute("fill"), "none");
+  assert.equal(star.lastElementChild.getAttribute("fill"), "currentColor");
   assert.equal(counts.lastElementChild.textContent, "123 msgs");
   container.innerHTML = renderItem({ ...baseSession, starCount: 0 });
   assert.equal(container.querySelector(".session-star-count"), null);
