@@ -56,7 +56,10 @@ function layoutNodes(allNodes: NodeInfo[], minimapHeight: number): NodeLayout {
   }
 
   const height = Math.max(1, minimapHeight);
-  const usableHeight = Math.max(0, height - MINIMAP_PADDING * 2);
+  const usableHeight = Math.max(
+    0,
+    height - MINIMAP_FOOTER - MINIMAP_PADDING * 2,
+  );
   if (allNodes.length === 1) {
     return {
       nodes: allNodes.map((node) => ({
@@ -264,7 +267,7 @@ export const ChatMinimap = memo(function ChatMinimap({
         });
       }
 
-      setMinimapHeight(Math.max(1, minimapEl.clientHeight - MINIMAP_FOOTER));
+      setMinimapHeight(Math.max(1, minimapEl.clientHeight));
       // A growing response usually leaves every anchor at the same offset.
       // Keep the rail stable instead of rendering a fresh identical node list.
       const previous = allNodesRef.current;
