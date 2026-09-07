@@ -2766,3 +2766,66 @@ span.linenumber {
 .message-rewind:hover {
   color: var(--accent);
 }
+
+.answer-star-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: -6px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.answer-star-toggle:hover {
+  background: var(--bg-hover);
+}
+.answer-star-toggle[aria-pressed="true"] {
+  color: var(--warning);
+}
+.answer-star-toggle:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.session-counts,
+.session-star-count {
+  display: inline-flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+.session-counts {
+  gap: 8px;
+}
+.session-star-count {
+  gap: 4px;
+}
+.session-message-count {
+  min-width: 8ch;
+  text-align: right;
+}
+.minimap-star {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  padding: 0;
+  border: 0;
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.minimap-star:hover {
+  color: var(--text);
+}
+@media (pointer: coarse) {
+  .answer-star-toggle {
+    width: 44px;
+    height: 44px;
+  }
+}

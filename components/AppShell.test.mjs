@@ -178,6 +178,58 @@ function emptyInventoryResponse() {
   });
 }
 
+test("sidebar updates the selected session star count immediately after a saved toggle", async () => {
+  const originalFetch = globalThis.fetch;
+  const session = { ...sidebarSession, starCount: 1 };
+  globalThis.fetch = async (url) => {
+    if (String(url).startsWith("/api/sessions"))
+      return Response.json({
+        sessions: [session],
+        activeSessionIds: [],
+        runningSessionIds: [],
+      });
+    return emptyInventoryResponse();
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = (metadata) =>
+    act(async () => {
+      root.render(
+        React.createElement(SessionSidebar, {
+          selectedSessionId: session.id,
+          selectedSessionMetadata: metadata,
+          onSelectSession() {},
+          beginSessionInventoryAttempt: () => 1,
+          actionsAvailable: true,
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  try {
+    await render(session);
+    assert.equal(
+      container.querySelector(".session-star-count").textContent,
+      "1",
+    );
+    await render({ ...session, starCount: 2, fileSize: 200 });
+    assert.equal(
+      container.querySelector(".session-star-count").textContent,
+      "2",
+    );
+    assert.equal(
+      container.querySelector(".session-message-count").textContent,
+      "1 msgs",
+    );
+    await render({ ...session, starCount: 0, fileSize: 300 });
+    assert.equal(container.querySelector(".session-star-count"), null);
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 function refreshSucceeded(container) {
   return container.querySelector('button[title="Refresh"] polyline') !== null;
 }

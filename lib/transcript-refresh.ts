@@ -112,6 +112,11 @@ export function reconcileSelectedSessionInventory(
         : preserveMetadata
           ? session.messageCount
           : undefined,
+      starCount: incomingHydrated
+        ? incoming.starCount
+        : preserveMetadata
+          ? session.starCount
+          : undefined,
       firstMessage: incomingHydrated
         ? incoming.firstMessage
         : preserveMetadata

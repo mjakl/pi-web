@@ -1,5 +1,7 @@
 "use client";
 
+import { StarIcon } from "./StarIcon";
+import { useI18n } from "@/hooks/useI18n";
 import {
   useEffect,
   useRef,
@@ -16,6 +18,8 @@ interface Props {
   messages: AgentMessage[];
   entryIds: string[];
   historyAnchors?: SessionContext["historyAnchors"];
+  starredEntryIds?: string[];
+  answerRefs?: RefObject<Map<string, HTMLDivElement>>;
   onLoadThrough: (entryId: string) => Promise<boolean>;
   scrollContainer: RefObject<HTMLDivElement | null>;
   messageRefs: RefObject<(HTMLDivElement | null)[]>;
@@ -77,10 +81,14 @@ export function ChatMinimap({
   messages,
   entryIds,
   historyAnchors,
+  starredEntryIds,
+  answerRefs,
   onLoadThrough,
   scrollContainer,
   messageRefs,
 }: Props) {
+  const { t } = useI18n();
+  const stars = useMemo(() => new Set(starredEntryIds), [starredEntryIds]);
   const [visible, setVisible] = useState(false);
   const [allNodes, setAllNodes] = useState<NodeInfo[]>([]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -110,11 +118,11 @@ export function ChatMinimap({
   const loadedAnchorIds = useMemo(
     () =>
       messages.flatMap((message, index) =>
-        isMessageGroupAnchor(message)
+        isMessageGroupAnchor(message) || stars.has(entryIds[index] ?? "")
           ? [entryIds[index] ?? `live:${index - entryIds.length}`]
           : [],
       ),
-    [messages, entryIds],
+    [messages, entryIds, stars],
   );
   const anchorIds = useMemo(
     () => [
@@ -130,7 +138,10 @@ export function ChatMinimap({
       (historyAnchors ?? []).map(({ id, timestamp }) => [id, timestamp]),
     );
     messages.forEach((message, index) => {
-      if (isMessageGroupAnchor(message) && message.timestamp !== undefined) {
+      if (
+        (isMessageGroupAnchor(message) || stars.has(entryIds[index] ?? "")) &&
+        message.timestamp !== undefined
+      ) {
         result.set(
           entryIds[index] ?? `live:${index - entryIds.length}`,
           message.timestamp,
@@ -138,9 +149,14 @@ export function ChatMinimap({
       }
     });
     return result;
-  }, [historyAnchors, messages, entryIds]);
-  const anchorsRef = useRef({ anchorIds, loadedAnchorIds });
-  anchorsRef.current = { anchorIds, loadedAnchorIds };
+  }, [historyAnchors, messages, entryIds, stars]);
+  const promptAnchorIds = messages.flatMap((message, index) =>
+    isMessageGroupAnchor(message)
+      ? [entryIds[index] ?? `live:${index - entryIds.length}`]
+      : [],
+  );
+  const anchorsRef = useRef({ anchorIds, promptAnchorIds });
+  anchorsRef.current = { anchorIds, promptAnchorIds };
 
   const nodeLayout = useMemo(
     () => layoutNodes(allNodes, minimapHeight),
@@ -207,11 +223,13 @@ export function ChatMinimap({
       const containerRect = scrollEl.getBoundingClientRect();
       const nextNodes: NodeInfo[] = [];
       const refIndices = new Map(
-        anchorsRef.current.loadedAnchorIds.map((id, index) => [id, index]),
+        anchorsRef.current.promptAnchorIds.map((id, index) => [id, index]),
       );
       for (const id of anchorsRef.current.anchorIds) {
         const refIndex = refIndices.get(id);
-        const element = refIndex === undefined ? null : refs?.[refIndex];
+        const element =
+          answerRefs?.current.get(id) ??
+          (refIndex === undefined ? null : refs?.[refIndex]);
         const elementRect = element?.getBoundingClientRect();
         nextNodes.push({
           id,
@@ -244,7 +262,13 @@ export function ChatMinimap({
         behavior: "smooth",
       });
     }, 150);
-  }, [lockActiveNode, messageRefs, scrollContainer, syncActiveNode]);
+  }, [
+    answerRefs,
+    lockActiveNode,
+    messageRefs,
+    scrollContainer,
+    syncActiveNode,
+  ]);
 
   useEffect(() => {
     const el = scrollContainer.current;
@@ -455,20 +479,38 @@ export function ChatMinimap({
               zIndex: 2,
             }}
           >
-            <div
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 2,
-                background: isActive
-                  ? "rgba(128,128,128,0.42)"
-                  : "rgba(128,128,128,0.16)",
-                border: `1.5px solid ${isActive ? "rgba(128,128,128,0.95)" : "rgba(128,128,128,0.58)"}`,
-                boxShadow: isActive ? "0 0 0 2px var(--bg-panel)" : "none",
-                transition: "transform 0.1s, background 0.1s",
-                transform: isNearest ? "scale(1.25)" : "scale(1)",
-              }}
-            />
+            {stars.has(node.id) ? (
+              <button
+                type="button"
+                className="minimap-star"
+                title={t("chat.jumpStarredAnswer")}
+                aria-label={t("chat.jumpStarredAnswer")}
+                onMouseDown={(event) => {
+                  event.stopPropagation();
+                }}
+                onClick={() => {
+                  scrollToNode(node, "smooth");
+                }}
+                style={{ height: Math.max(1, Math.min(32, nodeGap)) }}
+              >
+                <StarIcon />
+              </button>
+            ) : (
+              <div
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 2,
+                  background: isActive
+                    ? "rgba(128,128,128,0.42)"
+                    : "rgba(128,128,128,0.16)",
+                  border: `1.5px solid ${isActive ? "rgba(128,128,128,0.95)" : "rgba(128,128,128,0.58)"}`,
+                  boxShadow: isActive ? "0 0 0 2px var(--bg-panel)" : "none",
+                  transition: "transform 0.1s, background 0.1s",
+                  transform: isNearest ? "scale(1.25)" : "scale(1)",
+                }}
+              />
+            )}
           </div>
         );
       })}

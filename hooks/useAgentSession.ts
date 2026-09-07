@@ -1,5 +1,7 @@
 "use client";
 
+import { updateStarAnchors } from "@/lib/session-stars";
+
 import {
   useState,
   useCallback,
@@ -279,6 +281,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [entryIds, setEntryIds] = useState<string[]>([]);
+  const [starPending, setStarPending] = useState(false);
+  const starPendingRef = useRef(false);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [hasEarlierMessages, setHasEarlierMessages] = useState(false);
   const [streamState, dispatch] = useReducer(
@@ -1113,6 +1117,81 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       addNotice({ type: "error", message });
     },
     [addNotice],
+  );
+
+  const handleStar = useCallback(
+    async (targetId: string, starred: boolean) => {
+      const sid = sessionIdRef.current;
+      if (!sid || starPendingRef.current) return;
+      starPendingRef.current = true;
+      setStarPending(true);
+      commitLocalSnapshotMutation();
+      try {
+        await runPersistedWrite(async () => {
+          const response = await fetch(
+            `/api/sessions/${encodeURIComponent(sid)}/stars`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ targetId, starred }),
+            },
+          );
+          const result = (await response.json()) as {
+            error?: string;
+            starredEntryIds: string[];
+            starCount: number;
+            fileSize: number;
+            modified: string;
+          };
+          if (!response.ok)
+            throw new Error(result.error ?? `HTTP ${response.status}`);
+          if (!sessionHookMountedRef.current || sessionIdRef.current !== sid)
+            return;
+          const current = dataRef.current;
+          if (!current) return;
+          const info = current.info
+            ? {
+                ...current.info,
+                starCount: result.starCount,
+                fileSize: result.fileSize,
+                modified: result.modified,
+              }
+            : null;
+          const next = {
+            ...current,
+            info,
+            context: {
+              ...current.context,
+              starredEntryIds: result.starredEntryIds,
+              historyAnchors: updateStarAnchors(
+                current.context.historyAnchors ?? [],
+                current.context.messages,
+                current.context.entryIds,
+                result.starredEntryIds,
+              ),
+            },
+          };
+          dataRef.current = next;
+          setData(next);
+          if (info) onSessionMetadataChange?.(info);
+        });
+      } catch (error) {
+        if (sessionHookMountedRef.current && sessionIdRef.current === sid)
+          reportActionError(
+            t("chat.starFailed", { error: errorMessage(error) }),
+          );
+      } finally {
+        starPendingRef.current = false;
+        if (sessionHookMountedRef.current) setStarPending(false);
+      }
+    },
+    [
+      commitLocalSnapshotMutation,
+      runPersistedWrite,
+      onSessionMetadataChange,
+      reportActionError,
+      t,
+    ],
   );
 
   const refreshTranscript = useCallback(async (): Promise<boolean> => {
@@ -2871,6 +2950,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   return {
     // State
     historyAnchors: data?.context.historyAnchors,
+    starredEntryIds: data?.context.starredEntryIds,
+    handleStar,
+    starPending,
     loading,
     error,
     activeLeafId,

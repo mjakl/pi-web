@@ -1,3 +1,4 @@
+import { parseSessionStar } from "./session-stars";
 import { createReadStream } from "fs";
 import { stat } from "fs/promises";
 import { createInterface } from "readline";
@@ -143,6 +144,8 @@ export async function readSessionRowMetadata(
 
       let name: string | undefined;
       let messageCount = 0;
+      const stars = new Set<string>();
+      const answers = new Set<string>();
       let firstMessage = "";
       const input = createReadStream(filePath, { encoding: "utf8" });
       const lines = createInterface({ input, crlfDelay: Infinity });
@@ -155,6 +158,17 @@ export async function readSessionRowMetadata(
           } catch {
             continue;
           }
+
+          const star = parseSessionStar(entry);
+          if (star?.starred) stars.add(star.targetId);
+          else if (star) stars.delete(star.targetId);
+          if (
+            entry["type"] === "message" &&
+            (entry["message"] as { role?: string } | undefined)?.role ===
+              "assistant" &&
+            typeof entry["id"] === "string"
+          )
+            answers.add(entry["id"]);
 
           if (entry["type"] === "session_info") {
             name =
@@ -186,6 +200,7 @@ export async function readSessionRowMetadata(
         ...fingerprint,
         name,
         messageCount,
+        starCount: [...stars].filter((id) => answers.has(id)).length,
         firstMessage: sessionTitleFromFirstMessage(firstMessage),
       };
     },

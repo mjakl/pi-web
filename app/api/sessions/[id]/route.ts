@@ -91,6 +91,7 @@ export async function GET(
                 modified: fingerprint?.modified ?? header.timestamp,
                 fileSize: fingerprint?.fileSize,
                 messageCount: stats.totalMessages,
+                starCount: context.starredEntryIds?.length ?? 0,
                 firstMessage: sessionTitleFromFirstMessage(
                   firstUserMessage ? extractTextContent(firstUserMessage) : "",
                 ),

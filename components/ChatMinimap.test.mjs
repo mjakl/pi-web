@@ -297,3 +297,57 @@ test("shows unloaded turns and completes the latest requested jump after its mes
     await window.happyDOM.close();
   }
 });
+
+test("outlined answer stars jump to answer refs without displacing prompt refs", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scroll = document.createElement("div");
+  Object.defineProperty(scroll, "scrollHeight", { get: () => 2000 });
+  const jumps = [];
+  scroll.scrollTo = (options) => jumps.push(options.top);
+  try {
+    await React.act(() =>
+      root.render(
+        React.createElement(ChatMinimap, {
+          messages: [{ role: "user" }, { role: "assistant" }, { role: "user" }],
+          entryIds: ["u", "a", "u2"],
+          historyAnchors: [
+            { id: "u" },
+            { id: "a", starred: true },
+            { id: "u2" },
+          ],
+          starredEntryIds: ["a"],
+          answerRefs: {
+            current: new Map([
+              ["a", { getBoundingClientRect: () => rect(800) }],
+            ]),
+          },
+          scrollContainer: { current: scroll },
+          messageRefs: {
+            current: [
+              { getBoundingClientRect: () => rect(300) },
+              { getBoundingClientRect: () => rect(1100) },
+            ],
+          },
+          onLoadThrough: async () => false,
+        }),
+      ),
+    );
+    await settle();
+    const star = container.querySelector(
+      'button[aria-label="Jump to starred answer"]',
+    );
+    assert.ok(star);
+    assert.equal(star.querySelector("svg").getAttribute("fill"), "none");
+    await React.act(() => star.click());
+    assert.equal(jumps.at(-1), 620);
+    assert.equal(
+      container.querySelectorAll("[data-minimap-entry-id]").length,
+      3,
+    );
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+  }
+});

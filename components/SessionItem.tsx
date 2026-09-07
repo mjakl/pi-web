@@ -1,5 +1,6 @@
 "use client";
 
+import { StarIcon } from "./StarIcon";
 import {
   memo,
   useCallback,
@@ -830,13 +831,30 @@ export const SessionItem = memo(function SessionItem({
                 …
               </span>
             ) : (
-              <span
-                title={t("sidebar.messagesCount", {
-                  count: session.messageCount,
-                })}
-                style={{ whiteSpace: "nowrap" }}
-              >
-                {t("sidebar.messagesCount", { count: session.messageCount })}
+              <span className="session-counts">
+                {Boolean(session.starCount) && (
+                  <span
+                    className="session-star-count"
+                    title={t("sidebar.starCount", {
+                      count: session.starCount ?? 0,
+                    })}
+                    aria-label={t("sidebar.starCount", {
+                      count: session.starCount ?? 0,
+                    })}
+                  >
+                    <span>{session.starCount?.toLocaleString("en")}</span>
+                    <StarIcon size={11} />
+                  </span>
+                )}
+                <span
+                  className="session-message-count"
+                  title={t("sidebar.messagesCount", {
+                    count: session.messageCount,
+                  })}
+                  style={{ whiteSpace: "nowrap" }}
+                >
+                  {t("sidebar.messagesCount", { count: session.messageCount })}
+                </span>
               </span>
             )}
           </div>

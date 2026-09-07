@@ -1,3 +1,8 @@
+import {
+  copySessionStars,
+  readSessionStars,
+  setSessionStar,
+} from "./session-stars";
 import { assertWorkingDirectoryAvailable } from "./worktree";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import {
@@ -9,7 +14,7 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { randomUUID } from "crypto";
-import { existsSync, realpathSync, writeFileSync } from "fs";
+import { existsSync, realpathSync, statSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { ExtensionUiBridge } from "./extension-ui-bridge";
 import { validateAgentImages } from "./image-attachments";
@@ -427,6 +432,12 @@ export class AgentSessionWrapper {
     cacheSessionPath(this.inner.sessionId, sessionFile);
   }
 
+  setStar(targetId: string, starred: boolean): string[] {
+    if (!this.isActive() || this.sessionReplacement)
+      throw new Error("Session history is being changed");
+    return setSessionStar(this.inner.sessionManager, targetId, starred);
+  }
+
   onEvent(listener: EventListener): () => void {
     this.listeners.add(listener);
     for (const event of this.extensionUi.pendingRequests()) listener(event);
@@ -730,10 +741,9 @@ export class AgentSessionWrapper {
               newSessionFile = forkedPath;
             }
 
-            const newSessionId = SessionManager.open(
-              newSessionFile,
-              sessionDir,
-            ).getSessionId();
+            const child = SessionManager.open(newSessionFile, sessionDir);
+            copySessionStars(sessionManager.getEntries(), child);
+            const newSessionId = child.getSessionId();
             cacheSessionPath(newSessionId, newSessionFile);
             return { cancelled: false, newSessionId };
           });
@@ -777,10 +787,9 @@ export class AgentSessionWrapper {
             if (!clonedPath || !existsSync(clonedPath))
               throw new Error("Failed to clone current session branch");
 
-            const newSessionId = SessionManager.open(
-              clonedPath,
-              sessionDir,
-            ).getSessionId();
+            const child = SessionManager.open(clonedPath, sessionDir);
+            copySessionStars(sessionManager.getEntries(), child);
+            const newSessionId = child.getSessionId();
             cacheSessionPath(newSessionId, clonedPath);
             return { cancelled: false, newSessionId };
           });
@@ -1397,6 +1406,31 @@ export async function sendRpcSessionCommand(
   return session.send(command);
 }
 
+/** Annotate without starting an agent; wait for any startup already reading this file. */
+export async function setRpcSessionStar(
+  operation: RpcSessionOperation,
+  filePath: string,
+  targetId: string,
+  starred: boolean,
+) {
+  await assertRpcSessionOperationCurrent(operation);
+  while (getLocks().has(operation.sessionId)) {
+    await getLocks().get(operation.sessionId);
+    await assertRpcSessionOperationCurrent(operation);
+  }
+  const existing = getRpcSession(operation.sessionId);
+  const starredEntryIds = existing?.isAlive()
+    ? existing.setStar(targetId, starred)
+    : setSessionStar(SessionManager.open(filePath), targetId, starred);
+  const stats = statSync(filePath);
+  return {
+    starredEntryIds,
+    starCount: starredEntryIds.length,
+    fileSize: stats.size,
+    modified: stats.mtime.toISOString(),
+  };
+}
+
 /** Persist a normal session's tool selection and rebuild when resource policy changes. */
 export async function setRpcSessionTools(
   operation: RpcSessionOperation,
@@ -1556,6 +1590,7 @@ export function getRpcSessionInfos(): SessionInfo[] {
       created,
       modified: new Date(lastActivityMs).toISOString(),
       messageCount: messages.length,
+      starCount: readSessionStars(entries).length,
       firstMessage: sessionTitleFromFirstMessage(
         firstUserMessage ? extractTextContent(firstUserMessage.message) : "",
       ),

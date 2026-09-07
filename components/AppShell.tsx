@@ -1142,6 +1142,7 @@ export function AppShell({ homeDir }: { homeDir: string }) {
       <SessionSidebar
         homeDir={homeDir}
         selectedSessionId={selectedSession?.id ?? null}
+        selectedSessionMetadata={selectedSession}
         onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}
         initialSessionId={initialSessionId}

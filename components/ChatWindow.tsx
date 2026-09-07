@@ -330,6 +330,9 @@ export function ChatWindow({
 
   const {
     historyAnchors,
+    starredEntryIds,
+    handleStar,
+    starPending,
     loading,
     error,
     messages,
@@ -709,6 +712,8 @@ export function ChatWindow({
     return history.reverse();
   }, [messages]);
   const messageRefs = useMessageRefs(anchorCount);
+  const answerRefs = useRef(new Map<string, HTMLDivElement>());
+  const stars = useMemo(() => new Set(starredEntryIds), [starredEntryIds]);
   const isEmptyNew =
     isNew && messages.length === 0 && !streamState.isStreaming && !sessionBusy;
   const hasStreamingContent = Boolean(
@@ -1134,6 +1139,7 @@ export function ChatWindow({
                     keyPrefix?: string;
                     showTimestamp?: boolean;
                     writtenFiles?: WrittenFile[];
+                    finalAnswer?: boolean;
                   } = {},
                 ): ReactNode => {
                   const previousMessage = messages[idx - 1];
@@ -1171,6 +1177,17 @@ export function ChatWindow({
                       cwd={messageCwd}
                       onOpenFile={onOpenFile}
                       entryId={entryIds[idx]}
+                      starred={stars.has(entryIds[idx] ?? "")}
+                      starPending={starPending}
+                      onStar={
+                        (options.finalAnswer ||
+                          (options.attachRef !== false &&
+                            stars.has(entryIds[idx] ?? ""))) &&
+                        !readOnly &&
+                        !session?.transient
+                          ? handleStar
+                          : undefined
+                      }
                       onFork={
                         readOnly ||
                         sessionBusy ||
@@ -1214,7 +1231,17 @@ export function ChatWindow({
                   return (
                     <div
                       key={`${keyPrefix}-${messageKey}`}
-                      ref={attachVisibleRef(currentRefIdx)}
+                      ref={(element) => {
+                        attachVisibleRef(currentRefIdx)(element);
+                        const id = entryIds[idx];
+                        if (
+                          (options.finalAnswer || stars.has(id ?? "")) &&
+                          id
+                        ) {
+                          if (element) answerRefs.current.set(id, element);
+                          else answerRefs.current.delete(id);
+                        }
+                      }}
                     >
                       {view}
                     </div>
@@ -1222,6 +1249,13 @@ export function ChatWindow({
                 };
 
                 const rendered: ReactNode[] = [];
+                const firstAnchorIndex =
+                  messages.findIndex(isMessageGroupAnchor);
+                const prefixEnd =
+                  firstAnchorIndex === -1 ? messages.length : firstAnchorIndex;
+                const prefixFinalIndex = findFinalAssistantIndex(
+                  messages.slice(0, prefixEnd),
+                );
                 let renderedThrough = 0;
                 for (const [idx, msg] of messages.entries()) {
                   if (idx < renderedThrough) continue;
@@ -1229,7 +1263,15 @@ export function ChatWindow({
                     ? turnGroups.get(idx)
                     : undefined;
                   if (!turn) {
-                    rendered.push(renderMessage(idx, msg));
+                    rendered.push(
+                      renderMessage(idx, msg, {
+                        finalAnswer:
+                          idx === prefixFinalIndex &&
+                          hasFinalAssistantAnswer(msg) &&
+                          (prefixEnd < messages.length ||
+                            (!sessionBusy && !streamState.isStreaming)),
+                      }),
+                    );
                     continue;
                   }
 
@@ -1297,6 +1339,10 @@ export function ChatWindow({
                     rendered.push(
                       renderMessage(finalAssistantIdx, finalAnswerMessage, {
                         writtenFiles: turn.writtenFiles,
+                        finalAnswer: finalAnswerMessage.content.some(
+                          (block) =>
+                            block.type === "text" || block.type === "image",
+                        ),
                       }),
                     );
                   }
@@ -1373,6 +1419,8 @@ export function ChatWindow({
           messages={messages}
           entryIds={entryIds}
           historyAnchors={historyAnchors}
+          starredEntryIds={starredEntryIds}
+          answerRefs={answerRefs}
           onLoadThrough={loadEarlierMessages}
           scrollContainer={scrollContainerRef}
           messageRefs={messageRefs}
