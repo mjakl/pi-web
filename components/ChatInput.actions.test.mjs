@@ -76,6 +76,19 @@ async function withComposer(props, check) {
   }
 }
 
+test("queue recall can reserve the remaining composer attachment capacity", async () => {
+  const ref = React.createRef();
+  await withComposer({ ref, onSend: () => {} }, async () => {
+    assert.equal(ref.current.getImageCapacity(), 10);
+    await React.act(() =>
+      ref.current.restoreSubmission("recalled", [
+        { data: "aGVsbG8=", mimeType: "image/png" },
+      ]),
+    );
+    assert.equal(ref.current.getImageCapacity(), 9);
+  });
+});
+
 test("the action switches between Send, Stop, Steer, and transient keyboard Queue", async () => {
   const sent = [],
     steered = [],

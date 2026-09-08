@@ -133,6 +133,7 @@ export interface ChatInputHandle {
   insertText: (text: string) => void;
   replaceMessage: (message: UserMessage, overwrite?: boolean) => void;
   prependText: (text: string) => void;
+  getImageCapacity: () => number;
   addImages: (files: File[]) => void;
   rekeyDraft: (previousKey: string, nextKey: string) => void;
   restoreSubmission: (
@@ -760,6 +761,12 @@ export function ChatInput({
         if (!ta) return;
         ta.focus();
       });
+    },
+    getImageCapacity() {
+      return Math.max(
+        0,
+        MAX_ATTACHED_IMAGES - attachedImagesRef.current.length,
+      );
     },
     prependText(text: string) {
       if (!text.trim()) return;

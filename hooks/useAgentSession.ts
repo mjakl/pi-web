@@ -2040,6 +2040,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }));
       let sentSessionId: string | null = null;
       let promptRequestStarted = false;
+      let promptResult: { queued?: boolean } | null = null;
 
       try {
         await precedingPersistedWrites;
@@ -2063,7 +2064,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           }
           await ensureEventsConnected(sid, true);
           promptRequestStarted = true;
-          await sendAgentCommand(sid, {
+          promptResult = await sendAgentCommand<{ queued?: boolean }>(sid, {
             type: "prompt",
             message,
             ...(piImages?.length ? { images: piImages } : {}),
@@ -2073,13 +2074,28 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           sentSessionId = session.id;
           await ensureEventsConnected(session.id, true);
           promptRequestStarted = true;
-          await sendAgentCommand(session.id, {
-            type: "prompt",
-            message,
-            ...(piImages?.length ? { images: piImages } : {}),
-          });
+          promptResult = await sendAgentCommand<{ queued?: boolean }>(
+            session.id,
+            {
+              type: "prompt",
+              message,
+              ...(piImages?.length ? { images: piImages } : {}),
+            },
+          );
         } else {
           throw new Error(t("chat.noActiveSessionForPrompt"));
+        }
+        if (
+          promptResult?.queued &&
+          sentSessionId &&
+          promptRunIdRef.current === promptRunId
+        ) {
+          // Acceptance into the compaction inbox is not a transcript message.
+          // Keep SSE connected for its eventual SDK admission or queue recall.
+          setMessages((prev) => prev.filter((entry) => entry !== userMsg));
+          optimisticUserMessageKeyRef.current = null;
+          rpcPromptPendingRef.current = false;
+          void reconcileAgentState(sentSessionId);
         }
         if (isSlashCommandPrompt && sentSessionId) {
           void waitForPromptSettlement(sentSessionId, promptRunId);
@@ -2843,21 +2859,37 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (!sid) return;
     try {
       const result = await sendAgentCommand<{
+        queuedMessages?: QueuedMessages;
         steering?: string[];
         followUp?: string[];
-      }>(sid, { type: "clear_queue" });
-      // clearQueue also emits an empty queue_update, but that only reaches us
-      // while SSE is connected — clear locally so idle recalls update the UI.
-      setQueuedMessages({ steering: [], followUp: [] });
+        images?: Array<{ data: string; mimeType: string }>;
+      }>(sid, {
+        type: "clear_queue",
+        imageCapacity: opts.chatInputRef?.current?.getImageCapacity() ?? 0,
+      });
+      // Recall may leave a deferred attachment batch that cannot fit in the
+      // composer yet. Reconcile even when the idle SSE connection is closed.
+      setQueuedMessages(normalizeQueuedMessages(result?.queuedMessages));
       const texts = [...(result?.steering ?? []), ...(result?.followUp ?? [])];
-      if (texts.length > 0) {
-        opts.chatInputRef?.current?.prependText(texts.join("\n\n"));
+      if (texts.length > 0 || result?.images?.length) {
+        const text = texts.join("\n\n");
+        const destination = resolveComposerDraftKey(composerDraftKey);
+        const input = opts.chatInputRef?.current;
+        if (input) input.restoreSubmission(text, result?.images, destination);
+        else if (destination)
+          restoreDraftSubmission(destination, text, result?.images);
       }
     } catch (e) {
       console.error("Failed to recall queued messages:", e);
       addNotice({ type: "error", message: t("chat.recallQueuedFailed") });
     }
-  }, [opts.chatInputRef, addNotice, t]);
+  }, [
+    opts.chatInputRef,
+    addNotice,
+    t,
+    composerDraftKey,
+    resolveComposerDraftKey,
+  ]);
 
   const handleThinkingLevelChange = useCallback(
     async (level: ThinkingLevelOption) => {
