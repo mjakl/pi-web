@@ -360,6 +360,12 @@ export class AgentSessionWrapper {
     if (file) cacheSessionPath(this.inner.sessionId, file);
   }
 
+  setSessionName(name: string): void {
+    if (!this.isActive() || this.sessionReplacement)
+      throw new Error("Session history is being changed");
+    this.inner.setSessionName(name);
+  }
+
   setStar(targetId: string | null, starred: boolean): string[] {
     if (!this.isActive() || this.sessionReplacement)
       throw new Error("Session history is being changed");
@@ -862,7 +868,7 @@ export class AgentSessionWrapper {
         case "set_session_name": {
           const name = (command["name"] as string | undefined)?.trim();
           if (!name) throw new Error("Session name cannot be empty");
-          this.inner.setSessionName(name);
+          this.setSessionName(name);
           return null;
         }
 
@@ -1325,6 +1331,22 @@ export async function sendRpcSessionCommand(
   }
   await assertRpcSessionOperationCurrent(operation);
   return session.send(command);
+}
+
+/** Rename through the live owner, or persist without starting an agent. */
+export async function setRpcSessionName(
+  operation: RpcSessionOperation,
+  filePath: string,
+  name: string,
+): Promise<void> {
+  await assertRpcSessionOperationCurrent(operation);
+  while (getLocks().has(operation.sessionId)) {
+    await getLocks().get(operation.sessionId);
+    await assertRpcSessionOperationCurrent(operation);
+  }
+  const existing = getRpcSession(operation.sessionId);
+  if (existing?.isAlive()) existing.setSessionName(name);
+  else SessionManager.open(filePath).appendSessionInfo(name);
 }
 
 /** Annotate without starting an agent; null clears all stars. Wait for in-flight startup. */

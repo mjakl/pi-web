@@ -9,7 +9,12 @@ import {
   buildSessionContext,
   reparentChildSessions,
 } from "@/lib/session-reader";
-import { getRpcSession, stopRpcSession } from "@/lib/rpc-manager";
+import {
+  beginRpcSessionOperation,
+  getRpcSession,
+  setRpcSessionName,
+  stopRpcSession,
+} from "@/lib/rpc-manager";
 import { projectTreeForResponse } from "@/lib/project-tree";
 import { computeSessionTotalActiveMs } from "@/lib/session-timing";
 import { computeSessionStats } from "@/lib/session-stats";
@@ -134,6 +139,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const operation = beginRpcSessionOperation(id);
   try {
     const { name } = (await req.json()) as { name?: string };
     if (typeof name !== "string") {
@@ -143,8 +149,7 @@ export async function PATCH(
     if (!filePath) {
       return Response.json({ error: "Session not found" }, { status: 404 });
     }
-    const sm = SessionManager.open(filePath);
-    sm.appendSessionInfo(name.trim());
+    await setRpcSessionName(operation, filePath, name);
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json({ error: String(error) }, { status: 500 });
