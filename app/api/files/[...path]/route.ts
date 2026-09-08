@@ -18,7 +18,6 @@ import {
 } from "@/lib/file-types";
 import { isIgnoredDirent, resolveDirentIsDirectory } from "@/lib/file-dirent";
 import { contentDisposition } from "@/lib/content-disposition";
-import { errorMessage } from "@/lib/error-message";
 import { isReferencedBySession } from "@/lib/session-file-references";
 import { isFilePathReferencedByEntries } from "@/lib/session-file-references-core";
 import { isWindowsAbsolutePath, samePath, toSlashPath } from "@/lib/paths";
