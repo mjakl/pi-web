@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
+import { Window } from "happy-dom";
 import { createJiti } from "jiti";
+
+process.env.NODE_ENV = "test";
+const window = new Window({ url: "http://localhost" });
+Object.assign(globalThis, {
+  window,
+  document: window.document,
+  ResizeObserver: window.ResizeObserver,
+  IS_REACT_ACT_ENVIRONMENT: true,
+});
+after(() => window.happyDOM.close());
 
 const jiti = createJiti(import.meta.url, {
   jsx: { runtime: "automatic" },
@@ -113,7 +124,7 @@ test("selectTopLevelBranches works on preview-only server projections", () => {
 
 test("navigation-only rows render previews, image labels and entry-type fallbacks", async () => {
   const React = await jiti.import("react");
-  const { renderToStaticMarkup } = await jiti.import("react-dom/server");
+  const { createRoot } = await jiti.import("react-dom/client");
   const tree = [
     {
       ...node("answer", [], "message", {
@@ -130,20 +141,70 @@ test("navigation-only rows render previews, image labels and entry-type fallback
   ];
   assert.deepEqual([...buildActivePath(tree, "question")], ["answer"]);
   assert.deepEqual([...buildActivePath(tree, "image")], ["image"]);
-  const html = renderToStaticMarkup(
-    React.createElement(BranchNavigator, {
-      tree,
-      activeLeafId: "question",
-      onLeafChange: () => {},
-      open: true,
-      hasSession: true,
-    }),
-  );
-  assert.match(html, /Branch question/);
-  assert.match(html, /\[image\]/);
-  assert.match(html, /branch_summary/);
-  // SDK labels remain metadata, not row text (the existing UI contract).
-  assert.doesNotMatch(html, /Saved image|Saved summary/);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  let selected;
+  let toggled = false;
+  const props = {
+    tree,
+    activeLeafId: "question",
+    onLeafChange: (id) => {
+      selected = id;
+    },
+    onToggle: () => {
+      toggled = true;
+    },
+    open: true,
+    hasSession: true,
+    containerRef: { current: container },
+  };
+  container.getBoundingClientRect = () => ({ bottom: 42, left: 8, width: 320 });
+  try {
+    await React.act(() =>
+      root.render(React.createElement(BranchNavigator, props)),
+    );
+    const html = container.innerHTML;
+    assert.match(html, /Branch question/);
+    assert.match(html, /\[image\]/);
+    assert.match(html, /branch_summary/);
+    assert.doesNotMatch(html, /Saved image|Saved summary/);
+    const panel = container.querySelector(".menu-panel");
+    assert.equal(panel.style.position, "fixed");
+    assert.equal(panel.style.top, "42px");
+    assert.equal(panel.style.left, "8px");
+    assert.equal(panel.style.width, "320px");
+    const label = [...panel.querySelectorAll("span")].find(
+      (element) => element.textContent === "Branch question",
+    );
+    await React.act(() => label.click());
+    assert.equal(selected, "answer");
+    await React.act(() => container.querySelector("button").click());
+    assert.equal(toggled, true);
+    assert.ok(
+      container.querySelector(".menu-panel"),
+      "only the parent changes open state",
+    );
+    await React.act(() =>
+      root.render(
+        React.createElement(BranchNavigator, {
+          ...props,
+          hideInlineButton: true,
+        }),
+      ),
+    );
+    assert.equal(container.querySelector("button").style.display, "none");
+    assert.ok(container.querySelector(".menu-panel"));
+    await React.act(() =>
+      root.render(
+        React.createElement(BranchNavigator, { ...props, open: false }),
+      ),
+    );
+    assert.equal(container.querySelector(".menu-panel"), null);
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+  }
 });
 
 test("multi-root metadata chains use their user previews and assistant representatives", () => {

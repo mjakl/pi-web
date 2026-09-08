@@ -1492,17 +1492,6 @@ span.linenumber {
 /* Replaces ModelSelector's onMouseEnter/onMouseLeave, which wrote background
    and color inline and then outlived the hover: the composer variant's
    restored color: var(--text-muted) permanently beat the rule above. */
-.model-selector.is-toolbar > button {
-  background: none;
-  color: var(--text-muted);
-}
-.model-selector.is-toolbar > button[aria-expanded="true"] {
-  background: var(--bg-hover);
-}
-.model-selector.is-field > button {
-  background: var(--bg);
-  color: var(--text);
-}
 .model-selector > button:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text);
@@ -2550,18 +2539,10 @@ span.linenumber {
 }
 
 /* File explorer hover surfaces. Was a `hovered` flag in ChangeRow state and
-   direct currentTarget.style writes in the dismiss and search-clear buttons,
+   direct currentTarget.style writes in the search-clear button,
    which also left the hover colour stuck after a tap on touch. */
 .file-explorer-change-row:hover {
   background: var(--bg-hover);
-}
-.file-explorer-dismiss-button {
-  background: none;
-  color: var(--text-dim);
-}
-.file-explorer-dismiss-button:hover {
-  background: var(--bg-hover);
-  color: var(--text-muted);
 }
 .file-explorer-search-clear {
   background: none;

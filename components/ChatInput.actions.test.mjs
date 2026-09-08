@@ -265,3 +265,32 @@ test("the top bar invokes the current compaction or cancellation callback", asyn
     await React.act(() => root.unmount());
   }
 });
+
+test("choosing the auto-selected model makes it explicit without clearing it", async () => {
+  const chosen = [];
+  await withComposer(
+    {
+      onSend() {},
+      isStreaming: false,
+      model: { provider: "openai", modelId: "example" },
+      modelList: [{ provider: "openai", id: "example", name: "Example model" }],
+      isAutoModelSelection: true,
+      onModelChange: (...model) => chosen.push(model),
+    },
+    async ({ container, render }) => {
+      const chooseCurrent = async () => {
+        await React.act(() =>
+          container.querySelector(".anchor-model-selector").click(),
+        );
+        const options = container.querySelectorAll('[role="option"]');
+        assert.equal(options.length, 1);
+        await React.act(() => options[0].click());
+      };
+      await chooseCurrent();
+      assert.deepEqual(chosen, [["openai", "example"]]);
+      await render({ isAutoModelSelection: false });
+      await chooseCurrent();
+      assert.equal(chosen.length, 1);
+    },
+  );
+});

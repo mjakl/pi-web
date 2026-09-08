@@ -149,7 +149,6 @@ export class AgentSessionWrapper {
   private promptAdmissionTail: Promise<void> = Promise.resolve();
   private extensionsBound = false;
   private extensionBindingPromise: Promise<void> | null = null;
-  private extensionBindingError: unknown = null;
   private readonly onAgentRunComplete?: AgentRunCompleteListener;
   private unsubscribe: (() => void) | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -247,7 +246,6 @@ export class AgentSessionWrapper {
     if (this.extensionsBound) return Promise.resolve();
     if (this.extensionBindingPromise) return this.extensionBindingPromise;
 
-    this.extensionBindingError = null;
     this.extensionBindingPromise = (async () => {
       if (!this._alive) return;
       await this.inner.bindExtensions({
@@ -277,10 +275,7 @@ export class AgentSessionWrapper {
       console.log(
         `[pi-web] session_start dispatched to extensions for session ${this.inner.sessionId}`,
       );
-    })().catch((err: unknown) => {
-      this.extensionBindingError = err;
-      throw err;
-    });
+    })();
 
     return this.extensionBindingPromise;
   }
@@ -291,21 +286,10 @@ export class AgentSessionWrapper {
     } catch (err) {
       throw err instanceof Error ? err : new Error(String(err));
     }
-    if (this.extensionBindingError) {
-      throw this.extensionBindingError instanceof Error
-        ? this.extensionBindingError
-        : new Error(errorMessage(this.extensionBindingError));
-    }
   }
 
   private shouldWaitForExtensions(type: string): boolean {
-    return (
-      type === "prompt" ||
-      type === "steer" ||
-      type === "follow_up" ||
-      type === "get_commands" ||
-      type === "get_state"
-    );
+    return type === "prompt" || type === "get_commands" || type === "get_state";
   }
 
   private async withFinalIdleReset<T>(operation: () => Promise<T>): Promise<T> {
@@ -374,6 +358,12 @@ export class AgentSessionWrapper {
     persistSessionManager(manager);
     const file = manager.getSessionFile();
     if (file) cacheSessionPath(this.inner.sessionId, file);
+  }
+
+  setSessionName(name: string): void {
+    if (!this.isActive() || this.sessionReplacement)
+      throw new Error("Session history is being changed");
+    this.inner.setSessionName(name);
   }
 
   setStar(targetId: string | null, starred: boolean): string[] {
@@ -464,7 +454,7 @@ export class AgentSessionWrapper {
         throw new Error("Session history is being changed");
       }
 
-      if (type === "prompt" || type === "steer" || type === "follow_up") {
+      if (type === "prompt") {
         const imageError = validateAgentImages(command["images"]);
         if (imageError) throw new Error(imageError);
       }
@@ -612,8 +602,6 @@ export class AgentSessionWrapper {
             isPromptRunning: this.pendingPromptCount > 0,
             isBashRunning: this.inner.isBashRunning,
             isCompacting: this.inner.isCompacting,
-            autoCompactionEnabled: this.inner.autoCompactionEnabled,
-            autoRetryEnabled: this.inner.autoRetryEnabled,
             model: model
               ? { id: model.id, provider: model.provider }
               : undefined,
@@ -880,7 +868,7 @@ export class AgentSessionWrapper {
         case "set_session_name": {
           const name = (command["name"] as string | undefined)?.trim();
           if (!name) throw new Error("Session name cannot be empty");
-          this.inner.setSessionName(name);
+          this.setSessionName(name);
           return null;
         }
 
@@ -895,37 +883,10 @@ export class AgentSessionWrapper {
           return { text: this.inner.getLastAssistantText() ?? "" };
         }
 
-        case "set_auto_compaction": {
-          this.inner.setAutoCompactionEnabled(command["enabled"] as boolean);
-          return null;
-        }
-
         case "clear_queue": {
           // Full clear only: pi has no single-item dequeue, and clear+requeue
           // races against the agent loop pulling messages mid-flight.
           return this.inner.clearQueue();
-        }
-
-        case "steer": {
-          const steerImages = command["images"] as
-            | Array<{ type: "image"; data: string; mimeType: string }>
-            | undefined;
-          await this.inner.steer(
-            command["message"] as string,
-            steerImages?.length ? steerImages : undefined,
-          );
-          return null;
-        }
-
-        case "follow_up": {
-          const followImages = command["images"] as
-            | Array<{ type: "image"; data: string; mimeType: string }>
-            | undefined;
-          await this.inner.followUp(
-            command["message"] as string,
-            followImages?.length ? followImages : undefined,
-          );
-          return null;
         }
 
         case "get_tools": {
@@ -990,11 +951,6 @@ export class AgentSessionWrapper {
             command["id"] as string,
             command["data"] as string,
           );
-          return null;
-        }
-
-        case "set_auto_retry": {
-          this.inner.setAutoRetryEnabled(command["enabled"] as boolean);
           return null;
         }
 
@@ -1375,6 +1331,22 @@ export async function sendRpcSessionCommand(
   }
   await assertRpcSessionOperationCurrent(operation);
   return session.send(command);
+}
+
+/** Rename through the live owner, or persist without starting an agent. */
+export async function setRpcSessionName(
+  operation: RpcSessionOperation,
+  filePath: string,
+  name: string,
+): Promise<void> {
+  await assertRpcSessionOperationCurrent(operation);
+  while (getLocks().has(operation.sessionId)) {
+    await getLocks().get(operation.sessionId);
+    await assertRpcSessionOperationCurrent(operation);
+  }
+  const existing = getRpcSession(operation.sessionId);
+  if (existing?.isAlive()) existing.setSessionName(name);
+  else SessionManager.open(filePath).appendSessionInfo(name);
 }
 
 /** Annotate without starting an agent; null clears all stars. Wait for in-flight startup. */

@@ -181,7 +181,7 @@ test("filters model options by name and id", () => {
   assert.equal(filterModelOptions(options, "  "), options);
 });
 
-test("renders the shared field model selector as a disabled gray control", () => {
+test("renders the composer model selector as a disabled control", () => {
   const html = renderToStaticMarkup(
     React.createElement(ModelSelector, {
       options: [
@@ -189,18 +189,15 @@ test("renders the shared field model selector as a disabled gray control", () =>
       ],
       value: null,
       onChange() {},
-      onClear() {},
-      emptyLabel: "Parent default",
-      ariaLabel: "Model override",
+      ariaLabel: "Model and reasoning",
       disabled: true,
-      variant: "field",
     }),
   );
 
-  assert.match(html, /aria-label="Model override"/);
+  assert.match(html, /aria-label="Model and reasoning"/);
   assert.match(html, /disabled=""/);
-  assert.match(html, /background:var\(--bg-panel\)/);
-  assert.match(html, />Parent default</);
+  assert.match(html, /model-selector is-composer is-disabled/);
+  assert.match(html, />Select model</);
 });
 
 test("labels the model selector from the English message package", () => {

@@ -205,9 +205,3 @@ export function buildFileLineMentionText(
     firstLine === lastLine ? `:${firstLine}` : `:${firstLine}-${lastLine}`;
   return `${pathMention}${lineSuffix} `;
 }
-
-export function buildFileAtMentionsText(entryPaths: string[]): string {
-  return entryPaths
-    .map((entryPath) => buildAtMentionText(entryPath, false))
-    .join("");
-}

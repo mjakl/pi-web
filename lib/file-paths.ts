@@ -18,15 +18,7 @@ export function encodeFilePathForApi(filePath: string): string {
 /** URL for the file API. The only place this shape is built. */
 export function getFileApiUrl(
   filePath: string,
-  type:
-    | "list"
-    | "read"
-    | "download"
-    | "meta"
-    | "preview"
-    | "watch"
-    | "upload"
-    | "upload-check",
+  type: "list" | "read" | "download" | "meta" | "preview" | "watch",
   sourceSessionId?: string | null,
   params: Record<string, string | number | undefined> = {},
 ): string {

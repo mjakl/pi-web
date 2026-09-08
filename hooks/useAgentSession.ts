@@ -2421,13 +2421,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     [loadContext, runPersistedWrite],
   );
 
-  const handleNavigate = useCallback(
-    async (entryId: string) => {
-      await navigateTranscriptBranch(entryId);
-    },
-    [navigateTranscriptBranch],
-  );
-
   const handleLeafChange = useCallback(
     async (leafId: string | null) => {
       await navigateTranscriptBranch(leafId);
@@ -3102,7 +3095,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     handleFork,
     handleBranchMessage,
     handleRewind,
-    handleNavigate,
     handleModelChange,
     handleCompact,
     handleSteer,

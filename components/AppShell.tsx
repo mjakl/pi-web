@@ -39,11 +39,7 @@ import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { useAudio } from "@/hooks/useAudio";
 import { copyText } from "@/lib/clipboard";
 import { getFileName } from "@/lib/file-paths";
-import {
-  buildAtMentionText,
-  buildFileAtMentionsText,
-  buildFileLineMentionText,
-} from "@/lib/file-fuzzy";
+import { buildAtMentionText, buildFileLineMentionText } from "@/lib/file-fuzzy";
 import {
   claimExtensionAttentionNotification,
   shouldShowBrowserNotification,
@@ -536,18 +532,6 @@ export function AppShell({ homeDir }: { homeDir: string }) {
   const handleAtMention = useCallback(
     (relativePath: string, isDir: boolean) => {
       chatInputRef.current?.insertText(buildAtMentionText(relativePath, isDir));
-      if (isMobile) {
-        setRightPanelOpen(false);
-        setSidebarOpen(false);
-      }
-    },
-    [isMobile],
-  );
-
-  const handleAtMentions = useCallback(
-    (relativePaths: string[]) => {
-      const mentions = buildFileAtMentionsText(relativePaths);
-      if (mentions) chatInputRef.current?.insertText(mentions);
       if (isMobile) {
         setRightPanelOpen(false);
         setSidebarOpen(false);
@@ -1155,7 +1139,6 @@ export function AppShell({ homeDir }: { homeDir: string }) {
         explorerRefreshKey={explorerRefreshKey}
         onExplorerRefresh={handleExplorerRefresh}
         onAtMention={handleAtMention}
-        onAtMentions={handleAtMentions}
         onBackgroundTaskDone={handleBackgroundTaskDone}
         onActiveSessionIdsChange={handleActiveSessionIdsChange}
         onRunningSessionIdsChange={handleRunningSessionIdsChange}
@@ -1385,7 +1368,6 @@ export function AppShell({ homeDir }: { homeDir: string }) {
               tree={branchTree}
               activeLeafId={branchActiveLeafId}
               onLeafChange={handleBranchLeafChange}
-              inline
               containerRef={topBarRef}
               open={activeTopPanel === "branches"}
               onToggle={() => {
@@ -2212,8 +2194,6 @@ export function AppShell({ homeDir }: { homeDir: string }) {
                   tree={branchTree}
                   activeLeafId={branchActiveLeafId}
                   onLeafChange={handleBranchLeafChange}
-                  inline
-                  compact
                   containerRef={topBarRef}
                   open={activeTopPanel === "branches"}
                   onToggle={() => {
