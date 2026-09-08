@@ -402,7 +402,6 @@ export const enMessages: Record<string, string> = {
   "i18n.zoomOut": "Zoom out",
   "i18n.zoomIn": "Zoom in",
   "i18n.fitToWidth": "Fit to width",
-  "i18n.default": "Default",
   "i18n.disabled": "Disabled",
   "i18n.noResources": "No resources",
   "i18n.unknown": "Unknown",

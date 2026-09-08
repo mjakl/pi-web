@@ -131,7 +131,6 @@ interface Props {
 export interface ChatInputHandle {
   focusAtEnd: () => void;
   insertText: (text: string) => void;
-  insertIfEmpty: (text: string) => void;
   replaceMessage: (message: UserMessage, overwrite?: boolean) => void;
   prependText: (text: string) => void;
   addImages: (files: File[]) => void;
@@ -729,18 +728,6 @@ export function ChatInput({
       if (!ta) return;
       ta.focus({ preventScroll: true });
       ta.setSelectionRange(ta.value.length, ta.value.length);
-    },
-    insertIfEmpty(text: string) {
-      const ta = textareaRef.current;
-      const current = ta ? ta.value : value;
-      if (current.trim()) return;
-      valueRef.current = text;
-      setValue(text);
-      setAtQuery(null);
-      requestAnimationFrame(() => {
-        if (!ta) return;
-        ta.focus();
-      });
     },
     replaceMessage(message: UserMessage, overwrite = false) {
       const ta = textareaRef.current;
@@ -2516,7 +2503,6 @@ export function ChatInput({
                   disabled={isStreaming || isCompacting}
                   busy={modelSwitching}
                   isAutoSelection={isAutoModelSelection}
-                  variant="composer"
                   ariaLabel={t("chat.modelAndReasoning")}
                   detail={
                     onThinkingLevelChange ? thinkingDisplayLabel : undefined

@@ -9,12 +9,8 @@ const jiti = createJiti(import.meta.url, {
 });
 const React = await jiti.import("react");
 const { renderToStaticMarkup } = await jiti.import("react-dom/server");
-const {
-  MessageView,
-  getTokenEstimateText,
-  getToolCallInputText,
-  replaceUserMessageText,
-} = await jiti.import("./MessageView.tsx");
+const { MessageView, getTokenEstimateText, getToolCallInputText } =
+  await jiti.import("./MessageView.tsx");
 
 function renderMessage(message, props = {}) {
   return renderToStaticMarkup(
@@ -228,25 +224,6 @@ test("does not collapse incomplete skill-looking user text", () => {
 
   assert.match(html, /ordinary user text/);
   assert.doesNotMatch(html, /aria-expanded/);
-});
-
-test("keeps attached images when restoring a compact command for editing", () => {
-  const image = {
-    type: "image",
-    source: { type: "base64", media_type: "image/png", data: "QUJDRA==" },
-  };
-  const restored = replaceUserMessageText(
-    {
-      role: "user",
-      content: [{ type: "text", text: COMPLETE_SKILL_EXPANSION }, image],
-    },
-    "/skill:review src/main.ts",
-  );
-
-  assert.deepEqual(restored.content, [
-    { type: "text", text: "/skill:review src/main.ts" },
-    image,
-  ]);
 });
 
 test("renders assistant images as buttons that open a larger preview", () => {

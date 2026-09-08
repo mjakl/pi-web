@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from "react";
 import { useI18n } from "@/hooks/useI18n";
@@ -22,14 +21,10 @@ interface ModelSelectorProps {
   options: ModelSelectorOption[];
   value?: { provider: string; modelId: string } | null;
   onChange: (provider: string, modelId: string) => void;
-  onClear?: () => void;
-  emptyLabel?: string;
-  selectedLabel?: string;
   disabled?: boolean;
   busy?: boolean;
   isAutoSelection?: boolean;
   ariaLabel?: string;
-  variant?: "toolbar" | "field" | "composer";
   detail?: string;
   children?: ReactNode;
 }
@@ -67,14 +62,10 @@ export function ModelSelector({
   options,
   value,
   onChange,
-  onClear,
-  emptyLabel,
-  selectedLabel,
   disabled = false,
   busy = false,
   isAutoSelection = false,
   ariaLabel,
-  variant = "toolbar",
   detail,
   children,
 }: ModelSelectorProps) {
@@ -112,16 +103,13 @@ export function ModelSelector({
       modelsByProvider.push({ provider: option.provider, options: [option] });
   }
 
-  const currentName =
-    selectedLabel ??
-    (value
-      ? (sortedOptions.find(
-          (option) =>
-            option.modelId === value.modelId &&
-            option.provider === value.provider,
-        )?.name ?? value.modelId)
-      : (emptyLabel ??
-        t(sortedOptions.length > 0 ? "chat.selectModel" : "chat.noModels")));
+  const currentName = value
+    ? (sortedOptions.find(
+        (option) =>
+          option.modelId === value.modelId &&
+          option.provider === value.provider,
+      )?.name ?? value.modelId)
+    : t(sortedOptions.length > 0 ? "chat.selectModel" : "chat.noModels");
 
   // Shown as a native popover: the browser owns light dismiss and top layer,
   // and CSS anchor positioning keeps the panel pinned to the trigger, so
@@ -139,45 +127,6 @@ export function ModelSelector({
     setFilter("");
   }, [locked]);
 
-  const buttonStyle: CSSProperties | undefined =
-    variant === "composer"
-      ? undefined
-      : variant === "field"
-        ? {
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            width: "100%",
-            minWidth: 0,
-            height: 34,
-            padding: "0 9px",
-            overflow: "hidden",
-            border: "1px solid var(--border)",
-            borderRadius: 5,
-            background: locked ? "var(--bg-panel)" : undefined,
-            color: locked ? "var(--text-dim)" : undefined,
-            cursor: locked ? "default" : "pointer",
-            fontSize: 12,
-            textAlign: "left",
-          }
-        : {
-            display: "flex",
-            alignItems: "center",
-            justifyContent: isMobile ? "flex-start" : undefined,
-            gap: 6,
-            width: isMobile ? "100%" : undefined,
-            maxWidth: isMobile ? "100%" : 220,
-            height: 32,
-            padding: isMobile ? "8px 10px" : "8px 12px",
-            overflow: "hidden",
-            border: "none",
-            borderRadius: 9,
-            cursor: locked ? "not-allowed" : "pointer",
-            fontSize: 12,
-            opacity: locked ? 0.5 : 1,
-            transition: "background 0.12s, color 0.12s",
-          };
-
   const choose = (option: ModelSelectorOption) => {
     const active =
       option.modelId === value?.modelId && option.provider === value?.provider;
@@ -188,16 +137,8 @@ export function ModelSelector({
 
   return (
     <div
-      className={`model-selector is-${variant}${locked ? " is-disabled" : ""}`}
-      style={{
-        position: "relative",
-        width:
-          variant === "field" || (variant === "toolbar" && isMobile)
-            ? "100%"
-            : undefined,
-        minWidth: 0,
-        flex: variant === "toolbar" && isMobile ? "1 1 auto" : undefined,
-      }}
+      className={`model-selector is-composer${locked ? " is-disabled" : ""}`}
+      style={{ position: "relative", minWidth: 0 }}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || !open) return;
         event.preventDefault();
@@ -219,11 +160,10 @@ export function ModelSelector({
             ? t("chat.switchingModel")
             : locked
               ? currentName
-              : sortedOptions.length > 0 || onClear
+              : sortedOptions.length > 0
                 ? t("chat.changeModel")
                 : t("chat.noAvailableModels")
         }
-        style={buttonStyle}
         onPointerDown={() => {
           pressStartedAtRef.current = Date.now();
         }}
@@ -256,30 +196,6 @@ export function ModelSelector({
           >
             <path d="M21 12a9 9 0 1 1-2.64-6.36" />
           </svg>
-        ) : variant !== "composer" ? (
-          <svg
-            width="11"
-            height="11"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            style={{ flexShrink: 0 }}
-          >
-            <rect x="4" y="4" width="16" height="16" rx="2" />
-            <rect x="9" y="9" width="6" height="6" />
-            <line x1="9" y1="1" x2="9" y2="4" />
-            <line x1="15" y1="1" x2="15" y2="4" />
-            <line x1="9" y1="20" x2="9" y2="23" />
-            <line x1="15" y1="20" x2="15" y2="23" />
-            <line x1="20" y1="9" x2="23" y2="9" />
-            <line x1="20" y1="14" x2="23" y2="14" />
-            <line x1="1" y1="9" x2="4" y2="9" />
-            <line x1="1" y1="14" x2="4" y2="14" />
-          </svg>
         ) : null}
         <span
           style={{
@@ -293,22 +209,20 @@ export function ModelSelector({
           {currentName}
         </span>
         {detail && <span className="composer-model-detail">{detail}</span>}
-        {(variant === "field" || variant === "composer") && (
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            style={{ flexShrink: 0, color: "var(--text-dim)" }}
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        )}
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          style={{ flexShrink: 0, color: "var(--text-dim)" }}
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
       </button>
 
       {open && (
@@ -355,17 +269,6 @@ export function ModelSelector({
             aria-label={children ? t("chat.selectModel") : undefined}
             style={{ minHeight: 0, overflowY: "auto" }}
           >
-            {onClear && !filter.trim() && (
-              <ModelOptionButton
-                active={!value}
-                label={emptyLabel ?? t("i18n.default")}
-                onClick={() => {
-                  setOpen(false);
-                  setFilter("");
-                  onClear();
-                }}
-              />
-            )}
             {modelsByProvider.length === 0 ? (
               <div
                 style={{
@@ -387,9 +290,7 @@ export function ModelSelector({
                       className="menu-section-label"
                       style={{
                         borderTop:
-                          index > 0 || onClear
-                            ? "1px solid var(--border)"
-                            : "none",
+                          index > 0 ? "1px solid var(--border)" : "none",
                       }}
                     >
                       {group.provider}

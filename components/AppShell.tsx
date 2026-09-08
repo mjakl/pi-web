@@ -1368,7 +1368,6 @@ export function AppShell({ homeDir }: { homeDir: string }) {
               tree={branchTree}
               activeLeafId={branchActiveLeafId}
               onLeafChange={handleBranchLeafChange}
-              inline
               containerRef={topBarRef}
               open={activeTopPanel === "branches"}
               onToggle={() => {
@@ -2195,8 +2194,6 @@ export function AppShell({ homeDir }: { homeDir: string }) {
                   tree={branchTree}
                   activeLeafId={branchActiveLeafId}
                   onLeafChange={handleBranchLeafChange}
-                  inline
-                  compact
                   containerRef={topBarRef}
                   open={activeTopPanel === "branches"}
                   onToggle={() => {
