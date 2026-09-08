@@ -20,7 +20,7 @@ import { randomUUID } from "crypto";
 import { existsSync, realpathSync, statSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { ExtensionUiBridge } from "./extension-ui-bridge";
-import { MAX_ATTACHED_IMAGES, validateAgentImages } from "./image-attachments";
+import { validateAgentImages } from "./image-attachments";
 import { invalidateModelsCache } from "./models-cache";
 import { resolveVisibleModels, selectInitialModelScope } from "./model-scope";
 import {
@@ -101,6 +101,7 @@ type EventListener = (event: AgentEvent) => void;
 type AgentRunCompleteListener = (sessionId: string) => void;
 
 type DeferredInput = {
+  admissionOrder: number;
   command: Record<string, unknown>;
   paused: boolean;
 };
@@ -153,6 +154,7 @@ export class AgentSessionWrapper {
   private agentRunNeedsCompletion = false;
   private promptAdmissionTail: Promise<void> = Promise.resolve();
   private deferredInputs: DeferredInput[] = [];
+  private nextDeferredAdmissionOrder = 0;
   private drainingDeferredInputs = false;
   private extensionsBound = false;
   private extensionBindingPromise: Promise<void> | null = null;
@@ -371,7 +373,11 @@ export class AgentSessionWrapper {
   }
 
   private deferInput(command: Record<string, unknown>) {
-    this.deferredInputs.push({ command, paused: false });
+    this.deferredInputs.push({
+      admissionOrder: this.nextDeferredAdmissionOrder++,
+      command,
+      paused: false,
+    });
     this.emitQueueUpdate();
     return { queued: true };
   }
@@ -392,8 +398,16 @@ export class AgentSessionWrapper {
         } catch (error) {
           // Only definite admission rejection comes back here. Once SDK-owned,
           // input is not recallable; rejection transfers it back to recovery.
-          if (!this.deferredInputs.includes(input))
-            this.deferredInputs.unshift(input);
+          if (!this.deferredInputs.includes(input)) {
+            const next = this.deferredInputs.findIndex(
+              (pending) => pending.admissionOrder > input.admissionOrder,
+            );
+            this.deferredInputs.splice(
+              next === -1 ? this.deferredInputs.length : next,
+              0,
+              input,
+            );
+          }
           this.pauseDeferredInputs();
           this.emit({
             type: "prompt_error",
@@ -933,6 +947,10 @@ export class AgentSessionWrapper {
           if (!this.isActive()) throw new Error("Session is stopped");
           if (this.isSessionRunningForReplacement())
             throw new Error("Cannot rewind while the session is running");
+          if (this.deferredInputs.length > 0)
+            throw new Error(
+              "Cannot rewind while queued input is pending. Use Recall first to recover it.",
+            );
           const entryId = command["entryId"];
           const target =
             typeof entryId === "string"
@@ -1025,32 +1043,18 @@ export class AgentSessionWrapper {
         case "clear_queue": {
           // Full clear only: pi has no single-item dequeue, and clear+requeue
           // races against the agent loop pulling messages mid-flight.
-          const capacity = command["imageCapacity"] ?? MAX_ATTACHED_IMAGES;
-          if (
-            typeof capacity !== "number" ||
-            !Number.isInteger(capacity) ||
-            capacity < 0 ||
-            capacity > MAX_ATTACHED_IMAGES
-          )
-            throw new Error("Invalid image capacity");
           const images: Array<{
             type: "image";
             data: string;
             mimeType: string;
           }> = [];
-          const recalled: DeferredInput[] = [];
-          for (const input of this.deferredInputs) {
-            const attachments =
-              (input.command["images"] as typeof images | undefined) ?? [];
-            if (images.length + attachments.length > capacity) break;
-            recalled.push(input);
-            images.push(...attachments);
-          }
-          this.deferredInputs = this.deferredInputs.slice(recalled.length);
-          // Recall is recovery, never an instruction to start remaining work.
-          this.pauseDeferredInputs();
+          const recalled = this.deferredInputs;
+          this.deferredInputs = [];
           const queued = this.inner.clearQueue();
           for (const input of recalled) {
+            images.push(
+              ...((input.command["images"] as typeof images | undefined) ?? []),
+            );
             const target =
               input.command["streamingBehavior"] === "steer"
                 ? queued.steering

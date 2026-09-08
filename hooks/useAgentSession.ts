@@ -2854,41 +2854,65 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
   }, []);
 
-  const handleRecallQueue = useCallback(async () => {
+  // ChatWindow is keyed by session; one Recall owns this composer's recovery
+  // until its response is applied, including repeated clicks while it waits.
+  const recallInFlightRef = useRef<Promise<void> | null>(null);
+  const handleRecallQueue = useCallback(() => {
     const sid = sessionIdRef.current;
-    if (!sid) return;
-    try {
-      const result = await sendAgentCommand<{
-        queuedMessages?: QueuedMessages;
-        steering?: string[];
-        followUp?: string[];
-        images?: Array<{ data: string; mimeType: string }>;
-      }>(sid, {
-        type: "clear_queue",
-        imageCapacity: opts.chatInputRef?.current?.getImageCapacity() ?? 0,
-      });
-      // Recall may leave a deferred attachment batch that cannot fit in the
-      // composer yet. Reconcile even when the idle SSE connection is closed.
-      setQueuedMessages(normalizeQueuedMessages(result?.queuedMessages));
-      const texts = [...(result?.steering ?? []), ...(result?.followUp ?? [])];
-      if (texts.length > 0 || result?.images?.length) {
-        const text = texts.join("\n\n");
-        const destination = resolveComposerDraftKey(composerDraftKey);
-        const input = opts.chatInputRef?.current;
-        if (input) input.restoreSubmission(text, result?.images, destination);
-        else if (destination)
-          restoreDraftSubmission(destination, text, result?.images);
+    if (!sid) return Promise.resolve();
+    const pending = recallInFlightRef.current;
+    if (pending) return pending;
+    const recall = (async () => {
+      try {
+        const result = await sendAgentCommand<{
+          queuedMessages?: QueuedMessages;
+          steering?: string[];
+          followUp?: string[];
+          images?: Array<{ data: string; mimeType: string }>;
+        }>(sid, { type: "clear_queue" });
+        if (sessionHookMountedRef.current && sessionIdRef.current === sid) {
+          // Do not overwrite a newer SSE/snapshot update with this HTTP reply.
+          setQueuedMessages((current) =>
+            current === queuedMessages
+              ? normalizeQueuedMessages(result?.queuedMessages)
+              : current,
+          );
+        }
+        const texts = [
+          ...(result?.steering ?? []),
+          ...(result?.followUp ?? []),
+        ];
+        if (texts.length > 0 || result?.images?.length) {
+          // Payload ownership transfers even if this session is no longer
+          // visible. A no-op Recall must leave the existing draft untouched.
+          const draft = {
+            value: texts.join("\n\n"),
+            images: result?.images ?? [],
+          };
+          const destination = resolveComposerDraftKey(composerDraftKey) ?? sid;
+          const input = sessionHookMountedRef.current
+            ? opts.chatInputRef?.current
+            : null;
+          if (input) input.replaceDraft(draft, destination);
+          else setDraft(destination, draft);
+        }
+      } catch (e) {
+        console.error("Failed to recall queued messages:", e);
+        if (sessionHookMountedRef.current && sessionIdRef.current === sid)
+          addNotice({ type: "error", message: t("chat.recallQueuedFailed") });
+      } finally {
+        recallInFlightRef.current = null;
       }
-    } catch (e) {
-      console.error("Failed to recall queued messages:", e);
-      addNotice({ type: "error", message: t("chat.recallQueuedFailed") });
-    }
+    })();
+    recallInFlightRef.current = recall;
+    return recall;
   }, [
     opts.chatInputRef,
     addNotice,
     t,
     composerDraftKey,
     resolveComposerDraftKey,
+    queuedMessages,
   ]);
 
   const handleThinkingLevelChange = useCallback(

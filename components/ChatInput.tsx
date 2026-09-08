@@ -31,6 +31,7 @@ import {
   mergeRestoredSubmissionText,
   rekeyDraft as rekeyStoredDraft,
   setDraft,
+  type ChatDraft,
   type ChatDraftImage,
 } from "@/lib/draft-store";
 import {
@@ -133,7 +134,7 @@ export interface ChatInputHandle {
   insertText: (text: string) => void;
   replaceMessage: (message: UserMessage, overwrite?: boolean) => void;
   prependText: (text: string) => void;
-  getImageCapacity: () => number;
+  replaceDraft: (draft: ChatDraft, targetDraftKey: string) => void;
   addImages: (files: File[]) => void;
   rekeyDraft: (previousKey: string, nextKey: string) => void;
   restoreSubmission: (
@@ -722,6 +723,23 @@ export function ChatInput({
   valueRef.current = value;
   attachedImagesRef.current = attachedImages;
 
+  const replaceComposerDraft = (draft: ChatDraft) => {
+    // Replacement also owns pending attachments: late completion from the old
+    // draft must not append itself to the newly recalled input.
+    imageBatchVersionRef.current += 1;
+    const images = draftImagesToAttachedImages(draft.images);
+    valueRef.current = draft.value;
+    attachedImagesRef.current = images;
+    setValue(draft.value);
+    setAtQuery(null);
+    setHistoryCycle(null);
+    setAttachedImages((previous) => {
+      previous.forEach(revokeImagePreview);
+      return images;
+    });
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
   useImperativeHandle(ref, () => ({
     focusAtEnd() {
       const ta = textareaRef.current;
@@ -742,34 +760,16 @@ export function ChatInput({
       )
         return;
 
-      if (overwrite) imageBatchVersionRef.current += 1;
-      const restoredText = getUserMessageText(message);
-      const restoredImages = draftImagesToAttachedImages(
-        getUserMessageDraftImages(message),
-      );
-      valueRef.current = restoredText;
-      attachedImagesRef.current = restoredImages;
-      setValue(restoredText);
-      setAtQuery(null);
-      setHistoryCycle(null);
-      setAttachedImages((prev) => {
-        prev.forEach(revokeImagePreview);
-        return restoredImages;
-      });
-      requestAnimationFrame(() => {
-        if (!ta) return;
-        ta.focus();
+      replaceComposerDraft({
+        value: getUserMessageText(message),
+        images: getUserMessageDraftImages(message),
       });
     },
-    getImageCapacity() {
-      // Advisory batch size, not a reservation: recovery remains lossless if
-      // another response or attachment changes capacity before it arrives.
-      return Math.max(
-        0,
-        MAX_ATTACHED_IMAGES -
-          attachedImagesRef.current.length -
-          pendingImageCountRef.current,
-      );
+    replaceDraft(draft: ChatDraft, targetDraftKey: string) {
+      // Persist before rendering, including when the originating session is no
+      // longer the visible composer. Ordinary failed submissions still merge.
+      setDraft(targetDraftKey, draft);
+      if (targetDraftKey === draftKeyRef.current) replaceComposerDraft(draft);
     },
     prependText(text: string) {
       if (!text.trim()) return;
