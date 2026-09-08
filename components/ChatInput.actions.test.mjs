@@ -76,7 +76,145 @@ async function withComposer(props, check) {
   }
 }
 
-test("queue recall can reserve the remaining composer attachment capacity", async () => {
+for (const overlap of [
+  "recall",
+  "attachment before response",
+  "attachment after response",
+]) {
+  test(`recall retains all images across delayed ${overlap}`, async (t) => {
+    const { useAgentSession } = await jiti.import(
+      "../hooks/useAgentSession.ts",
+    );
+    const { getDraft, clearDraft } = await jiti.import("../lib/draft-store.ts");
+    const requests = [];
+    t.mock.method(globalThis, "fetch", async (_url, options) => {
+      if (options?.method !== "POST")
+        return new Response(null, { status: 404 });
+      const response = Promise.withResolvers();
+      requests.push({ ...response, command: JSON.parse(options.body) });
+      return response.promise;
+    });
+    const readers = [];
+    const originalReader = globalThis.FileReader;
+    globalThis.FileReader = class {
+      readAsDataURL() {
+        readers.push(this);
+      }
+    };
+    t.mock.method(URL, "createObjectURL", () => "blob:attachment");
+    t.mock.method(URL, "revokeObjectURL", () => {});
+    const id = `recall-${overlap}`;
+    const inputRef = React.createRef();
+    const errors = [];
+    const sent = [];
+    let agent;
+    function Harness() {
+      agent = useAgentSession({
+        session: { id },
+        newSessionCwd: null,
+        newSessionDraftKey: null,
+        chatInputRef: inputRef,
+      });
+      return React.createElement(ChatInput, {
+        ref: inputRef,
+        draftKey: id,
+        isStreaming: false,
+        onAbort: () => {},
+        onSend: (...args) => sent.push(args),
+        onError: (error) => errors.push(error),
+      });
+    }
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    t.after(async () => {
+      await React.act(() => root.unmount());
+      container.remove();
+      clearDraft(id);
+      globalThis.FileReader = originalReader;
+    });
+    await React.act(() => root.render(React.createElement(Harness)));
+    const images = Array.from({ length: 10 }, () => ({
+      data: "aGVsbG8=",
+      mimeType: "image/png",
+    }));
+    const response = () =>
+      Response.json({
+        success: true,
+        data: {
+          followUp: ["recalled"],
+          images,
+          queuedMessages: { steering: [], followUp: [] },
+        },
+      });
+    let first, second;
+    await React.act(() => {
+      first = agent.handleRecallQueue();
+    });
+    assert.equal(requests[0].command.imageCapacity, 10);
+    if (overlap === "recall") {
+      await React.act(() => {
+        second = agent.handleRecallQueue();
+      });
+      assert.equal(requests[1].command.imageCapacity, 10);
+    } else {
+      await React.act(() =>
+        inputRef.current.addImages(
+          Array.from(
+            { length: 10 },
+            () =>
+              new window.File(["image"], "image.png", { type: "image/png" }),
+          ),
+        ),
+      );
+      assert.equal(readers.length, 10);
+      assert.equal(inputRef.current.getImageCapacity(), 0);
+    }
+    const finishAttachments = () =>
+      React.act(async () => {
+        for (const reader of readers) {
+          reader.result = "data:image/png;base64,aGVsbG8=";
+          reader.onload();
+        }
+      });
+    if (overlap === "attachment before response") await finishAttachments();
+    await React.act(async () => {
+      requests[0].resolve(response());
+      await first;
+    });
+    if (overlap === "recall")
+      await React.act(async () => {
+        requests[1].resolve(response());
+        await second;
+      });
+    if (overlap === "attachment after response") await finishAttachments();
+    assert.equal(container.querySelectorAll("img").length, 20);
+    assert.equal(getDraft(id).images.length, 20);
+    await React.act(() =>
+      container.querySelector(".composer-action-primary").click(),
+    );
+    assert.equal(sent.length, 0);
+    assert.deepEqual(errors, [
+      "Send at most 10 images at a time. Remove some attachments before sending.",
+    ]);
+    assert.equal(getDraft(id).images.length, 20);
+    await React.act(() => root.render(null));
+    await React.act(() => root.render(React.createElement(Harness)));
+    assert.equal(container.querySelectorAll("img").length, 20);
+    for (let index = 0; index < 10; index++) {
+      await React.act(() =>
+        container.querySelector('[aria-label="Remove image"]').click(),
+      );
+    }
+    await React.act(() =>
+      container.querySelector(".composer-action-primary").click(),
+    );
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0][1].length, 10);
+  });
+}
+
+test("queue recall reports the remaining composer attachment capacity", async () => {
   const ref = React.createRef();
   await withComposer({ ref, onSend: () => {} }, async () => {
     assert.equal(ref.current.getImageCapacity(), 10);

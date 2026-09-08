@@ -100,6 +100,11 @@ function messageActionTarget(manager: SessionManager, entryId: unknown) {
 type EventListener = (event: AgentEvent) => void;
 type AgentRunCompleteListener = (sessionId: string) => void;
 
+type DeferredInput = {
+  command: Record<string, unknown>;
+  paused: boolean;
+};
+
 type AgentSessionWrapperOptions = {
   onAgentRunComplete?: AgentRunCompleteListener;
 };
@@ -147,8 +152,7 @@ export class AgentSessionWrapper {
   private sessionReplacement: "clone" | "rewind" | "branch" | null = null;
   private agentRunNeedsCompletion = false;
   private promptAdmissionTail: Promise<void> = Promise.resolve();
-  private deferredInputs: Record<string, unknown>[] = [];
-  private deferredInputsPaused = false;
+  private deferredInputs: DeferredInput[] = [];
   private drainingDeferredInputs = false;
   private extensionsBound = false;
   private extensionBindingPromise: Promise<void> | null = null;
@@ -216,7 +220,7 @@ export class AgentSessionWrapper {
         event.type === "compaction_end" &&
         (event["aborted"] || !event["result"])
       )
-        this.deferredInputsPaused = true;
+        this.pauseDeferredInputs();
       if (event.type === "queue_update") this.emitQueueUpdate();
       else this.emit(event);
       // Automatic compaction clears its flag after compaction_end; agent_start
@@ -342,9 +346,10 @@ export class AgentSessionWrapper {
     const deferred = (behavior: "steer" | "followUp") =>
       this.deferredInputs
         .filter(
-          (input) => (input["streamingBehavior"] ?? "followUp") === behavior,
+          (input) =>
+            (input.command["streamingBehavior"] ?? "followUp") === behavior,
         )
-        .map((input) => input["message"] as string);
+        .map((input) => input.command["message"] as string);
     return {
       steering: [...this.inner.getSteeringMessages(), ...deferred("steer")],
       followUp: [...this.inner.getFollowUpMessages(), ...deferred("followUp")],
@@ -366,34 +371,39 @@ export class AgentSessionWrapper {
   }
 
   private deferInput(command: Record<string, unknown>) {
-    this.deferredInputs.push(command);
+    this.deferredInputs.push({ command, paused: false });
     this.emitQueueUpdate();
     return { queued: true };
   }
 
+  private pauseDeferredInputs(): void {
+    for (const input of this.deferredInputs) input.paused = true;
+  }
+
   private async drainDeferredInputs(): Promise<void> {
-    if (
-      this.drainingDeferredInputs ||
-      this.deferredInputsPaused ||
-      !this.isActive()
-    )
-      return;
+    if (this.drainingDeferredInputs || !this.isActive()) return;
     this.drainingDeferredInputs = true;
     try {
-      while (
-        !this.deferredInputsPaused &&
-        !this.inner.isCompacting &&
-        this.isActive()
-      ) {
-        const input = this.deferredInputs[0];
+      while (!this.inner.isCompacting && this.isActive()) {
+        const input = this.deferredInputs.find((pending) => !pending.paused);
         if (!input) break;
-        await this.sendCommand(input, true);
+        try {
+          await this.sendCommand(input.command, input);
+        } catch (error) {
+          // Only definite admission rejection comes back here. Once SDK-owned,
+          // input is not recallable; rejection transfers it back to recovery.
+          if (!this.deferredInputs.includes(input))
+            this.deferredInputs.unshift(input);
+          this.pauseDeferredInputs();
+          this.emit({
+            type: "prompt_error",
+            errorMessage: errorMessage(error),
+          });
+          this.emitQueueUpdate();
+          break;
+        }
         if (this.deferredInputs.includes(input)) break;
       }
-    } catch (error) {
-      this.deferredInputsPaused = true;
-      this.emit({ type: "prompt_error", errorMessage: errorMessage(error) });
-      this.emitQueueUpdate();
     } finally {
       this.drainingDeferredInputs = false;
     }
@@ -491,7 +501,7 @@ export class AgentSessionWrapper {
 
   private async sendCommand(
     command: Record<string, unknown>,
-    deferred = false,
+    deferred?: DeferredInput,
   ): Promise<unknown> {
     if (!this.isActive()) throw new Error("Session is stopped");
     const type = command["type"] as string;
@@ -547,17 +557,12 @@ export class AgentSessionWrapper {
           // Serialize only admission. Once the preceding prompt has either
           // passed or failed preflight, the SDK can atomically decide whether
           // this submission starts a run or joins its streaming queue.
-          if (
-            !deferred &&
-            this.deferredInputs.length === 0 &&
-            !this.inner.isCompacting
-          )
-            this.deferredInputsPaused = false;
           const extensionCommand = this.isExtensionCommand(command);
           if (
             !deferred &&
             !extensionCommand &&
-            (this.inner.isCompacting || this.deferredInputs.length > 0)
+            (this.inner.isCompacting ||
+              this.deferredInputs.some((input) => !input.paused))
           )
             return this.deferInput(command);
 
@@ -583,8 +588,8 @@ export class AgentSessionWrapper {
           try {
             if (
               deferred &&
-              (this.deferredInputsPaused ||
-                !this.deferredInputs.includes(command) ||
+              (deferred.paused ||
+                !this.deferredInputs.includes(deferred) ||
                 !this.isActive())
             )
               return null;
@@ -612,12 +617,6 @@ export class AgentSessionWrapper {
             const preflight = new Promise<void>((resolve, reject) => {
               acceptPreflight = () => {
                 preflightAccepted = true;
-                if (deferred) {
-                  this.deferredInputs = this.deferredInputs.filter(
-                    (input) => input !== command,
-                  );
-                  this.emitQueueUpdate();
-                }
                 this.agentRunNeedsCompletion = true;
                 if (preflightSettled) return;
                 preflightSettled = true;
@@ -645,6 +644,14 @@ export class AgentSessionWrapper {
             this.pendingPromptCount += 1;
             let prompt: Promise<void>;
             try {
+              // SDK handoff ends wrapper ownership, before any async preflight.
+              // Stop uses SDK abort from here; Recall cannot withdraw this call.
+              if (deferred) {
+                this.deferredInputs = this.deferredInputs.filter(
+                  (input) => input !== deferred,
+                );
+                this.emitQueueUpdate();
+              }
               prompt = this.inner.prompt(command["message"] as string, {
                 ...(promptImages?.length ? { images: promptImages } : {}),
                 ...(streamingBehavior ? { streamingBehavior } : {}),
@@ -700,7 +707,7 @@ export class AgentSessionWrapper {
         }
 
         case "abort":
-          this.deferredInputsPaused = true;
+          this.pauseDeferredInputs();
           this.forceShutdownOnIdle = true;
           try {
             await this.withFinalIdleReset(() => this.inner.abort());
@@ -1031,24 +1038,24 @@ export class AgentSessionWrapper {
             data: string;
             mimeType: string;
           }> = [];
-          const recalled: Record<string, unknown>[] = [];
+          const recalled: DeferredInput[] = [];
           for (const input of this.deferredInputs) {
             const attachments =
-              (input["images"] as typeof images | undefined) ?? [];
+              (input.command["images"] as typeof images | undefined) ?? [];
             if (images.length + attachments.length > capacity) break;
             recalled.push(input);
             images.push(...attachments);
           }
           this.deferredInputs = this.deferredInputs.slice(recalled.length);
           // Recall is recovery, never an instruction to start remaining work.
-          this.deferredInputsPaused = this.deferredInputs.length > 0;
+          this.pauseDeferredInputs();
           const queued = this.inner.clearQueue();
           for (const input of recalled) {
             const target =
-              input["streamingBehavior"] === "steer"
+              input.command["streamingBehavior"] === "steer"
                 ? queued.steering
                 : queued.followUp;
-            target.push(input["message"] as string);
+            target.push(input.command["message"] as string);
           }
           this.emitQueueUpdate();
           return {
@@ -1106,7 +1113,7 @@ export class AgentSessionWrapper {
         }
 
         case "abort_compaction": {
-          this.deferredInputsPaused = true;
+          this.pauseDeferredInputs();
           this.inner.abortCompaction();
           return null;
         }
