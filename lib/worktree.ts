@@ -1,11 +1,5 @@
 import { execFile } from "child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  statSync,
-} from "fs";
+import { mkdirSync, readFileSync, realpathSync, statSync } from "fs";
 import { dirname, join } from "path";
 import { promisify } from "util";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -101,14 +95,7 @@ function rememberProjects(paths: string[], root: string): void {
 }
 
 function removedProject(cwd: string): ProjectInfo {
-  let root = readKnownProjects()[pathIdentityKey(cwd)];
-  // Compatibility with worktrees created by earlier Pi Web versions.
-  const parent = dirname(cwd);
-  const legacyRoot = parent.endsWith("-worktrees")
-    ? parent.slice(0, -"-worktrees".length)
-    : "";
-  if (!root && legacyRoot && existsSync(join(legacyRoot, ".git")))
-    root = realPathOrSelf(legacyRoot);
+  const root = readKnownProjects()[pathIdentityKey(cwd)];
   return {
     projectRoot: root ?? cwd,
     branch: null,

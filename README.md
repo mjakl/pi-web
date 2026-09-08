@@ -94,9 +94,9 @@ device._
   new session. Sessions from the same repository stay together.
 - Star useful answers, jump between prompts and stars on the desktop rail, and
   preview earlier prompts on hover. Clear a session's stars from its menu.
-- Run agent turns with model, reasoning-level, and tool controls. You can steer
-  work in progress, queue a follow-up, compact context, stop a run, attach
-  images, and use slash commands.
+- Run agent turns with model and reasoning-level controls. You can steer work in
+  progress, queue a follow-up, compact context, stop a run, attach images, and
+  use slash commands.
 - Read the result without losing the process. Expand reasoning, tool calls,
   command output, and subagent results, with token usage, context, and active
   time available alongside them.
@@ -183,12 +183,18 @@ found on `PATH`, so updating Pi is enough to update what Pi Web runs.
 
 - Pi Web reads Pi data from `~/.pi/agent` by default. Set `PI_CODING_AGENT_DIR`
   before startup to use another agent directory.
-- Session files stay under Pi's `sessions/<encoded-cwd>/` directories. Pi Web
-  must be able to read the recorded working directories.
-- The file browser is limited to working directories and known project or
-  session roots. It is not a general filesystem browser.
+- Session files stay under Pi's `sessions/<encoded-cwd>/` directories and must
+  be readable. History remains available if its working folder disappears;
+  running the session requires that folder.
+- Pi Web stores observed folder-to-repository associations in
+  `web-worktree-projects.json` in the agent directory. Web Push uses
+  `web-push.json` there for notification subscriptions and VAPID keys.
+- Explorer file-content access is limited to working directories, known project
+  or session roots, and explicitly selected folders. The workspace picker and
+  path completion can list other readable directories; selecting a workspace
+  grants access to that folder.
 - Type `@` in the composer to find project files. `@~/`, `@/`, `@./`, and `@../`
-  complete paths one directory at a time within paths Pi Web can list.
+  complete paths one directory at a time.
 - Server-side model and API requests honor `HTTP_PROXY`, `HTTPS_PROXY`, and
   `NO_PROXY`.
 
@@ -209,134 +215,15 @@ only repositories you control or have reviewed.
 ## Maintaining a fork
 
 This repository is not seeking outside contributions. If Pi Web suits you, fork
-it and adapt your copy. Architecture notes, module ownership, maintenance
-checks, and development constraints are in [`AGENTS.md`](./AGENTS.md).
+it and adapt your copy.
 
-### Development setup and checks
-
-Use [mise](https://mise.jdx.dev/) for the development tool versions in
-[`mise.toml`](./mise.toml): Node 24, npm, and just. These development pins do
-not change the Node 22.19.0 minimum for running Pi Web.
-
-After cloning, install the pinned development tools:
-
-```bash
-mise trust
-mise install
-```
-
-With that toolchain active, make sure the separate host Pi described in
-[Get started](#get-started) is on `PATH`, then prepare the checkout:
-
-```bash
-mise exec -- npm ci
-mise exec -- just ci
-```
-
-Leave `NODE_ENV` unset during development setup so `npm ci` installs dev
-dependencies. With mise active in your shell, omit `mise exec --`. On Windows,
-use a shell supported by just, such as Git Bash.
-
-[`package.json`](./package.json) owns the commands; [`justfile`](./justfile) is
-a shorter entry point:
-
-| Command                              | What it does                                                                                  |
-| ------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `just fix`                           | Apply supported Oxlint and ESLint fixes, then Oxfmt formatting; inspect the diff afterward    |
-| `just lint`                          | Check Oxfmt formatting, typed Oxlint correctness, and Next ESLint rules without fixing source |
-| `just typecheck`                     | Run TypeScript with `--noEmit`                                                                |
-| `just test-one bin/host-pi.test.mjs` | Run selected native Node test files with the host Pi preload                                  |
-| `just test`                          | Run the full native Node suite                                                                |
-| `just qa` / `just ci`                | Run lint, typecheck, and tests, stopping on failure                                           |
-
-TypeScript 5.9.3 remains the compiler resolved by the npm lockfile.
-[`tsconfig.json`](./tsconfig.json) enables strict checking, including unchecked
-indexed access, explicit index-signature property access, implicit returns and
-overrides, unused locals and parameters, switch fallthrough, and unreachable
-code. Prefer iterating over values or retaining a checked lookup instead of
-asserting that an indexed element exists. [`env.d.ts`](./env.d.ts) declares the
-public build-time version injected by Next.js without changing its client-side
-substitution.
-
-[Oxfmt](https://oxc.rs/docs/guide/usage/formatter/) is pinned as a development
-dependency. [`.oxfmtrc.json`](./.oxfmtrc.json) sets two-space indentation,
-double quotes, semicolons, trailing commas, and an 80-column target. Markdown
-prose wraps to that target. Import sorting, package-field sorting, and
-embedded-code formatting are disabled. Generated files, dependency and skill
-locks, vendored icons, skill sources, and compatibility symlinks are excluded.
-
-Oxlint 1.81.0 and its type-aware companion `oxlint-tsgolint` 7.0.2001 are pinned
-as development dependencies. [`.oxlintrc.json`](./.oxlintrc.json) is a local
-adaptation of `@mjakl/core` 0.3.0's `oxlint.base.json`; importing that package
-would add unrelated dependencies and a Node 24 requirement. Native correctness
-and suspicious checks cover application code, CLI launchers, configuration, the
-service worker, and tests. Semantic rules apply only to TypeScript files, not
-the untyped JavaScript launchers and fixtures. Generated files, dependencies,
-vendored icons, and skill sources/compatibility links are excluded.
-
-The adaptation keeps promise, unsafe-value, assertion, coercion, and
-error-handling checks, plus the shared base's intentional exceptions. It omits
-interface/type, array-syntax, naming, console, template-style, and
-equivalent-loop preferences; permits numeric template interpolation and CSS
-side-effect imports; and leaves TypeScript unused declarations to the compiler
-while checking JavaScript unused variables natively. Type-aware linting is on,
-but Oxlint compiler checking is off: TypeScript 5.9.3 remains the only compiler
-gate. Next's core-web-vitals ESLint preset retains React, Hooks, accessibility,
-and Next checks; its redundant TypeScript preset is not loaded.
-
-`just lint` runs Oxfmt's check, Oxlint, then ESLint. `just fix` runs supported
-Oxlint fixes, ESLint fixes, then Oxfmt; it does not enable suggestion or
-dangerous fixes. Inspect the resulting diff. For formatting alone, run
-`npm exec -- oxfmt .`; to check it without writing, run
-`npm exec -- oxfmt --check .`.
-
-For a focused name filter, put Node options before file paths and quote
-patterns:
-
-```bash
-just test-one --test-name-pattern "first pi" bin/host-pi.test.mjs
-# Equivalent npm command:
-npm run test:one -- --test-name-pattern "first pi" bin/host-pi.test.mjs
-```
-
-The unread-glow animation also has a standalone Chromium regression check. With
-`agent-browser` and its browser already installed, run:
-
-```bash
-npm run test:one -- scripts/session-glow.browser.test.mjs
-```
-
-It renders the real session indicator with the application stylesheet, checks
-the applied animation and reduced motion, then closes its browser and temporary
-loopback server. It runs separately from `just ci`, which does not require a
-browser.
-
-QA and CI are **non-mutating validation of source**, not zero-write commands.
-`npm ci` prepares host-package shims in `node_modules`; full and focused tests
-refresh them. TypeScript may write `tsconfig.tsbuildinfo`, and tests create
-temporary fixtures. None of these commands invokes `fix`. After changing your
-host Pi installation, run `npm run prepare` before a standalone typecheck.
-
-[GitHub Actions](./.github/workflows/validation.yml) runs two checks on pull
-requests and pushes to `main`:
-
-- **Source validation:** clean `npm ci`, then `just ci` with the mise pins.
-- **Node 22.19 runtime smoke:** build and pack a disposable copy on Node 24,
-  install the tarball with runtime dependencies only, and start its `pi-web` bin
-  on Node 22.19.0. The smoke requests the page and a saved session through the
-  Pi SDK, with temporary HOME/Pi state and a loopback-only listener. It never
-  starts an agent turn or invokes a provider.
-
-Both jobs install matching Pi coding-agent/server packages outside the checkout.
-Their version is a CI fixture, not a supported-version restriction. The runtime
-smoke is separate from `just ci` so routine checks do not build into `.next` or
-start a service. To repeat it locally, follow the disposable build/install steps
-in the workflow, then run:
-
-```bash
-PI_WEB_SMOKE_PACKAGE=/path/to/consumer/node_modules/@mjakl/pi-web \
-  mise exec node@22.19.0 -- node --test scripts/runtime-smoke.test.mjs
-```
+- [Development](./docs/development.md): pinned tool setup, checks, focused
+  tests, and dev-server troubleshooting. The standard validation command is
+  `just ci` (or `npm run ci`).
+- [Repository guide](./AGENTS.md): module ownership, project boundaries, and
+  task-specific instructions for coding agents.
+- [Packaging](./docs/packaging.md): disposable build and installed-package smoke
+  checks when changing dependencies or packaging.
 
 ## License
 

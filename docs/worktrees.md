@@ -48,14 +48,12 @@ refreshing the picker restores its controls. This does not activate the agent.
 Pi Web records observed folder-to-repository associations in
 `web-worktree-projects.json` inside the Pi agent directory (`~/.pi/agent`, or
 `PI_CODING_AGENT_DIR`). This keeps history grouped after Git forgets a removed
-worktree and after Pi Web restarts, without editing session transcripts. Old
-`<repo>-worktrees/<folder>` paths created by Pi Web are also recognized. If an
-arbitrarily located worktree was removed before Pi Web ever saw it, Git may no
-longer provide its repository identity; its history remains available under its
-original folder.
+worktree and after Pi Web restarts, without editing session transcripts. If a
+worktree was removed before Pi Web recorded its repository identity, its history
+remains available under its original folder; Pi Web does not infer the
+repository from the folder name.
 
 ## HTTP interface
 
 `GET /api/worktrees?cwd=<directory>` lists existing worktrees and reports
-project identity and folder availability. The former `POST` and `DELETE`
-worktree operations are removed and return HTTP 405.
+project identity and folder availability. This interface is read-only.

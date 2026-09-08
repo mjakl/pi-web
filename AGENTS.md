@@ -1,245 +1,109 @@
 # Pi Web Repository Guide
 
-Pi Web is a local Next.js interface over Pi's existing agent configuration and
-session files. It browses persisted sessions without starting an agent and runs
-live turns through in-process Pi SDK `AgentSession` instances.
+Pi Web is a local Next.js interface over Pi's existing configuration and session
+files. Browsing persisted sessions does not start an agent; live turns use
+in-process Pi SDK `AgentSession` instances.
 
 ## Working agreement
 
-- Use `npm`; requirements and available scripts are authoritative in
-  `package.json` and `package-lock.json`. Use the development tool pins in
-  `mise.toml` (`mise install`, then `mise exec -- <command>` unless mise is
-  active). Prepare a fresh checkout with `npm ci`, with `NODE_ENV` unset so dev
-  dependencies are installed. `justfile` delegates to the npm scripts.
-- Pi itself is not a dependency of this checkout. Development, build,
-  type-check, and tests all need a host Pi on `PATH`; see
-  [Host Pi runtime](#host-pi-runtime).
+- Use `npm` and the development tool pins in `mise.toml`. `package.json` owns
+  commands; `justfile` delegates to them. Pi must be installed separately on
+  `PATH`, never pinned as a checkout dependency.
 - Treat `~/.pi/agent` (or `PI_CODING_AGENT_DIR`) as user-owned state. Tests and
   experiments that write sessions, settings, credentials, or skills must use a
-  temporary agent directory or an explicit fixture. Do not alter the user's live
-  Pi state unless the task requires it.
+  temporary agent directory or an explicit fixture. Do not alter live Pi state
+  unless the task requires it.
 - Do not hand-edit generated output such as `.next/`, `next-env.d.ts`, or
-  `*.tsbuildinfo`.
-- `AGENTS.md` is the repository instruction source. `CLAUDE.md` is its symlink
-  for Claude compatibility; keep it a symlink rather than maintaining a copy.
-  Workflow skills are authored under `.agents/skills/`; `.claude/skills/`
-  contains compatibility symlinks.
+  `*.tsbuildinfo`. Do not build into a development checkout's `.next/` during
+  normal development.
+- `AGENTS.md` is the repository instruction source. Keep `CLAUDE.md` as its
+  symlink. Workflow skills live in `.agents/skills/`; `.claude/skills/` contains
+  compatibility symlinks, not copies.
 
-## Runtime and ownership map
+## Read before the relevant work
+
+Read the applicable guide before making changes or running its procedures:
+
+| Task                                                                                                                   | Required guidance                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Set up a checkout, run checks, change validation tooling, or start/troubleshoot the dev server                         | [Development](docs/development.md)                                                                                             |
+| Change session reading or lifecycle, live commands, streaming, models, project resource loading, or host Pi resolution | [Agent runtime](docs/agent-runtime.md)                                                                                         |
+| Change dependencies, the build script, or the published `files` list                                                   | [Packaging and runtime smoke](docs/packaging.md)                                                                               |
+| Change built-in project shell execution                                                                                | [Shell environment boundary](docs/adr/0001-isolate-project-command-environments.md) and [Agent runtime](docs/agent-runtime.md) |
+| Change folder selection, worktree discovery, or missing-folder behavior                                                | [Worktrees](docs/worktrees.md)                                                                                                 |
+| Add or change visible UI text or English formatting                                                                    | [English messages and formatting](docs/i18n.md)                                                                                |
+
+## Ownership map
 
 ```text
 Browser components/hooks
         | HTTP + SSE
         v
 Next.js routes in app/api
-        |                         persisted, read-only browsing
-        +--> lib/session-reader.ts ----------------------------> Pi session JSONL
-        |
-        +--> lib/rpc-manager.ts --> in-process AgentSession ---> Pi session JSONL
+        +--> lib/session-reader.ts --> persisted Pi session JSONL
+        +--> lib/rpc-manager.ts ----> live AgentSession --> Pi session JSONL
 ```
 
-- Persisted session access is owned by `lib/session-reader.ts`: listing scans
-  bounded JSONL metadata, while detail and context reads may use SDK
-  `SessionManager` helpers. Neither path creates a live `AgentSession`.
-- Top-level live commands and turns enter through `app/api/agent/**` and are
-  owned by `lib/rpc-manager.ts`. Inspect all runtime callers before changing
-  startup or lifecycle behavior. Browser synchronization is owned by
-  `hooks/useAgentSession.ts` and the `lib/agent-event-*` modules.
-- `globalThis` registries and caches survive Next.js hot reload but are
-  process-local acceleration, not durable truth. Session JSONL and Pi's SDK
-  stores remain authoritative.
-- Keep route handlers focused on HTTP validation and translation. Put shared
-  session, filesystem, model, credential, or process policy in the existing
-  `lib/` owner instead of reimplementing it in another route or component.
+Keep route handlers focused on HTTP validation and translation. Put shared
+session, filesystem, model, and process policy in its existing `lib/` owner.
+Session JSONL and Pi's SDK stores remain authoritative; `globalThis` registries
+and caches are process-local acceleration, not durable truth.
 
 Start with these owners instead of a broad file inventory:
 
-| Change area                                                   | Start here                                                                                                                  |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Persisted session reading, metadata, families, or context     | `lib/session-reader.ts`, `lib/session-*.ts`, `app/api/sessions/**`                                                          |
-| Live session startup, commands, tools, fork/clone, or cleanup | `lib/rpc-manager.ts`, `app/api/agent/**`                                                                                    |
-| Extension dialogs, statuses, widgets, or custom UI            | `lib/extension-ui-bridge.ts`                                                                                                |
-| Browser streaming and reconciliation                          | `hooks/useAgentSession.ts`, `lib/agent-event-*.ts`, `lib/agent-client.ts`                                                   |
-| File access, path identity, Git, or worktrees                 | `lib/file-access.ts`, `lib/path-security.ts`, `lib/paths.ts`, `lib/worktree.ts`                                             |
-| Project resources, trust, plugins, or skills                  | `lib/project-trust.ts`, `app/api/{project-trust,plugins,skills}/**`                                                         |
-| Models and startup preferences                                | `lib/model-scope.ts`, `lib/models-cache.ts`, `lib/agent-config-stamp.ts`, `lib/startup-preferences.ts`, `app/api/models/**` |
-| Application shell and session workspace UI                    | `components/AppShell.tsx`, `components/SessionSidebar.tsx`, `components/ChatWindow.tsx`, `components/ChatInput.tsx`         |
-| Host Pi resolution, package shims, and Next.js startup        | `bin/host-pi.js`, `bin/host-pi-runtime.js`, `bin/link-host-pi.js`, `bin/run-next.js`                                        |
+| Change area                                        | Start here                                                                                                                  |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Persisted sessions, metadata, families, or context | `lib/session-reader.ts`, `lib/session-*.ts`, `app/api/sessions/**`                                                          |
+| Live commands, tools, fork/clone, or cleanup       | `lib/rpc-manager.ts`, `app/api/agent/**`                                                                                    |
+| Extension dialogs, statuses, widgets, or custom UI | `lib/extension-ui-bridge.ts`                                                                                                |
+| Browser streaming and reconciliation               | `hooks/useAgentSession.ts`, `lib/agent-event-*.ts`, `lib/agent-client.ts`                                                   |
+| Files, paths, Git, or worktrees                    | `lib/file-access.ts`, `lib/path-security.ts`, `lib/paths.ts`, `lib/worktree.ts`                                             |
+| Project resources, trust, plugins, or skills       | `lib/project-trust.ts`, `app/api/{project-trust,plugins,skills}/**`                                                         |
+| Models and startup preferences                     | `lib/model-scope.ts`, `lib/models-cache.ts`, `lib/agent-config-stamp.ts`, `lib/startup-preferences.ts`, `app/api/models/**` |
+| Application shell and workspace UI                 | `components/AppShell.tsx`, `components/SessionSidebar.tsx`, `components/ChatWindow.tsx`, `components/ChatInput.tsx`         |
+| Host Pi resolution and Next.js startup             | `bin/host-pi.js`, `bin/host-pi-runtime.js`, `bin/link-host-pi.js`, `bin/run-next.js`                                        |
 
-## High-risk invariants
-
-### Host Pi runtime
-
-- Pi Web runs the first `pi` on `PATH`, never a copy inside the checkout.
-  `bin/run-next.js` validates that installation with `bin/host-pi.js`,
-  serializes it into `PI_WEB_HOST_PI`, and preloads `bin/host-pi-runtime.js`,
-  which redirects every `@earendil-works/*` import to it. Start Next.js only
-  through `npm run dev`, `npm run build`, `npm start`, or the `pi-web` bin.
-- TypeScript, Turbopack, and webpack resolve Pi through `node_modules` and never
-  see that hook. `bin/link-host-pi.js` writes the packages Pi Web imports as
-  small re-export packages pointing at the validated host entry, refreshed by
-  `npm install` (`prepare`), `npm run dev`, `npm run build`, and `npm test`.
-  Turbopack compiles only files inside the workspace root, so these must stay
-  real files in the checkout; symlinks to the host installation do not resolve.
-- Turbopack requests server externals through a hashed alias of the package name
-  (`@earendil-works/pi-tui-<hash>`), which the preload normalizes before
-  matching. Keep both the alias and bare-name paths working when changing
-  resolution, and keep `next.config.ts` `serverExternalPackages` in step.
-- Pi Web supports whatever Pi version is installed. Do not pin Pi packages in
-  `package.json`; a pinned copy would be what tests and builds validate while
-  the host runs something else. The matching host packages pinned outside the
-  checkout in `.github/workflows/validation.yml` are CI fixtures only.
-
-### Session lifecycle and branching
-
-- Keep one live wrapper per source session id in the `globalThis` registry, and
-  keep concurrent startup coalesced by the shared start locks. Destruction must
-  remove registry entries and release owned resources on success and failure.
-- Fork and clone create independent child sessions while keeping the source
-  wrapper active under its original session id. Reject conflicting active work
-  and copy history through a separate `SessionManager` so the source runtime
-  keeps its session file and branch.
-- Keep independent session forks distinct from in-session tree navigation.
-  `parentSession` is family/display metadata, not chat context. `entryIds[]`
-  remains parallel to displayed `messages[]` so fork and navigation target the
-  correct JSONL entry.
-- Normalize persisted Pi tool-call blocks in `lib/session-reader.ts` and
-  completed streamed messages in `hooks/useAgentSession.ts` through
-  `lib/normalize.ts`. Do not create a third wire/file message shape in a UI
-  component.
-
-### Streaming and reconciliation
-
-- Subscribe to SSE before taking or publishing the initial runtime snapshot so
-  events cannot fall into the connection gap.
-- Do not treat the first `agent_end` as prompt completion. Retries, compaction,
-  and extension-queued work can continue; terminal UI state comes from
-  `prompt_done` or `agent_settled`, with runtime-state reconciliation as the
-  missed-event fallback.
-- Preserve monotonic run identity when changing reconnect or reconciliation
-  code. Late events and stale HTTP responses from an older run must not revive
-  or complete a newer run.
-- Keep `compaction_start` and `compaction_end` handling for both automatic and
-  manual compaction.
-
-### Tools, resources, and project execution
-
-- Keep tool and resource defaults owned by Pi. Append Pi Web's rendering note
-  through the resource loader's `appendSystemPromptOverride`, preserving the
-  discovered append instructions and normal system prompt for new and resumed
-  runtimes. Do not inject it into conversation history.
-- Gate project-controlled extensions, project settings resources, and project
-  skills through `projectTrustReloadOptions()` in `lib/project-trust.ts`.
-  Opening an untrusted project must not execute its code. A trust change takes
-  effect by rebuilding the affected runtime, not by partially mutating it.
-- When changing built-in project shell execution, read
-  [`docs/adr/0001-isolate-project-command-environments.md`](docs/adr/0001-isolate-project-command-environments.md).
-  Keep Next host variables out of project commands, preserve the SDK-managed
-  environment and agent-bin `PATH`, and let an earlier user extension that owns
-  `bash` take precedence.
-- Skill toggles edit only the `disable-model-invocation` frontmatter field.
-  Preserve all unrelated user formatting and frontmatter.
-
-### Security, files, paths, and credentials
+## Boundaries to preserve
 
 - Pi Web has no built-in authentication and does not restrict request Host,
-  Origin, or Content-Type headers. Security is owned by the layer in front of
-  the application: non-loopback access requires a trusted network or an external
-  security layer. Do not add an application-level hostname or origin allowlist,
-  and do not add a Content-Type gate as a CSRF defence; the gate was removed by
-  decision, knowing loopback has no layer in front of it.
-- Pi Web's file APIs are not a general filesystem browser. Keep containment and
-  symlink-safe authorization centralized in `lib/path-security.ts`; add roots
-  through the existing allowed-root flow rather than adding route-local path
-  checks.
-- Git emits POSIX-style paths even on Windows. Convert Git path output with
-  `toNativePath()` and compare paths with `samePath()` or the centralized
-  containment helpers, never raw string equality. Do not convert branch names.
+  Origin, or Content-Type headers. Non-loopback access requires a trusted
+  network or an external security layer. Do not add hostname/origin allowlists
+  or a Content-Type gate as a CSRF defence; this boundary is intentional even on
+  loopback.
+- Opening an untrusted project must not execute its code. Keep project resource
+  loading gated by `projectTrustReloadOptions()` in `lib/project-trust.ts`.
 - Pi Web never reads, writes, or serves provider credentials. Providers are
-  configured in the Pi terminal, and the SDK resolves credentials inside
-  `createAgentSessionServices()` during session construction. Do not add a
-  credential store or an authentication route.
-- Keep model scope resolution delegated to Pi's SDK semantics; do not compare
-  `enabledModels` patterns literally. Apply explicit startup model and thinking
-  choices during session construction so the first turn cannot run with a
-  transient default.
-- `auth.json` and `models.json` change outside Pi Web, so the models cache
-  cannot be invalidated on write. Expire it with `readAgentConfigStamp()`
-  instead, or a terminal login stays invisible for the cache TTL.
-
-## UI and conditional guidance
-
-- Follow existing components and CSS variables in source rather than a copied
-  token inventory. Preserve keyboard, focus, scroll, mobile, and browser
-  lifecycle behavior when changing interactions.
-- When adding or changing user-visible UI text or English formatting, read
-  [`docs/i18n.md`](docs/i18n.md) and update the English message package.
-
-## Development server
-
-- Before `npm run dev`, run `lsof -nP -iTCP:30141 -sTCP:LISTEN`. Reuse a healthy
-  Pi Web process. A second dev server for the same checkout cannot work around
-  the port because both processes contend for `.next/dev/lock`.
-- Do not run `next build` or `npm run build` during normal development; they
-  write production state into `.next/` and interfere with the dev server. Do not
-  use `next dev --webpack` as a fallback; development uses Turbopack.
-- A browser-only `Module ... factory is not available` overlay commonly means a
-  stale HMR graph. Reload the page explicitly, then compare current server logs
-  and a direct HTTP/API request. Restart only if the failure reproduces from a
-  fresh page and server-side checks fail too. Stop the exact process gracefully,
-  move `.next/` to a temporary backup, and restart with `npm run dev`.
-- Next.js may append a generated `BEGIN:nextjs-agent-rules` block to this file
-  when the dev server starts. Inspect `git status` after server use and exclude
-  that generated block from unrelated changes.
+  configured in the Pi terminal; the SDK resolves credentials during session
+  construction. Do not add a credential store or an authentication route.
+- Keep file-content containment and symlink-safe authorization centralized in
+  `lib/path-security.ts`. Add roots through the existing allowed-root flow, not
+  route-local checks. The workspace picker and path completion can list
+  directories outside those roots; they do not grant file-content access by
+  listing them.
+- Git emits POSIX-style paths even on Windows. Convert Git path output with
+  `toNativePath()` and compare paths with `samePath()` or centralized
+  containment helpers, never raw string equality. Do not convert branch names.
+- Skill toggles edit only `disable-model-invocation` frontmatter. Preserve all
+  unrelated user formatting and fields.
+- Follow existing components and CSS variables. Preserve keyboard, focus,
+  scroll, mobile, and browser lifecycle behavior when changing interactions.
+- Keep the stronger checks in `tsconfig.json` enabled. Use explicit dictionary
+  access and retain checked values when traversing arrays; do not add assertions
+  or silently skip entries to satisfy indexed-access checking. Preserve
+  message/entry-id alignment and existing empty states. Declare known build-time
+  environment fields in `env.d.ts` so client constants retain Next.js's static
+  substitution.
 
 ## Validation and handoff
 
 - Add or update the nearest `*.test.mjs` regression test for changed behavior.
-  Use `just test-one <file>` (or `npm run test:one -- <file>`) while iterating.
-  Put Node runner options before paths, for example
-  `just test-one --test-name-pattern "first pi" bin/host-pi.test.mjs`. These
-  commands prepare shims and use the host preload, which resolves Pi the way the
-  server does; shims alone cover only the package root.
-- Regression tests exercise exported behavior or rendered output. Never read a
-  source file and assert on its text.
-- Before implementation handoff, run `just ci` (or `npm run ci`): Oxfmt, typed
-  Oxlint, Next ESLint, `tsc --noEmit`, and the full native Node suite. If
-  dependencies are not installed or a check cannot run, report that explicitly
-  rather than claiming validation. `tsc` reads the host Pi shims rather than
-  writing them; after a host Pi change or an unresolved `@earendil-works`
-  import, run `npm run prepare` before typechecking.
-- Keep the stronger checks in `tsconfig.json` enabled. Use explicit dictionary
-  access for index signatures and retain actual values when traversing arrays;
-  do not add assertions or silently skip entries to satisfy indexed-access
-  checking. Preserve message/entry-id alignment and existing empty-state
-  behavior. Declare known build-time environment fields in `env.d.ts` so client
-  constants keep Next.js's static substitution.
-- Keep `qa` and `ci` non-mutating validation of source. Disposable generated
-  outputs (host shims, TypeScript incremental state, test fixtures) are allowed;
-  `just lint` / `npm run lint` checks Oxfmt formatting, typed Oxlint, then Next
-  ESLint. Apply supported Oxlint and ESLint fixes followed by formatting
-  explicitly with `just fix` / `npm run fix`, then inspect the diff. Do not use
-  suggestion or dangerous fixes. Keep semantic lint rules scoped to TypeScript
-  in [`.oxlintrc.json`](.oxlintrc.json), with compiler checking off; `tsc` owns
-  compiler diagnostics. Preserve intentional empty-string/false defaults rather
-  than replacing `||` with `??` mechanically. For formatting alone, use
-  `npm exec -- oxfmt .`; check it without writing with
-  `npm exec -- oxfmt --check .`. Keep formatting policy and exclusions in
-  [`.oxfmtrc.json`](.oxfmtrc.json), not per-command ignore lists.
-- For instruction-only or documentation-only changes, run `git diff --check` and
-  validate every referenced path, link, and command; code checks are not
-  required unless the change also affects code or configuration.
+  Exercise exported behavior or rendered output, never source-text assertions.
+- Before implementation handoff, run `just ci` or `npm run ci` using the setup
+  in [Development](docs/development.md). If a check cannot run, report that
+  explicitly rather than claiming validation.
+- For documentation/instruction-only changes, code checks are not required:
+  validate referenced paths, links, and commands instead. For instruction
+  changes, also walk through a task that needs each moved rule and a nearby task
+  that should not load it.
 - Always inspect `git diff --stat`, `git diff --check`, and the final diff for
   generated state, user data, secrets, and unrelated rewrites before handoff.
-- For a change to `dependencies`, the `build` script, or the `files` list, prove
-  the published package still starts: in a scratch copy of the tree, run
-  `npm run build`, then `npm pack`, install the tarball with `--omit=dev`, and
-  run its `pi-web` bin. Use the disposable build/install steps in
-  `.github/workflows/validation.yml` and `scripts/runtime-smoke.test.mjs` to
-  verify Node 22.19 startup and a server-side host Pi session read with isolated
-  state on loopback. Keep this smoke separate from routine `just ci`. `npm pack`
-  has no build step and ships whatever `.next` exists. A consumer install never
-  contains the packages bundled into `.next` and holds no Pi packages at all, so
-  the started server must reach Pi through the preload, and the build keeps
-  `--webpack` because a Turbopack build reaches `serverExternalPackages` through
-  `.next/node_modules/<package>-<hash>` symlinks that `npm pack` drops.
