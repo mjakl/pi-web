@@ -31,6 +31,7 @@ import {
   mergeRestoredSubmissionText,
   rekeyDraft as rekeyStoredDraft,
   setDraft,
+  type ChatDraft,
   type ChatDraftImage,
 } from "@/lib/draft-store";
 import {
@@ -133,6 +134,7 @@ export interface ChatInputHandle {
   insertText: (text: string) => void;
   replaceMessage: (message: UserMessage, overwrite?: boolean) => void;
   prependText: (text: string) => void;
+  replaceDraft: (draft: ChatDraft, targetDraftKey: string) => void;
   addImages: (files: File[]) => void;
   rekeyDraft: (previousKey: string, nextKey: string) => void;
   restoreSubmission: (
@@ -437,7 +439,6 @@ function draftImagesToAttachedImages(
 ): AttachedImage[] {
   return (images ?? [])
     .filter(isBase64ImageWithinLimits)
-    .slice(0, MAX_ATTACHED_IMAGES)
     .map(draftImageToAttachedImage);
 }
 
@@ -722,6 +723,23 @@ export function ChatInput({
   valueRef.current = value;
   attachedImagesRef.current = attachedImages;
 
+  const replaceComposerDraft = (draft: ChatDraft) => {
+    // Replacement also owns pending attachments: late completion from the old
+    // draft must not append itself to the newly recalled input.
+    imageBatchVersionRef.current += 1;
+    const images = draftImagesToAttachedImages(draft.images);
+    valueRef.current = draft.value;
+    attachedImagesRef.current = images;
+    setValue(draft.value);
+    setAtQuery(null);
+    setHistoryCycle(null);
+    setAttachedImages((previous) => {
+      previous.forEach(revokeImagePreview);
+      return images;
+    });
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
   useImperativeHandle(ref, () => ({
     focusAtEnd() {
       const ta = textareaRef.current;
@@ -742,24 +760,16 @@ export function ChatInput({
       )
         return;
 
-      if (overwrite) imageBatchVersionRef.current += 1;
-      const restoredText = getUserMessageText(message);
-      const restoredImages = draftImagesToAttachedImages(
-        getUserMessageDraftImages(message),
-      );
-      valueRef.current = restoredText;
-      attachedImagesRef.current = restoredImages;
-      setValue(restoredText);
-      setAtQuery(null);
-      setHistoryCycle(null);
-      setAttachedImages((prev) => {
-        prev.forEach(revokeImagePreview);
-        return restoredImages;
+      replaceComposerDraft({
+        value: getUserMessageText(message),
+        images: getUserMessageDraftImages(message),
       });
-      requestAnimationFrame(() => {
-        if (!ta) return;
-        ta.focus();
-      });
+    },
+    replaceDraft(draft: ChatDraft, targetDraftKey: string) {
+      // Persist before rendering, including when the originating session is no
+      // longer the visible composer. Ordinary failed submissions still merge.
+      setDraft(targetDraftKey, draft);
+      if (targetDraftKey === draftKeyRef.current) replaceComposerDraft(draft);
     },
     prependText(text: string) {
       if (!text.trim()) return;
@@ -843,17 +853,11 @@ export function ChatInput({
       // recovery is not lost if this instance is unmounted.
       if (destinationDraftKey) setDraft(destinationDraftKey, restoredDraft);
       if (!targetsCurrentComposer) return;
+      // Recovery owns every returned image, even if another response or an
+      // attachment batch filled the composer meanwhile. The limit is checked
+      // when sending, not by discarding recovered input.
       const restoredImages = images?.length
-        ? [
-            ...draftImagesToAttachedImages(images).slice(
-              0,
-              Math.max(
-                0,
-                MAX_ATTACHED_IMAGES - attachedImagesRef.current.length,
-              ),
-            ),
-            ...attachedImagesRef.current,
-          ].slice(0, MAX_ATTACHED_IMAGES)
+        ? [...draftImagesToAttachedImages(images), ...attachedImagesRef.current]
         : attachedImagesRef.current;
       // Session promotion can rekey this composer before React flushes the
       // functional updates below, so update the imperative snapshot first.
@@ -868,11 +872,7 @@ export function ChatInput({
       setHistoryCycle(null);
       if (images?.length) {
         setAttachedImages((current) => {
-          const available = Math.max(0, MAX_ATTACHED_IMAGES - current.length);
-          const restored = draftImagesToAttachedImages(images).slice(
-            0,
-            available,
-          );
+          const restored = draftImagesToAttachedImages(images);
           const next =
             restored.length > 0 ? [...restored, ...current] : current;
           attachedImagesRef.current = next;
@@ -944,12 +944,9 @@ export function ChatInput({
           newImages.push({ ...image, previewUrl: URL.createObjectURL(file) });
         }
         setAttachedImages((prev) => {
-          const accepted = newImages.slice(
-            0,
-            Math.max(0, MAX_ATTACHED_IMAGES - prev.length),
-          );
-          newImages.slice(accepted.length).forEach(revokeImagePreview);
-          const next = [...prev, ...accepted];
+          // These files were admitted before compression. A concurrent recall
+          // must not make that already-owned batch disappear.
+          const next = [...prev, ...newImages];
           attachedImagesRef.current = next;
           return next;
         });
@@ -1054,8 +1051,14 @@ export function ChatInput({
     [attachedImages.length, clearInput, onBuiltinCommand],
   );
 
+  const checkImageLimit = useCallback(() => {
+    if (attachedImagesRef.current.length <= MAX_ATTACHED_IMAGES) return true;
+    onError?.(t("chat.imageLimit", { count: MAX_ATTACHED_IMAGES }));
+    return false;
+  }, [onError, t]);
+
   const handleSend = useCallback(async () => {
-    if (submissionDisabled) return;
+    if (submissionDisabled || !checkImageLimit()) return;
     const msg = value.trim();
     if (!msg && !attachedImages.length) return;
     onAudioUnlock?.();
@@ -1071,6 +1074,7 @@ export function ChatInput({
     isStreaming,
     submissionDisabled,
     runBuiltinCommand,
+    checkImageLimit,
     onSend,
     clearInput,
     onAudioUnlock,
@@ -1356,7 +1360,7 @@ export function ChatInput({
 
   const sendQueued = useCallback(
     (mode: StreamingAction) => {
-      if (submissionDisabled) return;
+      if (submissionDisabled || !checkImageLimit()) return;
       const msg = value.trim();
       if (!msg && !attachedImages.length) return;
       onAudioUnlock?.();
@@ -1396,6 +1400,7 @@ export function ChatInput({
       clearInput,
       onAudioUnlock,
       runBuiltinCommand,
+      checkImageLimit,
     ],
   );
 

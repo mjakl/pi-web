@@ -273,6 +273,8 @@ export const enMessages: Record<string, string> = {
   "chat.send": "Send",
   "chat.attachImage": "Attach image",
   "chat.attachFailed": "Could not attach images: {error}",
+  "chat.imageLimit":
+    "Send at most {count} images at a time. Remove some attachments before sending.",
   "chat.copyFailed": "Could not copy: {error}",
   "chat.previewImage": "Preview image",
   "chat.filterModels": "Filter models…",

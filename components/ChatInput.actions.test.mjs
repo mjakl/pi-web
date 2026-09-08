@@ -76,6 +76,368 @@ async function withComposer(props, check) {
   }
 }
 
+for (const overlap of [
+  "recall",
+  "attachment before response",
+  "attachment after response",
+]) {
+  test(`recall replaces the draft with the whole queue across delayed ${overlap}`, async (t) => {
+    const { useAgentSession } = await jiti.import(
+      "../hooks/useAgentSession.ts",
+    );
+    const { getDraft, clearDraft } = await jiti.import("../lib/draft-store.ts");
+    const requests = [];
+    t.mock.method(globalThis, "fetch", async (_url, options) => {
+      if (options?.method !== "POST")
+        return new Response(null, { status: 404 });
+      const response = Promise.withResolvers();
+      requests.push({ ...response, command: JSON.parse(options.body) });
+      return response.promise;
+    });
+    const readers = [];
+    const originalReader = globalThis.FileReader;
+    globalThis.FileReader = class {
+      readAsDataURL() {
+        readers.push(this);
+      }
+    };
+    t.mock.method(URL, "createObjectURL", () => "blob:attachment");
+    t.mock.method(URL, "revokeObjectURL", () => {});
+    const id = `recall-${overlap}`;
+    const inputRef = React.createRef();
+    const errors = [];
+    const sent = [];
+    let agent;
+    function Harness() {
+      agent = useAgentSession({
+        session: { id },
+        newSessionCwd: null,
+        newSessionDraftKey: null,
+        chatInputRef: inputRef,
+      });
+      return React.createElement(ChatInput, {
+        ref: inputRef,
+        draftKey: id,
+        isStreaming: false,
+        onAbort: () => {},
+        onSend: (...args) => sent.push(args),
+        onError: (error) => errors.push(error),
+      });
+    }
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    t.after(async () => {
+      await React.act(() => root.unmount());
+      container.remove();
+      clearDraft(id);
+      globalThis.FileReader = originalReader;
+    });
+    await React.act(() => root.render(React.createElement(Harness)));
+    await React.act(() =>
+      inputRef.current.restoreSubmission("old draft", [
+        { data: "b2xk", mimeType: "image/png" },
+      ]),
+    );
+    const images = Array.from({ length: 20 }, (_, index) => ({
+      data: Buffer.from(`queued image ${index}`).toString("base64"),
+      mimeType: "image/png",
+    }));
+    const response = () =>
+      Response.json({
+        success: true,
+        data: {
+          followUp: ["earlier message", "later message"],
+          images,
+          queuedMessages: { steering: [], followUp: [] },
+        },
+      });
+    let first, second;
+    await React.act(() => {
+      first = agent.handleRecallQueue();
+    });
+    if (overlap === "recall") {
+      await React.act(() => {
+        second = agent.handleRecallQueue();
+      });
+      assert.equal(requests.length, 1, "overlapping recalls share one request");
+    } else {
+      await React.act(() =>
+        inputRef.current.addImages(
+          Array.from(
+            { length: 9 },
+            () =>
+              new window.File(["image"], "image.png", { type: "image/png" }),
+          ),
+        ),
+      );
+      assert.equal(readers.length, 9);
+    }
+    const finishAttachments = () =>
+      React.act(async () => {
+        for (const reader of readers) {
+          reader.result = "data:image/png;base64,aGVsbG8=";
+          reader.onload();
+        }
+      });
+    if (overlap === "attachment before response") await finishAttachments();
+    await React.act(async () => {
+      requests[0].resolve(response());
+      await first;
+    });
+    if (overlap === "recall") await second;
+    if (overlap === "attachment after response") await finishAttachments();
+    assert.equal(container.querySelectorAll("img").length, 20);
+    assert.deepEqual(getDraft(id), {
+      value: "earlier message\n\nlater message",
+      images,
+    });
+    assert.equal(
+      container.querySelector("textarea").value,
+      "earlier message\n\nlater message",
+    );
+    await React.act(() =>
+      container.querySelector(".composer-action-primary").click(),
+    );
+    assert.equal(sent.length, 0);
+    assert.deepEqual(errors, [
+      "Send at most 10 images at a time. Remove some attachments before sending.",
+    ]);
+    assert.equal(getDraft(id).images.length, 20);
+    await React.act(() => root.render(null));
+    await React.act(() => root.render(React.createElement(Harness)));
+    assert.equal(container.querySelectorAll("img").length, 20);
+    let emptyRecall;
+    await React.act(() => {
+      emptyRecall = agent.handleRecallQueue();
+    });
+    await React.act(async () => {
+      requests[1].resolve(
+        Response.json({
+          success: true,
+          data: {
+            steering: [],
+            followUp: [],
+            queuedMessages: { steering: [], followUp: [] },
+          },
+        }),
+      );
+      await emptyRecall;
+    });
+    assert.deepEqual(getDraft(id), {
+      value: "earlier message\n\nlater message",
+      images,
+    });
+    for (let index = 0; index < 10; index++) {
+      await React.act(() =>
+        container.querySelector('[aria-label="Remove image"]').click(),
+      );
+    }
+    await React.act(() =>
+      container.querySelector(".composer-action-primary").click(),
+    );
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0][1].length, 10);
+  });
+}
+
+test("recall recovers its payload without overwriting a newer queue snapshot", async (t) => {
+  const { useAgentSession } = await jiti.import("../hooks/useAgentSession.ts");
+  const { getDraft, clearDraft } = await jiti.import("../lib/draft-store.ts");
+  const state = Promise.withResolvers();
+  const response = Promise.withResolvers();
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (options?.method === "POST") return response.promise;
+    if (url.endsWith("/state")) return state.promise;
+    return new Response(null, { status: 404 });
+  });
+  const id = "recall-newer-snapshot";
+  const inputRef = React.createRef();
+  let agent;
+  function Harness() {
+    agent = useAgentSession({
+      session: { id },
+      newSessionCwd: null,
+      newSessionDraftKey: null,
+      chatInputRef: inputRef,
+    });
+    return React.createElement(ChatInput, {
+      ref: inputRef,
+      draftKey: id,
+      isStreaming: false,
+      onAbort: () => {},
+      onSend: () => {},
+    });
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => {
+    await React.act(() => root.unmount());
+    container.remove();
+    clearDraft(id);
+  });
+  await React.act(() => root.render(React.createElement(Harness)));
+  let recalled;
+  await React.act(() => {
+    recalled = agent.handleRecallQueue();
+  });
+  const newerQueue = { steering: [], followUp: ["queued after Recall"] };
+  await React.act(async () => {
+    state.resolve(
+      Response.json({
+        active: true,
+        running: false,
+        state: { queuedMessages: newerQueue },
+      }),
+    );
+  });
+  assert.deepEqual(agent.queuedMessages, newerQueue);
+  const image = { data: "cmVjYWxsZWQ=", mimeType: "image/png" };
+  await React.act(async () => {
+    response.resolve(
+      Response.json({
+        success: true,
+        data: {
+          followUp: ["recalled earlier"],
+          images: [image],
+          queuedMessages: { steering: [], followUp: [] },
+        },
+      }),
+    );
+    await recalled;
+  });
+  assert.deepEqual(agent.queuedMessages, newerQueue);
+  assert.deepEqual(getDraft(id), {
+    value: "recalled earlier",
+    images: [image],
+  });
+  assert.equal(container.querySelector("textarea").value, "recalled earlier");
+});
+
+for (const firstResponse of ["origin", "current"]) {
+  test(`recall stays with its originating session when ${firstResponse} responds first`, async (t) => {
+    const { useAgentSession } = await jiti.import(
+      "../hooks/useAgentSession.ts",
+    );
+    const { getDraft, setDraft, clearDraft } = await jiti.import(
+      "../lib/draft-store.ts",
+    );
+    const requests = [];
+    t.mock.method(globalThis, "fetch", async (url, options) => {
+      if (options?.method !== "POST")
+        return new Response(null, { status: 404 });
+      const response = Promise.withResolvers();
+      requests.push({ ...response, url });
+      return response.promise;
+    });
+    const origin = `origin-${firstResponse}`;
+    const current = `current-${firstResponse}`;
+    const inputRef = React.createRef();
+    let agent;
+    function Harness({ id }) {
+      agent = useAgentSession({
+        session: { id },
+        newSessionCwd: null,
+        newSessionDraftKey: null,
+        chatInputRef: inputRef,
+      });
+      return React.createElement(ChatInput, {
+        key: id,
+        ref: inputRef,
+        draftKey: id,
+        isStreaming: false,
+        onAbort: () => {},
+        onSend: () => {},
+      });
+    }
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    t.after(async () => {
+      await React.act(() => root.unmount());
+      container.remove();
+      clearDraft(origin);
+      clearDraft(current);
+    });
+    setDraft(origin, {
+      value: "origin unsent draft",
+      images: [{ data: "b2xk", mimeType: "image/png" }],
+    });
+    setDraft(current, { value: "current unsent draft", images: [] });
+    await React.act(() =>
+      root.render(React.createElement(Harness, { key: origin, id: origin })),
+    );
+    let originRecall, currentRecall;
+    await React.act(() => {
+      originRecall = agent.handleRecallQueue();
+    });
+    await React.act(() =>
+      root.render(React.createElement(Harness, { key: current, id: current })),
+    );
+    await React.act(() => {
+      currentRecall = agent.handleRecallQueue();
+    });
+    assert.equal(requests.length, 2);
+    const image = { data: "b3JpZ2lu", mimeType: "image/png" };
+    const finishOrigin = () =>
+      React.act(async () => {
+        requests[0].resolve(
+          Response.json({
+            success: true,
+            data: {
+              followUp: ["origin recalled"],
+              images: [image],
+              queuedMessages: {
+                steering: [],
+                followUp: ["stale origin snapshot"],
+              },
+            },
+          }),
+        );
+        await originRecall;
+      });
+    const finishCurrent = () =>
+      React.act(async () => {
+        requests[1].resolve(
+          Response.json({
+            success: true,
+            data: {
+              followUp: [],
+              queuedMessages: { steering: [], followUp: [] },
+            },
+          }),
+        );
+        await currentRecall;
+      });
+    if (firstResponse === "origin") {
+      await finishOrigin();
+      await finishCurrent();
+    } else {
+      await finishCurrent();
+      await finishOrigin();
+    }
+    assert.deepEqual(agent.queuedMessages, { steering: [], followUp: [] });
+    assert.equal(
+      container.querySelector("textarea").value,
+      "current unsent draft",
+    );
+    assert.deepEqual(getDraft(origin), {
+      value: "origin recalled",
+      images: [image],
+    });
+    assert.deepEqual(getDraft(current), {
+      value: "current unsent draft",
+      images: [],
+    });
+    await React.act(() =>
+      root.render(React.createElement(Harness, { key: origin, id: origin })),
+    );
+    assert.equal(container.querySelector("textarea").value, "origin recalled");
+    assert.equal(container.querySelectorAll("img").length, 1);
+  });
+}
+
 test("the action switches between Send, Stop, Steer, and transient keyboard Queue", async () => {
   const sent = [],
     steered = [],
