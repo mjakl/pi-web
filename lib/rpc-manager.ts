@@ -149,7 +149,6 @@ export class AgentSessionWrapper {
   private promptAdmissionTail: Promise<void> = Promise.resolve();
   private extensionsBound = false;
   private extensionBindingPromise: Promise<void> | null = null;
-  private extensionBindingError: unknown = null;
   private readonly onAgentRunComplete?: AgentRunCompleteListener;
   private unsubscribe: (() => void) | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -247,7 +246,6 @@ export class AgentSessionWrapper {
     if (this.extensionsBound) return Promise.resolve();
     if (this.extensionBindingPromise) return this.extensionBindingPromise;
 
-    this.extensionBindingError = null;
     this.extensionBindingPromise = (async () => {
       if (!this._alive) return;
       await this.inner.bindExtensions({
@@ -277,10 +275,7 @@ export class AgentSessionWrapper {
       console.log(
         `[pi-web] session_start dispatched to extensions for session ${this.inner.sessionId}`,
       );
-    })().catch((err: unknown) => {
-      this.extensionBindingError = err;
-      throw err;
-    });
+    })();
 
     return this.extensionBindingPromise;
   }
@@ -290,11 +285,6 @@ export class AgentSessionWrapper {
       await this.ensureExtensionsBound();
     } catch (err) {
       throw err instanceof Error ? err : new Error(String(err));
-    }
-    if (this.extensionBindingError) {
-      throw this.extensionBindingError instanceof Error
-        ? this.extensionBindingError
-        : new Error(errorMessage(this.extensionBindingError));
     }
   }
 

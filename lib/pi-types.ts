@@ -11,7 +11,6 @@ import type {
   Theme,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentMessage as PiAgentMessage } from "@earendil-works/pi-agent-core";
-import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 
 export interface ContextUsage {
   /** Usage inferred from compacted messages until Pi reports fresh usage. */
@@ -76,7 +75,6 @@ interface SkillLike {
 
 interface ResourceLoaderLike {
   getSkills(): { skills: SkillLike[] };
-  getAgentsFiles(): { agentsFiles: Array<{ path: string; content: string }> };
 }
 
 interface ExtensionRunnerLike {
@@ -165,8 +163,6 @@ export interface AgentSessionLike {
   readonly sessionFile: string | undefined;
   readonly isStreaming: boolean;
   readonly isCompacting: boolean;
-  readonly autoCompactionEnabled: boolean;
-  readonly autoRetryEnabled: boolean;
   readonly model: ModelLike | undefined;
   readonly modelRuntime: {
     getModel: (provider: string, modelId: string) => ModelLike | undefined;
@@ -209,18 +205,6 @@ export interface AgentSessionLike {
       preflightResult?: (success: boolean) => void;
     },
   ): Promise<void>;
-  sendCustomMessage(
-    message: {
-      customType: string;
-      content: string | (TextContent | ImageContent)[];
-      display: boolean;
-      details?: unknown;
-    },
-    options?: {
-      triggerTurn?: boolean;
-      deliverAs?: "steer" | "followUp" | "nextTurn";
-    },
-  ): Promise<void>;
   abort(): Promise<void>;
   executeBash(
     command: string,
@@ -248,16 +232,6 @@ export interface AgentSessionLike {
   setSessionName(name: string): void;
   getSessionStats(): Omit<SessionStatsInfo, "sessionName">;
   getLastAssistantText(): string | undefined;
-  setAutoCompactionEnabled(enabled: boolean): void;
-  setAutoRetryEnabled(enabled: boolean): void;
-  steer(
-    text: string,
-    images?: Array<{ type: "image"; data: string; mimeType: string }>,
-  ): Promise<void>;
-  followUp(
-    text: string,
-    images?: Array<{ type: "image"; data: string; mimeType: string }>,
-  ): Promise<void>;
   readonly pendingMessageCount: number;
   getSteeringMessages(): readonly string[];
   getFollowUpMessages(): readonly string[];
