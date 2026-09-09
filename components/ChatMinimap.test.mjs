@@ -1239,3 +1239,107 @@ for (const dense of [false, true]) {
     },
   );
 }
+
+test("linear sessions connect prompts, stars and compactions in one narrow lane with or without a projected tree", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scroll = document.createElement("div");
+  Object.defineProperty(scroll, "scrollHeight", { get: () => 2000 });
+  const ids = ["prompt", "star", "compact", "next", "answer"];
+  const messages = [
+    { role: "user", content: "Opening prompt" },
+    { role: "assistant", content: "Saved answer" },
+    { role: "custom", customType: "compaction" },
+    { role: "user", content: "Next prompt" },
+    { role: "assistant", content: "Final answer" },
+  ];
+  const tree = projectTreeForResponse(
+    ids.reduceRight(
+      (children, id, index) => [
+        {
+          entry: {
+            id,
+            type: id === "compact" ? "compaction" : "message",
+            message: messages[index],
+          },
+          children,
+        },
+      ],
+      [],
+    ),
+  );
+  try {
+    for (const projectedTree of [undefined, tree]) {
+      await React.act(() =>
+        root.render(
+          React.createElement(ChatMinimap, {
+            tree: projectedTree,
+            activeLeafId: "answer",
+            messages,
+            entryIds: ids,
+            starredEntryIds: ["star"],
+            scrollContainer: { current: scroll },
+            messageRefs: {
+              current: [300, 900, 1200].map((top) => ({
+                getBoundingClientRect: () => rect(top),
+              })),
+            },
+            answerRefs: {
+              current: new Map([
+                ["star", { getBoundingClientRect: () => rect(600) }],
+              ]),
+            },
+            onLoadThrough: async () => false,
+          }),
+        ),
+      );
+      await settle();
+      const rail = container.querySelector(".chat-minimap");
+      for (const event of ["mouseout", "mouseover"]) {
+        await React.act(() =>
+          rail.dispatchEvent(new window.MouseEvent(event, { bubbles: true })),
+        );
+        assert.equal(rail.style.width, "36px");
+        assert.equal(rail.classList.contains("is-expanded"), false);
+        assert.equal(
+          rail.querySelector(".minimap-branch, .minimap-junction"),
+          null,
+        );
+        const markers = [...rail.querySelectorAll("[data-minimap-entry-id]")];
+        assert.deepEqual(
+          markers.map((marker) => marker.dataset.minimapEntryId),
+          ["prompt", "star", "compact", "next"],
+        );
+        assert.ok(markers[0].querySelector(".minimap-message"));
+        assert.ok(markers[1].querySelector(".minimap-star"));
+        assert.ok(markers[2].querySelector('[role="separator"]'));
+        assert.ok(markers[3].querySelector(".minimap-message"));
+        const lines = [...rail.querySelectorAll(":scope > svg > path")];
+        assert.equal(
+          lines.length,
+          3,
+          "linear history connects every adjacent transcript anchor",
+        );
+        for (const [index, line] of lines.entries()) {
+          const coordinates = line
+            .getAttribute("d")
+            .match(/-?\d+(?:\.\d+)?/g)
+            .map(Number);
+          const parentY = Number.parseFloat(markers[index].style.top) * 6;
+          const childY = Number.parseFloat(markers[index + 1].style.top) * 6;
+          assert.equal(line.getAttribute("stroke"), "var(--text-dim)");
+          assert.equal(line.getAttribute("stroke-width"), "2");
+          assert.equal(line.getAttribute("opacity"), "0.8");
+          assert.equal(coordinates[0], 18);
+          assert.equal(coordinates.at(-2), 18);
+          assert.ok(coordinates[1] >= parentY + 5);
+          assert.ok(coordinates.at(-1) <= childY - 5);
+        }
+      }
+    }
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+  }
+});
