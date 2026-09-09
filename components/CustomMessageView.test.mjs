@@ -43,7 +43,31 @@ async function mount(message) {
   };
 }
 
-for (const display of [true, false]) {
+for (const customType of ["pi-processes:readiness", "compaction"]) {
+  test(`display:false ${customType} messages render nothing on mount or live updates`, async () => {
+    const message = {
+      role: "custom",
+      customType,
+      display: false,
+      content: "Hidden context",
+      details: { processId: "process-42" },
+    };
+    const view = await mount(message);
+    try {
+      assert.equal(view.container.innerHTML, "");
+      await view.render({ ...message, content: "Updated hidden context" });
+      assert.equal(view.container.innerHTML, "");
+      await view.render({ ...message, display: true });
+      assert.notEqual(view.container.innerHTML, "");
+      await view.render(message);
+      assert.equal(view.container.innerHTML, "");
+    } finally {
+      await view.close();
+    }
+  });
+}
+
+for (const display of [true, undefined]) {
   test(`extension messages with display=${display} start collapsed and can be opened and closed`, async () => {
     const message = {
       role: "custom",
@@ -66,10 +90,6 @@ for (const display of [true, false]) {
       assert.equal(header.title, "Expand");
       assert.match(header.textContent, /pi-processes:readiness/);
       assert.match(header.textContent, /Server ready/);
-      assert.equal(
-        header.textContent.includes("hidden extension message"),
-        !display,
-      );
       assert.equal(
         view.container.querySelector(".markdown-custom-message"),
         null,
