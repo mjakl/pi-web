@@ -449,13 +449,20 @@ test("deferred detail reads serialize a navigation-only SDK tree", async (t) => 
   assert.deepEqual(detail.tree, [
     {
       entry: { id: "root", type: "message" },
+      parentId: null,
       children: [
         {
           entry: { id: "branch", type: "message" },
+          parentId: "root",
           children: [
-            { entry: { id: "custom", type: "custom" }, children: [] },
+            {
+              entry: { id: "custom", type: "custom" },
+              parentId: "branch",
+              children: [],
+            },
             {
               entry: { id: "image", type: "message" },
+              parentId: "branch",
               children: [],
               branchPreview: { text: "[image]" },
             },

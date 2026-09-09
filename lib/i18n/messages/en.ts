@@ -499,4 +499,6 @@ export const enMessages: Record<string, string> = {
   "error.tryAgain": "Try again",
   "error.reload": "Reload page",
   "chat.jumpHumanMessage": "Jump to human message",
+  "chat.conversationMap": "Conversation paths",
+  "chat.switchConversationPath": "Switch branch: {preview}",
 };

@@ -33,6 +33,7 @@ const jiti = createJiti(import.meta.url, {
 const React = await jiti.import("react");
 const { createRoot } = await jiti.import("react-dom/client");
 const { ChatMinimap } = await jiti.import("./ChatMinimap.tsx");
+const { projectTreeForResponse } = await jiti.import("../lib/project-tree.ts");
 const rect = (top = 0) => ({
   top,
   left: 0,
@@ -686,4 +687,172 @@ test("rail markers stay out of tab order and pointer clicks do not pin previews"
     container.remove();
   }
   assert.equal(document.querySelector('[role="tooltip"]'), null);
+});
+
+test("a dense branched rail keeps its last turn in the viewport and navigable", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scroll = document.createElement("div");
+  Object.defineProperty(scroll, "scrollHeight", { get: () => 300000 });
+  const jumps = [];
+  scroll.scrollTo = (options) => jumps.push(options.top);
+  const ids = Array.from({ length: 700 }, (_, index) => `turn-${index}`);
+  try {
+    await React.act(() =>
+      root.render(
+        React.createElement(ChatMinimap, {
+          tree: [
+            {
+              entry: { id: "turn-0", type: "message" },
+              children: [
+                {
+                  entry: { id: "turn-699", type: "message" },
+                  compressedEntryIds: ids.slice(1, -1),
+                  children: [],
+                },
+                { entry: { id: "other", type: "message" }, children: [] },
+              ],
+            },
+          ],
+          activeLeafId: "turn-699",
+          messages: ids.map((id) => ({ role: "user", content: id })),
+          entryIds: ids,
+          scrollContainer: { current: scroll },
+          messageRefs: {
+            current: ids.map((_, index) => ({
+              getBoundingClientRect: () => rect(300 + index * 300),
+            })),
+          },
+          onLoadThrough: async () => assert.fail("all turns are loaded"),
+          onLeafChange: () =>
+            assert.fail("scroll navigation cannot switch branches"),
+        }),
+      ),
+    );
+    await settle();
+    const last = container.querySelector('[data-minimap-entry-id="turn-699"]');
+    const clientY = Number.parseFloat(last.style.top) * 6;
+    assert.ok(
+      clientY < 600 - 30,
+      "last turn clears the footer even in a dense graph",
+    );
+    await React.act(() => {
+      container.querySelector(".chat-minimap").dispatchEvent(
+        new window.MouseEvent("mousedown", {
+          bubbles: true,
+          clientX: 18,
+          clientY,
+        }),
+      );
+      window.dispatchEvent(new window.MouseEvent("mouseup"));
+    });
+    assert.equal(jumps.at(-1), 300 + 699 * 300 - 180);
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+  }
+});
+
+test("inline paths preview on focus and switch only on explicit selection, never rail scrolling or dragging", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scroll = document.createElement("div");
+  Object.defineProperty(scroll, "scrollHeight", { get: () => 2000 });
+  const jumps = [];
+  scroll.scrollTo = (options) => jumps.push(options.top);
+  const switches = [];
+  const node = (id, children = []) => ({
+    entry: { id, type: "message", message: { role: "user", content: id } },
+    children,
+  });
+  const props = {
+    tree: projectTreeForResponse([
+      node("prompt", [
+        node("fork", [
+          node("current"),
+          node("alternative", [node("other-end")]),
+        ]),
+      ]),
+    ]),
+    activeLeafId: "current",
+    messages: [
+      { role: "user", content: "prompt" },
+      { role: "user", content: "current" },
+    ],
+    entryIds: ["prompt", "current"],
+    scrollContainer: { current: scroll },
+    messageRefs: {
+      current: [500, 800].map((top) => ({
+        getBoundingClientRect: () => rect(top),
+      })),
+    },
+    onLoadThrough: async () => assert.fail("preview must not fetch history"),
+    onLeafChange: (id) => switches.push(id),
+  };
+  try {
+    await React.act(() => root.render(React.createElement(ChatMinimap, props)));
+    await settle();
+    const rail = container.querySelector(".chat-minimap.has-branches");
+    assert.equal(rail.style.width, "132px");
+    assert.equal(rail.querySelectorAll("path").length, 3);
+    assert.ok(rail.querySelector('[data-rail-entry-id="fork"]'));
+    const alternative = rail.querySelector(
+      'button[data-rail-entry-id="other-end"]',
+    );
+    assert.ok(alternative);
+    assert.equal(alternative.tabIndex, 0);
+    await React.act(() => alternative.focus());
+    await settle();
+    assert.equal(
+      document.querySelector('[role="tooltip"]').textContent,
+      "Switch branch: alternative",
+    );
+    assert.deepEqual(switches, []);
+    await React.act(() => {
+      scroll.dispatchEvent(new window.Event("scroll"));
+      rail.dispatchEvent(
+        new window.MouseEvent("mousedown", {
+          bubbles: true,
+          clientX: 18,
+          clientY: 12,
+        }),
+      );
+      window.dispatchEvent(
+        new window.MouseEvent("mousemove", { clientX: 46, clientY: 112 }),
+      );
+      window.dispatchEvent(new window.MouseEvent("mouseup"));
+    });
+    assert.ok(jumps.length > 0);
+    assert.deepEqual(switches, []);
+    const beforeSelection = jumps.length;
+    await React.act(() => {
+      alternative.dispatchEvent(
+        new window.MouseEvent("mousedown", {
+          bubbles: true,
+          clientX: 46,
+          clientY: 112,
+        }),
+      );
+      alternative.click();
+    });
+    assert.deepEqual(switches, ["other-end"]);
+    assert.equal(
+      jumps.length,
+      beforeSelection,
+      "switching must not also scroll the old path",
+    );
+    await React.act(() =>
+      root.render(
+        React.createElement(ChatMinimap, { ...props, branchDisabled: true }),
+      ),
+    );
+    assert.equal(alternative.disabled, true);
+    await React.act(() => alternative.click());
+    assert.deepEqual(switches, ["other-end"]);
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+  }
 });

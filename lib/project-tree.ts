@@ -103,7 +103,9 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
     node: T,
     compressedEntryIds?: string[],
     branchPreview?: BranchPreview,
+    parentId: string | null = null,
   ): SessionTreeNode => ({
+    parentId,
     entry: { id: node.entry.id, type: node.entry.type },
     children: [],
     ...(node.label !== undefined ? { label: node.label } : {}),
@@ -126,19 +128,20 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
         node: source,
         compressedEntryIds: [] as string[],
         branchPreview: undefined as BranchPreview | undefined,
+        parentId: projectedParent.entry.id,
       },
     ];
     const flattenedSeen = new Set<T>();
 
     for (let item = pending.pop(); item; item = pending.pop()) {
-      const { node, compressedEntryIds, branchPreview } = item;
+      const { node, compressedEntryIds, branchPreview, parentId } = item;
       if (flattenedSeen.has(node)) continue;
       flattenedSeen.add(node);
       const nextPreview = branchPreview ?? previewForEntry(node.entry);
 
       if (keep.has(node)) {
         projectedParent.children.push(
-          cloneNode(node, compressedEntryIds, nextPreview),
+          cloneNode(node, compressedEntryIds, nextPreview, parentId),
         );
       }
 
@@ -149,6 +152,7 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
             ? []
             : [...compressedEntryIds, node.entry.id],
           branchPreview: keep.has(node) ? undefined : nextPreview,
+          parentId: keep.has(node) ? node.entry.id : parentId,
         });
       }
     }
@@ -183,6 +187,7 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
         child,
         compressedEntryIds,
         branchPreview,
+        projected.entry.id,
       );
       projected.children.push(projectedChild);
       tasks.push({

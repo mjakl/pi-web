@@ -1303,16 +1303,24 @@ span.linenumber {
   overflow-y: auto;
 }
 
-/* Continue the 36px minimap strip beside the composer and safe-area padding.
+.chat-window {
+  --conversation-rail-width: 36px;
+}
+.chat-window:has(.chat-minimap.has-branches) {
+  --conversation-rail-width: 132px;
+}
+
+/* Continue the minimap strip beside the composer and safe-area padding.
    Only the transcript's ChatMinimap owns navigation and pointer handling. */
 .chat-window:has(.chat-minimap) {
   background-image: linear-gradient(
-    to left,
-    var(--bg-panel) 35px,
-    var(--border) 35px,
-    var(--border) 36px,
-    transparent 36px
+    to right,
+    var(--border) 1px,
+    var(--bg-panel) 1px
   );
+  background-size: var(--conversation-rail-width) 100%;
+  background-position: right;
+  background-repeat: no-repeat;
 }
 
 .chat-window.is-empty::after {
@@ -1334,7 +1342,7 @@ span.linenumber {
 .chat-body {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 36px;
+  grid-template-columns: minmax(0, 1fr) var(--conversation-rail-width);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -1623,7 +1631,7 @@ span.linenumber {
 .chat-notices {
   position: absolute;
   top: 12px;
-  right: 36px;
+  right: var(--conversation-rail-width);
   left: 0;
   z-index: 40;
   display: flex;
@@ -2176,7 +2184,7 @@ span.linenumber {
    transcript, clear of the minimap rail on desktop. */
 .chat-jump-to-latest {
   position: absolute;
-  right: 46px;
+  right: calc(var(--conversation-rail-width) + 10px);
   bottom: 18px;
   z-index: 40;
   display: flex;
@@ -2780,6 +2788,50 @@ span.linenumber {
 .session-star-count {
   gap: 4px;
 }
+.minimap-fork {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--accent);
+  background: var(--bg-panel);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.minimap-branch {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.minimap-branch > span {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  background: var(--bg-panel);
+}
+.minimap-branch:hover,
+.minimap-branch:focus-visible {
+  color: var(--accent);
+  background: var(--bg-selected);
+  border-radius: 4px;
+}
+.minimap-branch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.minimap-branch:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .session-star-count svg,
 .minimap-star svg {
   color: var(--warning);

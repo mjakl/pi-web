@@ -1404,6 +1404,16 @@ export function ChatWindow({
           key={`${session?.id ?? "draft"}:${activeLeafId ?? ""}`}
           messages={messages}
           entryIds={entryIds}
+          tree={tree}
+          activeLeafId={activeLeafId}
+          onLeafChange={handleLeafChange}
+          branchDisabled={
+            loading ||
+            sessionBusy ||
+            isCompacting ||
+            messageActionEntryId !== null ||
+            branchStatus === "pending"
+          }
           historyAnchors={historyAnchors}
           starredEntryIds={starredEntryIds}
           answerRefs={answerRefs}

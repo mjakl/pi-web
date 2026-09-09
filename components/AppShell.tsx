@@ -1308,74 +1308,61 @@ export function AppShell({ homeDir }: { homeDir: string }) {
           </svg>
           {!mobile && <span>{translate("history.label")}</span>}
         </button>
-        {sessionHasBranches &&
-          (mobile ? (
-            <button
-              type="button"
-              onClick={() => {
-                toggleTopPanel("branches", true);
-              }}
-              title={translate("i18n.branches")}
-              aria-label={translate("i18n.branches")}
-              aria-pressed={activeTopPanel === "branches"}
+        {sessionHasBranches && mobile && (
+          <button
+            type="button"
+            onClick={() => {
+              toggleTopPanel("branches", true);
+            }}
+            title={translate("i18n.branches")}
+            aria-label={translate("i18n.branches")}
+            aria-pressed={activeTopPanel === "branches"}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: TOP_BAR_ICON_BUTTON_SIZE,
+              height: "100%",
+              padding: 0,
+              background:
+                activeTopPanel === "branches" ? "var(--bg-selected)" : "none",
+              border: "none",
+              borderTop:
+                activeTopPanel === "branches"
+                  ? "2px solid var(--accent)"
+                  : "2px solid transparent",
+              borderRight: "1px solid var(--border)",
+              color:
+                activeTopPanel === "branches"
+                  ? "var(--text)"
+                  : "var(--text-muted)",
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+            data-mobile-toolbar-action="branches"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: TOP_BAR_ICON_BUTTON_SIZE,
-                height: "100%",
-                padding: 0,
-                background:
-                  activeTopPanel === "branches" ? "var(--bg-selected)" : "none",
-                border: "none",
-                borderTop:
-                  activeTopPanel === "branches"
-                    ? "2px solid var(--accent)"
-                    : "2px solid transparent",
-                borderRight: "1px solid var(--border)",
                 color:
-                  activeTopPanel === "branches"
-                    ? "var(--text)"
-                    : "var(--text-muted)",
-                cursor: "pointer",
-                flexShrink: 0,
+                  branchTree.length > 0 ? "var(--accent)" : "var(--text-dim)",
               }}
-              data-mobile-toolbar-action="branches"
+              aria-hidden="true"
             >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{
-                  color:
-                    branchTree.length > 0 ? "var(--accent)" : "var(--text-dim)",
-                }}
-                aria-hidden="true"
-              >
-                <line x1="6" y1="3" x2="6" y2="15" />
-                <circle cx="18" cy="6" r="3" />
-                <circle cx="6" cy="18" r="3" />
-                <path d="M18 9a9 9 0 0 1-9 9" />
-              </svg>
-            </button>
-          ) : (
-            <BranchNavigator
-              tree={branchTree}
-              activeLeafId={branchActiveLeafId}
-              onLeafChange={handleBranchLeafChange}
-              containerRef={topBarRef}
-              open={activeTopPanel === "branches"}
-              onToggle={() => {
-                toggleTopPanel("branches");
-              }}
-              hasSession
-            />
-          ))}
+              <line x1="6" y1="3" x2="6" y2="15" />
+              <circle cx="18" cy="6" r="3" />
+              <circle cx="6" cy="18" r="3" />
+              <path d="M18 9a9 9 0 0 1-9 9" />
+            </svg>
+          </button>
+        )}
         <button
           ref={systemBtnRef}
           type="button"
