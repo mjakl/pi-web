@@ -68,39 +68,6 @@ interface NodeLayout {
   fillsHeight: boolean;
 }
 
-function layoutNodes(allNodes: NodeInfo[], minimapHeight: number): NodeLayout {
-  if (allNodes.length === 0) {
-    return { nodes: [], gap: MAX_NODE_GAP, fillsHeight: false };
-  }
-
-  const height = Math.max(1, minimapHeight);
-  const usableHeight = Math.max(
-    0,
-    height - MINIMAP_FOOTER - MINIMAP_PADDING * 2,
-  );
-  if (allNodes.length === 1) {
-    return {
-      nodes: allNodes.map((node) => ({
-        ...node,
-        topRatio: MINIMAP_PADDING / height,
-      })),
-      gap: MAX_NODE_GAP,
-      fillsHeight: false,
-    };
-  }
-
-  const naturalGap = usableHeight / (allNodes.length - 1);
-  const gap = Math.min(MAX_NODE_GAP, naturalGap);
-  return {
-    nodes: allNodes.map((node, index) => ({
-      ...node,
-      topRatio: (MINIMAP_PADDING + index * gap) / height,
-    })),
-    gap,
-    fillsHeight: naturalGap <= MAX_NODE_GAP,
-  };
-}
-
 export const ChatMinimap = memo(function ChatMinimap({
   onExpandedWidthChange,
   tree,
@@ -215,14 +182,13 @@ export const ChatMinimap = memo(function ChatMinimap({
   }, [expanded]);
   const graph = useMemo(
     () =>
-      branched && tree
-        ? buildConversationRail(
-            tree,
-            activeLeafId ?? null,
-            anchorIds,
-            starredEntryIds,
-          )
-        : [],
+      buildConversationRail(
+        // Without forks, transcript anchors form one active path.
+        branched && tree ? tree : [],
+        activeLeafId ?? null,
+        anchorIds,
+        starredEntryIds,
+      ),
     [branched, tree, activeLeafId, anchorIds, starredEntryIds],
   );
   const visibleGraph = expanded ? graph : graph.filter((node) => node.active);
@@ -255,7 +221,6 @@ export const ChatMinimap = memo(function ChatMinimap({
       : t("chat.switchPath");
   };
   const nodeLayout = useMemo(() => {
-    if (!branched) return layoutNodes(allNodes, minimapHeight);
     const rows = new Map(graph.map((node) => [node.id, node.row]));
     return {
       nodes: allNodes.map((node) => ({
@@ -267,7 +232,7 @@ export const ChatMinimap = memo(function ChatMinimap({
       gap: graphGap,
       fillsHeight: graphGap < MAX_NODE_GAP,
     };
-  }, [allNodes, minimapHeight, branched, graph, graphGap]);
+  }, [allNodes, minimapHeight, graph, graphGap]);
   const { nodes: positionedNodes, gap: nodeGap } = nodeLayout;
   nodeLayoutRef.current = nodeLayout;
 
@@ -615,7 +580,7 @@ export const ChatMinimap = memo(function ChatMinimap({
         overflow: expanded ? "auto" : "visible",
       }}
     >
-      {branched && (
+      {graph.length > 0 && (
         <>
           <svg
             aria-hidden="true"
