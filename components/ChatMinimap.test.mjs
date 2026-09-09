@@ -689,6 +689,143 @@ test("rail markers stay out of tab order and pointer clicks do not pin previews"
   assert.equal(document.querySelector('[role="tooltip"]'), null);
 });
 
+test("active and inactive stars use identical markers aligned as siblings, while other path markers stay squares and dots", async () => {
+  const style = document.createElement("style");
+  style.textContent = readFileSync(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8",
+  );
+  document.head.append(style);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scroll = document.createElement("div");
+  Object.defineProperty(scroll, "scrollHeight", { get: () => 2000 });
+  const switches = [];
+  const jumps = [];
+  scroll.scrollTo = (options) => jumps.push(options.top);
+  const node = (id, children = []) => ({
+    entry: {
+      id,
+      type: "message",
+      message: { role: id === "prompt" ? "user" : "assistant", content: id },
+    },
+    children,
+  });
+  const props = {
+    tree: projectTreeForResponse([
+      node("prompt", [node("active"), node("other-star", [node("other-end")])]),
+    ]),
+    activeLeafId: "active",
+    messages: [
+      { role: "user", content: "prompt" },
+      { role: "assistant", content: "active" },
+    ],
+    entryIds: ["prompt", "active"],
+    starredEntryIds: ["active", "other-star"],
+    scrollContainer: { current: scroll },
+    messageRefs: { current: [{ getBoundingClientRect: () => rect(300) }] },
+    answerRefs: {
+      current: new Map([
+        ["active", { getBoundingClientRect: () => rect(800) }],
+      ]),
+    },
+    onLoadThrough: async () => false,
+    onLeafChange: (id) => switches.push(id),
+  };
+  try {
+    await React.act(() => root.render(React.createElement(ChatMinimap, props)));
+    await settle();
+    const active = container.querySelector(
+      '[data-minimap-entry-id="active"] .minimap-star',
+    );
+    const inactive = container.querySelector(
+      '[data-rail-entry-id="other-star"].minimap-star',
+    );
+    assert.ok(active && inactive);
+    assert.equal(
+      inactive.querySelector("svg").outerHTML,
+      active.querySelector("svg").outerHTML,
+    );
+    assert.equal(
+      window.getComputedStyle(inactive.querySelector("svg")).color,
+      window.getComputedStyle(active.querySelector("svg")).color,
+    );
+    assert.equal(inactive.style.height, active.style.height);
+    assert.equal(
+      Number.parseFloat(inactive.style.top),
+      Number.parseFloat(active.parentElement.style.top) * 6,
+    );
+    assert.equal(
+      Number.parseFloat(inactive.style.left),
+      54,
+      "inactive star is centered in the next 36px lane",
+    );
+    assert.equal(
+      window.getComputedStyle(inactive).width,
+      window.getComputedStyle(active).width,
+    );
+    assert.equal(
+      container.querySelector('[data-minimap-entry-id="prompt"] button > div')
+        .style.borderRadius,
+      "2px",
+    );
+    assert.equal(
+      window.getComputedStyle(
+        container.querySelector('[data-rail-entry-id="other-end"] > span'),
+      ).borderRadius,
+      "50%",
+    );
+    await React.act(() => {
+      const icon = inactive.querySelector("svg");
+      icon.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+      icon.dispatchEvent(
+        new window.MouseEvent("mousemove", {
+          bubbles: true,
+          clientX: 54,
+          clientY: Number.parseFloat(inactive.style.top),
+        }),
+      );
+    });
+    await settle();
+    assert.equal(
+      document.querySelector('[role="tooltip"]').textContent,
+      "Switch branch to starred answer",
+    );
+    assert.deepEqual(switches, [], "hover only previews the stored star");
+    await React.act(() => inactive.focus());
+    await settle();
+    assert.equal(
+      document.querySelector('[role="tooltip"]').textContent,
+      "Switch branch to starred answer",
+    );
+    await React.act(() => inactive.click());
+    assert.deepEqual(switches, ["other-star"]);
+    assert.deepEqual(jumps, []);
+    await React.act(() => active.click());
+    assert.equal(jumps.at(-1), 620);
+    assert.deepEqual(switches, ["other-star"]);
+    await React.act(() =>
+      root.render(
+        React.createElement(ChatMinimap, {
+          ...props,
+          starredEntryIds: ["active"],
+        }),
+      ),
+    );
+    await settle();
+    assert.equal(
+      container.querySelector('[data-rail-entry-id="other-star"]'),
+      null,
+    );
+    assert.equal(document.querySelector('[role="tooltip"]'), null);
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
+    style.remove();
+  }
+});
+
 test("a dense branched rail keeps its last turn in the viewport and navigable", async () => {
   const container = document.createElement("div");
   document.body.append(container);
@@ -795,7 +932,7 @@ test("inline paths preview on focus and switch only on explicit selection, never
     await React.act(() => root.render(React.createElement(ChatMinimap, props)));
     await settle();
     const rail = container.querySelector(".chat-minimap.has-branches");
-    assert.equal(rail.style.width, "132px");
+    assert.equal(rail.style.width, "144px");
     assert.equal(rail.querySelectorAll("path").length, 3);
     assert.ok(rail.querySelector('[data-rail-entry-id="fork"]'));
     const alternative = rail.querySelector(

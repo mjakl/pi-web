@@ -122,7 +122,6 @@ test("the shell is handed callables it can invoke, and a transcript refresh only
   await withoutSession.unmount();
 
   assert.equal(typeof first.loadSystemInfo, "function");
-  assert.equal(typeof first.changeBranchLeaf, "function");
   assert.equal(typeof first.refreshTranscript, "function");
   // SessionSidebar's manual Refresh denies success when no transcript callback
   // is available, so a session-less ChatWindow must publish null here.
@@ -311,8 +310,6 @@ test("unmount resets the displayed values", async () => {
 
   const last = view.display.at(-1);
   assert.deepEqual(last, {
-    branchTree: [],
-    branchActiveLeafId: null,
     systemPrompt: null,
     systemTools: null,
     sessionStats: null,

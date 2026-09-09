@@ -22,8 +22,10 @@ import type {
   SessionContext,
   SessionTreeNode,
 } from "@/lib/types";
-import { buildConversationRail } from "@/lib/conversation-rail";
-import { hasSessionBranches } from "./BranchNavigator";
+import {
+  buildConversationRail,
+  hasSessionBranches,
+} from "@/lib/conversation-rail";
 
 interface Props {
   tree?: SessionTreeNode[];
@@ -41,6 +43,8 @@ interface Props {
 }
 
 const MINIMAP_WIDTH = 36;
+const BRANCH_LANE_GAP = 36;
+const BRANCHED_MINIMAP_WIDTH = BRANCH_LANE_GAP * 4;
 const MAX_NODE_GAP = 50;
 const MINIMAP_PADDING = 12;
 const NAVIGATION_ACTIVE_LOCK_MS = 1600;
@@ -203,9 +207,14 @@ export const ChatMinimap = memo(function ChatMinimap({
   const graph = useMemo(
     () =>
       branched && tree
-        ? buildConversationRail(tree, activeLeafId ?? null, anchorIds)
+        ? buildConversationRail(
+            tree,
+            activeLeafId ?? null,
+            anchorIds,
+            starredEntryIds,
+          )
         : [],
-    [branched, tree, activeLeafId, anchorIds],
+    [branched, tree, activeLeafId, anchorIds, starredEntryIds],
   );
   const graphRows = graph.reduce((max, node) => Math.max(max, node.row), 0);
   const graphGap = Math.min(
@@ -218,10 +227,17 @@ export const ChatMinimap = memo(function ChatMinimap({
   );
   const graphY = (row: number) => MINIMAP_PADDING + row * graphGap;
   const graphWidth = graph.reduce(
-    (max, node) => Math.max(max, node.lane * 28 + 36),
-    132,
+    (max, node) => Math.max(max, node.lane * BRANCH_LANE_GAP + MINIMAP_WIDTH),
+    BRANCHED_MINIMAP_WIDTH,
   );
   const graphById = new Map(graph.map((node) => [node.id, node]));
+  const branchLabel = (id: string) => {
+    if (stars.has(id)) return t("chat.switchStarredPath");
+    const preview = graphById.get(id)?.preview;
+    return preview
+      ? t("chat.switchConversationPath", { preview })
+      : t("chat.switchPath");
+  };
   const nodeLayout = useMemo(() => {
     if (!branched) return layoutNodes(allNodes, minimapHeight);
     const rows = new Map(graph.map((node) => [node.id, node.row]));
@@ -513,9 +529,10 @@ export const ChatMinimap = memo(function ChatMinimap({
     ? markerRefs.current.get(previewNode.id)
     : undefined;
 
-  const branchPreviewAnchor = branchPreviewId
-    ? branchRefs.current.get(branchPreviewId)
-    : undefined;
+  const branchPreviewAnchor =
+    branchPreviewId && graphById.has(branchPreviewId)
+      ? branchRefs.current.get(branchPreviewId)
+      : undefined;
 
   return (
     <div
@@ -526,7 +543,7 @@ export const ChatMinimap = memo(function ChatMinimap({
       onMouseDown={handleMouseDown}
       onMouseMove={(event) => {
         if (
-          event.target instanceof HTMLElement &&
+          event.target instanceof window.Element &&
           event.target.closest(".minimap-branch")
         )
           return;
@@ -546,7 +563,7 @@ export const ChatMinimap = memo(function ChatMinimap({
         setHoveredIndex(null);
       }}
       style={{
-        width: branched ? 132 : MINIMAP_WIDTH,
+        width: branched ? BRANCHED_MINIMAP_WIDTH : MINIMAP_WIDTH,
         flexShrink: 0,
         position: "relative",
         cursor: "pointer",
@@ -569,8 +586,8 @@ export const ChatMinimap = memo(function ChatMinimap({
                 ? graphById.get(node.parentId)
                 : undefined;
               if (!parent) return null;
-              const x = 18 + node.lane * 28;
-              const px = 18 + parent.lane * 28;
+              const x = MINIMAP_WIDTH / 2 + node.lane * BRANCH_LANE_GAP;
+              const px = MINIMAP_WIDTH / 2 + parent.lane * BRANCH_LANE_GAP;
               const y = graphY(node.row);
               const py = graphY(parent.row);
               return (
@@ -591,19 +608,20 @@ export const ChatMinimap = memo(function ChatMinimap({
               node.active ? (
                 <span
                   key={node.id}
-                  className="minimap-fork"
+                  className="minimap-junction"
                   data-rail-entry-id={node.id}
-                  style={{ left: 18 + node.lane * 28, top: graphY(node.row) }}
+                  style={{
+                    left: MINIMAP_WIDTH / 2 + node.lane * BRANCH_LANE_GAP,
+                    top: graphY(node.row),
+                  }}
                 />
               ) : (
                 <button
                   key={node.id}
                   type="button"
-                  className="minimap-branch"
+                  className={`minimap-branch${stars.has(node.id) ? " minimap-star" : ""}`}
                   data-rail-entry-id={node.id}
-                  aria-label={t("chat.switchConversationPath", {
-                    preview: node.preview ?? t("i18n.branches"),
-                  })}
+                  aria-label={branchLabel(node.id)}
                   aria-describedby={
                     branchPreviewId === node.id ? previewId : undefined
                   }
@@ -613,9 +631,9 @@ export const ChatMinimap = memo(function ChatMinimap({
                     else branchRefs.current.delete(node.id);
                   }}
                   style={{
-                    left: 18 + node.lane * 28,
+                    left: MINIMAP_WIDTH / 2 + node.lane * BRANCH_LANE_GAP,
                     top: graphY(node.row),
-                    height: Math.max(1, Math.min(28, graphGap)),
+                    height: Math.max(1, Math.min(32, graphGap)),
                   }}
                   onMouseDown={(event) => {
                     event.stopPropagation();
@@ -638,17 +656,14 @@ export const ChatMinimap = memo(function ChatMinimap({
                     setBranchPreviewId(null);
                   }}
                 >
-                  <span />
+                  {stars.has(node.id) ? <StarIcon filled /> : <span />}
                 </button>
               ),
             )}
           {branchPreviewId && branchPreviewAnchor && (
             <MessagePreviewPopover
               id={previewId}
-              text={t("chat.switchConversationPath", {
-                preview:
-                  graphById.get(branchPreviewId)?.preview ?? t("i18n.branches"),
-              })}
+              text={branchLabel(branchPreviewId)}
               anchor={branchPreviewAnchor}
             />
           )}

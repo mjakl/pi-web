@@ -10,12 +10,26 @@ export interface ConversationRailNode {
   row: number;
 }
 
-/** Expand only the current transcript's anchors within the server's contracted
- * paths. IDs, not message text or turn counts, locate each fork. */
+/** The rail stays narrow for linear conversations. Walk iteratively because
+ * session history can contain thousands of entries. */
+export function hasSessionBranches(nodes: SessionTreeNode[]): boolean {
+  if (nodes.length > 1) return true;
+  const pending = [...nodes];
+  for (let node = pending.pop(); node; node = pending.pop()) {
+    if (node.children.length > 1) return true;
+    pending.push(...node.children);
+  }
+  return false;
+}
+
+/** Expand transcript anchors and session-wide stars within contracted paths.
+ * IDs, not message text or turn counts, locate each fork. Rows measure visible
+ * steps from the root; siblings share a row without moving their fork. */
 export function buildConversationRail(
   tree: SessionTreeNode[],
   activeLeafId: string | null,
   anchorIds: string[],
+  starredEntryIds: string[] = [],
 ): ConversationRailNode[] {
   const parents = new Map<string, string | null>();
   const representatives = new Map<string, SessionTreeNode>();
@@ -47,7 +61,7 @@ export function buildConversationRail(
   const anchors = new Set(anchorIds);
   const kept = new Set([
     ...representatives.keys(),
-    ...anchorIds.filter((id) => parents.has(id)),
+    ...[...anchorIds, ...starredEntryIds].filter((id) => parents.has(id)),
   ]);
   if (activeLeafId && parents.has(activeLeafId)) kept.add(activeLeafId);
   const nodes = new Map<string, ConversationRailNode>();

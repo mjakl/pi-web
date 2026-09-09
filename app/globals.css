@@ -1307,7 +1307,7 @@ span.linenumber {
   --conversation-rail-width: 36px;
 }
 .chat-window:has(.chat-minimap.has-branches) {
-  --conversation-rail-width: 132px;
+  --conversation-rail-width: 144px;
 }
 
 /* Continue the minimap strip beside the composer and safe-area padding.
@@ -2788,13 +2788,13 @@ span.linenumber {
 .session-star-count {
   gap: 4px;
 }
-.minimap-fork {
+.minimap-junction {
   position: absolute;
-  width: 6px;
-  height: 6px;
-  border: 1px solid var(--accent);
-  background: var(--bg-panel);
-  border-radius: 50%;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--accent);
+  background: var(--accent);
+  border-radius: 2px;
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
@@ -2802,7 +2802,7 @@ span.linenumber {
   position: absolute;
   display: grid;
   place-items: center;
-  width: 26px;
+  width: 32px;
   padding: 0;
   transform: translate(-50%, -50%);
   border: none;
@@ -2836,6 +2836,9 @@ span.linenumber {
 .minimap-star svg {
   color: var(--warning);
 }
+.minimap-star svg {
+  background: var(--bg-panel);
+}
 .session-message-count {
   min-width: 8ch;
   text-align: right;
@@ -2847,7 +2850,7 @@ span.linenumber {
   width: 32px;
   padding: 0;
   border: 0;
-  background: var(--bg-panel);
+  background: transparent;
   color: var(--text-dim);
   pointer-events: auto;
   cursor: pointer;

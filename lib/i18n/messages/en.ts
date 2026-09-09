@@ -377,9 +377,7 @@ export const enMessages: Record<string, string> = {
   "i18n.creatingSession": "Creating new session…",
   "i18n.creating": "Creating…",
   "i18n.noChanges": "No changes",
-  "i18n.branches": "Branches",
   "i18n.noActiveSession": "No active session",
-  "i18n.noBranches": "This session has no branches",
   "i18n.source": "Source",
   "i18n.preview": "Preview",
   "i18n.diff": "Diff",
@@ -501,4 +499,6 @@ export const enMessages: Record<string, string> = {
   "chat.jumpHumanMessage": "Jump to human message",
   "chat.conversationMap": "Conversation paths",
   "chat.switchConversationPath": "Switch branch: {preview}",
+  "chat.switchPath": "Switch branch",
+  "chat.switchStarredPath": "Switch branch to starred answer",
 };

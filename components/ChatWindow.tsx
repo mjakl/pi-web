@@ -19,7 +19,6 @@ import type {
   BlockingExtensionUiRequest,
   ExtensionUiRequest,
   SessionInfo,
-  SessionTreeNode,
   ToolEntry,
   ToolResultMessage,
 } from "@/lib/types";
@@ -62,8 +61,6 @@ import {
 /** What the shell displays on ChatWindow's behalf. Values only: this is held in
  *  AppShell state and compared, so everything here must be cheap to compare. */
 export interface ChatDisplayState {
-  branchTree: SessionTreeNode[];
-  branchActiveLeafId: string | null;
   systemPrompt: string | null;
   systemTools: ToolEntry[] | null;
   sessionStats: SessionStatsInfo | null;
@@ -77,12 +74,9 @@ export interface ChatDisplayState {
 export interface ChatActions {
   loadSystemInfo: () => Promise<void>;
   refreshTranscript: (() => Promise<boolean>) | null;
-  changeBranchLeaf: (leafId: string | null) => void;
 }
 
 export const EMPTY_CHAT_DISPLAY: ChatDisplayState = {
-  branchTree: [],
-  branchActiveLeafId: null,
   systemPrompt: null,
   systemTools: null,
   sessionStats: null,
@@ -615,8 +609,6 @@ export function ChatWindow({
   // from a ref, so a re-render that moves no key publishes nothing.
   const chatDisplayRef = useRef<ChatDisplayState>(EMPTY_CHAT_DISPLAY);
   chatDisplayRef.current = {
-    branchTree: tree,
-    branchActiveLeafId: activeLeafId,
     systemPrompt,
     systemTools,
     sessionStats,
@@ -631,8 +623,6 @@ export function ChatWindow({
     ctxKey,
     systemPrompt,
     systemTools,
-    tree,
-    activeLeafId,
     compactionControl,
   ]);
   useEffect(
@@ -649,17 +639,8 @@ export function ChatWindow({
     onChatActionsChange?.({
       loadSystemInfo,
       refreshTranscript: session ? refreshTranscript : null,
-      changeBranchLeaf: (...args) => {
-        void handleLeafChange(...args);
-      },
     });
-  }, [
-    onChatActionsChange,
-    loadSystemInfo,
-    refreshTranscript,
-    session,
-    handleLeafChange,
-  ]);
+  }, [onChatActionsChange, loadSystemInfo, refreshTranscript, session]);
   useEffect(() => () => onChatActionsChange?.(null), [onChatActionsChange]);
 
   const onDrop = useCallback(

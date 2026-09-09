@@ -1,7 +1,7 @@
 import { isRecord } from "./types";
 import type { BranchPreview, SessionTreeNode } from "@/lib/types";
 
-// BranchNavigator still traverses recursively, so keep the response tree shallow.
+// Bound JSON response nesting; parentId preserves the graph beyond this depth.
 export const MAX_PROJECTED_TREE_DEPTH = 200;
 const MAX_BRANCH_PREVIEW_LENGTH = 40;
 

@@ -1004,7 +1004,7 @@ test("the header can refresh the current page on desktop and mobile", async () =
   }
 });
 
-test("conversation branches live inline on desktop while mobile retains its branch navigator", async () => {
+test("conversation branches live only in the desktop rail, without a toolbar selector on either viewport", async () => {
   const originalFetch = globalThis.fetch;
   const originalResizeObserver = globalThis.ResizeObserver;
   const originalIntersectionObserver = globalThis.IntersectionObserver;
@@ -1099,16 +1099,14 @@ test("conversation branches live inline on desktop while mobile retains its bran
     );
     assert.ok(more);
     await act(() => more.click());
-    const mobileButton = container.querySelector(
-      'button[data-mobile-toolbar-action="branches"]',
+    assert.equal(
+      container.querySelector('button[aria-label="Branches"]'),
+      null,
+      "mobile has no branch selector, including in its expanded toolbar",
     );
-    assert.ok(mobileButton, "mobile keeps its toolbar branch action");
-    await act(() => mobileButton.click());
-    assert.ok(
-      [...container.querySelectorAll(".menu-panel")].some((panel) =>
-        panel.textContent.includes("Alternative path"),
-      ),
-      "mobile branch navigator opens inline with its existing flow",
+    assert.equal(
+      container.querySelector('button[data-mobile-toolbar-action="branches"]'),
+      null,
     );
   } finally {
     await act(() => root.unmount());
