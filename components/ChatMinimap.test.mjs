@@ -520,11 +520,14 @@ test("compactions render as neutral dividers for unloaded, loaded and live histo
             ? [
                 { role: "user" },
                 { role: "custom", customType: "compaction" },
+                { role: "custom", customType: "compaction", display: false },
                 { role: "user" },
                 { role: "custom", customType: "compaction" },
               ]
             : [{ role: "user" }],
-          entryIds: loaded ? ["old", "compact", "recent"] : ["recent"],
+          entryIds: loaded
+            ? ["old", "compact", "hidden", "recent"]
+            : ["recent"],
           historyAnchors: [
             { id: "old" },
             { id: "compact", compaction: true },
@@ -565,6 +568,7 @@ test("compactions render as neutral dividers for unloaded, loaded and live histo
     assert.deepEqual(loads, ["compact"]);
     await render(true);
     assert.equal(container.querySelectorAll('[role="separator"]').length, 2);
+    assert.ok(!container.querySelector('[data-minimap-entry-id="hidden"]'));
     await select(container.querySelector('[data-minimap-entry-id="compact"]'));
     assert.equal(jumps.at(-1), 420);
     await select(container.querySelector('[data-minimap-entry-id="recent"]'));

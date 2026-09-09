@@ -122,12 +122,114 @@ function sessionSnapshot() {
     tree: [],
     leafId: "recent-answer",
     context: {
-      messages: recentMessages,
-      entryIds: ["recent-question", "recent-progress", "recent-answer"],
+      messages: [
+        recentMessages[0],
+        {
+          role: "custom",
+          customType: "extension",
+          display: false,
+          content: "Hidden context",
+        },
+        ...recentMessages.slice(1),
+      ],
+      entryIds: [
+        "recent-question",
+        "hidden-context",
+        "recent-progress",
+        "recent-answer",
+      ],
       oldestEntryId: "recent-question",
       hasMore: true,
     },
   };
+}
+
+for (const customType of ["extension", "compaction"]) {
+  for (const withVisibleMessage of [false, true]) {
+    test(`hidden ${customType} messages do not create or inflate process groups (visible=${withVisibleMessage})`, async () => {
+      const hidden = {
+        role: "custom",
+        customType,
+        display: false,
+        content: "Hidden context",
+      };
+      const messages = [
+        { role: "user", content: "Question" },
+        ...(withVisibleMessage
+          ? [
+              {
+                role: "custom",
+                customType: "visible-extension",
+                display: true,
+                content: "Visible progress",
+              },
+            ]
+          : []),
+        hidden,
+        assistant([{ type: "text", text: "Final answer" }]),
+      ];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (url) => {
+        const path = String(url);
+        if (path.startsWith("/api/sessions/session?"))
+          return Response.json({
+            ...sessionSnapshot(),
+            context: {
+              messages,
+              entryIds: messages.map((_, index) => `entry-${index}`),
+              hasMore: false,
+            },
+          });
+        if (path === "/api/sessions/session/state")
+          return Response.json({ active: false, running: false });
+        if (path.startsWith("/api/models"))
+          return Response.json({ models: {}, modelList: [] });
+        return Response.json({});
+      };
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      try {
+        await act(async () => {
+          root.render(
+            React.createElement(ChatWindow, {
+              session,
+              newSessionCwd: null,
+              newSessionDraftKey: null,
+            }),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+        assert.match(container.textContent, /Final answer/);
+        assert.doesNotMatch(container.textContent, /Hidden context/);
+        const processToggle = container.querySelector(
+          'button[title="Expand process details"]',
+        );
+        if (withVisibleMessage) {
+          assert.ok(
+            processToggle,
+            "visible progress remains in the process group",
+          );
+          assert.equal(
+            processToggle.textContent,
+            "Process details · 1 message",
+          );
+          await act(() => processToggle.click());
+          assert.match(container.textContent, /Visible progress/);
+          assert.doesNotMatch(container.textContent, /Hidden context/);
+        } else {
+          assert.ok(
+            !processToggle,
+            "hidden-only progress has no process group",
+          );
+        }
+      } finally {
+        await act(() => root.unmount());
+        container.remove();
+        globalThis.fetch = originalFetch;
+      }
+    });
+  }
 }
 
 test("transcript expansion and history prepend preserve position and deferred entry identity", async () => {

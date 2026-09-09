@@ -1,5 +1,6 @@
 import { readSessionStars, SESSION_STAR_TYPE } from "./session-stars";
 import { getMessagePreview } from "./message-preview";
+import { isMessageGroupAnchor } from "./message-display";
 import {
   SessionManager,
   buildContextEntries as piBuildContextEntries,
@@ -638,7 +639,11 @@ export function buildSessionContext(
             entry.type === "compaction" ||
             (entry.type === "branch_summary" && Boolean(entry.summary)) ||
             (entry.type === "custom_message" &&
-              entry.customType === "compaction"),
+              isMessageGroupAnchor({
+                role: "custom",
+                customType: entry.customType,
+                display: entry.display,
+              })),
         )
         .map((entry) => ({
           id: entry.id,

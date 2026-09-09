@@ -29,6 +29,7 @@ import {
   countToolCallBlocks,
   getAssistantErrorMessage,
   getDisplayableAssistantBlocks,
+  isHiddenCustomMessage,
   isMessageGroupAnchor,
   shouldExpandProcessDetails,
   splitFinalAssistantBlocks,
@@ -182,7 +183,7 @@ function hasDisplayableProcessMessage(message: AgentMessage): boolean {
   if (message.role === "assistant") {
     return getDisplayableAssistantBlocks(message).length > 0;
   }
-  return message.role === "custom";
+  return message.role === "custom" && !isHiddenCustomMessage(message);
 }
 
 function withAssistantBlocks(

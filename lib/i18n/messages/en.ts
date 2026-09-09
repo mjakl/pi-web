@@ -474,7 +474,6 @@ export const enMessages: Record<string, string> = {
   "i18n.fileContext": "File context: {details}",
   "i18n.readFiles": "Read files",
   "i18n.modifiedFiles": "Modified files",
-  "i18n.hiddenExtensionMessage": "hidden extension message",
   "i18n.noMessage": "(no message)",
   "i18n.showExtensionMessage": "Show extension message",
   "i18n.collapse": "Collapse",

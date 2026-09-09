@@ -14,13 +14,23 @@ interface ProcessDetailsOptions {
   hasFinalAnswer: boolean;
 }
 
+export function isHiddenCustomMessage(message: {
+  role?: AgentMessage["role"];
+  display?: boolean;
+}): boolean {
+  return message.role === "custom" && message.display === false;
+}
+
 export function isMessageGroupAnchor(message: {
   role?: AgentMessage["role"];
   customType?: string;
+  display?: boolean;
 }): boolean {
   return (
     message.role === "user" ||
-    (message.role === "custom" && message.customType === "compaction")
+    (message.role === "custom" &&
+      message.customType === "compaction" &&
+      !isHiddenCustomMessage(message))
   );
 }
 
