@@ -14,7 +14,24 @@ interface ProcessDetailsOptions {
   hasFinalAnswer: boolean;
 }
 
+export function isHiddenCustomMessage(message: {
+  role?: AgentMessage["role"];
+  display?: boolean;
+}): boolean {
+  return message.role === "custom" && message.display === false;
+}
+
 export function isMessageGroupAnchor(message: {
+  role?: AgentMessage["role"];
+  customType?: string;
+  display?: boolean;
+}): boolean {
+  return isMessageGroupBoundary(message) && !isHiddenCustomMessage(message);
+}
+
+// Hidden compactions still separate completed answers from continuation turns.
+// Visibility controls navigation anchors, not transcript structure.
+export function isMessageGroupBoundary(message: {
   role?: AgentMessage["role"];
   customType?: string;
 }): boolean {

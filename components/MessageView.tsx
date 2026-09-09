@@ -29,6 +29,7 @@ import { CompactIcon } from "./CompactIcon";
 import {
   getAssistantErrorMessage,
   isEmptyAssistantBlock,
+  isHiddenCustomMessage,
 } from "@/lib/message-display";
 import { parseUnifiedPatch, type SplitDiffCell } from "@/lib/patch";
 import { isEditToolName } from "@/lib/tool-names";
@@ -265,6 +266,7 @@ export const MessageView = memo(
       return null;
     }
     if (message.role === "custom") {
+      if (isHiddenCustomMessage(message)) return null;
       if (message.customType === "compaction") {
         return (
           <HistoryActionFrame entryId={entryId} actions={historyActions}>
@@ -2081,7 +2083,6 @@ function CustomMessageView({
   onOpenFile?: (filePath: string) => void;
 }) {
   const { t } = useI18n();
-  const isHiddenDisplay = message.display === false;
   const [contentExpanded, setContentExpanded] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -2112,8 +2113,7 @@ function CustomMessageView({
           border: "1px solid var(--border)",
           borderRadius: 8,
           overflow: "hidden",
-          background: isHiddenDisplay ? "var(--bg-subtle)" : "var(--bg)",
-          opacity: isHiddenDisplay && !contentExpanded ? 0.82 : 1,
+          background: "var(--bg)",
         }}
       >
         <button
@@ -2152,18 +2152,6 @@ function CustomMessageView({
             }}
           >
             {title}
-            {isHiddenDisplay && (
-              <span
-                style={{
-                  display: "block",
-                  color: "var(--text-dim)",
-                  fontSize: 11,
-                  fontWeight: 400,
-                }}
-              >
-                {t("i18n.hiddenExtensionMessage")}
-              </span>
-            )}
           </span>
           <span
             style={{

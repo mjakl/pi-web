@@ -29,7 +29,9 @@ import {
   countToolCallBlocks,
   getAssistantErrorMessage,
   getDisplayableAssistantBlocks,
+  isHiddenCustomMessage,
   isMessageGroupAnchor,
+  isMessageGroupBoundary,
   shouldExpandProcessDetails,
   splitFinalAssistantBlocks,
 } from "@/lib/message-display";
@@ -182,7 +184,7 @@ function hasDisplayableProcessMessage(message: AgentMessage): boolean {
   if (message.role === "assistant") {
     return getDisplayableAssistantBlocks(message).length > 0;
   }
-  return message.role === "custom";
+  return message.role === "custom" && !isHiddenCustomMessage(message);
 }
 
 function withAssistantBlocks(
@@ -746,7 +748,7 @@ export function ChatWindow({
       }
     >();
     const anchorIndices = messages.flatMap((message, index) =>
-      isMessageGroupAnchor(message) ? [index] : [],
+      isMessageGroupBoundary(message) ? [index] : [],
     );
     for (const [anchorPosition, userIdx] of anchorIndices.entries()) {
       const endIdx = anchorIndices[anchorPosition + 1] ?? messages.length;
@@ -1107,8 +1109,9 @@ export function ChatWindow({
               {(() => {
                 // A compaction summary can replace the last user message while
                 // its turn is still streaming, so it also counts as a live tail.
-                const lastAnchorIdx =
-                  messages.findLastIndex(isMessageGroupAnchor);
+                const lastAnchorIdx = messages.findLastIndex(
+                  isMessageGroupBoundary,
+                );
 
                 // Only group anchors get a minimap ref — one dot per turn.
                 const anchorRefIndexByMessage = new Map<number, number>();
@@ -1235,8 +1238,9 @@ export function ChatWindow({
                 };
 
                 const rendered: ReactNode[] = [];
-                const firstAnchorIndex =
-                  messages.findIndex(isMessageGroupAnchor);
+                const firstAnchorIndex = messages.findIndex(
+                  isMessageGroupBoundary,
+                );
                 const prefixEnd =
                   firstAnchorIndex === -1 ? messages.length : firstAnchorIndex;
                 const prefixFinalIndex = findFinalAssistantIndex(
@@ -1245,9 +1249,7 @@ export function ChatWindow({
                 let renderedThrough = 0;
                 for (const [idx, msg] of messages.entries()) {
                   if (idx < renderedThrough) continue;
-                  const turn = isMessageGroupAnchor(msg)
-                    ? turnGroups.get(idx)
-                    : undefined;
+                  const turn = turnGroups.get(idx);
                   if (!turn) {
                     rendered.push(
                       renderMessage(idx, msg, {
