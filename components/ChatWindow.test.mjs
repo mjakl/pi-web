@@ -46,7 +46,7 @@ test("keeps the empty transcript and composer in one semantic layout", () => {
 
   assert.match(
     html,
-    /^<section class="chat-window is-empty" aria-label="messages"/,
+    /^<section class="chat-window is-empty"[^>]* aria-label="messages"/,
   );
   assert.ok(
     html.indexOf('class="chat-body"') < html.indexOf('class="chat-composer"'),

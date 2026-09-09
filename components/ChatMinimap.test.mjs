@@ -689,7 +689,7 @@ test("rail markers stay out of tab order and pointer clicks do not pin previews"
   assert.equal(document.querySelector('[role="tooltip"]'), null);
 });
 
-test("active and inactive stars use identical markers aligned as siblings, while other path markers stay squares and dots", async () => {
+test("active and inactive stars use identical markers aligned as siblings, while path markers use neutral filled and hollow squares", async () => {
   const style = document.createElement("style");
   style.textContent = readFileSync(
     new URL("../app/globals.css", import.meta.url),
@@ -731,10 +731,11 @@ test("active and inactive stars use identical markers aligned as siblings, while
       ]),
     },
     onLoadThrough: async () => false,
-    onLeafChange: (id) => switches.push(id),
+    onLeafChange: (leafId, entryId) => switches.push({ leafId, entryId }),
   };
   try {
     await React.act(() => root.render(React.createElement(ChatMinimap, props)));
+    await React.act(() => container.querySelector(".chat-minimap").focus());
     await settle();
     const active = container.querySelector(
       '[data-minimap-entry-id="active"] .minimap-star',
@@ -770,11 +771,15 @@ test("active and inactive stars use identical markers aligned as siblings, while
         .style.borderRadius,
       "2px",
     );
+    const promptMarker = container.querySelector(
+      '[data-minimap-entry-id="prompt"] button > div',
+    );
+    assert.match(promptMarker.style.background, /^rgba\(128,\s*128,\s*128,/);
     assert.equal(
       window.getComputedStyle(
         container.querySelector('[data-rail-entry-id="other-end"] > span'),
       ).borderRadius,
-      "50%",
+      "2px",
     );
     await React.act(() => {
       const icon = inactive.querySelector("svg");
@@ -800,11 +805,15 @@ test("active and inactive stars use identical markers aligned as siblings, while
       "Switch branch to starred answer",
     );
     await React.act(() => inactive.click());
-    assert.deepEqual(switches, ["other-star"]);
+    assert.deepEqual(switches, [
+      { leafId: "other-end", entryId: "other-star" },
+    ]);
     assert.deepEqual(jumps, []);
     await React.act(() => active.click());
     assert.equal(jumps.at(-1), 620);
-    assert.deepEqual(switches, ["other-star"]);
+    assert.deepEqual(switches, [
+      { leafId: "other-end", entryId: "other-star" },
+    ]);
     await React.act(() =>
       root.render(
         React.createElement(ChatMinimap, {
@@ -823,6 +832,61 @@ test("active and inactive stars use identical markers aligned as siblings, while
     await React.act(() => root.unmount());
     container.remove();
     style.remove();
+  }
+});
+
+test("hover expansion uses exactly one lane per path and updates when branches change", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scroll = document.createElement("div");
+  Object.defineProperty(scroll, "scrollHeight", { get: () => 2000 });
+  const widths = [];
+  const onExpandedWidthChange = (width) => widths.push(width);
+  const node = (id, children = []) => ({
+    entry: { id, type: "message", message: { role: "user", content: id } },
+    children,
+  });
+  try {
+    for (const count of [1, 2, 3, 1]) {
+      await React.act(() =>
+        root.render(
+          React.createElement(ChatMinimap, {
+            tree: projectTreeForResponse([
+              node(
+                "prompt",
+                Array.from({ length: count }, (_, i) => node(`leaf-${i}`)),
+              ),
+            ]),
+            activeLeafId: "leaf-0",
+            messages: [{ role: "user", content: "prompt" }],
+            entryIds: ["prompt"],
+            scrollContainer: { current: scroll },
+            messageRefs: { current: [] },
+            onLoadThrough: async () => false,
+            onExpandedWidthChange,
+          }),
+        ),
+      );
+      await settle();
+      const rail = container.querySelector(".chat-minimap");
+      await React.act(() =>
+        rail.dispatchEvent(
+          new window.MouseEvent("mouseover", { bubbles: true }),
+        ),
+      );
+      assert.equal(rail.style.width, `${count * 36}px`);
+      assert.equal(widths.at(-1), count * 36);
+      await React.act(() =>
+        rail.dispatchEvent(
+          new window.MouseEvent("mouseout", { bubbles: true }),
+        ),
+      );
+      assert.equal(rail.style.width, "36px");
+    }
+  } finally {
+    await React.act(() => root.unmount());
+    container.remove();
   }
 });
 
@@ -891,7 +955,7 @@ test("a dense branched rail keeps its last turn in the viewport and navigable", 
   }
 });
 
-test("inline paths preview on focus and switch only on explicit selection, never rail scrolling or dragging", async () => {
+test("expanded inactive paths preview each prompt and switch only on explicit selection, never rail scrolling or dragging", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -909,7 +973,7 @@ test("inline paths preview on focus and switch only on explicit selection, never
       node("prompt", [
         node("fork", [
           node("current"),
-          node("alternative", [node("other-end")]),
+          node("alternative", [node("follow-up", [node("other-end")])]),
         ]),
       ]),
     ]),
@@ -926,19 +990,47 @@ test("inline paths preview on focus and switch only on explicit selection, never
       })),
     },
     onLoadThrough: async () => assert.fail("preview must not fetch history"),
-    onLeafChange: (id) => switches.push(id),
+    onLeafChange: (leafId, entryId) => switches.push({ leafId, entryId }),
   };
   try {
     await React.act(() => root.render(React.createElement(ChatMinimap, props)));
     await settle();
     const rail = container.querySelector(".chat-minimap.has-branches");
-    assert.equal(rail.style.width, "144px");
-    assert.equal(rail.querySelectorAll("path").length, 3);
+    assert.equal(rail.style.width, "36px");
+    assert.equal(rail.querySelector(".minimap-branch"), null);
+    assert.equal(rail.querySelector("svg").getAttribute("width"), "36");
+    assert.equal(rail.tabIndex, 0);
+    await React.act(() =>
+      rail.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true })),
+    );
+    assert.equal(rail.style.width, "72px");
+    assert.ok(rail.classList.contains("is-expanded"));
+    await React.act(() => {
+      rail.scrollLeft = 108;
+      rail.dispatchEvent(new window.MouseEvent("mouseout", { bubbles: true }));
+    });
+    assert.equal(rail.style.width, "36px");
+    assert.equal(rail.scrollLeft, 0);
+    assert.equal(rail.querySelector(".minimap-branch"), null);
+    await React.act(() => rail.focus());
+    assert.equal(rail.style.width, "72px");
+    assert.equal(rail.querySelectorAll("path").length, 5);
     assert.ok(rail.querySelector('[data-rail-entry-id="fork"]'));
     const alternative = rail.querySelector(
-      'button[data-rail-entry-id="other-end"]',
+      'button[data-rail-entry-id="alternative"]',
     );
     assert.ok(alternative);
+    for (const id of ["alternative", "follow-up", "other-end"]) {
+      const marker = rail.querySelector(`button[data-rail-entry-id="${id}"]`);
+      assert.ok(marker, `each inactive prompt has a marker: ${id}`);
+      assert.equal(marker.getAttribute("aria-label"), `Switch branch: ${id}`);
+      assert.equal(marker.style.left, alternative.style.left);
+    }
+    assert.ok(
+      Number.parseFloat(
+        rail.querySelector('[data-rail-entry-id="other-end"]').style.top,
+      ) > Number.parseFloat(alternative.style.top),
+    );
     assert.equal(alternative.tabIndex, 0);
     await React.act(() => alternative.focus());
     await settle();
@@ -948,6 +1040,7 @@ test("inline paths preview on focus and switch only on explicit selection, never
     );
     assert.deepEqual(switches, []);
     await React.act(() => {
+      rail.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
       scroll.dispatchEvent(new window.Event("scroll"));
       rail.dispatchEvent(
         new window.MouseEvent("mousedown", {
@@ -974,22 +1067,171 @@ test("inline paths preview on focus and switch only on explicit selection, never
       );
       alternative.click();
     });
-    assert.deepEqual(switches, ["other-end"]);
+    assert.deepEqual(switches, [
+      { leafId: "other-end", entryId: "alternative" },
+    ]);
     assert.equal(
       jumps.length,
       beforeSelection,
       "switching must not also scroll the old path",
     );
     await React.act(() =>
+      rail.dispatchEvent(new window.MouseEvent("mouseout", { bubbles: true })),
+    );
+    assert.equal(rail.style.width, "36px");
+    assert.equal(rail.querySelector(".minimap-branch"), null);
+    assert.equal(document.querySelector('[role="tooltip"]'), null);
+    await React.act(() => rail.focus());
+    await React.act(() =>
       root.render(
         React.createElement(ChatMinimap, { ...props, branchDisabled: true }),
       ),
     );
-    assert.equal(alternative.disabled, true);
-    await React.act(() => alternative.click());
-    assert.deepEqual(switches, ["other-end"]);
+    const disabledAlternative = rail.querySelector(
+      'button[data-rail-entry-id="alternative"]',
+    );
+    assert.equal(disabledAlternative.disabled, true);
+    await React.act(() => disabledAlternative.click());
+    assert.deepEqual(switches, [
+      { leafId: "other-end", entryId: "alternative" },
+    ]);
   } finally {
     await React.act(() => root.unmount());
     container.remove();
   }
 });
+
+for (const dense of [false, true]) {
+  test(
+    dense
+      ? "dense rail omits connecting lines when adjacent squares leave no gap"
+      : "rail connecting lines stop outside filled and hollow squares in both hover modes",
+    async () => {
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      const scroll = document.createElement("div");
+      Object.defineProperty(scroll, "scrollHeight", { get: () => 2000 });
+      const ids = Array.from(
+        { length: dense ? 100 : 2 },
+        (_, index) => `square-${index}`,
+      );
+      const node = (id, children = []) => ({
+        entry: {
+          id,
+          type: "message",
+          message: { role: "user", content: id },
+        },
+        children,
+      });
+      const descendants = ids
+        .slice(1)
+        .reduceRight((children, id) => [node(id, children)], []);
+      const markerCenter = (rail, id) => {
+        const active = rail.querySelector(`[data-minimap-entry-id="${id}"]`);
+        if (active)
+          return {
+            x:
+              Number.parseFloat(active.style.left) +
+              Number.parseFloat(active.style.width) / 2,
+            y: (Number.parseFloat(active.style.top) * rail.clientHeight) / 100,
+          };
+        const inactive = rail.querySelector(`[data-rail-entry-id="${id}"]`);
+        assert.ok(inactive, `the visible graph contains ${id}`);
+        return {
+          x: Number.parseFloat(inactive.style.left),
+          y: Number.parseFloat(inactive.style.top),
+        };
+      };
+      try {
+        await React.act(() =>
+          root.render(
+            React.createElement(ChatMinimap, {
+              tree: projectTreeForResponse([
+                node(ids[0], [...descendants, node("other-square")]),
+              ]),
+              activeLeafId: ids.at(-1),
+              messages: ids.map((id) => ({ role: "user", content: id })),
+              entryIds: ids,
+              scrollContainer: { current: scroll },
+              messageRefs: {
+                current: ids.map((_, index) => ({
+                  getBoundingClientRect: () => rect(300 + index * 300),
+                })),
+              },
+              onLoadThrough: async () => false,
+            }),
+          ),
+        );
+        await settle();
+        const rail = container.querySelector(".chat-minimap");
+        for (const expanded of [false, true]) {
+          if (expanded)
+            await React.act(() =>
+              rail.dispatchEvent(
+                new window.MouseEvent("mouseover", { bubbles: true }),
+              ),
+            );
+          assert.equal(rail.classList.contains("is-expanded"), expanded);
+          const paths = [...rail.querySelector("svg").querySelectorAll("path")];
+          const parent = markerCenter(rail, ids[0]);
+          const activeChild = markerCenter(rail, ids[1]);
+          if (dense) {
+            assert.ok(
+              activeChild.y - parent.y < 8,
+              "the fixture's 8px squares overlap vertically",
+            );
+            assert.equal(
+              paths.length,
+              0,
+              "a graph without space between squares must omit its connecting lines",
+            );
+            continue;
+          }
+          const children = [
+            activeChild,
+            ...(expanded ? [markerCenter(rail, "other-square")] : []),
+          ];
+          assert.equal(paths.length, children.length);
+          for (const child of children) {
+            const endpoints = paths
+              .map((path) => {
+                const coordinates = path
+                  .getAttribute("d")
+                  .match(/-?\d+(?:\.\d+)?/g)
+                  .map(Number);
+                return {
+                  startX: coordinates[0],
+                  startY: coordinates[1],
+                  endX: coordinates.at(-2),
+                  endY: coordinates.at(-1),
+                };
+              })
+              .find(
+                (path) => path.startX === parent.x && path.endX === child.x,
+              );
+            assert.ok(
+              endpoints,
+              "each visible child has its own connecting line",
+            );
+            assert.ok(
+              endpoints.startY >= parent.y + 5,
+              "a connecting line starts outside the parent square",
+            );
+            assert.ok(
+              endpoints.endY <= child.y - 5,
+              "a connecting line ends outside the child square",
+            );
+            assert.ok(
+              endpoints.endY > endpoints.startY,
+              "a connecting line has a forward gap between the squares",
+            );
+          }
+        }
+      } finally {
+        await React.act(() => root.unmount());
+        container.remove();
+      }
+    },
+  );
+}

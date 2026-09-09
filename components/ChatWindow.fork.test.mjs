@@ -871,3 +871,194 @@ test("the session hook refuses direct prompt and command admission during branch
     globalThis.fetch = originalFetch;
   }
 });
+
+test("rail navigation commits only accepted context, preserves drafts, and retries a failed read without repeating the mutation", async () => {
+  const { useAgentSession } = await jiti.import("../hooks/useAgentSession.ts");
+  const originalFetch = globalThis.fetch;
+  const commands = [];
+  const restored = [];
+  const branchMessages = [
+    { role: "user", content: "Other question" },
+    { role: "assistant", content: [{ type: "text", text: "Saved answer" }] },
+    { role: "user", content: "Later question" },
+  ];
+  let outcome = "cancel";
+  let failContext = false;
+  let holdContext = false;
+  let contextReads = 0;
+  let releaseContext;
+  let api;
+  globalThis.fetch = async (url, options) => {
+    const path = String(url);
+    if (path === "/api/agent/fork-source" && options?.body) {
+      const command = JSON.parse(options.body);
+      commands.push(command);
+      assert.equal(command.type, "navigate_tree");
+      if (outcome === "reject")
+        return Response.json({ error: "Navigation rejected" }, { status: 500 });
+      return Response.json({
+        success: true,
+        data:
+          outcome === "cancel"
+            ? { cancelled: true }
+            : { cancelled: false, leafId: "other-leaf" },
+      });
+    }
+    if (path.startsWith("/api/sessions/fork-source/context?")) {
+      contextReads += 1;
+      if (holdContext)
+        await new Promise((resolve) => {
+          releaseContext = resolve;
+        });
+      if (failContext)
+        return Response.json({ error: "Read unavailable" }, { status: 500 });
+      return Response.json({
+        context: {
+          messages: branchMessages,
+          entryIds: ["other-question", "other-star", "other-leaf"],
+          oldestEntryId: "other-question",
+          hasMore: false,
+        },
+      });
+    }
+    if (path.startsWith("/api/sessions/fork-source?"))
+      return Response.json({
+        sessionId: session.id,
+        filePath: session.path,
+        info: session,
+        tree: [],
+        leafId: "answer",
+        context: {
+          messages: history,
+          entryIds: ["question", "answer"],
+          oldestEntryId: "question",
+          hasMore: false,
+        },
+      });
+    if (path.startsWith("/api/models"))
+      return Response.json({ models: {}, modelList: [] });
+    return Response.json({ active: false, running: false });
+  };
+  const inputRef = {
+    current: {
+      restoreSubmission: (text) => restored.push(text),
+      replaceMessage: () => assert.fail("navigation must preserve the draft"),
+    },
+  };
+  function Probe() {
+    api = useAgentSession({
+      session,
+      newSessionCwd: null,
+      newSessionDraftKey: null,
+      chatInputRef: inputRef,
+    });
+    return null;
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  setDraft(session.id, { value: "Unsent draft", images: [] });
+  try {
+    await React.act(async () => root.render(React.createElement(Probe)));
+    for (const nextOutcome of ["cancel", "reject"]) {
+      outcome = nextOutcome;
+      let accepted;
+      await React.act(async () => {
+        accepted = await api.handleLeafChange("other-leaf", "other-star");
+      });
+      assert.equal(api.activeLeafId, "answer");
+      assert.deepEqual(api.messages, history);
+      assert.equal(accepted, false);
+      assert.equal(api.historyCursor, "question");
+      assert.equal(api.branchStatus, null);
+      assert.equal(api.branchScrollTarget, null);
+    }
+    assert.equal(
+      contextReads,
+      0,
+      "cancelled and rejected mutations cannot select history",
+    );
+    outcome = "accept";
+    failContext = true;
+    await React.act(async () => {
+      assert.equal(
+        await api.handleLeafChange("other-leaf", "other-star"),
+        false,
+      );
+    });
+    assert.equal(api.branchStatus, "failed");
+    assert.equal(api.activeLeafId, "answer");
+    assert.deepEqual(api.messages, history);
+    assert.equal(api.branchScrollTarget, null);
+    await React.act(async () => {
+      await api.handleSend("Draft during failed context");
+      await api.handleLeafChange("answer", "question");
+    });
+    assert.equal(commands.length, 3);
+    assert.deepEqual(restored, ["Draft during failed context"]);
+
+    failContext = false;
+    holdContext = true;
+    let retry;
+    await React.act(async () => {
+      retry = api.retryBranchContext();
+      await api.handleSend("Draft during pending context");
+      assert.equal(await api.loadEarlierMessages("question"), false);
+      await api.handlePromptWithStreamingBehavior("/extension", "steer");
+      assert.equal(
+        (await api.handleBuiltinSlashCommand("/compact")).handled,
+        true,
+      );
+    });
+    assert.equal(api.branchStatus, "pending");
+    assert.equal(api.activeLeafId, "answer");
+    assert.deepEqual(api.messages, history);
+    await React.act(async () => {
+      releaseContext();
+      assert.equal(await retry, true);
+    });
+    assert.equal(
+      commands.length,
+      3,
+      "retry reads context without replaying navigation",
+    );
+    assert.equal(api.activeLeafId, "other-leaf");
+    assert.deepEqual(api.messages, branchMessages);
+    assert.equal(api.branchStatus, null);
+    assert.deepEqual(api.branchScrollTarget, {
+      leafId: "other-leaf",
+      entryId: "other-star",
+    });
+    assert.equal(getDraft(session.id).value, "Unsent draft");
+    assert.deepEqual(restored, [
+      "Draft during failed context",
+      "Draft during pending context",
+      "/extension",
+    ]);
+    const firstTarget = api.branchScrollTarget;
+    holdContext = false;
+    await React.act(async () => {
+      assert.equal(
+        await api.handleLeafChange("other-leaf", "other-star"),
+        true,
+      );
+    });
+    assert.deepEqual(api.branchScrollTarget, firstTarget);
+    assert.notEqual(
+      api.branchScrollTarget,
+      firstTarget,
+      "repeated navigation requests a fresh jump",
+    );
+    await React.act(async () => {
+      assert.equal(await api.handleLeafChange("other-leaf"), true);
+    });
+    assert.equal(api.branchScrollTarget, null);
+    assert.equal(getDraft(session.id).value, "Unsent draft");
+  } finally {
+    releaseContext?.();
+    await React.act(async () => root.unmount());
+    container.remove();
+    clearDraft(session.id);
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -28,9 +28,10 @@ import {
 } from "@/lib/conversation-rail";
 
 interface Props {
+  onExpandedWidthChange?: (width: number) => void;
   tree?: SessionTreeNode[];
   activeLeafId?: string | null;
-  onLeafChange?: (id: string) => void | Promise<void>;
+  onLeafChange?: (leafId: string, entryId?: string) => void | Promise<void>;
   branchDisabled?: boolean;
   messages: AgentMessage[];
   entryIds: string[];
@@ -44,7 +45,8 @@ interface Props {
 
 const MINIMAP_WIDTH = 36;
 const BRANCH_LANE_GAP = 36;
-const BRANCHED_MINIMAP_WIDTH = BRANCH_LANE_GAP * 4;
+// Clear the square's full size, including its hover enlargement.
+const GRAPH_NODE_CLEARANCE = 5;
 const MAX_NODE_GAP = 50;
 const MINIMAP_PADDING = 12;
 const NAVIGATION_ACTIVE_LOCK_MS = 1600;
@@ -100,6 +102,7 @@ function layoutNodes(allNodes: NodeInfo[], minimapHeight: number): NodeLayout {
 }
 
 export const ChatMinimap = memo(function ChatMinimap({
+  onExpandedWidthChange,
   tree,
   activeLeafId,
   onLeafChange,
@@ -135,6 +138,8 @@ export const ChatMinimap = memo(function ChatMinimap({
   const [minimapHeight, setMinimapHeight] = useState(600);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [branchPreviewId, setBranchPreviewId] = useState<string | null>(null);
+  const [railHovered, setRailHovered] = useState(false);
+  const [railFocused, setRailFocused] = useState(false);
   const branchRefs = useRef(new Map<string, HTMLButtonElement>());
   const previewId = useId();
   const markerRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -204,6 +209,10 @@ export const ChatMinimap = memo(function ChatMinimap({
   anchorsRef.current = { anchorIds, promptAnchorIds };
 
   const branched = useMemo(() => !!tree && hasSessionBranches(tree), [tree]);
+  const expanded = branched && (railHovered || railFocused);
+  useEffect(() => {
+    if (!expanded && containerRef.current) containerRef.current.scrollLeft = 0;
+  }, [expanded]);
   const graph = useMemo(
     () =>
       branched && tree
@@ -216,7 +225,11 @@ export const ChatMinimap = memo(function ChatMinimap({
         : [],
     [branched, tree, activeLeafId, anchorIds, starredEntryIds],
   );
-  const graphRows = graph.reduce((max, node) => Math.max(max, node.row), 0);
+  const visibleGraph = expanded ? graph : graph.filter((node) => node.active);
+  const graphRows = visibleGraph.reduce(
+    (max, node) => Math.max(max, node.row),
+    0,
+  );
   const graphGap = Math.min(
     MAX_NODE_GAP,
     Math.max(
@@ -228,8 +241,11 @@ export const ChatMinimap = memo(function ChatMinimap({
   const graphY = (row: number) => MINIMAP_PADDING + row * graphGap;
   const graphWidth = graph.reduce(
     (max, node) => Math.max(max, node.lane * BRANCH_LANE_GAP + MINIMAP_WIDTH),
-    BRANCHED_MINIMAP_WIDTH,
+    MINIMAP_WIDTH,
   );
+  useEffect(() => {
+    onExpandedWidthChange?.(graphWidth);
+  }, [graphWidth, onExpandedWidthChange]);
   const graphById = new Map(graph.map((node) => [node.id, node]));
   const branchLabel = (id: string) => {
     if (stars.has(id)) return t("chat.switchStarredPath");
@@ -537,9 +553,32 @@ export const ChatMinimap = memo(function ChatMinimap({
   return (
     <div
       ref={containerRef}
-      className={`chat-minimap${branched ? " has-branches" : ""}`}
+      className={`chat-minimap${branched ? " has-branches" : ""}${expanded ? " is-expanded" : ""}`}
       role="navigation"
       aria-label={t("chat.conversationMap")}
+      tabIndex={branched ? 0 : undefined}
+      onMouseEnter={() => {
+        setRailHovered(true);
+      }}
+      onFocusCapture={() => {
+        setRailFocused(true);
+      }}
+      onKeyDownCapture={() => {
+        setRailFocused(true);
+      }}
+      onMouseDownCapture={(event) => {
+        if (branched) {
+          // Pointer navigation must not pin the hover expansion through focus.
+          event.preventDefault();
+          setRailFocused(false);
+        }
+      }}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setRailFocused(false);
+          setBranchPreviewId(null);
+        }
+      }}
       onMouseDown={handleMouseDown}
       onMouseMove={(event) => {
         if (
@@ -560,49 +599,53 @@ export const ChatMinimap = memo(function ChatMinimap({
         if (node) setBranchPreviewId(null);
       }}
       onMouseLeave={() => {
+        setRailHovered(false);
         setHoveredIndex(null);
+        if (!railFocused) setBranchPreviewId(null);
       }}
       style={{
-        width: branched ? BRANCHED_MINIMAP_WIDTH : MINIMAP_WIDTH,
+        width: expanded ? graphWidth : MINIMAP_WIDTH,
+        maxWidth: expanded ? "100%" : undefined,
         flexShrink: 0,
         position: "relative",
         cursor: "pointer",
         userSelect: "none",
         borderLeft: "1px solid var(--border)",
         background: "var(--bg-panel)",
-        overflow: branched ? "auto" : "visible",
+        overflow: expanded ? "auto" : "visible",
       }}
     >
       {branched && (
         <>
           <svg
             aria-hidden="true"
-            width={graphWidth}
+            width={expanded ? graphWidth : MINIMAP_WIDTH}
             height={minimapHeight}
             style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
           >
-            {graph.map((node) => {
+            {visibleGraph.map((node) => {
               const parent = node.parentId
                 ? graphById.get(node.parentId)
                 : undefined;
               if (!parent) return null;
               const x = MINIMAP_WIDTH / 2 + node.lane * BRANCH_LANE_GAP;
               const px = MINIMAP_WIDTH / 2 + parent.lane * BRANCH_LANE_GAP;
-              const y = graphY(node.row);
-              const py = graphY(parent.row);
+              const y = graphY(node.row) - GRAPH_NODE_CLEARANCE;
+              const py = graphY(parent.row) + GRAPH_NODE_CLEARANCE;
+              if (y <= py) return null;
               return (
                 <path
                   key={node.id}
                   d={`M ${px} ${py} C ${px} ${y}, ${x} ${py}, ${x} ${y}`}
                   fill="none"
-                  stroke={node.active ? "var(--accent)" : "var(--text-dim)"}
+                  stroke="var(--text-dim)"
                   strokeWidth={node.active ? 2 : 1}
                   opacity={node.active ? 0.8 : 0.55}
                 />
               );
             })}
           </svg>
-          {graph
+          {visibleGraph
             .filter((node) => !node.anchor)
             .map((node) =>
               node.active ? (
@@ -639,7 +682,7 @@ export const ChatMinimap = memo(function ChatMinimap({
                     event.stopPropagation();
                   }}
                   onClick={() => {
-                    void onLeafChange?.(node.id);
+                    void onLeafChange?.(node.targetLeafId, node.scrollEntryId);
                   }}
                   onMouseEnter={() => {
                     setHoveredIndex(null);
@@ -660,7 +703,7 @@ export const ChatMinimap = memo(function ChatMinimap({
                 </button>
               ),
             )}
-          {branchPreviewId && branchPreviewAnchor && (
+          {expanded && branchPreviewId && branchPreviewAnchor && (
             <MessagePreviewPopover
               id={previewId}
               text={branchLabel(branchPreviewId)}
@@ -745,17 +788,11 @@ export const ChatMinimap = memo(function ChatMinimap({
                     width: 8,
                     height: 8,
                     borderRadius: 2,
-                    background: branched
-                      ? "var(--accent)"
-                      : isActive
-                        ? "rgba(128,128,128,0.42)"
-                        : "rgba(128,128,128,0.16)",
-                    border: `1.5px solid ${branched ? "var(--accent)" : isActive ? "rgba(128,128,128,0.95)" : "rgba(128,128,128,0.58)"}`,
-                    boxShadow: isActive
-                      ? branched
-                        ? "0 0 0 2px var(--bg-panel), 0 0 0 3px var(--accent)"
-                        : "0 0 0 2px var(--bg-panel)"
-                      : "none",
+                    background: isActive
+                      ? "rgba(128,128,128,0.95)"
+                      : "rgba(128,128,128,0.58)",
+                    border: `1.5px solid ${isActive ? "rgba(128,128,128,0.95)" : "rgba(128,128,128,0.58)"}`,
+                    boxShadow: isActive ? "0 0 0 2px var(--bg-panel)" : "none",
                     transition: "transform 0.1s, background 0.1s",
                     transform: isNearest ? "scale(1.25)" : "scale(1)",
                   }}

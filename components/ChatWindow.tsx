@@ -10,6 +10,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import type {
@@ -331,6 +332,7 @@ export function ChatWindow({
     contextUsage,
     messageActionEntryId,
     branchStatus,
+    branchScrollTarget,
     retryBranchContext,
     isCompacting,
     compactError,
@@ -440,7 +442,27 @@ export function ChatWindow({
   const liveFollowAttachedRef = useRef(true);
   const previousScrollTopRef = useRef(0);
   const previousLeafRef = useRef(activeLeafId);
+  const previousBranchScrollTargetRef = useRef(branchScrollTarget);
+  const branchScrollAnchorRef = useRef(branchScrollTarget);
+  const restoreRailFocusRef = useRef(false);
+  const releaseBranchScrollAnchor = useCallback(() => {
+    branchScrollAnchorRef.current = null;
+  }, []);
   const [atTail, setAtTail] = useState(true);
+  const [expandedRailWidth, setExpandedRailWidth] = useState(36);
+  const handleRailLeafChange = useCallback(
+    async (leafId: string, entryId?: string) => {
+      const rail =
+        scrollContainerRef.current?.parentElement?.querySelector(
+          ".chat-minimap",
+        );
+      restoreRailFocusRef.current = Boolean(
+        rail?.contains(document.activeElement),
+      );
+      await handleLeafChange(leafId, entryId);
+    },
+    [handleLeafChange],
+  );
 
   const syncScrollPosition = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -473,11 +495,12 @@ export function ChatWindow({
   }, []);
 
   const jumpToLatest = useCallback(() => {
+    releaseBranchScrollAnchor();
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
     scrollToLatest(reducedMotion ? "auto" : "smooth");
-  }, [scrollToLatest]);
+  }, [releaseBranchScrollAnchor, scrollToLatest]);
 
   const compactionControl = useMemo(
     () =>
@@ -698,6 +721,61 @@ export function ChatWindow({
   }, [messages]);
   const messageRefs = useMessageRefs(anchorCount);
   const answerRefs = useRef(new Map<string, HTMLDivElement>());
+  const alignBranchScrollAnchor = useCallback(() => {
+    const target = branchScrollAnchorRef.current;
+    const container = scrollContainerRef.current;
+    if (!target || target.leafId !== activeLeafId || !container) return false;
+    const promptIndex = messages
+      .flatMap((message, index) =>
+        isMessageGroupAnchor(message) ? [entryIds[index]] : [],
+      )
+      .indexOf(target.entryId);
+    const element =
+      answerRefs.current.get(target.entryId) ??
+      messageRefs.current[promptIndex];
+    // Keep tail-follow detached while an older selected message is loading.
+    liveFollowAttachedRef.current = false;
+    if (!element) return true;
+    const top =
+      element.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      container.scrollTop -
+      container.clientHeight * 0.3;
+    container.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+    liveFollowAttachedRef.current = false;
+    previousScrollTopRef.current = container.scrollTop;
+    setAtTail(
+      isScrollAtTail(
+        container.scrollTop,
+        container.clientHeight,
+        container.scrollHeight,
+      ),
+    );
+    return true;
+  }, [activeLeafId, entryIds, messageRefs, messages]);
+  useEffect(() => {
+    if (!branchScrollTarget) return;
+    let cancelled = false;
+    void loadEarlierMessages(branchScrollTarget.entryId).then((loaded) => {
+      if (
+        !loaded &&
+        !cancelled &&
+        branchScrollAnchorRef.current === branchScrollTarget
+      ) {
+        releaseBranchScrollAnchor();
+        reportActionError(t("chat.branchTargetLoadFailed"));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    branchScrollTarget,
+    loadEarlierMessages,
+    releaseBranchScrollAnchor,
+    reportActionError,
+    t,
+  ]);
   const stars = useMemo(() => new Set(starredEntryIds), [starredEntryIds]);
   const isEmptyNew =
     isNew && messages.length === 0 && !streamState.isStreaming && !sessionBusy;
@@ -810,6 +888,7 @@ export function ChatWindow({
   }, [messages, toolResultsMap, messageCwd]);
 
   const scheduleScrollLayout = useAnimationFrameCallback(() => {
+    if (alignBranchScrollAnchor()) return;
     if (liveFollowAttachedRef.current) scrollToLatest();
     else syncScrollPosition();
   });
@@ -818,11 +897,28 @@ export function ChatWindow({
     const container = scrollContainerRef.current;
     if (!container) return;
 
+    if (previousBranchScrollTargetRef.current !== branchScrollTarget) {
+      previousBranchScrollTargetRef.current = branchScrollTarget;
+      branchScrollAnchorRef.current = branchScrollTarget;
+    }
+
     if (previousLeafRef.current !== activeLeafId) {
       previousLeafRef.current = activeLeafId;
+      if (restoreRailFocusRef.current) {
+        restoreRailFocusRef.current = false;
+        container.parentElement
+          ?.querySelector<HTMLElement>(".chat-minimap")
+          ?.focus({ preventScroll: true });
+      }
       pendingPrependRef.current = null;
       initialScrollDoneRef.current = true;
-      scrollToLatest();
+      if (!alignBranchScrollAnchor()) scrollToLatest();
+      return;
+    }
+
+    if (alignBranchScrollAnchor()) {
+      pendingPrependRef.current = null;
+      initialScrollDoneRef.current = true;
       return;
     }
 
@@ -849,6 +945,8 @@ export function ChatWindow({
     }
   }, [
     activeLeafId,
+    alignBranchScrollAnchor,
+    branchScrollTarget,
     agentPhase,
     completedPrependId,
     entryIds,
@@ -972,6 +1070,11 @@ export function ChatWindow({
   return (
     <section
       className={`chat-window${isEmptyNew ? " is-empty" : ""}`}
+      style={
+        {
+          "--expanded-conversation-rail-width": `${expandedRailWidth}px`,
+        } as CSSProperties
+      }
       aria-label={t("chat.messages")}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -1069,7 +1172,28 @@ export function ChatWindow({
         />
       </div>
 
-      <div className="chat-body">
+      <div
+        className="chat-body"
+        onPointerDownCapture={releaseBranchScrollAnchor}
+        onClickCapture={releaseBranchScrollAnchor}
+        onWheelCapture={releaseBranchScrollAnchor}
+        onTouchStartCapture={releaseBranchScrollAnchor}
+        onKeyDownCapture={(event) => {
+          if (
+            [
+              "ArrowUp",
+              "ArrowDown",
+              "PageUp",
+              "PageDown",
+              "Home",
+              "End",
+              " ",
+              "Enter",
+            ].includes(event.key)
+          )
+            releaseBranchScrollAnchor();
+        }}
+      >
         <div
           ref={scrollContainerRef}
           className="chat-scroll"
@@ -1382,12 +1506,13 @@ export function ChatWindow({
         </div>
         <ChatJumpToLatest visible={!atTail} onClick={jumpToLatest} />
         <ChatMinimap
+          onExpandedWidthChange={setExpandedRailWidth}
           key={`${session?.id ?? "draft"}:${activeLeafId ?? ""}`}
           messages={messages}
           entryIds={entryIds}
           tree={tree}
           activeLeafId={activeLeafId}
-          onLeafChange={handleLeafChange}
+          onLeafChange={handleRailLeafChange}
           branchDisabled={
             loading ||
             sessionBusy ||

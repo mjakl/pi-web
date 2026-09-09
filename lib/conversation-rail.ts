@@ -3,6 +3,10 @@ import type { SessionTreeNode } from "./types";
 export interface ConversationRailNode {
   id: string;
   parentId: string | null;
+  /** Complete path to select when navigating to this marker. */
+  targetLeafId: string;
+  /** Exact rendered prompt or saved answer; structural nodes select the path only. */
+  scrollEntryId?: string;
   active: boolean;
   anchor: boolean;
   preview?: string;
@@ -13,11 +17,23 @@ export interface ConversationRailNode {
 /** The rail stays narrow for linear conversations. Walk iteratively because
  * session history can contain thousands of entries. */
 export function hasSessionBranches(nodes: SessionTreeNode[]): boolean {
-  if (nodes.length > 1) return true;
-  const pending = [...nodes];
-  for (let node = pending.pop(); node; node = pending.pop()) {
-    if (node.children.length > 1) return true;
-    pending.push(...node.children);
+  const parents = new Set<string | null>();
+  const pending = nodes.map((node) => ({
+    node,
+    parentId: null as string | null,
+  }));
+  for (let item = pending.pop(); item; item = pending.pop()) {
+    const { node } = item;
+    const parentId =
+      node.parentId !== undefined ? node.parentId : item.parentId;
+    if (parents.has(parentId)) return true;
+    parents.add(parentId);
+    pending.push(
+      ...node.children.map((child) => ({
+        node: child,
+        parentId: node.entry.id,
+      })),
+    );
   }
   return false;
 }
@@ -59,6 +75,7 @@ export function buildConversationRail(
     current = parents.get(current) ?? null;
   }
   const anchors = new Set(anchorIds);
+  const stars = new Set(starredEntryIds);
   const kept = new Set([
     ...representatives.keys(),
     ...[...anchorIds, ...starredEntryIds].filter((id) => parents.has(id)),
@@ -72,6 +89,13 @@ export function buildConversationRail(
     nodes.set(id, {
       id,
       parentId,
+      targetLeafId: id,
+      scrollEntryId:
+        stars.has(id) ||
+        (representatives.get(id)?.entry.type === "message" &&
+          representatives.get(id)?.branchPreview?.role === "user")
+          ? id
+          : undefined,
       active: active.has(id),
       anchor: anchors.has(id),
       preview: representatives.get(id)?.branchPreview?.text,
@@ -90,6 +114,7 @@ export function buildConversationRail(
     nodes.set(id, {
       id,
       parentId: tail,
+      targetLeafId: id,
       active: true,
       anchor: true,
       lane: 0,
@@ -122,6 +147,11 @@ export function buildConversationRail(
       row: row + 1,
     }));
     tasks.push(...next.reverse());
+  }
+  const leaves = new Map<number, string>();
+  for (const node of result.toReversed()) {
+    node.targetLeafId = leaves.get(node.lane) ?? node.id;
+    leaves.set(node.lane, node.targetLeafId);
   }
   return result;
 }

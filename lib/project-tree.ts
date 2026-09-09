@@ -17,6 +17,14 @@ type ProjectableTreeNode<T> = {
   label?: string;
 };
 
+function isHumanMessage(entry: ProjectableEntry): boolean {
+  return (
+    entry.type === "message" &&
+    isRecord(entry.message) &&
+    entry.message["role"] === "user"
+  );
+}
+
 function appendPreviewText(current: string, value: unknown): string {
   if (typeof value !== "string" || current.length > MAX_BRANCH_PREVIEW_LENGTH)
     return current;
@@ -74,7 +82,8 @@ function previewForEntry(entry: ProjectableEntry): BranchPreview | undefined {
 
 /**
  * Project the session tree into the shallow navigation tree sent to the client.
- * Keeps roots, branch points, and leaves while contracting single-child chains
+ * Keeps human messages, roots, branch points, and leaves while contracting other
+ * single-child chains
  * without recursive traversal. Contracted entry IDs are attached to the next
  * visible node so the UI can still recognize an active leaf inside the chain.
  */
@@ -90,7 +99,11 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
     if (seen.has(node)) continue;
     seen.add(node);
 
-    if (roots.has(node) || node.children.length !== 1) {
+    if (
+      roots.has(node) ||
+      node.children.length !== 1 ||
+      isHumanMessage(node.entry)
+    ) {
       keep.add(node);
     }
 
@@ -104,14 +117,19 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
     compressedEntryIds?: string[],
     branchPreview?: BranchPreview,
     parentId: string | null = null,
-  ): SessionTreeNode => ({
-    parentId,
-    entry: { id: node.entry.id, type: node.entry.type },
-    children: [],
-    ...(node.label !== undefined ? { label: node.label } : {}),
-    ...(compressedEntryIds?.length ? { compressedEntryIds } : {}),
-    ...(branchPreview ? { branchPreview } : {}),
-  });
+  ): SessionTreeNode => {
+    const preview = isHumanMessage(node.entry)
+      ? previewForEntry(node.entry)
+      : branchPreview;
+    return {
+      parentId,
+      entry: { id: node.entry.id, type: node.entry.type },
+      children: [],
+      ...(node.label !== undefined ? { label: node.label } : {}),
+      ...(compressedEntryIds?.length ? { compressedEntryIds } : {}),
+      ...(preview ? { branchPreview: preview } : {}),
+    };
+  };
   const tasks = nodes.map((source) => ({
     source,
     projected: cloneNode(source, undefined, previewForEntry(source.entry)),

@@ -47,7 +47,6 @@ import {
   observedActivityEpochAfter,
   projectPersistedSnapshot,
   runSessionLoadPhases,
-  runTranscriptNavigation,
   type BranchContextRequest,
   type PaginationRequest,
   type PersistedAuthority,
@@ -312,12 +311,18 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const messageActionPendingRef = useRef(false);
   const branchActionRef = useRef<{
     sessionId: string;
+    restoreDraft: boolean;
+    scrollEntryId?: string;
     result?: { leafId: string | null; message?: UserMessage };
     loading: boolean;
   } | null>(null);
   const [branchStatus, setBranchStatus] = useState<"pending" | "failed" | null>(
     null,
   );
+  const [branchScrollTarget, setBranchScrollTarget] = useState<{
+    leafId: string | null;
+    entryId: string;
+  } | null>(null);
   const [messageActionEntryId, setMessageActionEntryId] = useState<
     string | null
   >(null);
@@ -841,11 +846,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   historyLeafRef.current = activeLeafId;
   const loadEarlierMessages = useCallback(
     async (throughEntryId?: string): Promise<boolean> => {
+      if (branchActionRef.current) return false;
       const sid = sessionIdRef.current;
       const leaf = historyLeafRef.current;
       while (earlierLoadRef.current) await earlierLoadRef.current;
       if (
         !sid ||
+        branchActionRef.current ||
         sessionIdRef.current !== sid ||
         historyLeafRef.current !== leaf
       )
@@ -2265,7 +2272,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       action.loading ||
       action.sessionId !== sessionIdRef.current
     )
-      return;
+      return false;
     action.loading = true;
     setBranchStatus("pending");
     const branchRequest: BranchContextRequest = {
@@ -2286,29 +2293,39 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       sessionIdRef.current !== action.sessionId ||
       branchActionRef.current !== action
     )
-      return;
+      return false;
     action.loading = false;
     if (!loaded) {
       setBranchStatus("failed");
-      return;
+      return false;
     }
     setActiveLeafId(action.result.leafId);
-    const draft = messageActionDraft(action.result.message);
-    setDraft(action.sessionId, draft);
-    opts.chatInputRef?.current?.replaceMessage(
-      {
-        role: "user",
-        content: [
-          { type: "text", text: draft.value },
-          ...draft.images.map((image) => ({
-            type: "image" as const,
-            ...image,
-          })),
-        ],
-      },
-      true,
-    );
+    if (action.restoreDraft) {
+      setBranchScrollTarget(null);
+      const draft = messageActionDraft(action.result.message);
+      setDraft(action.sessionId, draft);
+      opts.chatInputRef?.current?.replaceMessage(
+        {
+          role: "user",
+          content: [
+            { type: "text", text: draft.value },
+            ...draft.images.map((image) => ({
+              type: "image" as const,
+              ...image,
+            })),
+          ],
+        },
+        true,
+      );
+    } else {
+      setBranchScrollTarget(
+        action.scrollEntryId
+          ? { leafId: action.result.leafId, entryId: action.scrollEntryId }
+          : null,
+      );
+    }
     finishBranchAction();
+    return true;
   }, [finishBranchAction, loadContext, opts.chatInputRef]);
 
   const handleBranchMessage = useCallback(
@@ -2316,7 +2333,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       const sid = sessionIdRef.current;
       if (!sid || messageActionPendingRef.current) return;
       messageActionPendingRef.current = true;
-      const action = { sessionId: sid, loading: false };
+      const action = { sessionId: sid, loading: false, restoreDraft: true };
       branchActionRef.current = action;
       setBranchStatus("pending");
       setMessageActionEntryId(entryId);
@@ -2404,44 +2421,63 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     ],
   );
 
-  const navigateTranscriptBranch = useCallback(
-    async (leafId: string | null) => {
-      if (branchActionRef.current || bashRunningRef.current) return;
-      const sid = sessionIdRef.current;
-      if (!sid) return;
-      const branchRequest: BranchContextRequest = {
-        intentOrder: ++persistedOrderRef.current,
-        sessionId: sid,
-        runId: promptRunIdRef.current,
-      };
-      acceptedTranscriptOrderRef.current = branchRequest.intentOrder;
-      setActiveLeafId(leafId);
-      // The previous branch's cursor cannot authorize pagination on this branch.
-      setHistoryCursor(null);
-      setHasEarlierMessages(false);
-      await runTranscriptNavigation(
-        () =>
-          runPersistedWrite(async () => {
-            if (leafId) {
-              await sendAgentCommand(sid, {
-                type: "navigate_tree",
-                targetId: leafId,
-              }).catch(() => {});
-            }
-          }),
-        async () => {
-          await loadContext(sid, leafId, undefined, branchRequest);
-        },
-      );
-    },
-    [loadContext, runPersistedWrite],
-  );
-
   const handleLeafChange = useCallback(
-    async (leafId: string | null) => {
-      await navigateTranscriptBranch(leafId);
+    async (leafId: string, entryId?: string): Promise<boolean> => {
+      if (
+        messageActionPendingRef.current ||
+        agentRunningRef.current ||
+        bashRunningRef.current ||
+        isCompacting
+      )
+        return false;
+      const sid = sessionIdRef.current;
+      if (!sid) return false;
+      const action = {
+        sessionId: sid,
+        restoreDraft: false,
+        scrollEntryId: entryId,
+        loading: false,
+      };
+      branchActionRef.current = action;
+      messageActionPendingRef.current = true;
+      setBranchStatus("pending");
+      setMessageActionEntryId(entryId ?? leafId);
+      commitLocalSnapshotMutation();
+      try {
+        const result = await runPersistedWrite(() =>
+          sendAgentCommand<{ cancelled: boolean; leafId: string | null }>(sid, {
+            type: "navigate_tree",
+            targetId: leafId,
+          }),
+        );
+        if (
+          result.cancelled ||
+          !sessionHookMountedRef.current ||
+          sessionIdRef.current !== sid
+        ) {
+          finishBranchAction();
+          return false;
+        }
+        branchActionRef.current = { ...action, result };
+        return await retryBranchContext();
+      } catch (error) {
+        finishBranchAction();
+        if (sessionHookMountedRef.current && sessionIdRef.current === sid)
+          reportActionError(
+            t("chat.branchNavigationFailed", { error: errorMessage(error) }),
+          );
+        return false;
+      }
     },
-    [navigateTranscriptBranch],
+    [
+      commitLocalSnapshotMutation,
+      finishBranchAction,
+      isCompacting,
+      reportActionError,
+      retryBranchContext,
+      runPersistedWrite,
+      t,
+    ],
   );
 
   const handleModelChange = useCallback(
@@ -3119,6 +3155,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     contextUsage,
     messageActionEntryId,
     branchStatus,
+    branchScrollTarget,
     retryBranchContext,
     tree: data?.tree ?? NO_BRANCHES,
     systemPrompt,

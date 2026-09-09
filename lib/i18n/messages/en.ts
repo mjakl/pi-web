@@ -7,6 +7,9 @@ export const enMessages: Record<string, string> = {
   "chat.branchBusy":
     "Wait for the current operation to finish before branching",
   "chat.branchFailed": "Could not create branch: {error}",
+  "chat.branchNavigationFailed": "Could not switch branch: {error}",
+  "chat.branchTargetLoadFailed":
+    "The branch is open, but the selected message could not be loaded.",
   "chat.newSessionFailed": "Could not create session: {error}",
   "chat.starAnswer": "Star answer",
   "chat.unstarAnswer": "Unstar answer",

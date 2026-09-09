@@ -1083,6 +1083,13 @@ test("conversation branches live only in the desktop rail, without a toolbar sel
       window.happyDOM.setWindowSize({ width: 1064, height: 844 }),
     );
     await act(() => root.render(appShell(`session=${sidebarSession.id}`)));
+    const rail = container.querySelector(".chat-minimap.has-branches");
+    assert.ok(rail);
+    assert.equal(rail.style.width, "36px");
+    assert.equal(rail.querySelector(".minimap-branch"), null);
+    await act(() =>
+      rail.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true })),
+    );
     assert.ok(
       container.querySelector(
         '.chat-minimap.has-branches button[aria-label="Switch branch: Alternative path"]',
