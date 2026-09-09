@@ -26,11 +26,18 @@ export function isMessageGroupAnchor(message: {
   customType?: string;
   display?: boolean;
 }): boolean {
+  return isMessageGroupBoundary(message) && !isHiddenCustomMessage(message);
+}
+
+// Hidden compactions still separate completed answers from continuation turns.
+// Visibility controls navigation anchors, not transcript structure.
+export function isMessageGroupBoundary(message: {
+  role?: AgentMessage["role"];
+  customType?: string;
+}): boolean {
   return (
     message.role === "user" ||
-    (message.role === "custom" &&
-      message.customType === "compaction" &&
-      !isHiddenCustomMessage(message))
+    (message.role === "custom" && message.customType === "compaction")
   );
 }
 
