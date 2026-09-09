@@ -7,6 +7,9 @@ export const enMessages: Record<string, string> = {
   "chat.branchBusy":
     "Wait for the current operation to finish before branching",
   "chat.branchFailed": "Could not create branch: {error}",
+  "chat.branchNavigationFailed": "Could not switch branch: {error}",
+  "chat.branchTargetLoadFailed":
+    "The branch is open, but the selected message could not be loaded.",
   "chat.newSessionFailed": "Could not create session: {error}",
   "chat.starAnswer": "Star answer",
   "chat.unstarAnswer": "Unstar answer",
@@ -377,9 +380,7 @@ export const enMessages: Record<string, string> = {
   "i18n.creatingSession": "Creating new session…",
   "i18n.creating": "Creating…",
   "i18n.noChanges": "No changes",
-  "i18n.branches": "Branches",
   "i18n.noActiveSession": "No active session",
-  "i18n.noBranches": "This session has no branches",
   "i18n.source": "Source",
   "i18n.preview": "Preview",
   "i18n.diff": "Diff",
@@ -498,4 +499,8 @@ export const enMessages: Record<string, string> = {
   "error.tryAgain": "Try again",
   "error.reload": "Reload page",
   "chat.jumpHumanMessage": "Jump to human message",
+  "chat.conversationMap": "Conversation paths",
+  "chat.switchConversationPath": "Switch branch: {preview}",
+  "chat.switchPath": "Switch branch",
+  "chat.switchStarredPath": "Switch branch to starred answer",
 };

@@ -1,7 +1,7 @@
 import { isRecord } from "./types";
 import type { BranchPreview, SessionTreeNode } from "@/lib/types";
 
-// BranchNavigator still traverses recursively, so keep the response tree shallow.
+// Bound JSON response nesting; parentId preserves the graph beyond this depth.
 export const MAX_PROJECTED_TREE_DEPTH = 200;
 const MAX_BRANCH_PREVIEW_LENGTH = 40;
 
@@ -16,6 +16,14 @@ type ProjectableTreeNode<T> = {
   children: T[];
   label?: string;
 };
+
+function isHumanMessage(entry: ProjectableEntry): boolean {
+  return (
+    entry.type === "message" &&
+    isRecord(entry.message) &&
+    entry.message["role"] === "user"
+  );
+}
 
 function appendPreviewText(current: string, value: unknown): string {
   if (typeof value !== "string" || current.length > MAX_BRANCH_PREVIEW_LENGTH)
@@ -74,7 +82,8 @@ function previewForEntry(entry: ProjectableEntry): BranchPreview | undefined {
 
 /**
  * Project the session tree into the shallow navigation tree sent to the client.
- * Keeps roots, branch points, and leaves while contracting single-child chains
+ * Keeps human messages, roots, branch points, and leaves while contracting other
+ * single-child chains
  * without recursive traversal. Contracted entry IDs are attached to the next
  * visible node so the UI can still recognize an active leaf inside the chain.
  */
@@ -90,7 +99,11 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
     if (seen.has(node)) continue;
     seen.add(node);
 
-    if (roots.has(node) || node.children.length !== 1) {
+    if (
+      roots.has(node) ||
+      node.children.length !== 1 ||
+      isHumanMessage(node.entry)
+    ) {
       keep.add(node);
     }
 
@@ -103,13 +116,20 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
     node: T,
     compressedEntryIds?: string[],
     branchPreview?: BranchPreview,
-  ): SessionTreeNode => ({
-    entry: { id: node.entry.id, type: node.entry.type },
-    children: [],
-    ...(node.label !== undefined ? { label: node.label } : {}),
-    ...(compressedEntryIds?.length ? { compressedEntryIds } : {}),
-    ...(branchPreview ? { branchPreview } : {}),
-  });
+    parentId: string | null = null,
+  ): SessionTreeNode => {
+    const preview = isHumanMessage(node.entry)
+      ? previewForEntry(node.entry)
+      : branchPreview;
+    return {
+      parentId,
+      entry: { id: node.entry.id, type: node.entry.type },
+      children: [],
+      ...(node.label !== undefined ? { label: node.label } : {}),
+      ...(compressedEntryIds?.length ? { compressedEntryIds } : {}),
+      ...(preview ? { branchPreview: preview } : {}),
+    };
+  };
   const tasks = nodes.map((source) => ({
     source,
     projected: cloneNode(source, undefined, previewForEntry(source.entry)),
@@ -126,19 +146,20 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
         node: source,
         compressedEntryIds: [] as string[],
         branchPreview: undefined as BranchPreview | undefined,
+        parentId: projectedParent.entry.id,
       },
     ];
     const flattenedSeen = new Set<T>();
 
     for (let item = pending.pop(); item; item = pending.pop()) {
-      const { node, compressedEntryIds, branchPreview } = item;
+      const { node, compressedEntryIds, branchPreview, parentId } = item;
       if (flattenedSeen.has(node)) continue;
       flattenedSeen.add(node);
       const nextPreview = branchPreview ?? previewForEntry(node.entry);
 
       if (keep.has(node)) {
         projectedParent.children.push(
-          cloneNode(node, compressedEntryIds, nextPreview),
+          cloneNode(node, compressedEntryIds, nextPreview, parentId),
         );
       }
 
@@ -149,6 +170,7 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
             ? []
             : [...compressedEntryIds, node.entry.id],
           branchPreview: keep.has(node) ? undefined : nextPreview,
+          parentId: keep.has(node) ? node.entry.id : parentId,
         });
       }
     }
@@ -183,6 +205,7 @@ export function projectTreeForResponse<T extends ProjectableTreeNode<T>>(
         child,
         compressedEntryIds,
         branchPreview,
+        projected.entry.id,
       );
       projected.children.push(projectedChild);
       tasks.push({

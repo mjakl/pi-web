@@ -325,6 +325,8 @@ export interface SessionTreeNode {
   children: SessionTreeNode[];
   label?: string;
   compressedEntryIds?: string[];
+  /** Nearest projected ancestor, even when the response nesting is depth-limited. */
+  parentId?: string | null;
   branchPreview?: BranchPreview;
 }
 

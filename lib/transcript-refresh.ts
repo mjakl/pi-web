@@ -283,14 +283,6 @@ export function projectPersistedSnapshot<
   };
 }
 
-export async function runTranscriptNavigation(
-  persistNavigation: () => Promise<unknown>,
-  loadContext: () => Promise<void>,
-): Promise<void> {
-  await persistNavigation();
-  await loadContext();
-}
-
 export async function runSessionLoadPhases<T>(
   loadTranscript: () => Promise<unknown>,
   loadState?: () => Promise<T>,

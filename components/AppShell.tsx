@@ -28,7 +28,6 @@ import {
 import { SettingsPanel } from "./SettingsPanel";
 import { createClientId } from "@/lib/client-id";
 import { ProjectTrustDialog } from "./ProjectTrustDialog";
-import { BranchNavigator, hasSessionBranches } from "./BranchNavigator";
 import { SystemPromptPanel } from "./SystemPromptPanel";
 import { ToolDefinitionsPanel } from "./ToolDefinitionsPanel";
 import { useI18n } from "@/hooks/useI18n";
@@ -296,8 +295,6 @@ export function AppShell({ homeDir }: { homeDir: string }) {
     useState<ChatDisplayState>(EMPTY_CHAT_DISPLAY);
   const chatActionsRef = useRef<ChatActions | null>(null);
   const {
-    branchTree,
-    branchActiveLeafId,
     systemPrompt,
     systemTools,
     sessionStats,
@@ -307,11 +304,6 @@ export function AppShell({ homeDir }: { homeDir: string }) {
   const contextStats = formatContextUsage(
     contextUsage ?? sessionStats?.contextUsage,
   );
-  const sessionHasBranches = hasSessionBranches(branchTree);
-
-  const handleBranchLeafChange = useCallback((leafId: string | null) => {
-    chatActionsRef.current?.changeBranchLeaf(leafId);
-  }, []);
 
   const [systemInfoLoading, setSystemInfoLoading] = useState(false);
   const lastSystemPromptRef = useRef<string | null | undefined>(undefined);
@@ -389,7 +381,7 @@ export function AppShell({ homeDir }: { homeDir: string }) {
 
   // Single active panel — only one dropdown open at a time
   const [activeTopPanel, setActiveTopPanel] = useState<
-    "branches" | "system" | "tools" | "session" | null
+    "system" | "tools" | "session" | null
   >(null);
   const [topPanelPos, setTopPanelPos] = useState<{
     top: number;
@@ -397,17 +389,8 @@ export function AppShell({ homeDir }: { homeDir: string }) {
     width: number;
   } | null>(null);
 
-  useEffect(() => {
-    if (!sessionHasBranches) {
-      setActiveTopPanel((panel) => (panel === "branches" ? null : panel));
-    }
-  }, [sessionHasBranches]);
-
   const toggleTopPanel = useCallback(
-    (
-      panel: "branches" | "system" | "tools" | "session",
-      keepMobileToolbarOpen = false,
-    ) => {
+    (panel: "system" | "tools" | "session", keepMobileToolbarOpen = false) => {
       if (isMobile) setSidebarOpen(false);
       setActiveTopPanel((cur) => (cur === panel ? null : panel));
       if (isMobile && isNarrowMobile && keepMobileToolbarOpen)
@@ -1308,74 +1291,6 @@ export function AppShell({ homeDir }: { homeDir: string }) {
           </svg>
           {!mobile && <span>{translate("history.label")}</span>}
         </button>
-        {sessionHasBranches &&
-          (mobile ? (
-            <button
-              type="button"
-              onClick={() => {
-                toggleTopPanel("branches", true);
-              }}
-              title={translate("i18n.branches")}
-              aria-label={translate("i18n.branches")}
-              aria-pressed={activeTopPanel === "branches"}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: TOP_BAR_ICON_BUTTON_SIZE,
-                height: "100%",
-                padding: 0,
-                background:
-                  activeTopPanel === "branches" ? "var(--bg-selected)" : "none",
-                border: "none",
-                borderTop:
-                  activeTopPanel === "branches"
-                    ? "2px solid var(--accent)"
-                    : "2px solid transparent",
-                borderRight: "1px solid var(--border)",
-                color:
-                  activeTopPanel === "branches"
-                    ? "var(--text)"
-                    : "var(--text-muted)",
-                cursor: "pointer",
-                flexShrink: 0,
-              }}
-              data-mobile-toolbar-action="branches"
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{
-                  color:
-                    branchTree.length > 0 ? "var(--accent)" : "var(--text-dim)",
-                }}
-                aria-hidden="true"
-              >
-                <line x1="6" y1="3" x2="6" y2="15" />
-                <circle cx="18" cy="6" r="3" />
-                <circle cx="6" cy="18" r="3" />
-                <path d="M18 9a9 9 0 0 1-9 9" />
-              </svg>
-            </button>
-          ) : (
-            <BranchNavigator
-              tree={branchTree}
-              activeLeafId={branchActiveLeafId}
-              onLeafChange={handleBranchLeafChange}
-              containerRef={topBarRef}
-              open={activeTopPanel === "branches"}
-              onToggle={() => {
-                toggleTopPanel("branches");
-              }}
-              hasSession
-            />
-          ))}
         <button
           ref={systemBtnRef}
           type="button"
@@ -2189,20 +2104,6 @@ export function AppShell({ homeDir }: { homeDir: string }) {
                 </>
               )}
               {!isMobile && renderMainFileToggle(false)}
-              {isMobile && sessionHasBranches && (
-                <BranchNavigator
-                  tree={branchTree}
-                  activeLeafId={branchActiveLeafId}
-                  onLeafChange={handleBranchLeafChange}
-                  containerRef={topBarRef}
-                  open={activeTopPanel === "branches"}
-                  onToggle={() => {
-                    toggleTopPanel("branches");
-                  }}
-                  hasSession={showChat}
-                  hideInlineButton
-                />
-              )}
               {/* Top panel dropdown — shared, only one active at a time */}
               {activeTopPanel && topPanelPos && (
                 <div

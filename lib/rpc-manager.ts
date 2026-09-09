@@ -72,18 +72,25 @@ function persistSessionManager(
   (manager as unknown as { flushed: boolean }).flushed = true;
 }
 
-function messageActionTarget(manager: SessionManager, entryId: unknown) {
+function messageActionTarget(
+  manager: SessionManager,
+  entryId: unknown,
+  behavior: "edit" | "navigate" = "edit",
+) {
   const entry =
     typeof entryId === "string" ? manager.getEntry(entryId) : undefined;
   if (
     !entry ||
-    !["message", "custom_message", "compaction", "branch_summary"].includes(
-      entry.type,
-    )
+    (behavior === "edit" &&
+      !["message", "custom_message", "compaction", "branch_summary"].includes(
+        entry.type,
+      ))
   )
     throw new Error("Select an existing conversation message");
   const message =
-    entry.type === "message" && entry.message.role === "user"
+    behavior === "edit" &&
+    entry.type === "message" &&
+    entry.message.role === "user"
       ? entry.message
       : undefined;
   return {
@@ -121,6 +128,7 @@ const SESSION_REPLACEMENT_COMMAND_TYPES = new Set([
   "clone",
   "rewind",
   "branch_from_message",
+  "navigate_tree",
 ]);
 const COMMANDS_ALLOWED_DURING_SESSION_REPLACEMENT = new Set([
   "get_state",
@@ -835,7 +843,8 @@ export class AgentSessionWrapper {
           };
         }
 
-        case "branch_from_message": {
+        case "branch_from_message":
+        case "navigate_tree": {
           if (this.isSessionRunningForReplacement())
             throw new Error(
               "Wait for the current operation to finish before branching",
@@ -844,10 +853,17 @@ export class AgentSessionWrapper {
             await this.waitForExtensionsBound();
             if (!this.isActive()) throw new Error("Session is stopped");
             const manager = this.inner.sessionManager;
-            const target = messageActionTarget(manager, command["entryId"]);
+            const navigation = command["type"] === "navigate_tree";
+            const target = messageActionTarget(
+              manager,
+              navigation ? command["targetId"] : command["entryId"],
+              navigation ? "navigate" : "edit",
+            );
             const state = this.inner.agent.state;
             if (!state) throw new Error("Session context is unavailable");
             const oldLeafId = manager.getLeafId();
+            if (navigation && oldLeafId === target.leafId)
+              return { cancelled: false, leafId: oldLeafId };
             const controller = new AbortController();
             this.branchAbortController = controller;
             try {
@@ -889,7 +905,7 @@ export class AgentSessionWrapper {
               return {
                 cancelled: false,
                 leafId: manager.getLeafId(),
-                message: target.message,
+                ...(target.message ? { message: target.message } : {}),
               };
             } finally {
               this.branchAbortController = null;
@@ -981,17 +997,6 @@ export class AgentSessionWrapper {
             });
             return { message };
           });
-        }
-
-        case "navigate_tree": {
-          if (this.inner.isBashRunning) {
-            throw new Error("Cannot navigate while a shell command is running");
-          }
-          const result = await this.inner.navigateTree(
-            command["targetId"] as string,
-            {},
-          );
-          return { cancelled: result.cancelled };
         }
 
         case "set_thinking_level": {

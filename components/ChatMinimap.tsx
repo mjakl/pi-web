@@ -17,9 +17,22 @@ import {
   type RefObject,
 } from "react";
 import { isMessageGroupAnchor } from "@/lib/message-display";
-import type { AgentMessage, SessionContext } from "@/lib/types";
+import type {
+  AgentMessage,
+  SessionContext,
+  SessionTreeNode,
+} from "@/lib/types";
+import {
+  buildConversationRail,
+  hasSessionBranches,
+} from "@/lib/conversation-rail";
 
 interface Props {
+  onExpandedWidthChange?: (width: number) => void;
+  tree?: SessionTreeNode[];
+  activeLeafId?: string | null;
+  onLeafChange?: (leafId: string, entryId?: string) => void | Promise<void>;
+  branchDisabled?: boolean;
   messages: AgentMessage[];
   entryIds: string[];
   historyAnchors?: SessionContext["historyAnchors"];
@@ -31,6 +44,9 @@ interface Props {
 }
 
 const MINIMAP_WIDTH = 36;
+const BRANCH_LANE_GAP = 36;
+// Clear the square's full size, including its hover enlargement.
+const GRAPH_NODE_CLEARANCE = 5;
 const MAX_NODE_GAP = 50;
 const MINIMAP_PADDING = 12;
 const NAVIGATION_ACTIVE_LOCK_MS = 1600;
@@ -86,6 +102,11 @@ function layoutNodes(allNodes: NodeInfo[], minimapHeight: number): NodeLayout {
 }
 
 export const ChatMinimap = memo(function ChatMinimap({
+  onExpandedWidthChange,
+  tree,
+  activeLeafId,
+  onLeafChange,
+  branchDisabled,
   messages,
   entryIds,
   historyAnchors,
@@ -116,6 +137,10 @@ export const ChatMinimap = memo(function ChatMinimap({
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [minimapHeight, setMinimapHeight] = useState(600);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [branchPreviewId, setBranchPreviewId] = useState<string | null>(null);
+  const [railHovered, setRailHovered] = useState(false);
+  const [railFocused, setRailFocused] = useState(false);
+  const branchRefs = useRef(new Map<string, HTMLButtonElement>());
   const previewId = useId();
   const markerRefs = useRef(new Map<string, HTMLButtonElement>());
   const draggingRef = useRef(false);
@@ -183,10 +208,66 @@ export const ChatMinimap = memo(function ChatMinimap({
   const anchorsRef = useRef({ anchorIds, promptAnchorIds });
   anchorsRef.current = { anchorIds, promptAnchorIds };
 
-  const nodeLayout = useMemo(
-    () => layoutNodes(allNodes, minimapHeight),
-    [allNodes, minimapHeight],
+  const branched = useMemo(() => !!tree && hasSessionBranches(tree), [tree]);
+  const expanded = branched && (railHovered || railFocused);
+  useEffect(() => {
+    if (!expanded && containerRef.current) containerRef.current.scrollLeft = 0;
+  }, [expanded]);
+  const graph = useMemo(
+    () =>
+      branched && tree
+        ? buildConversationRail(
+            tree,
+            activeLeafId ?? null,
+            anchorIds,
+            starredEntryIds,
+          )
+        : [],
+    [branched, tree, activeLeafId, anchorIds, starredEntryIds],
   );
+  const visibleGraph = expanded ? graph : graph.filter((node) => node.active);
+  const graphRows = visibleGraph.reduce(
+    (max, node) => Math.max(max, node.row),
+    0,
+  );
+  const graphGap = Math.min(
+    MAX_NODE_GAP,
+    Math.max(
+      0,
+      (minimapHeight - MINIMAP_FOOTER - MINIMAP_PADDING * 2) /
+        Math.max(1, graphRows),
+    ),
+  );
+  const graphY = (row: number) => MINIMAP_PADDING + row * graphGap;
+  const graphWidth = graph.reduce(
+    (max, node) => Math.max(max, node.lane * BRANCH_LANE_GAP + MINIMAP_WIDTH),
+    MINIMAP_WIDTH,
+  );
+  useEffect(() => {
+    onExpandedWidthChange?.(graphWidth);
+  }, [graphWidth, onExpandedWidthChange]);
+  const graphById = new Map(graph.map((node) => [node.id, node]));
+  const branchLabel = (id: string) => {
+    if (stars.has(id)) return t("chat.switchStarredPath");
+    const preview = graphById.get(id)?.preview;
+    return preview
+      ? t("chat.switchConversationPath", { preview })
+      : t("chat.switchPath");
+  };
+  const nodeLayout = useMemo(() => {
+    if (!branched) return layoutNodes(allNodes, minimapHeight);
+    const rows = new Map(graph.map((node) => [node.id, node.row]));
+    return {
+      nodes: allNodes.map((node) => ({
+        ...node,
+        topRatio:
+          (MINIMAP_PADDING + (rows.get(node.id) ?? 0) * graphGap) /
+          minimapHeight,
+      })),
+      gap: graphGap,
+      fillsHeight: graphGap < MAX_NODE_GAP,
+    };
+  }, [allNodes, minimapHeight, branched, graph, graphGap]);
   const { nodes: positionedNodes, gap: nodeGap } = nodeLayout;
   nodeLayoutRef.current = nodeLayout;
 
@@ -394,10 +475,14 @@ export const ChatMinimap = memo(function ChatMinimap({
     if (!firstNode || height <= 0) return null;
 
     const pointerY = Math.max(0, Math.min(height, ratio * height));
-    const firstNodeY = firstNode.topRatio * height;
-    const rawIndex = gap > 0 ? Math.round((pointerY - firstNodeY) / gap) : 0;
-    const nodeIndex = Math.max(0, Math.min(nodes.length - 1, rawIndex));
-    const nearestNode = nodes[nodeIndex];
+    const nearestNode = nodes.reduce(
+      (nearest, node) =>
+        Math.abs(node.topRatio * height - pointerY) <
+        Math.abs(nearest.topRatio * height - pointerY)
+          ? node
+          : nearest,
+      firstNode,
+    );
 
     if (!fillsHeight && nearestNode) {
       const nodeY = nearestNode.topRatio * height;
@@ -409,7 +494,14 @@ export const ChatMinimap = memo(function ChatMinimap({
 
   const handleMouseDown = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      if (!visible) return;
+      if (!visible && !branched) return;
+      const bounds = event.currentTarget.getBoundingClientRect();
+      if (
+        branched &&
+        event.clientX - bounds.left + event.currentTarget.scrollLeft >
+          MINIMAP_WIDTH
+      )
+        return;
 
       draggingRef.current = true;
       const rect = event.currentTarget.getBoundingClientRect();
@@ -435,10 +527,10 @@ export const ChatMinimap = memo(function ChatMinimap({
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
     },
-    [findNearestNode, scrollToNode, visible],
+    [findNearestNode, scrollToNode, visible, branched],
   );
 
-  if (!visible) return null;
+  if (!visible && !branched) return null;
 
   const previewIndex = hoveredIndex;
   const previewNode =
@@ -453,32 +545,173 @@ export const ChatMinimap = memo(function ChatMinimap({
     ? markerRefs.current.get(previewNode.id)
     : undefined;
 
+  const branchPreviewAnchor =
+    branchPreviewId && graphById.has(branchPreviewId)
+      ? branchRefs.current.get(branchPreviewId)
+      : undefined;
+
   return (
     <div
       ref={containerRef}
-      className="chat-minimap"
+      className={`chat-minimap${branched ? " has-branches" : ""}${expanded ? " is-expanded" : ""}`}
+      role="navigation"
+      aria-label={t("chat.conversationMap")}
+      tabIndex={branched ? 0 : undefined}
+      onMouseEnter={() => {
+        setRailHovered(true);
+      }}
+      onFocusCapture={() => {
+        setRailFocused(true);
+      }}
+      onKeyDownCapture={() => {
+        setRailFocused(true);
+      }}
+      onMouseDownCapture={(event) => {
+        if (branched) {
+          // Pointer navigation must not pin the hover expansion through focus.
+          event.preventDefault();
+          setRailFocused(false);
+        }
+      }}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setRailFocused(false);
+          setBranchPreviewId(null);
+        }
+      }}
       onMouseDown={handleMouseDown}
       onMouseMove={(event) => {
+        if (
+          event.target instanceof window.Element &&
+          event.target.closest(".minimap-branch")
+        )
+          return;
         const rect = event.currentTarget.getBoundingClientRect();
-        const node = findNearestNode((event.clientY - rect.top) / rect.height);
+        const node =
+          branched &&
+          event.clientX - rect.left + event.currentTarget.scrollLeft >
+            MINIMAP_WIDTH
+            ? null
+            : findNearestNode((event.clientY - rect.top) / rect.height);
         // Store the index, not the raw ratio: React bails out when it is
         // unchanged, so a pointer sweep only re-renders when the dot changes.
         setHoveredIndex(node?.index ?? null);
+        if (node) setBranchPreviewId(null);
       }}
       onMouseLeave={() => {
+        setRailHovered(false);
         setHoveredIndex(null);
+        if (!railFocused) setBranchPreviewId(null);
       }}
       style={{
-        width: MINIMAP_WIDTH,
+        width: expanded ? graphWidth : MINIMAP_WIDTH,
+        maxWidth: expanded ? "100%" : undefined,
         flexShrink: 0,
         position: "relative",
         cursor: "pointer",
         userSelect: "none",
         borderLeft: "1px solid var(--border)",
         background: "var(--bg-panel)",
-        overflow: "visible",
+        overflow: expanded ? "auto" : "visible",
       }}
     >
+      {branched && (
+        <>
+          <svg
+            aria-hidden="true"
+            width={expanded ? graphWidth : MINIMAP_WIDTH}
+            height={minimapHeight}
+            style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+          >
+            {visibleGraph.map((node) => {
+              const parent = node.parentId
+                ? graphById.get(node.parentId)
+                : undefined;
+              if (!parent) return null;
+              const x = MINIMAP_WIDTH / 2 + node.lane * BRANCH_LANE_GAP;
+              const px = MINIMAP_WIDTH / 2 + parent.lane * BRANCH_LANE_GAP;
+              const y = graphY(node.row) - GRAPH_NODE_CLEARANCE;
+              const py = graphY(parent.row) + GRAPH_NODE_CLEARANCE;
+              if (y <= py) return null;
+              return (
+                <path
+                  key={node.id}
+                  d={`M ${px} ${py} C ${px} ${y}, ${x} ${py}, ${x} ${y}`}
+                  fill="none"
+                  stroke="var(--text-dim)"
+                  strokeWidth={node.active ? 2 : 1}
+                  opacity={node.active ? 0.8 : 0.55}
+                />
+              );
+            })}
+          </svg>
+          {visibleGraph
+            .filter((node) => !node.anchor)
+            .map((node) =>
+              node.active ? (
+                <span
+                  key={node.id}
+                  className="minimap-junction"
+                  data-rail-entry-id={node.id}
+                  style={{
+                    left: MINIMAP_WIDTH / 2 + node.lane * BRANCH_LANE_GAP,
+                    top: graphY(node.row),
+                  }}
+                />
+              ) : (
+                <button
+                  key={node.id}
+                  type="button"
+                  className={`minimap-branch${stars.has(node.id) ? " minimap-star" : ""}`}
+                  data-rail-entry-id={node.id}
+                  aria-label={branchLabel(node.id)}
+                  aria-describedby={
+                    branchPreviewId === node.id ? previewId : undefined
+                  }
+                  disabled={branchDisabled}
+                  ref={(element) => {
+                    if (element) branchRefs.current.set(node.id, element);
+                    else branchRefs.current.delete(node.id);
+                  }}
+                  style={{
+                    left: MINIMAP_WIDTH / 2 + node.lane * BRANCH_LANE_GAP,
+                    top: graphY(node.row),
+                    height: Math.max(1, Math.min(32, graphGap)),
+                  }}
+                  onMouseDown={(event) => {
+                    event.stopPropagation();
+                  }}
+                  onClick={() => {
+                    void onLeafChange?.(node.targetLeafId, node.scrollEntryId);
+                  }}
+                  onMouseEnter={() => {
+                    setHoveredIndex(null);
+                    setBranchPreviewId(node.id);
+                  }}
+                  onMouseLeave={() => {
+                    setBranchPreviewId(null);
+                  }}
+                  onFocus={() => {
+                    setHoveredIndex(null);
+                    setBranchPreviewId(node.id);
+                  }}
+                  onBlur={() => {
+                    setBranchPreviewId(null);
+                  }}
+                >
+                  {stars.has(node.id) ? <StarIcon filled /> : <span />}
+                </button>
+              ),
+            )}
+          {expanded && branchPreviewId && branchPreviewAnchor && (
+            <MessagePreviewPopover
+              id={previewId}
+              text={branchLabel(branchPreviewId)}
+              anchor={branchPreviewAnchor}
+            />
+          )}
+        </>
+      )}
       {positionedNodes.map((node) => {
         const isNearest = hoveredIndex === node.index;
         const isActive = activeIndex === node.index;
@@ -494,7 +727,7 @@ export const ChatMinimap = memo(function ChatMinimap({
               top: `${node.topRatio * 100}%`,
               transform: "translateY(-50%)",
               left: 0,
-              right: 0,
+              width: MINIMAP_WIDTH,
               height: Math.max(1, nodeGap),
               display: "flex",
               alignItems: "center",
@@ -556,8 +789,8 @@ export const ChatMinimap = memo(function ChatMinimap({
                     height: 8,
                     borderRadius: 2,
                     background: isActive
-                      ? "rgba(128,128,128,0.42)"
-                      : "rgba(128,128,128,0.16)",
+                      ? "rgba(128,128,128,0.95)"
+                      : "rgba(128,128,128,0.58)",
                     border: `1.5px solid ${isActive ? "rgba(128,128,128,0.95)" : "rgba(128,128,128,0.58)"}`,
                     boxShadow: isActive ? "0 0 0 2px var(--bg-panel)" : "none",
                     transition: "transform 0.1s, background 0.1s",

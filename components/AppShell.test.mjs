@@ -1004,6 +1004,127 @@ test("the header can refresh the current page on desktop and mobile", async () =
   }
 });
 
+test("conversation branches live only in the desktop rail, without a toolbar selector on either viewport", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalResizeObserver = globalThis.ResizeObserver;
+  const originalIntersectionObserver = globalThis.IntersectionObserver;
+  globalThis.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+  };
+  globalThis.IntersectionObserver = class {
+    observe() {}
+    disconnect() {}
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  globalThis.fetch = async (input) => {
+    const path = new URL(String(input), "http://localhost").pathname;
+    if (path === `/api/sessions/${sidebarSession.id}/state`)
+      return Response.json({ active: false, running: false });
+    if (path === `/api/sessions/${sidebarSession.id}`)
+      return Response.json({
+        sessionId: sidebarSession.id,
+        filePath: sidebarSession.path,
+        info: sidebarSession,
+        totalActiveMs: 0,
+        tree: [
+          {
+            entry: { id: "root", type: "message" },
+            children: [
+              {
+                entry: { id: "current", type: "message" },
+                children: [],
+                branchPreview: { role: "user", text: "Current path" },
+              },
+              {
+                entry: { id: "other", type: "message" },
+                children: [],
+                branchPreview: { role: "user", text: "Alternative path" },
+              },
+            ],
+          },
+        ],
+        leafId: "current",
+        context: {
+          messages: [
+            { role: "user", content: "Current path", timestamp: 1000 },
+          ],
+          entryIds: ["current"],
+          hasMore: false,
+        },
+        stats: {
+          userMessages: 1,
+          assistantMessages: 0,
+          toolCalls: 0,
+          toolResults: 0,
+          totalMessages: 1,
+          tokens: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: 0,
+          },
+          cost: 0,
+        },
+      });
+    return Response.json({
+      sessions: [sidebarSession],
+      activeSessionIds: [],
+      runningSessionIds: [],
+      projects: [],
+      models: [],
+    });
+  };
+  try {
+    await act(() =>
+      window.happyDOM.setWindowSize({ width: 1064, height: 844 }),
+    );
+    await act(() => root.render(appShell(`session=${sidebarSession.id}`)));
+    const rail = container.querySelector(".chat-minimap.has-branches");
+    assert.ok(rail);
+    assert.equal(rail.style.width, "36px");
+    assert.equal(rail.querySelector(".minimap-branch"), null);
+    await act(() =>
+      rail.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true })),
+    );
+    assert.ok(
+      container.querySelector(
+        '.chat-minimap.has-branches button[aria-label="Switch branch: Alternative path"]',
+      ),
+    );
+    assert.equal(
+      container.querySelector('button[aria-label="Branches"]'),
+      null,
+      "desktop has no duplicate selector",
+    );
+    await act(() => window.happyDOM.setWindowSize({ width: 390, height: 844 }));
+    const more = container.querySelector(
+      'button[data-mobile-toolbar-more="true"]',
+    );
+    assert.ok(more);
+    await act(() => more.click());
+    assert.equal(
+      container.querySelector('button[aria-label="Branches"]'),
+      null,
+      "mobile has no branch selector, including in its expanded toolbar",
+    );
+    assert.equal(
+      container.querySelector('button[data-mobile-toolbar-action="branches"]'),
+      null,
+    );
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+    globalThis.fetch = originalFetch;
+    globalThis.ResizeObserver = originalResizeObserver;
+    globalThis.IntersectionObserver = originalIntersectionObserver;
+    window.happyDOM.setWindowSize({ width: 1024, height: 768 });
+  }
+});
+
 for (const estimated of [false, true]) {
   test(`context usage agrees between the top bar and statistics panel on desktop and mobile (estimated: ${estimated})`, async () => {
     const originalFetch = globalThis.fetch;
