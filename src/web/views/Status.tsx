@@ -1,4 +1,5 @@
 import { formatTokens } from "@core/context-usage";
+import type { LiveStatus, ModelOption } from "@core/ports";
 import type { SessionView } from "@core/workspace";
 
 const LEVEL_CLASS = {
@@ -32,12 +33,131 @@ export function ContextBadge({ usage }: { usage: SessionView["usage"] }) {
   );
 }
 
+/** Providers keep their first-appearance order; headers only when there are two. */
+function ModelSelect({
+  models,
+  current,
+}: {
+  models: ModelOption[];
+  current: ModelOption | null;
+}) {
+  const providers = [...new Set(models.map((model) => model.provider))];
+  const option = (model: ModelOption) => (
+    <option
+      value={`${model.provider}/${model.id}`}
+      selected={current?.provider === model.provider && current.id === model.id}
+    >
+      {model.name}
+    </option>
+  );
+  return (
+    <select
+      name="model"
+      class="select max-w-48 select-xs"
+      aria-label="Model"
+      title={`${String(models.length)} models. Type to search.`}
+    >
+      {providers.length > 1
+        ? providers.map((provider) => (
+            <optgroup label={provider}>
+              {models
+                .filter((model) => model.provider === provider)
+                .map(option)}
+            </optgroup>
+          ))
+        : models.map(option)}
+    </select>
+  );
+}
+
+function QueuePanel({
+  sessionId,
+  queue,
+}: {
+  sessionId: string;
+  queue: LiveStatus["queue"];
+}) {
+  if (queue.length === 0) return <></>;
+  return (
+    <div class="flex w-full flex-col gap-1 rounded-box bg-base-200 p-2 text-xs">
+      <div class="flex items-center gap-2">
+        <span class="font-semibold">Queued · {String(queue.length)}</span>
+        <span class="flex-1" />
+        <button
+          class="btn btn-ghost btn-xs"
+          title="Take the queued messages back into the composer"
+          hx-post={`/sessions/${sessionId}/queue/recall`}
+          hx-target="#composer-text"
+          hx-swap="outerHTML"
+        >
+          Recall
+        </button>
+        <button
+          class="btn btn-ghost btn-xs"
+          hx-post={`/sessions/${sessionId}/queue/clear`}
+          hx-swap="none"
+        >
+          Clear
+        </button>
+      </div>
+      {queue.map((message) => (
+        <div class="flex items-center gap-2">
+          <span
+            class={`badge badge-xs ${message.behavior === "steer" ? "badge-accent" : "badge-ghost"}`}
+          >
+            {message.behavior === "steer" ? "steer" : "follow-up"}
+          </span>
+          <span class="truncate" title={message.text}>
+            {message.text}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CompactButton({
+  sessionId,
+  status,
+  level,
+}: {
+  sessionId: string;
+  status: LiveStatus;
+  level: SessionView["usage"]["level"];
+}) {
+  const warning = level === "warn" || level === "critical";
+  return status.compacting ? (
+    <button
+      class="btn btn-outline btn-xs"
+      aria-label="Stop compacting"
+      hx-post={`/sessions/${sessionId}/compact/abort`}
+      hx-swap="none"
+    >
+      ◼ compacting
+    </button>
+  ) : (
+    <button
+      class={`btn btn-xs ${warning ? "btn-warning" : "btn-ghost"}`}
+      title="Summarise the conversation so far to free context"
+      hx-post={`/sessions/${sessionId}/compact`}
+      hx-swap="none"
+      disabled={status.running}
+    >
+      Compact
+    </button>
+  );
+}
+
 /** Everything that changes while a session runs: model, state, context. */
 export function Status({ view }: { view: SessionView }) {
   const { status, summary } = view;
-  const current = status?.model;
+  const current = status?.model ?? null;
   return (
-    <div class="flex flex-wrap items-center gap-2 text-sm">
+    <div
+      class="flex flex-wrap items-center gap-2 text-sm"
+      {...(status?.running ? { "data-running": "true" } : {})}
+      {...(status?.bashRunning ? { "data-bash-running": "true" } : {})}
+    >
       {status ? (
         <form
           hx-post={`/sessions/${summary.id}/model`}
@@ -45,28 +165,19 @@ export function Status({ view }: { view: SessionView }) {
           hx-swap="none"
           class="flex items-center gap-1"
         >
-          <select name="model" class="select select-xs" aria-label="Model">
-            {view.models.map((model) => (
-              <option
-                value={`${model.provider}/${model.id}`}
-                selected={
-                  current?.provider === model.provider &&
-                  current.id === model.id
-                }
-              >
-                {model.name}
-              </option>
-            ))}
-          </select>
+          <ModelSelect models={view.models} current={current} />
           {current?.reasoning ? (
             <select
               name="thinking"
               class="select select-xs"
               aria-label="Reasoning"
             >
-              {status.thinkingLevels.map((level) => (
-                <option value={level} selected={level === status.thinkingLevel}>
-                  {level}
+              {status.thinkingLevels.map((choice) => (
+                <option
+                  value={choice.level}
+                  selected={choice.level === status.thinkingLevel}
+                >
+                  {choice.label}
                 </option>
               ))}
             </select>
@@ -76,7 +187,14 @@ export function Status({ view }: { view: SessionView }) {
         <span class="text-base-content/60">not running</span>
       )}
       <ContextBadge usage={view.usage} />
-      {status?.running ? (
+      {status ? (
+        <CompactButton
+          sessionId={summary.id}
+          status={status}
+          level={view.usage.level}
+        />
+      ) : null}
+      {status?.running || status?.bashRunning ? (
         <>
           <span
             class="loading loading-xs loading-dots"
@@ -91,14 +209,6 @@ export function Status({ view }: { view: SessionView }) {
           </button>
         </>
       ) : null}
-      {status?.compacting ? (
-        <span class="badge badge-sm badge-warning">compacting</span>
-      ) : null}
-      {status && status.queued > 0 ? (
-        <span class="badge badge-ghost badge-sm">
-          {String(status.queued)} queued
-        </span>
-      ) : null}
       {status
         ? Object.entries(status.statuses).map(([key, text]) => (
             <span class="badge badge-ghost badge-sm" title={key}>
@@ -106,13 +216,26 @@ export function Status({ view }: { view: SessionView }) {
             </span>
           ))
         : null}
-      {status?.notices.map((notice) => (
-        <span
-          class={`badge badge-sm ${notice.level === "error" ? "badge-error" : notice.level === "warning" ? "badge-warning" : "badge-info"}`}
-        >
-          {notice.message}
-        </span>
-      ))}
+      {view.modelWarnings.length > 0 ? (
+        <div class="alert w-full py-1 text-xs alert-warning" role="alert">
+          {view.modelWarnings.join("\n")}
+        </div>
+      ) : null}
+      {status?.compaction ? (
+        <div class="alert w-full py-1 text-xs alert-success">
+          {status.compaction.reason === "manual"
+            ? "Compacted"
+            : status.compaction.reason}{" "}
+          {formatTokens(status.compaction.tokensBefore)} →{" "}
+          {status.compaction.tokensAfter === null
+            ? "?"
+            : formatTokens(status.compaction.tokensAfter)}{" "}
+          tokens
+        </div>
+      ) : null}
+      {status ? (
+        <QueuePanel sessionId={summary.id} queue={status.queue} />
+      ) : null}
     </div>
   );
 }

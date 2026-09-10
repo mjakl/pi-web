@@ -67,8 +67,8 @@ describe("web app", () => {
     expect(html).toContain('id="nav-drawer"');
     expect(html).toContain('id="theme-select"');
     expect(html).toContain('data-session-id="s1"');
-    // `hx-on--keydown` would bind the htmx event htmx:keydown, not the DOM one.
-    expect(html).toContain("hx-on-keydown");
+    expect(html).toContain('id="composer-text"');
+    expect(html).toContain('id="toasts"');
   });
 
   it("returns a fragment for HTMX requests and 404 for unknown ids", async () => {
@@ -100,7 +100,7 @@ describe("web app", () => {
       method: "POST",
       body: form,
     });
-    expect(prompt.status).toBe(200);
+    expect(prompt.status).toBe(204);
 
     const res = await app.request("/sessions/s1/events");
     expect(res.headers.get("content-type")).toContain("text/event-stream");
@@ -231,7 +231,7 @@ describe("web app", () => {
     expect(world.store.has("s1")).toBe(false);
   });
 
-  it("reports a failed action in the shared notice", async () => {
+  it("reports a failed action as a toast", async () => {
     const { app } = testApp();
     const form = new FormData();
     form.set("entryId", "u1");
@@ -239,8 +239,8 @@ describe("web app", () => {
       method: "POST",
       body: form,
     });
-    expect(res.headers.get("hx-retarget")).toBe("#notice");
-    expect(await res.text()).toContain("assistant answer");
+    expect(res.headers.get("hx-trigger")).toContain("assistant answer");
+    expect(res.headers.get("hx-trigger")).toContain("web-pi:toast");
   });
 
   it("serves session statistics and the exported transcript", async () => {
@@ -254,6 +254,178 @@ describe("web app", () => {
       'inline; filename="pi-session-s1.html"',
     );
     expect(exported.headers.get("x-frame-options")).toBe("DENY");
+  });
+
+  it("lists built-in and session commands, filtered and badged", async () => {
+    const { app } = testApp();
+    const all = await (await app.request("/sessions/s1/commands?q=")).text();
+    expect(all).toContain("/compact");
+    expect(all).toContain("/skill:testing");
+    expect(all).toContain("Manual");
+    // A stopped session lists prompts and skills but no extension commands.
+    expect(all).not.toContain("/review");
+
+    const filtered = await (
+      await app.request("/sessions/s1/commands?q=comp")
+    ).text();
+    expect(filtered).toContain("/compact");
+    expect(filtered).not.toContain("/clone");
+  });
+
+  it("accepts attachments and serves them back from the session file", async () => {
+    const { app, world } = testApp();
+    const form = new FormData();
+    form.set("text", "look at this");
+    form.append(
+      "images[]",
+      new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" }),
+    );
+    expect(
+      (await app.request("/sessions/s1/prompt", { method: "POST", body: form }))
+        .status,
+    ).toBe(204);
+    const entry = world.store.get("s1")?.entries.at(-1);
+    expect(entry?.type).toBe("message");
+
+    const page = await (await app.request("/sessions/s1")).text();
+    const match = /\/sessions\/s1\/entries\/([^/]+)\/image\/0/.exec(page);
+    expect(match).not.toBeNull();
+    const image = await app.request(match?.[0] ?? "");
+    expect(image.status).toBe(200);
+    expect(image.headers.get("content-type")).toBe("image/gif");
+  });
+
+  it("refuses more than ten attachments", async () => {
+    const { app } = testApp();
+    const form = new FormData();
+    form.set("text", "many");
+    for (let index = 0; index < 11; index += 1) {
+      form.append(
+        "images[]",
+        new File([new Uint8Array([1])], "x.png", { type: "image/png" }),
+      );
+    }
+    const res = await app.request("/sessions/s1/prompt", {
+      method: "POST",
+      body: form,
+    });
+    expect(res.headers.get("hx-trigger")).toContain("10 images");
+  });
+
+  it("queues a follow-up while a turn runs, then recalls it", async () => {
+    const { app } = testApp({ delayMs: 200 });
+    const first = new FormData();
+    first.set("text", "go");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: first });
+
+    const queued = new FormData();
+    queued.set("text", "and then this");
+    queued.set("behavior", "followUp");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: queued });
+
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain("Queued · 1");
+    expect(page).toContain("follow-up");
+
+    const recalled = await (
+      await app.request("/sessions/s1/queue/recall", { method: "POST" })
+    ).text();
+    expect(recalled).toContain('id="composer-text"');
+    expect(recalled).toContain("and then this");
+    expect(await (await app.request("/sessions/s1")).text()).not.toContain(
+      "Queued ·",
+    );
+  });
+
+  it("runs a built-in slash command instead of prompting", async () => {
+    const { app, world } = testApp();
+    const form = new FormData();
+    form.set("text", "/name Renamed by command");
+    const res = await app.request("/sessions/s1/prompt", {
+      method: "POST",
+      body: form,
+    });
+    expect(res.headers.get("hx-trigger")).toContain("Renamed");
+    expect(world.store.get("s1")?.summary.name).toBe("Renamed by command");
+  });
+
+  it("compacts on request and shows the result", async () => {
+    const { app } = testApp({ delayMs: 1 });
+    expect(
+      (await app.request("/sessions/s1/compact", { method: "POST" })).status,
+    ).toBe(204);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain("Compacted");
+    expect(page).toContain("40k");
+  });
+
+  it("runs a shell command from the composer and shows its output", async () => {
+    const { app, world } = testApp({ delayMs: 1 });
+    const form = new FormData();
+    form.set("text", "!echo hi");
+    expect(
+      (await app.request("/sessions/s1/prompt", { method: "POST", body: form }))
+        .status,
+    ).toBe(204);
+    const entry = world.store.get("s1")?.entries.at(-1);
+    expect(entry?.type === "message" && entry.message.role).toBe(
+      "bashExecution",
+    );
+    expect(await (await app.request("/sessions/s1")).text()).toContain(
+      "echo hi: ok",
+    );
+  });
+
+  it("serves the file index only inside the session's own folder", async () => {
+    const { app } = testApp({ files: ["src/main.ts"] });
+    const index = await app.request("/sessions/s1/file-index");
+    expect(await index.json()).toEqual({
+      files: ["src/main.ts"],
+      truncated: false,
+    });
+
+    const scoped = await app.request(
+      "/sessions/s1/file-index?cwd=%2Frepo%2Fone%2Fsrc&q=main",
+    );
+    expect(scoped.status).toBe(200);
+    const outside = await app.request("/sessions/s1/file-index?cwd=%2Fetc");
+    expect(outside.status).toBe(403);
+  });
+
+  it("keeps path completion inside the session folder", async () => {
+    const { app } = testApp({ files: ["src/main.ts"] });
+    const res = await app.request("/sessions/s1/file-completion?q=.%2Fsrc");
+    expect(await res.json()).toEqual({
+      matches: [{ path: "/repo/one/src/main.ts", isDir: false }],
+    });
+  });
+
+  it("refuses shell output this session never produced", async () => {
+    const { app } = testApp();
+    const res = await app.request(
+      "/sessions/s1/bash-output?path=%2Ftmp%2Fpi-bash-abc.log",
+    );
+    expect(res.status).toBe(403);
+    const wrong = await app.request(
+      "/sessions/s1/bash-output?path=%2Fetc%2Fpasswd",
+    );
+    expect(wrong.status).toBe(403);
+  });
+
+  it("tells the browser to re-key its draft once a session exists", async () => {
+    const { app } = testApp();
+    const form = new FormData();
+    form.set("cwd", "/repo/two");
+    form.set("text", "hello");
+    const res = await app.request("/sessions", {
+      method: "POST",
+      body: form,
+      headers: { "HX-Request": "true" },
+    });
+    expect(res.headers.get("hx-redirect")).toBe("/sessions/new-1");
+    expect(res.headers.get("hx-trigger")).toContain("web-pi:session-created");
+    expect(res.headers.get("hx-trigger")).toContain("/repo/two");
   });
 
   it("pushes rows and a finished marker on the shared stream", async () => {

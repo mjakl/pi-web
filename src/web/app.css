@@ -84,3 +84,24 @@
   --tw-prose-th-borders: var(--color-base-300);
   --tw-prose-td-borders: var(--color-base-300);
 }
+
+/* The composer grows with its content and stops before it owns the screen. */
+.composer-textarea {
+  field-sizing: content;
+  min-height: 3.5rem;
+  max-height: 12rem;
+  resize: none;
+}
+
+@media (max-width: 640px) {
+  /* Under 16px iOS zooms the page when the field takes focus. */
+  .composer-textarea {
+    font-size: 16px;
+  }
+}
+
+#composer:not([data-running]) .composer-running-label,
+#composer:not([data-running]) .composer-running-only,
+#composer[data-running] .composer-idle-label {
+  display: none;
+}

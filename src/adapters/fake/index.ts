@@ -1,11 +1,17 @@
+import type { SlashCommand } from "@core/composer";
 import type {
   AgentRuntime,
+  Files,
   LiveEvent,
   LiveSession,
   LiveSnapshot,
+  LiveStatus,
   ModelCatalog,
   ModelOption,
   ProjectResolver,
+  ProjectResources,
+  PromptInput,
+  QueuedMessage,
   RuntimeEvent,
   SessionCatalog,
   ThinkingLevel,
@@ -43,13 +49,51 @@ export function userEntry(
   id: string,
   parentId: string | null,
   text: string,
+  images = 0,
+): SessionEntry {
+  const content =
+    images === 0
+      ? text
+      : [
+          { type: "text" as const, text },
+          ...Array.from({ length: images }, () => ({
+            type: "image" as const,
+            // A 1x1 transparent GIF: enough for a thumbnail to render.
+            data: "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+            mimeType: "image/gif",
+          })),
+        ];
+  return {
+    type: "message",
+    id,
+    parentId,
+    timestamp: new Date().toISOString(),
+    message: { role: "user", content, timestamp: Date.now() },
+  };
+}
+
+export function bashEntry(
+  id: string,
+  parentId: string | null,
+  command: string,
+  output: string,
+  excludeFromContext: boolean,
 ): SessionEntry {
   return {
     type: "message",
     id,
     parentId,
     timestamp: new Date().toISOString(),
-    message: { role: "user", content: text, timestamp: Date.now() },
+    message: {
+      role: "bashExecution",
+      command,
+      output,
+      exitCode: 0,
+      cancelled: false,
+      truncated: false,
+      timestamp: Date.now(),
+      excludeFromContext,
+    },
   };
 }
 
@@ -132,11 +176,28 @@ function starEntry(
   };
 }
 
+export const FAKE_COMMANDS: SlashCommand[] = [
+  { name: "review", description: "Review the diff", source: "extension" },
+  { name: "changelog", description: "Draft a changelog", source: "prompt" },
+  {
+    name: "skill:testing",
+    description: "How this repository tests things",
+    source: "skill",
+    manual: true,
+  },
+];
+
 class FakeLiveSession implements LiveSession {
   readonly id: string;
   private partial: Extract<AgentMessage, { role: "assistant" }> | undefined;
   private turnStart: number;
   private running = false;
+  private compacting = false;
+  private bashRunning = false;
+  private bash: { command: string; output: string } | undefined;
+  private queue: QueuedMessage[] = [];
+  private compaction: LiveStatus["compaction"] = null;
+  private notices: LiveStatus["notices"] = [];
   private thinkingLevel: ThinkingLevel = "medium";
   private readonly listeners = new Set<(event: LiveEvent) => void>();
   private counter = 0;
@@ -187,33 +248,49 @@ class FakeLiveSession implements LiveSession {
       last?.type === "message" && last.message.role === "assistant"
         ? last.message.usage.totalTokens
         : null;
+    const notices = this.notices;
+    this.notices = [];
     return {
       summary: { ...this.stored.summary, live: true },
       branch,
       entries: [...this.stored.entries],
       turnStart: this.turnStart,
       ...(this.partial ? { partial: this.partial } : {}),
+      ...(this.bash ? { bash: { ...this.bash } } : {}),
       status: {
         running: this.running,
-        compacting: false,
+        compacting: this.compacting,
+        bashRunning: this.bashRunning,
         model: FAKE_MODEL,
         thinkingLevel: this.thinkingLevel,
-        thinkingLevels: ["off", "low", "medium", "high"],
+        thinkingLevels: [
+          { level: "off", label: "off" },
+          { level: "low", label: "brief" },
+          { level: "medium", label: "balanced" },
+          { level: "high", label: "thorough" },
+        ],
         contextTokens,
-        queued: 0,
+        queue: [...this.queue],
+        compaction: this.compaction,
         statuses: {},
-        notices: [],
+        notices,
       },
     };
   }
 
-  prompt(text: string): Promise<void> {
-    if (this.running)
-      throw new Error("Fake runtime accepts one prompt at a time");
+  prompt(text: string, input: PromptInput = {}): Promise<void> {
+    if (this.running) {
+      this.queue.push({ text, behavior: input.behavior ?? "steer" });
+      this.emit({ type: "activity" });
+      return Promise.resolve();
+    }
     this.running = true;
+    this.compaction = null;
     this.turnStart = branchOf(this.stored).length;
     const userId = this.nextId();
-    this.append(userEntry(userId, leafOf(this.stored), text));
+    this.append(
+      userEntry(userId, leafOf(this.stored), text, input.images?.length ?? 0),
+    );
     this.emit({ type: "activity" });
 
     const answer = this.reply(text);
@@ -285,6 +362,86 @@ class FakeLiveSession implements LiveSession {
     this.emit({ type: "activity" });
   }
 
+  commands(): SlashCommand[] {
+    return FAKE_COMMANDS;
+  }
+
+  compact(instructions?: string): Promise<void> {
+    this.compacting = true;
+    this.compaction = null;
+    this.emit({ type: "activity" });
+    setTimeout(() => {
+      this.compacting = false;
+      this.compaction = {
+        tokensBefore: 40_000,
+        tokensAfter: 8000,
+        reason: instructions ?? "manual",
+      };
+      this.emit({ type: "activity" });
+    }, this.delayMs * 4);
+    return Promise.resolve();
+  }
+
+  abortCompaction(): void {
+    this.compacting = false;
+    this.emit({ type: "activity" });
+  }
+
+  reload(): Promise<void> {
+    this.notices.push({ level: "info", message: "Resources reloaded." });
+    this.emit({ type: "activity" });
+    return Promise.resolve();
+  }
+
+  clearQueue(): QueuedMessage[] {
+    const cleared = this.queue;
+    this.queue = [];
+    this.emit({ type: "activity" });
+    return cleared;
+  }
+
+  /** Echoes the command back, one chunk at a time, like a real shell run. */
+  runBash(command: string, excludeFromContext: boolean): Promise<void> {
+    this.bashRunning = true;
+    this.turnStart = branchOf(this.stored).length;
+    this.bash = { command, output: "" };
+    this.emit({ type: "activity" });
+    return new Promise((resolve) => {
+      let shown = 0;
+      const lines = [`${command}: ok`, "done"];
+      const tick = () => {
+        const line = lines[shown];
+        shown += 1;
+        if (this.bash && line !== undefined) this.bash.output += `${line}\n`;
+        this.emit({ type: "activity" });
+        if (shown < lines.length && this.bashRunning) {
+          setTimeout(tick, this.delayMs);
+          return;
+        }
+        const output = this.bash?.output ?? "";
+        this.bash = undefined;
+        this.bashRunning = false;
+        this.append(
+          bashEntry(
+            this.nextId(),
+            leafOf(this.stored),
+            command,
+            output,
+            excludeFromContext,
+          ),
+        );
+        this.emit({ type: "turn_done" });
+        resolve();
+      };
+      setTimeout(tick, this.delayMs);
+    });
+  }
+
+  abortBash(): void {
+    this.bashRunning = false;
+    this.emit({ type: "activity" });
+  }
+
   navigateTree(targetId: string): Promise<string | undefined> {
     const entry = this.stored.entries.find((item) => item.id === targetId);
     if (!entry) throw new Error("Select an existing conversation message");
@@ -312,6 +469,9 @@ export type FakeWorld = {
   runtime: AgentRuntime;
   models: ModelCatalog;
   projects: ProjectResolver;
+  resources: ProjectResources;
+  files: Files;
+  tmpdir: string;
   store: Map<string, FakeStoredSession>;
 };
 
@@ -320,6 +480,8 @@ export function createFakeWorld(
     sessions?: FakeStoredSession[];
     reply?: (prompt: string) => string;
     delayMs?: number;
+    files?: string[];
+    tmpdir?: string;
   } = {},
 ): FakeWorld {
   const store = new Map(
@@ -506,9 +668,35 @@ export function createFakeWorld(
         return Promise.resolve(open(stored));
       },
     },
-    models: { list: () => Promise.resolve([FAKE_MODEL]) },
+    models: {
+      list: () => Promise.resolve({ models: [FAKE_MODEL], warnings: [] }),
+    },
     projects: {
       resolve: (cwd) => Promise.resolve({ root: cwd, branch: null }),
     },
+    resources: {
+      commands: () =>
+        Promise.resolve(
+          FAKE_COMMANDS.filter((command) => command.source !== "extension"),
+        ),
+    },
+    files: {
+      index: () =>
+        Promise.resolve({
+          files: [...(options.files ?? ["src/main.ts", "README.md"])],
+          truncated: false,
+        }),
+      children: (query, cwd) =>
+        Promise.resolve(
+          (options.files ?? ["src/main.ts", "README.md"])
+            .map((file) => ({
+              path: `${cwd}/${file}`,
+              isDir: false,
+            }))
+            .filter((entry) => entry.path.includes(query.replace(/^\.\//, ""))),
+        ),
+      readOutput: () => Promise.resolve("full shell output"),
+    },
+    tmpdir: options.tmpdir ?? "/tmp",
   };
 }

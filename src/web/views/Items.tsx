@@ -124,12 +124,22 @@ export function Item({
       return (
         <article
           id={`entry-${item.entryId}`}
+          data-role="user"
           class="group my-3 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3"
         >
-          <div class="whitespace-pre-wrap">{item.text}</div>
-          {item.imageCount > 0 ? (
-            <div class="mt-1 text-xs text-base-content/60">
-              {String(item.imageCount)} image(s)
+          <div class="whitespace-pre-wrap" data-user-text>
+            {item.text}
+          </div>
+          {item.imageCount > 0 && actions ? (
+            <div class="mt-2 flex flex-wrap gap-2">
+              {Array.from({ length: item.imageCount }, (_, index) => (
+                <img
+                  class="h-14 w-14 rounded border border-base-300 object-cover"
+                  alt={`Attachment ${String(index + 1)}`}
+                  loading="lazy"
+                  src={`/sessions/${actions.sessionId}/entries/${item.entryId}/image/${String(index)}`}
+                />
+              ))}
             </div>
           ) : null}
           {editable && actions ? (
@@ -139,7 +149,11 @@ export function Item({
       );
     case "assistant":
       return (
-        <article id={`entry-${item.entryId}`} class="my-3 px-1">
+        <article
+          id={`entry-${item.entryId}`}
+          data-role="assistant"
+          class="my-3 px-1"
+        >
           {item.thinking ? (
             <details class="my-2 text-sm text-base-content/70">
               <summary class="cursor-pointer">Thinking</summary>
@@ -199,7 +213,22 @@ export function Item({
           id={`entry-${item.entryId}`}
           class="my-3 rounded-lg bg-base-200 px-4 py-2 font-mono text-xs whitespace-pre-wrap"
         >
-          <div class="mb-1 text-base-content/60">{item.customType}</div>
+          <div class="mb-1 flex items-center gap-2 text-base-content/60">
+            <span>{item.customType}</span>
+            {item.excluded ? (
+              <span class="badge badge-ghost badge-xs">not sent to model</span>
+            ) : null}
+            {item.outputPath && actions ? (
+              <a
+                class="link"
+                target="_blank"
+                rel="noreferrer"
+                href={`/sessions/${actions.sessionId}/bash-output?path=${encodeURIComponent(item.outputPath)}`}
+              >
+                full output
+              </a>
+            ) : null}
+          </div>
           {item.text}
         </article>
       );

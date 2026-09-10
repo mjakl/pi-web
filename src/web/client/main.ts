@@ -1,6 +1,8 @@
 // The only script the browser runs besides htmx. Bundled to static/client.js.
 
+import { abortTurn, setUpComposer } from "./composer.ts";
 import { DARK_THEME, LIGHT_THEME, THEME_KEY } from "./theme.ts";
+import { setUpToasts } from "./toasts.ts";
 
 type Theme = "light" | "dark" | "system";
 
@@ -58,11 +60,6 @@ function setUpScrollFollow(): void {
   log.scrollTop = log.scrollHeight;
 }
 
-function abortTurn(): void {
-  const id = document.querySelector("main")?.getAttribute("data-session-id");
-  if (id) void fetch(`/sessions/${id}/abort`, { method: "POST" });
-}
-
 function inTextEntry(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLSelectElement ||
@@ -73,8 +70,9 @@ function inTextEntry(target: EventTarget | null): boolean {
 
 function setUpShortcuts(): void {
   document.addEventListener("keydown", (event) => {
+    // Escape inside a field is the composer's: it closes a menu first.
     if (event.key === "Escape") {
-      abortTurn();
+      if (!event.defaultPrevented && !inTextEntry(event.target)) abortTurn();
       return;
     }
     if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
@@ -192,3 +190,5 @@ setUpScrollFollow();
 setUpShortcuts();
 setUpFilter();
 setUpUnread();
+setUpToasts();
+setUpComposer();

@@ -1,5 +1,6 @@
 import { relativeTime, type ProjectGroup } from "@core/sessions";
 import type { SessionView } from "@core/workspace";
+import { Composer } from "./Composer.tsx";
 import { Items } from "./Items.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { Status } from "./Status.tsx";
@@ -30,12 +31,18 @@ function Shell({
           </a>
         </div>
         <main
-          class="flex min-h-0 flex-1 flex-col"
+          class="relative flex min-h-0 flex-1 flex-col"
           data-session-id={activeId}
           hx-ext="sse"
           sse-connect={activeId ? `/sessions/${activeId}/events` : undefined}
         >
           {children}
+          <div
+            id="toasts"
+            class="pointer-events-none fixed right-4 bottom-24 z-50 flex w-80 flex-col gap-2"
+            sse-swap="notice"
+            hx-swap="beforeend"
+          />
         </main>
       </div>
       <div class="drawer-side">
@@ -71,73 +78,11 @@ export function NewSessionPage({
 }) {
   return (
     <Shell groups={groups}>
-      <form
-        method="post"
-        action="/sessions"
-        class="m-auto flex w-full max-w-xl flex-col gap-3"
-      >
-        <label class="form-control">
-          <span class="label-text">Working folder</span>
-          <input
-            name="cwd"
-            value={cwd}
-            class="input-bordered input w-full"
-            required
-          />
-        </label>
-        <label class="form-control">
-          <span class="label-text">First request</span>
-          <textarea
-            name="text"
-            class="textarea-bordered textarea w-full"
-            rows={4}
-            required
-          >
-            {draft ?? ""}
-          </textarea>
-        </label>
-        <button class="btn self-end btn-primary">Start</button>
-      </form>
+      <div class="m-auto px-4 text-base-content/60">
+        New session. Type the first request below.
+      </div>
+      <Composer cwd={cwd} draft={draft} />
     </Shell>
-  );
-}
-
-export function Composer({
-  sessionId,
-  draft,
-}: {
-  sessionId: string;
-  draft?: string;
-}) {
-  return (
-    <form
-      id="composer"
-      hx-post={`/sessions/${sessionId}/prompt`}
-      hx-target="#notice"
-      hx-swap="innerHTML"
-      hx-on--after-request="if (event.detail.successful) this.reset()"
-      class="flex gap-2 border-t border-base-300 p-3"
-    >
-      <textarea
-        name="text"
-        class="textarea-bordered textarea flex-1"
-        rows={3}
-        placeholder="Ask Pi… (Ctrl+Enter to send)"
-        required
-        hx-on-keydown="if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); this.form.requestSubmit(); }"
-      >
-        {draft ?? ""}
-      </textarea>
-      <button class="btn self-end btn-primary">Send</button>
-    </form>
-  );
-}
-
-export function Notice({ message }: { message?: string }) {
-  return message ? (
-    <div class="alert text-sm alert-error">{message}</div>
-  ) : (
-    <></>
   );
 }
 
@@ -202,6 +147,7 @@ export function SessionPage({
           <BranchSwitcher view={view} />
           <details class="dropdown dropdown-end">
             <summary
+              id="stats-trigger"
               class="btn btn-ghost btn-xs"
               hx-get={`/sessions/${summary.id}/stats`}
               hx-target="#session-stats"
@@ -222,9 +168,6 @@ export function SessionPage({
           >
             Full history
           </a>
-        </div>
-        <div id="status" sse-swap="status" hx-swap="innerHTML">
-          <Status view={view} />
         </div>
         {view.otherBranch ? (
           <div class="alert flex items-center gap-2 py-1 text-sm alert-info">
@@ -263,9 +206,16 @@ export function SessionPage({
           />
         </div>
       </div>
-      <div id="notice" class="px-4" />
+      <div
+        id="status"
+        class="border-t border-base-300 px-4 py-2"
+        sse-swap="status"
+        hx-swap="innerHTML"
+      >
+        <Status view={view} />
+      </div>
       {view.otherBranch ? null : (
-        <Composer sessionId={summary.id} draft={draft} />
+        <Composer sessionId={summary.id} cwd={summary.cwd} draft={draft} />
       )}
     </Shell>
   );

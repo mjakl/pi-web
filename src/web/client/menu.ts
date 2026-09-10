@@ -1,0 +1,80 @@
+// The two anchored composer menus need the same five things: a rendered list,
+// one active index, arrows, apply, and close. This is that, once.
+
+export type Menu = {
+  readonly element: HTMLElement;
+  isOpen(): boolean;
+  render(html: string): void;
+  close(): void;
+  move(delta: number): void;
+  applyActive(): boolean;
+};
+
+export function createMenu(
+  id: string,
+  apply: (item: HTMLElement) => void,
+): Menu {
+  const element = document.getElementById(id);
+  if (!element) throw new Error(`Missing menu ${id}`);
+
+  const items = (): HTMLElement[] => [
+    ...element.querySelectorAll<HTMLElement>("[data-index]"),
+  ];
+
+  const paint = (index: number): void => {
+    for (const item of items()) {
+      const active = item.dataset["index"] === String(index);
+      item.classList.toggle("menu-active", active);
+      item.setAttribute("aria-selected", active ? "true" : "false");
+      if (active) item.scrollIntoView({ block: "nearest" });
+    }
+  };
+
+  let index = 0;
+
+  element.addEventListener("mousedown", (event) => {
+    const item = (event.target as HTMLElement).closest<HTMLElement>(
+      "[data-index]",
+    );
+    if (!item) return;
+    // Keep the caret in the textarea: the click must not move focus.
+    event.preventDefault();
+    apply(item);
+  });
+  element.addEventListener("mouseover", (event) => {
+    const item = (event.target as HTMLElement).closest<HTMLElement>(
+      "[data-index]",
+    );
+    if (!item) return;
+    index = Number(item.dataset["index"] ?? 0);
+    paint(index);
+  });
+
+  return {
+    element,
+    isOpen: () => !element.hidden,
+    render(html) {
+      element.innerHTML = html;
+      element.hidden = false;
+      index = 0;
+      paint(index);
+    },
+    close() {
+      element.hidden = true;
+    },
+    move(delta) {
+      const count = items().length;
+      if (count === 0) return;
+      index = Math.min(Math.max(index + delta, 0), count - 1);
+      paint(index);
+    },
+    applyActive() {
+      const item = items().find(
+        (entry) => entry.dataset["index"] === String(index),
+      );
+      if (!item) return false;
+      apply(item);
+      return true;
+    },
+  };
+}

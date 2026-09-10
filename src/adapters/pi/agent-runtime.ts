@@ -1,3 +1,4 @@
+import type { SlashCommand } from "@core/composer";
 import type {
   AgentRuntime,
   LiveEvent,
@@ -5,7 +6,10 @@ import type {
   LiveSnapshot,
   LiveStatus,
   ModelOption,
+  PromptInput,
+  QueuedMessage,
   RuntimeEvent,
+  ThinkingChoice,
   ThinkingLevel,
 } from "@core/ports";
 import { STAR_TYPE } from "@core/session-entries";
@@ -20,6 +24,11 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { existsSync, statSync } from "node:fs";
+import {
+  createProjectBashExtension,
+  createProjectBashOperations,
+  preferUserBashExtension,
+} from "./bash-env.ts";
 import { createHeadlessUi } from "./headless-ui.ts";
 import { projectTrustReloadOptions } from "./project-trust.ts";
 import type { PiSessionCatalog } from "./session-catalog.ts";
@@ -34,17 +43,27 @@ class PiLiveSession implements LiveSession {
   private partial: Partial | undefined;
   private turnStart: number;
   private compacting = false;
-  private queued = 0;
+  private queue: QueuedMessage[] = [];
+  private compaction: LiveStatus["compaction"] = null;
+  private bash: { command: string; output: string } | undefined;
   private readonly statuses = new Map<string, string>();
   private notices: LiveStatus["notices"] = [];
   private readonly listeners = new Set<(event: LiveEvent) => void>();
   private readonly unsubscribe: () => void;
 
   private readonly inner: AgentSession;
+  private readonly agentDir: string;
+  private readonly shellPath: string | undefined;
   private readonly onStop: () => void;
 
-  constructor(inner: AgentSession, onStop: () => void) {
+  constructor(
+    inner: AgentSession,
+    options: { agentDir: string; shellPath?: string },
+    onStop: () => void,
+  ) {
     this.inner = inner;
+    this.agentDir = options.agentDir;
+    this.shellPath = options.shellPath;
     this.onStop = onStop;
     this.id = inner.sessionId;
     this.turnStart = inner.sessionManager.getBranch().length;
@@ -84,11 +103,30 @@ class PiLiveSession implements LiveSession {
         this.compacting = false;
         if (event.errorMessage) {
           this.notices.push({ level: "error", message: event.errorMessage });
+        } else if (event.result && !event.aborted) {
+          this.compaction = {
+            tokensBefore: event.result.tokensBefore,
+            tokensAfter: event.result.estimatedTokensAfter ?? null,
+            reason: event.reason,
+          };
         }
         this.emit({ type: "activity" });
         break;
       case "queue_update":
-        this.queued = event.steering.length + event.followUp.length;
+        this.queue = [
+          ...event.steering.map((text): QueuedMessage => ({
+            text,
+            behavior: "steer",
+          })),
+          ...event.followUp.map((text): QueuedMessage => ({
+            text,
+            behavior: "followUp",
+          })),
+        ];
+        this.emit({ type: "activity" });
+        break;
+      case "bash_execution_update":
+        if (this.bash) this.bash.output += event.delta;
         this.emit({ type: "activity" });
         break;
       case "agent_settled":
@@ -156,14 +194,22 @@ class PiLiveSession implements LiveSession {
           reasoning: model.reasoning,
         }
       : null;
+    const labels = model?.thinkingLevelMap;
     return {
       running: this.inner.isStreaming,
       compacting: this.compacting,
+      bashRunning: this.inner.isBashRunning,
       model: option,
       thinkingLevel: this.inner.thinkingLevel,
-      thinkingLevels: this.inner.getAvailableThinkingLevels(),
+      thinkingLevels: this.inner
+        .getAvailableThinkingLevels()
+        .map((level): ThinkingChoice => ({
+          level,
+          label: labels?.[level] ?? level,
+        })),
       contextTokens: this.inner.getContextUsage()?.tokens ?? null,
-      queued: this.queued,
+      queue: this.queue,
+      compaction: this.compaction,
       statuses: Object.fromEntries(this.statuses),
       notices,
     };
@@ -176,20 +222,31 @@ class PiLiveSession implements LiveSession {
       entries: this.inner.sessionManager.getEntries(),
       turnStart: this.turnStart,
       ...(this.partial ? { partial: this.partial } : {}),
+      ...(this.bash ? { bash: { ...this.bash } } : {}),
       status: this.status(),
     };
   }
 
-  prompt(text: string): Promise<void> {
+  prompt(text: string, input: PromptInput = {}): Promise<void> {
     if (!this.inner.isStreaming) {
       this.turnStart = this.inner.sessionManager.getBranch().length;
+      this.compaction = null;
     }
     // The SDK's prompt() resolves when the whole run ends; the caller only
     // needs to know the prompt was accepted, so settle on preflight instead.
     return new Promise((resolve, reject) => {
       this.inner
         .prompt(text, {
-          streamingBehavior: "followUp",
+          streamingBehavior: input.behavior ?? "steer",
+          ...(input.images && input.images.length > 0
+            ? {
+                images: input.images.map((image) => ({
+                  type: "image" as const,
+                  data: image.data,
+                  mimeType: image.mimeType,
+                })),
+              }
+            : {}),
           preflightResult: (ok) => {
             if (ok) resolve();
           },
@@ -244,6 +301,98 @@ class PiLiveSession implements LiveSession {
     return result.cancelled ? undefined : result.editorText;
   }
 
+  /**
+   * Extension commands, prompt templates, and skills, as the SDK reports them
+   * for this session. Skills Pi may not invoke on its own are marked so the
+   * menu can say who may run them.
+   */
+  commands(): SlashCommand[] {
+    return [
+      ...this.inner.extensionRunner
+        .getRegisteredCommands()
+        .map((command): SlashCommand => ({
+          name: command.invocationName,
+          description: command.description ?? "",
+          source: "extension",
+        })),
+      ...this.inner.promptTemplates.map((prompt): SlashCommand => ({
+        name: prompt.name,
+        description: prompt.description,
+        source: "prompt",
+      })),
+      ...this.inner.resourceLoader
+        .getSkills()
+        .skills.map((skill): SlashCommand => ({
+          name: `skill:${skill.name}`,
+          description: skill.description,
+          source: "skill",
+          ...(skill.disableModelInvocation ? { manual: true } : {}),
+        })),
+    ];
+  }
+
+  async compact(instructions?: string): Promise<void> {
+    this.compaction = null;
+    await this.inner.compact(instructions);
+  }
+
+  abortCompaction(): void {
+    this.inner.abortCompaction();
+    this.emit({ type: "activity" });
+  }
+
+  async reload(): Promise<void> {
+    await this.inner.reload();
+    this.emit({ type: "activity" });
+  }
+
+  clearQueue(): QueuedMessage[] {
+    const cleared = this.queue;
+    const dropped = this.inner.clearQueue();
+    this.queue = [];
+    this.emit({ type: "activity" });
+    return cleared.length > 0
+      ? cleared
+      : [
+          ...dropped.steering.map((text): QueuedMessage => ({
+            text,
+            behavior: "steer",
+          })),
+          ...dropped.followUp.map((text): QueuedMessage => ({
+            text,
+            behavior: "followUp",
+          })),
+        ];
+  }
+
+  /** `!cmd` in the composer. Output streams through `bash_execution_update`. */
+  async runBash(command: string, excludeFromContext: boolean): Promise<void> {
+    if (!this.inner.isStreaming) {
+      this.turnStart = this.inner.sessionManager.getBranch().length;
+    }
+    this.bash = { command, output: "" };
+    this.emit({ type: "activity" });
+    try {
+      await this.inner.executeBash(command, undefined, {
+        excludeFromContext,
+        operations: createProjectBashOperations({
+          agentDir: this.agentDir,
+          ...(this.shellPath === undefined
+            ? {}
+            : { shellPath: this.shellPath }),
+        }),
+      });
+    } finally {
+      this.bash = undefined;
+      this.emit({ type: "turn_done" });
+    }
+  }
+
+  abortBash(): void {
+    this.inner.abortBash();
+    this.emit({ type: "activity" });
+  }
+
   /** A session Pi never wrote to disk: an abandoned draft, safe to drop. */
   hasTranscript(): boolean {
     const file = this.inner.sessionManager.getSessionFile();
@@ -251,7 +400,7 @@ class PiLiveSession implements LiveSession {
   }
 
   get busy(): boolean {
-    return this.inner.isStreaming;
+    return this.inner.isStreaming || this.inner.isBashRunning;
   }
 
   subscribe(listener: (event: LiveEvent) => void): () => void {
@@ -294,6 +443,14 @@ export function createPiAgentRuntime(options: {
       settingsManager,
       resourceLoaderOptions: {
         appendSystemPromptOverride: (base) => [...base, RENDER_NOTE],
+        extensionFactories: [
+          createProjectBashExtension({
+            cwd,
+            agentDir: options.agentDir,
+            settings: settingsManager,
+          }),
+        ],
+        extensionsOverride: preferUserBashExtension,
       },
       ...(trust ? { resourceLoaderReloadOptions: trust } : {}),
     });
@@ -302,10 +459,18 @@ export function createPiAgentRuntime(options: {
       sessionManager: manager,
     });
     const id = session.sessionId;
-    const wrapper = new PiLiveSession(session, () => {
-      live.delete(id);
-      announce({ type: "stopped", sessionId: id });
-    });
+    const shellPath = settingsManager.getShellPath();
+    const wrapper = new PiLiveSession(
+      session,
+      {
+        agentDir: options.agentDir,
+        ...(shellPath === undefined ? {} : { shellPath }),
+      },
+      () => {
+        live.delete(id);
+        announce({ type: "stopped", sessionId: id });
+      },
+    );
     let idle: ReturnType<typeof setTimeout> | undefined;
     const resetIdle = () => {
       if (idle) clearTimeout(idle);

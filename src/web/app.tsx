@@ -1,15 +1,13 @@
+import { bashCommand, imageLimitError } from "@core/composer";
+import type { ImageAttachment } from "@core/ports";
 import { isSessionId } from "@core/sessions";
 import { staticAssets } from "@web/assets";
-import type { Workspace } from "@core/workspace";
+import { ForbiddenPath, type Workspace } from "@core/workspace";
 import { honoFactory } from "@web/hono";
 import { HtmlLayout } from "@web/HtmlLayout";
+import { CommandMenu, ComposerText, Toasts } from "@web/views/Composer";
 import { Items, StarButton } from "@web/views/Items";
-import {
-  IndexPage,
-  NewSessionPage,
-  Notice,
-  SessionPage,
-} from "@web/views/SessionPage";
+import { IndexPage, NewSessionPage, SessionPage } from "@web/views/SessionPage";
 import { SessionList, SessionRow } from "@web/views/Sidebar";
 import { StatsPanel } from "@web/views/Stats";
 import { Status } from "@web/views/Status";
@@ -46,6 +44,48 @@ function field(form: FormData, name: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** Errors reach the reader as a toast, wherever the request came from. */
+function toastHeader(
+  c: Context,
+  message: string,
+  level: "info" | "warning" | "error" = "error",
+): void {
+  c.header(
+    "HX-Trigger",
+    JSON.stringify({ "web-pi:toast": { level, message } }),
+  );
+}
+
+type Submission = {
+  text: string;
+  images: ImageAttachment[];
+  behavior: "steer" | "followUp";
+};
+
+/** The composer's multipart body: text, attachments, and how to deliver it. */
+async function readSubmission(
+  form: FormData,
+): Promise<Submission | { error: string }> {
+  const files = form
+    .getAll("images[]")
+    .filter((value): value is File => value instanceof File && value.size > 0);
+  const limit = imageLimitError(
+    files.map((file) => ({ mimeType: file.type, bytes: file.size })),
+  );
+  if (limit) return { error: limit };
+  const images = await Promise.all(
+    files.map(async (file) => ({
+      data: Buffer.from(await file.arrayBuffer()).toString("base64"),
+      mimeType: file.type,
+    })),
+  );
+  return {
+    text: field(form, "text"),
+    images,
+    behavior: field(form, "behavior") === "followUp" ? "followUp" : "steer",
+  };
+}
+
 export function createWebApp(deps: WebDeps) {
   const app = honoFactory.createApp();
   const renderIntervalMs = deps.renderIntervalMs ?? 100;
@@ -72,7 +112,7 @@ export function createWebApp(deps: WebDeps) {
     return c.html(<SessionRow {...found} />);
   }
 
-  /** Reports the failure in the shared notice instead of breaking the page. */
+  /** Reports the failure as a toast instead of breaking the page. */
   async function guard(
     c: Context,
     action: () => Promise<Response>,
@@ -80,9 +120,9 @@ export function createWebApp(deps: WebDeps) {
     try {
       return await action();
     } catch (error) {
-      c.header("HX-Retarget", "#notice");
-      c.header("HX-Reswap", "innerHTML");
-      return c.html(<Notice message={errorText(error)} />);
+      toastHeader(c, errorText(error));
+      c.header("HX-Reswap", "none");
+      return c.body(null, 200);
     }
   }
 
@@ -119,10 +159,30 @@ export function createWebApp(deps: WebDeps) {
   app.post("/sessions", async (c) => {
     const form = await c.req.formData();
     const cwd = field(form, "cwd");
-    const text = field(form, "text");
-    if (!cwd || !text) return c.text("cwd and text are required", 400);
-    const id = await deps.workspace.startSession(cwd, text);
-    return c.redirect(`/sessions/${id}`, 303);
+    const submission = await readSubmission(form);
+    if ("error" in submission) {
+      toastHeader(c, submission.error);
+      return c.body(null, 200);
+    }
+    if (!cwd || !submission.text) {
+      toastHeader(c, "A working folder and a first request are required.");
+      return c.body(null, 200);
+    }
+    return guard(c, async () => {
+      const id = await deps.workspace.startSession(cwd, submission.text, {
+        images: submission.images,
+      });
+      if (c.req.header("HX-Request") !== "true") {
+        return c.redirect(`/sessions/${id}`, 303);
+      }
+      // The browser holds this session's draft under a provisional key.
+      c.header(
+        "HX-Trigger",
+        JSON.stringify({ "web-pi:session-created": { cwd, id } }),
+      );
+      c.header("HX-Redirect", `/sessions/${id}`);
+      return c.body(null, 200);
+    });
   });
 
   app.get("/sessions/:id", async (c) => {
@@ -168,17 +228,184 @@ export function createWebApp(deps: WebDeps) {
     }
   });
 
+  /**
+   * One entry point for everything typed into the composer: built-in slash
+   * commands, `!` shell runs, and prompts with attachments. Built-ins are
+   * dispatched here rather than in the browser so a reload cannot lose them.
+   */
   app.post("/sessions/:id/prompt", async (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
     const form = await c.req.formData();
-    const text = field(form, "text");
-    if (!text) return c.html(<Notice message="Type a request first." />);
+    const submission = await readSubmission(form);
+    if ("error" in submission) {
+      toastHeader(c, submission.error);
+      return c.body(null, 200);
+    }
+    const { text, images, behavior } = submission;
+    if (!text && images.length === 0) {
+      toastHeader(c, "Type a request first.");
+      return c.body(null, 200);
+    }
+    return guard(c, async () => {
+      if (images.length === 0) {
+        const shell = bashCommand(text);
+        if (shell) {
+          await deps.workspace.runBash(id, shell.command, shell.excluded);
+          return c.body(null, 204);
+        }
+        const builtin = /^\/(compact|reload|name|clone)(?:\s+([\s\S]*))?$/.exec(
+          text,
+        );
+        if (builtin) return runBuiltin(c, id, builtin[1] ?? "", builtin[2]);
+      }
+      await deps.workspace.send(id, text, { images, behavior });
+      return c.body(null, 204);
+    });
+  });
+
+  async function runBuiltin(
+    c: Context,
+    id: string,
+    name: string,
+    argument: string | undefined,
+  ): Promise<Response> {
+    const argumentText = argument?.trim() ?? "";
+    switch (name) {
+      case "compact":
+        await deps.workspace.compact(
+          id,
+          argumentText === "" ? undefined : argumentText,
+        );
+        return c.body(null, 204);
+      case "reload":
+        await deps.workspace.reload(id);
+        toastHeader(c, "Extensions, skills, and prompts reloaded.", "info");
+        return c.body(null, 200);
+      case "name":
+        if (argumentText === "") {
+          toastHeader(c, "Usage: /name <session name>");
+          return c.body(null, 200);
+        }
+        await deps.workspace.rename(id, argumentText);
+        toastHeader(c, `Renamed to "${argumentText}".`, "info");
+        return c.body(null, 200);
+      default: {
+        const cloned = await deps.workspace.clone(id);
+        c.header("HX-Redirect", `/sessions/${cloned}`);
+        return c.body(null, 200);
+      }
+    }
+  }
+
+  app.get("/sessions/:id/commands", async (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    const commands = await deps.workspace.commands(id, c.req.query("q") ?? "");
+    return c.html(<CommandMenu commands={commands} />);
+  });
+
+  app.post("/sessions/:id/compact", async (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    return guard(c, async () => {
+      await deps.workspace.compact(id);
+      return c.body(null, 204);
+    });
+  });
+
+  app.post("/sessions/:id/compact/abort", (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    deps.workspace.abortCompaction(id);
+    return c.body(null, 204);
+  });
+
+  /** Recall answers with the composer's textarea holding the queued texts. */
+  app.post("/sessions/:id/queue/recall", (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    return c.html(<ComposerText draft={deps.workspace.recallQueue(id)} />);
+  });
+
+  app.post("/sessions/:id/queue/clear", (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    deps.workspace.clearQueue(id);
+    return c.body(null, 204);
+  });
+
+  app.get("/sessions/:id/entries/:entryId/image/:index", async (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    const index = Number(c.req.param("index"));
+    if (!Number.isInteger(index) || index < 0) return c.notFound();
+    const image = await deps.workspace.entryImage(
+      id,
+      c.req.param("entryId"),
+      index,
+    );
+    if (!image) return c.notFound();
+    return c.body(Buffer.from(image.data, "base64"), 200, {
+      "Content-Type": image.mimeType,
+      "Cache-Control": "private, max-age=3600",
+      "Content-Security-Policy": "sandbox; default-src 'none'",
+      "X-Content-Type-Options": "nosniff",
+    });
+  });
+
+  /** The two JSON endpoints of this phase: a menu cannot be a round trip. */
+  app.get("/sessions/:id/file-index", async (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    return files(c, () =>
+      deps.workspace.fileIndex(
+        id,
+        c.req.query("cwd"),
+        (c.req.query("q") ?? "").slice(0, 500),
+      ),
+    );
+  });
+
+  app.get("/sessions/:id/file-completion", async (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    return files(c, async () => ({
+      matches: await deps.workspace.fileCompletion(
+        id,
+        (c.req.query("q") ?? "").slice(0, 500),
+        c.req.query("cwd"),
+      ),
+    }));
+  });
+
+  async function files(
+    c: Context,
+    action: () => Promise<unknown>,
+  ): Promise<Response> {
     try {
-      await deps.workspace.send(id, text);
-      return await Promise.resolve(c.html(<Notice />));
+      c.header("Cache-Control", "no-store");
+      return c.json(await action());
     } catch (error) {
-      return c.html(<Notice message={errorText(error)} />);
+      if (error instanceof ForbiddenPath) return c.json({ error: "" }, 403);
+      return c.json({ error: "Cannot list that directory" }, 404);
+    }
+  }
+
+  app.get("/sessions/:id/bash-output", async (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    const path = c.req.query("path") ?? "";
+    try {
+      const output = await deps.workspace.bashOutput(id, path);
+      return c.text(output, 200, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      });
+    } catch (error) {
+      if (error instanceof ForbiddenPath) return c.text(errorText(error), 403);
+      return c.text("Cannot read that output file", 404);
     }
   });
 
@@ -406,6 +633,14 @@ export function createWebApp(deps: WebDeps) {
           event: "status",
           data: await html(<Status view={view} />),
         });
+        // Notices are drained by the snapshot: send them once, as toasts.
+        const notices = view.status?.notices ?? [];
+        if (notices.length > 0) {
+          await stream.writeSSE({
+            event: "notice",
+            data: await html(<Toasts notices={notices} />),
+          });
+        }
       };
 
       let timer: ReturnType<typeof setTimeout> | undefined;

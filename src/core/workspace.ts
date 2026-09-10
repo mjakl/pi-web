@@ -1,12 +1,26 @@
+import {
+  buildEntriesFromFiles,
+  BUILTIN_COMMANDS,
+  type FileEntry,
+  filterFileEntries,
+  rankCommands,
+  type SlashCommand,
+} from "./composer.ts";
 import { contextUsage, type ContextUsage } from "./context-usage.ts";
+import { directoryWithin, isBashOutputPath } from "./path-access.ts";
 import type {
   AgentRuntime,
+  Files,
+  ImageAttachment,
   LiveEvent,
   LiveSession,
   LiveStatus,
   ModelCatalog,
+  ModelListing,
   ModelOption,
   ProjectResolver,
+  ProjectResources,
+  PromptInput,
   RuntimeEvent,
   SessionCatalog,
   SessionRead,
@@ -43,6 +57,8 @@ export type SessionView = {
   status: LiveStatus | null;
   usage: ContextUsage;
   models: ModelOption[];
+  /** `enabledModels` patterns that matched nothing, shown once per page. */
+  modelWarnings: string[];
   /** Entry ids of starred answers. */
   starred: Set<string>;
   /** Tips of every branch in the session; one entry when nothing branched. */
@@ -53,17 +69,24 @@ export type SessionView = {
 
 export type Workspace = ReturnType<typeof createWorkspace>;
 
+/** Where a file request may point: the session's own working folder. */
+export class ForbiddenPath extends Error {}
+
 export function createWorkspace(deps: {
   sessions: SessionCatalog;
   runtime: AgentRuntime;
   models: ModelCatalog;
   projects: ProjectResolver;
+  resources: ProjectResources;
+  files: Files;
+  /** os.tmpdir(); shell captures may live nowhere else. */
+  tmpdir: string;
 }) {
-  async function modelsFor(cwd: string): Promise<ModelOption[]> {
+  async function modelsFor(cwd: string): Promise<ModelListing> {
     try {
       return await deps.models.list(cwd);
     } catch {
-      return [];
+      return { models: [], warnings: [] };
     }
   }
 
@@ -109,7 +132,7 @@ export function createWorkspace(deps: {
   function liveView(
     live: LiveSession,
     summary: SessionSummary,
-    models: ModelOption[],
+    models: ModelListing,
   ): SessionView {
     const snapshot = live.snapshot();
     const settled = projectTranscript(
@@ -118,6 +141,14 @@ export function createWorkspace(deps: {
     const turn = projectTranscript(snapshot.branch.slice(snapshot.turnStart));
     if (snapshot.partial) {
       turn.items.push(assistantItem("partial", snapshot.partial));
+    }
+    if (snapshot.bash) {
+      turn.items.push({
+        kind: "note",
+        entryId: "bash-pending",
+        customType: "bash",
+        text: `$ ${snapshot.bash.command}\n${snapshot.bash.output}`,
+      });
     }
     const { status } = snapshot;
     const reported = status.contextTokens;
@@ -132,7 +163,8 @@ export function createWorkspace(deps: {
         contextWindow: status.model?.contextWindow,
         estimated: reported === null && fallback !== null,
       }),
-      models,
+      models: models.models,
+      modelWarnings: models.warnings,
       starred: readStars(snapshot.entries),
       leaves: branchLeaves(
         snapshot.entries,
@@ -148,9 +180,9 @@ export function createWorkspace(deps: {
     leafId: string | undefined,
   ): Promise<SessionView> {
     const transcript = projectTranscript(stored.branch);
-    const models = await modelsFor(stored.summary.cwd);
+    const listing = await modelsFor(stored.summary.cwd);
     const model = transcript.lastModel
-      ? models.find(
+      ? listing.models.find(
           (option) =>
             option.provider === transcript.lastModel?.provider &&
             option.id === transcript.lastModel.id,
@@ -165,7 +197,8 @@ export function createWorkspace(deps: {
         tokens: transcript.lastContextTokens,
         contextWindow: model?.contextWindow,
       }),
-      models,
+      models: listing.models,
+      modelWarnings: listing.warnings,
       starred: readStars(stored.entries),
       leaves: branchLeaves(stored.entries, stored.branch.at(-1)?.id ?? null),
       otherBranch: leafId !== undefined && leafId !== stored.leafId,
@@ -206,6 +239,24 @@ export function createWorkspace(deps: {
 
   async function stop(id: string): Promise<void> {
     await deps.runtime.get(id)?.stop();
+  }
+
+  /** File requests may only reach the session's own working folder. */
+  async function authorizedCwd(
+    id: string,
+    directory: string | undefined,
+  ): Promise<string> {
+    const summary = await summaryOf(id);
+    if (!summary) throw new ForbiddenPath("Unknown session");
+    if (directory === undefined || directory === "") return summary.cwd;
+    if (!directoryWithin(summary.cwd, directory)) {
+      throw new ForbiddenPath("Outside the session's working folder");
+    }
+    return directory;
+  }
+
+  async function liveOrOpen(id: string): Promise<LiveSession> {
+    return deps.runtime.get(id) ?? deps.runtime.open({ sessionId: id });
   }
 
   /** A live session owns its file; only a stopped one is edited on disk. */
@@ -269,20 +320,143 @@ export function createWorkspace(deps: {
     },
 
     /** Start a session in `cwd` and send the first prompt. Returns its id. */
-    async startSession(cwd: string, text: string): Promise<string> {
+    async startSession(
+      cwd: string,
+      text: string,
+      input?: PromptInput,
+    ): Promise<string> {
       const live = await deps.runtime.open({ cwd });
-      await live.prompt(text);
+      await live.prompt(text, input);
       return live.id;
     },
 
-    async send(id: string, text: string): Promise<void> {
-      const live =
-        deps.runtime.get(id) ?? (await deps.runtime.open({ sessionId: id }));
-      await live.prompt(text);
+    async send(id: string, text: string, input?: PromptInput): Promise<void> {
+      const live = await liveOrOpen(id);
+      await live.prompt(text, input);
     },
 
+    /** Stops the turn, or the shell command when that is what runs. */
     async abort(id: string): Promise<void> {
-      await deps.runtime.get(id)?.abort();
+      const live = deps.runtime.get(id);
+      if (!live) return;
+      if (live.snapshot().status.bashRunning) live.abortBash();
+      else await live.abort();
+    },
+
+    /**
+     * The slash menu: built-ins plus whatever the session offers. A stopped
+     * session lists prompt templates and skills from disk rather than
+     * starting an agent just to fill a menu.
+     */
+    async commands(id: string, query: string): Promise<SlashCommand[]> {
+      const live = deps.runtime.get(id);
+      let listed: SlashCommand[] = [];
+      if (live) listed = live.commands();
+      else {
+        const summary = await summaryOf(id);
+        if (summary) {
+          listed = await deps.resources
+            .commands(summary.cwd)
+            .catch(() => [] as SlashCommand[]);
+        }
+      }
+      return rankCommands([...BUILTIN_COMMANDS, ...listed], query, {
+        running: live?.snapshot().status.running ?? false,
+      });
+    },
+
+    async compact(id: string, instructions?: string): Promise<void> {
+      const live = await liveOrOpen(id);
+      await live.compact(instructions);
+    },
+
+    abortCompaction(id: string): void {
+      deps.runtime.get(id)?.abortCompaction();
+    },
+
+    async reload(id: string): Promise<void> {
+      await (await liveOrOpen(id)).reload();
+    },
+
+    /** Empties the queue and hands its texts back as one composer draft. */
+    recallQueue(id: string): string {
+      const queued = deps.runtime.get(id)?.clearQueue() ?? [];
+      return queued.map((message) => message.text).join("\n\n");
+    },
+
+    clearQueue(id: string): void {
+      deps.runtime.get(id)?.clearQueue();
+    },
+
+    async runBash(
+      id: string,
+      command: string,
+      excludeFromContext: boolean,
+    ): Promise<void> {
+      const live = await liveOrOpen(id);
+      await live.runBash(command, excludeFromContext);
+    },
+
+    /** One image of a user message, straight out of the session file. */
+    async entryImage(
+      id: string,
+      entryId: string,
+      index: number,
+    ): Promise<ImageAttachment | undefined> {
+      const stored = await entriesOf(id);
+      const entry = stored?.entries.find((item) => item.id === entryId);
+      if (entry?.type !== "message" || entry.message.role !== "user") {
+        return undefined;
+      }
+      const { content } = entry.message;
+      if (typeof content === "string") return undefined;
+      const image = content.filter((part) => part.type === "image")[index];
+      return image ? { data: image.data, mimeType: image.mimeType } : undefined;
+    },
+
+    /** The `@` index for a folder inside the session's own working folder. */
+    async fileIndex(
+      id: string,
+      directory: string | undefined,
+      query: string,
+    ): Promise<
+      { files: string[]; truncated: boolean } | { matches: FileEntry[] }
+    > {
+      const cwd = await authorizedCwd(id, directory);
+      const index = await deps.files.index(cwd);
+      if (query === "") return index;
+      return {
+        matches: filterFileEntries(buildEntriesFromFiles(index.files), query),
+      };
+    },
+
+    /** Immediate children for a path-like `@` query, containment enforced. */
+    async fileCompletion(
+      id: string,
+      query: string,
+      directory: string | undefined,
+    ): Promise<FileEntry[]> {
+      const cwd = await authorizedCwd(id, directory);
+      const children = await deps.files.children(query, cwd);
+      return children.filter((entry) => directoryWithin(cwd, entry.path));
+    },
+
+    /** A truncated shell run's capture file, if this session produced it. */
+    async bashOutput(id: string, path: string): Promise<string> {
+      if (!isBashOutputPath(deps.tmpdir, path)) {
+        throw new ForbiddenPath("Not a shell output file");
+      }
+      const stored = await entriesOf(id);
+      const referenced = stored?.entries.some(
+        (entry) =>
+          entry.type === "message" &&
+          entry.message.role === "bashExecution" &&
+          entry.message.fullOutputPath === path,
+      );
+      if (!referenced) {
+        throw new ForbiddenPath("This session did not produce that file");
+      }
+      return deps.files.readOutput(path);
     },
 
     async setModel(

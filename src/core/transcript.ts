@@ -32,7 +32,16 @@ export type TranscriptItem =
       tokensBefore: number;
     }
   | { kind: "branch_summary"; entryId: string; summary: string }
-  | { kind: "note"; entryId: string; customType: string; text: string };
+  | {
+      kind: "note";
+      entryId: string;
+      customType: string;
+      text: string;
+      /** Capture file holding the full output of a truncated shell run. */
+      outputPath?: string;
+      /** A `!!` shell run: its output never reached the model. */
+      excluded?: boolean;
+    };
 
 export type Transcript = {
   items: TranscriptItem[];
@@ -153,6 +162,10 @@ export function projectTranscript(branch: readonly SessionEntry[]): Transcript {
             entryId: entry.id,
             customType: "bash",
             text: `$ ${message.command}\n${message.output}`,
+            ...(message.fullOutputPath
+              ? { outputPath: message.fullOutputPath }
+              : {}),
+            ...(message.excludeFromContext ? { excluded: true } : {}),
           });
         }
         break;

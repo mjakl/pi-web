@@ -26,9 +26,10 @@ browser holds none.
 
 ```text
 src/core       rules and ports: transcript projection, session derivations
-               (stars, statistics, branches), context usage, workspace
-src/adapters   Pi SDK and in-memory implementations of the ports
-src/web        Hono routes, JSX views, HTMX/SSE delivery
+               (stars, statistics, branches), context usage, composer input
+               rules, path containment, workspace
+src/adapters   Pi SDK, filesystem, and in-memory implementations of the ports
+src/web        Hono routes, JSX views, HTMX/SSE delivery, client bundle
 src/container.ts  the only file that wires adapters into the core
 src/main.ts    process entrypoint
 tests/         vitest, mirrors src/ and scripts/
@@ -43,9 +44,12 @@ Rules enforced by `.oxlintrc.json`:
 - No parent-relative imports; use `@core/*`, `@adapters/*`, `@web/*`,
   `@scripts/*`, `#/*`.
 - Hono JSX uses `class`, never `className`. No dynamic imports in `src/`.
+- `src/web/client/*` is bundled by esbuild and may import `@core/*`; anything it
+  imports must run in a browser (no Node, no SDK).
 
 Read `docs/architecture.md` before changing a port, the SSE contract, or context
-accounting.
+accounting. Shell commands run with a sanitised environment; read
+`docs/adr/0001-project-command-environment.md` before changing that.
 
 ## Validation
 

@@ -1,7 +1,7 @@
 set quiet := true
 
 tailwind := "./node_modules/.bin/tailwindcss -i ./src/web/app.css -o ./static/app.css"
-esbuild := "./node_modules/.bin/esbuild src/web/client/main.ts --bundle --format=esm --target=es2022 --outfile=static/client.js"
+esbuild := "./node_modules/.bin/esbuild src/web/client/main.ts --bundle --format=esm --target=es2022 --alias:@core=./src/core --outfile=static/client.js"
 
 # INFO: List all available commands
 default:

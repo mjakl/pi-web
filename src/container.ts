@@ -4,11 +4,14 @@ import {
   type FakeStoredSession,
   userEntry,
 } from "@adapters/fake/index";
+import { createFileTree } from "@adapters/fs/file-tree";
 import { createPiAgentRuntime } from "@adapters/pi/agent-runtime";
 import { createPiModelCatalog } from "@adapters/pi/model-catalog";
 import { createPiProjectResolver } from "@adapters/pi/projects";
+import { createPiProjectResources } from "@adapters/pi/resources";
 import { createPiSessionCatalog } from "@adapters/pi/session-catalog";
 import { createWorkspace, type Workspace } from "@core/workspace";
+import { tmpdir } from "node:os";
 import type { Config } from "./config.ts";
 
 /** Two stored sessions so the demo runtime has a sidebar worth looking at. */
@@ -57,7 +60,15 @@ export function createDeps(config: Config): { workspace: Workspace } {
       reply: (prompt) =>
         `You asked: **${prompt}**\n\nThis reply comes from the fake runtime, streamed word by word so the page can be checked without a model.\n\n\`\`\`ts\nconst answer = 42;\n\`\`\``,
     });
-    return { workspace: createWorkspace(world) };
+    // Files stay real even in the demo world: `@` completion is only worth
+    // looking at against an actual checkout.
+    return {
+      workspace: createWorkspace({
+        ...world,
+        files: createFileTree(),
+        tmpdir: tmpdir(),
+      }),
+    };
   }
   const catalog = createPiSessionCatalog({ agentDir: config.agentDir });
   return {
@@ -66,6 +77,9 @@ export function createDeps(config: Config): { workspace: Workspace } {
       runtime: createPiAgentRuntime({ agentDir: config.agentDir, catalog }),
       models: createPiModelCatalog({ agentDir: config.agentDir }),
       projects: createPiProjectResolver({ agentDir: config.agentDir }),
+      resources: createPiProjectResources({ agentDir: config.agentDir }),
+      files: createFileTree(),
+      tmpdir: tmpdir(),
     }),
   };
 }

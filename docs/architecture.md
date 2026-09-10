@@ -16,13 +16,15 @@ are the only state; the browser shows whatever the server last rendered.
 Internal interfaces, all consumers in this repository. Defined in
 `src/core/ports.ts`:
 
-| Port              | Purpose                                                                                                  | Pi adapter                           |
-| ----------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| `SessionCatalog`  | List from headers only; read one branch; row metadata; rename, delete, star, fork, clone, rewind, export | `src/adapters/pi/session-catalog.ts` |
-| `AgentRuntime`    | Open or resume a `LiveSession`; watch every session's lifecycle                                          | `src/adapters/pi/agent-runtime.ts`   |
-| `LiveSession`     | `snapshot()`, `prompt()`, `abort()`, `setModel()`, `setStar()`, `navigateTree()`, `subscribe()`          | same                                 |
-| `ModelCatalog`    | Models Pi has credentials for                                                                            | `src/adapters/pi/model-catalog.ts`   |
-| `ProjectResolver` | The repository a working folder belongs to, and its branch                                               | `src/adapters/pi/projects.ts`        |
+| Port               | Purpose                                                                                                                      | Adapter                              |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `SessionCatalog`   | List from headers only; read one branch; row metadata; rename, delete, star, fork, clone, rewind, export                     | `src/adapters/pi/session-catalog.ts` |
+| `AgentRuntime`     | Open or resume a `LiveSession`; watch every session's lifecycle                                                              | `src/adapters/pi/agent-runtime.ts`   |
+| `LiveSession`      | `snapshot()`, `prompt()`, `abort()`, `commands()`, `compact()`, `clearQueue()`, `runBash()`, `navigateTree()`, `subscribe()` | same                                 |
+| `ModelCatalog`     | Models Pi has credentials for, narrowed by `enabledModels`                                                                   | `src/adapters/pi/model-catalog.ts`   |
+| `ProjectResolver`  | The repository a working folder belongs to, and its branch                                                                   | `src/adapters/pi/projects.ts`        |
+| `ProjectResources` | Prompt templates and skills of a folder, without starting an agent                                                           | `src/adapters/pi/resources.ts`       |
+| `Files`            | The `@` completion index, directory children, shell-output captures                                                          | `src/adapters/fs/file-tree.ts`       |
 
 `LiveSession` is the deep module: SDK event choreography (partial messages,
 compaction, retries, queue, extension notices) stays inside; callers only read a
@@ -41,7 +43,8 @@ Page load, HTMX responses, and SSE events all render the same three views:
 
 - `#messages` receives settled turn items (`sse-swap="settled"`, `beforeend`);
 - `#turn` receives the whole current turn (`sse-swap="turn"`, `innerHTML`);
-- `#status` receives model, state, notices, and the context badge.
+- `#status` receives model, state, queue, compaction, and the context badge;
+- `#toasts` receives notices (`sse-swap="notice"`, `beforeend`).
 
 The SSE endpoint coalesces activity into one re-render per 100 ms. Because the
 turn is re-rendered from the snapshot rather than patched from deltas, a missed
@@ -104,15 +107,32 @@ composition root and the only importer of Pi adapters.
   theme, keyboard shortcuts) is bundled by esbuild into `static/client.js` and
   loaded as a module with a content hash in its URL. The only inline script is
   the two-line theme read in `<head>`, which has to run before the first paint.
+- **The composer's rules live in `src/core/composer.ts`**, and the client bundle
+  imports them (esbuild resolves `@core` the same way tsconfig does). Slash
+  ranking, `@`-token extraction, fuzzy scoring, insert text, history cycling,
+  and the attachment limits are one implementation, unit-tested server-side and
+  executed in the browser where a round trip would be felt. Only two JSON
+  endpoints exist, both for the `@` menu: a keystroke cannot wait for a rendered
+  fragment. Everything else the composer opens — the slash menu, the queue
+  panel, the notice shelf — is server-rendered HTML.
+- **File requests are scoped to the session's working folder.**
+  `directoryWithin` in `src/core/path-access.ts` is the only check, and Phase 4
+  extends it with the full allowed-root policy rather than adding checks to
+  routes. Shell-output captures need both a `<tmpdir>/pi-bash-*.log` name and a
+  persisted `bashExecution` entry in that session that references the file.
+- **Project commands run in the project's environment.** See
+  [ADR 0001](adr/0001-project-command-environment.md).
 
 ## Not carried over yet
 
 pi-web features absent from this slice, roughly in order of value:
 
-1. File explorer, file viewer, Git status and diffs, `@` path completion.
-2. Image attachments, the slash-command menu (`/name`, `/session` and `/clone`
-   exist as buttons, not as commands), steer vs follow-up choice, queue recall,
-   manual compaction button.
+1. File explorer, file viewer, Git status and diffs, download.
+2. `@` completion and the slash menu need a session: the new-session composer
+   offers neither until the session exists. Drafts persist text, not
+   attachments. The model selector is a native `<select>` (its type-ahead
+   replaces pi-web's filter box); startup model preferences are Pi's own
+   defaults rather than a browser choice persisted into settings.
 3. Extension dialogs (`select`, `confirm`, `input`, `editor`, custom UI) are
    auto-cancelled; widgets and footers are ignored. Extension statuses and
    notices are shown.
