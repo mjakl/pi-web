@@ -12,10 +12,26 @@ import {
   type RailMark,
 } from "./conversation-rail.ts";
 import { contextUsage, type ContextUsage } from "./context-usage.ts";
-import { directoryWithin, isBashOutputPath } from "./path-access.ts";
+import { type FileKind, fileKind, languageOf } from "./file-types.ts";
+import type { GitFileStatus } from "./git-status.ts";
+import {
+  directoryWithin,
+  FileAccessError,
+  isAbsolutePath,
+  isBashOutputPath,
+  parentPath,
+  referencesPath,
+  samePath,
+  withinAny,
+} from "./path-access.ts";
 import type {
   AgentRuntime,
+  DirEntry,
   Files,
+  FileStat,
+  Git,
+  GitChangeFile,
+  GitStatus,
   ImageAttachment,
   LiveEvent,
   LiveSession,
@@ -30,6 +46,7 @@ import type {
   SessionCatalog,
   SessionRead,
   ThinkingLevel,
+  Watcher,
 } from "./ports.ts";
 import {
   type BranchLeaf,
@@ -55,6 +72,7 @@ import {
   contentParts,
   deferThinking,
   projectTranscript,
+  type ToolCallView,
   type TranscriptItem,
 } from "./transcript.ts";
 import { pageItems } from "./turns.ts";
@@ -118,6 +136,25 @@ export type SidebarView = {
   activityElsewhere: boolean;
 };
 
+/** Everything the file viewer renders, in one read. */
+export type FileView = {
+  path: string;
+  /** The folder the panel shows paths relative to. */
+  cwd: string;
+  kind: FileKind;
+  language: string;
+  size: number;
+  /** A text file within the limit. */
+  text?: string;
+  /** A text file too large to render; the reader is told, not truncated. */
+  tooLarge?: boolean;
+  /** The file is gone from disk; only the diff is left. */
+  deleted?: boolean;
+  status?: GitFileStatus;
+  /** The unified patch against HEAD, when Git has one. */
+  diff?: string;
+};
+
 export type Workspace = ReturnType<typeof createWorkspace>;
 
 /** Where a file request may point: the session's own working folder. */
@@ -130,9 +167,15 @@ export function createWorkspace(deps: {
   projects: ProjectResolver;
   resources: ProjectResources;
   files: Files;
+  git: Git;
+  watcher: Watcher;
   /** os.tmpdir(); shell captures may live nowhere else. */
   tmpdir: string;
 }) {
+  // Folders a reader explicitly validated, as pi-web does: in memory, gone on
+  // restart, never written to Pi's store.
+  const validatedRoots = new Set<string>();
+
   async function modelsFor(cwd: string): Promise<ModelListing> {
     try {
       return await deps.models.list(cwd);
@@ -329,7 +372,11 @@ export function createWorkspace(deps: {
     await deps.runtime.get(id)?.stop();
   }
 
-  /** File requests may only reach the session's own working folder. */
+  /**
+   * The folder a completion request may list. Defaults to the session's own,
+   * and anything else goes through the same containment policy as the file
+   * panel, so there is one answer to "may this be listed".
+   */
   async function authorizedCwd(
     id: string,
     directory: string | undefined,
@@ -337,10 +384,116 @@ export function createWorkspace(deps: {
     const summary = await summaryOf(id);
     if (!summary) throw new ForbiddenPath("Unknown session");
     if (directory === undefined || directory === "") return summary.cwd;
-    if (!directoryWithin(summary.cwd, directory)) {
-      throw new ForbiddenPath("Outside the session's working folder");
-    }
+    await authorize(directory, { sessionId: id, listing: true });
     return directory;
+  }
+
+  // --- File access -------------------------------------------------------
+  //
+  // One policy for every file route: lexical containment against the roots
+  // this request may reach, then the same check on the resolved path. The
+  // cheap roots (the open session's folder and its repository) are tried
+  // first; the full set costs a pass over every session header.
+
+  /** 256 KiB of text, as pi-web; above that the viewer says so. */
+  const TEXT_LIMIT = 256 * 1024;
+  const MEDIA_LIMIT = 10 * 1024 * 1024;
+
+  async function projectRootOf(cwd: string): Promise<string | undefined> {
+    return deps.projects.resolve(cwd).then(
+      (project) => project.root,
+      () => undefined,
+    );
+  }
+
+  async function nearRoots(sessionId: string | undefined): Promise<string[]> {
+    const roots = [...validatedRoots];
+    if (sessionId === undefined) return roots;
+    const summary = await summaryOf(sessionId);
+    if (!summary) return roots;
+    roots.push(summary.cwd);
+    // A linked worktree may reach the repository it belongs to.
+    const root = await projectRootOf(summary.cwd);
+    if (root !== undefined) roots.push(root);
+    return roots;
+  }
+
+  /** Every session's working folder, and the repository each sits in. */
+  async function everyRoot(): Promise<string[]> {
+    const cwds = [
+      ...new Set((await deps.sessions.list()).map((session) => session.cwd)),
+    ];
+    const roots = await Promise.all(cwds.map(projectRootOf));
+    return [...cwds, ...roots.filter((root) => root !== undefined)];
+  }
+
+  async function sessionReferences(id: string, path: string): Promise<boolean> {
+    const stored = await entriesOf(id);
+    return stored
+      ? referencesPath(JSON.stringify(stored.entries), path)
+      : false;
+  }
+
+  /**
+   * Answers with the file's stat, or throws with the status the route should
+   * send. `listing` requests are never granted by a transcript reference:
+   * naming a file does not open its folder.
+   */
+  async function authorize(
+    path: string,
+    options: {
+      sessionId?: string | undefined;
+      listing?: boolean;
+      allowMissing?: boolean;
+    } = {},
+  ): Promise<FileStat | undefined> {
+    if (!isAbsolutePath(path)) {
+      throw new FileAccessError("Path must be absolute", 400);
+    }
+    const roots = await nearRoots(options.sessionId);
+    if (!withinAny(roots, path)) roots.push(...(await everyRoot()));
+    let referenced = false;
+    if (!withinAny(roots, path)) {
+      if (options.listing === true || options.sessionId === undefined) {
+        throw new FileAccessError("Access denied", 403);
+      }
+      referenced = await sessionReferences(options.sessionId, path);
+      if (!referenced) throw new FileAccessError("Access denied", 403);
+    }
+    const info = await deps.files.stat(path);
+    if (info === undefined && options.allowMissing !== true) {
+      throw new FileAccessError("Not found", 404);
+    }
+    if (options.listing === true && info !== undefined && !info.isDirectory) {
+      throw new FileAccessError("Not a directory", 400);
+    }
+    if (!referenced) {
+      // The lexical check proved the spelling; this proves the file.
+      const real = await deps.files.realpath(
+        info === undefined ? parentPath(path) : path,
+      );
+      if (real === undefined) throw new FileAccessError("Not found", 404);
+      const resolved = await Promise.all(
+        roots.map((root) => deps.files.realpath(root)),
+      );
+      const known = resolved.filter((root) => root !== undefined);
+      if (!withinAny(known, real)) {
+        throw new FileAccessError("Access denied", 403);
+      }
+    }
+    return info;
+  }
+
+  async function cwdOf(sessionId: string | undefined): Promise<string> {
+    if (sessionId === undefined) return "";
+    return (await summaryOf(sessionId))?.cwd ?? "";
+  }
+
+  function changeFor(
+    status: GitStatus,
+    path: string,
+  ): GitChangeFile | undefined {
+    return status.files.find((file) => samePath(file.path, path));
   }
 
   async function liveOrOpen(id: string): Promise<LiveSession> {
@@ -634,6 +787,199 @@ export function createWorkspace(deps: {
         throw new ForbiddenPath("This session did not produce that file");
       }
       return deps.files.readOutput(path);
+    },
+
+    /** The working folder of a session, for the file panel's root. */
+    async sessionFolder(id: string): Promise<string | undefined> {
+      const cwd = await cwdOf(id);
+      return cwd === "" ? undefined : cwd;
+    },
+
+    /** Children of one directory, for the explorer's lazy tree. */
+    async listDirectory(
+      sessionId: string | undefined,
+      path: string,
+    ): Promise<{ path: string; entries: DirEntry[] }> {
+      await authorize(path, { sessionId, listing: true });
+      return { path, entries: await deps.files.list(path) };
+    },
+
+    /** What the working tree changed, for the panel's changes section. */
+    async gitChanges(sessionId: string): Promise<GitStatus> {
+      const cwd = await cwdOf(sessionId);
+      if (cwd === "") throw new FileAccessError("Unknown session", 404);
+      return deps.git.status(cwd);
+    },
+
+    /**
+     * One file as the viewer needs it: its kind, its text when it has any,
+     * and its diff against HEAD. A deleted file has no content left, so it
+     * opens with the diff alone.
+     */
+    async fileView(
+      sessionId: string | undefined,
+      path: string,
+    ): Promise<FileView> {
+      const cwd = await cwdOf(sessionId);
+      const info = await authorize(path, { sessionId, allowMissing: true });
+      const status = cwd === "" ? null : await deps.git.status(cwd);
+      const change = status ? changeFor(status, path) : undefined;
+      if (info === undefined) {
+        if (!change) throw new FileAccessError("Not found", 404);
+        const diff = await deps.git.diff(cwd, change);
+        return {
+          path,
+          cwd,
+          kind: "text",
+          language: languageOf(path),
+          size: 0,
+          deleted: true,
+          status: change.status,
+          ...(diff === null ? {} : { diff }),
+        };
+      }
+      if (!info.isFile) throw new FileAccessError("Not a file", 400);
+      const kind = fileKind(path);
+      const view: FileView = {
+        path,
+        cwd,
+        kind,
+        language: languageOf(path),
+        size: info.size,
+        ...(change ? { status: change.status } : {}),
+      };
+      if (kind === "text") {
+        if (info.size > TEXT_LIMIT) view.tooLarge = true;
+        else view.text = await deps.files.readText(path, TEXT_LIMIT);
+      }
+      if (change) {
+        const diff = await deps.git.diff(cwd, change);
+        if (diff !== null) view.diff = diff;
+      }
+      return view;
+    },
+
+    /** Size, language, and kind alone: what a media viewer re-reads. */
+    async fileMeta(
+      sessionId: string | undefined,
+      path: string,
+    ): Promise<{ size: number; language: string; kind: FileKind }> {
+      const info = await authorize(path, { sessionId });
+      if (info === undefined || !info.isFile) {
+        throw new FileAccessError("Not a file", 400);
+      }
+      return {
+        size: info.size,
+        language: languageOf(path),
+        kind: fileKind(path),
+      };
+    },
+
+    /** Raw bytes for an image, an audio file, a PDF, or a download. */
+    async fileBytes(
+      sessionId: string | undefined,
+      path: string,
+      range?: { start: number; end: number },
+    ): Promise<{ size: number; stream: ReadableStream<Uint8Array> }> {
+      const info = await authorize(path, { sessionId });
+      if (info === undefined || !info.isFile) {
+        throw new FileAccessError("Not a file", 400);
+      }
+      if (fileKind(path) === "image" && info.size > MEDIA_LIMIT) {
+        throw new FileAccessError("Image too large (>10MB)", 413);
+      }
+      return { size: info.size, stream: deps.files.stream(path, range) };
+    },
+
+    /** A .docx as HTML, for the sandboxed preview frame. */
+    async docxPreview(
+      sessionId: string | undefined,
+      path: string,
+    ): Promise<string> {
+      const info = await authorize(path, { sessionId });
+      if (info === undefined || fileKind(path) !== "docx") {
+        throw new FileAccessError("Not a Word document", 400);
+      }
+      if (info.size > MEDIA_LIMIT) {
+        throw new FileAccessError("Document too large (>10MB)", 413);
+      }
+      return deps.files.docxHtml(path);
+    },
+
+    /** Tells the viewer when the file changed under it. */
+    async watchFile(
+      sessionId: string | undefined,
+      path: string,
+      handlers: {
+        change(info: { mtime: number; size: number }): void;
+        error(): void;
+      },
+    ): Promise<() => void> {
+      // A watch survives the file being deleted and written again, so a
+      // missing path is not an error here.
+      await authorize(path, { sessionId, allowMissing: true });
+      return deps.watcher.watch(path, handlers);
+    },
+
+    /** The explorer's search box: files of the index, ranked. */
+    async searchFiles(
+      sessionId: string,
+      query: string,
+      limit = 50,
+    ): Promise<FileEntry[]> {
+      const cwd = await authorizedCwd(sessionId, undefined);
+      const index = await deps.files.index(cwd);
+      const entries = index.files.map((path) => ({ path, isDir: false }));
+      return filterFileEntries(entries, query, limit);
+    },
+
+    /**
+     * A folder the reader picked. Validating it is what makes it reachable;
+     * the set is in memory, so a restart forgets it, as pi-web does.
+     */
+    async validateFolder(
+      path: string,
+    ): Promise<{ cwd: string; projectRoot: string }> {
+      if (!isAbsolutePath(path)) {
+        throw new FileAccessError(`Not an absolute path: ${path}`, 400);
+      }
+      const info = await deps.files.stat(path);
+      if (info === undefined) {
+        throw new FileAccessError(`Folder not found: ${path}`, 404);
+      }
+      if (!info.isDirectory) {
+        throw new FileAccessError(`Not a folder: ${path}`, 400);
+      }
+      const cwd = (await deps.files.realpath(path)) ?? path;
+      validatedRoots.add(cwd);
+      const projectRoot = (await projectRootOf(cwd)) ?? cwd;
+      validatedRoots.add(projectRoot);
+      return { cwd, projectRoot };
+    },
+
+    /** One tool call, for the "show all" behind a truncated result. */
+    async toolCall(
+      id: string,
+      entryId: string,
+      callId: string,
+    ): Promise<ToolCallView | undefined> {
+      const stored = await entriesOf(id);
+      if (!stored) return undefined;
+      for (const item of projectTranscript(stored.branch).items) {
+        if (item.kind !== "assistant") continue;
+        for (const block of item.blocks) {
+          if (block.kind !== "tool" || block.call.id !== callId) continue;
+          // The link carries whichever entry the truncated body came from:
+          // the call's own, or the one the result was written into.
+          if (
+            item.entryId === entryId ||
+            block.call.result?.entryId === entryId
+          ) {
+            return block.call;
+          }
+        }
+      }
+      return undefined;
     },
 
     async setModel(

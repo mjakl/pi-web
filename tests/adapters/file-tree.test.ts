@@ -56,6 +56,35 @@ describe("file tree", () => {
     expect(filtered).toEqual([{ path: join(root, "src", "web"), isDir: true }]);
   });
 
+  it("lists children with directories first and the ignore list applied", async () => {
+    const entries = await createFileTree().list(root);
+    expect(entries.map((entry) => entry.name)).not.toContain("node_modules");
+    const names = entries.map((entry) => entry.name);
+    expect(names.indexOf("src")).toBeLessThan(names.indexOf("README.md"));
+    expect(entries.find((entry) => entry.name === "src")?.isDir).toBe(true);
+  });
+
+  it("stats, resolves, and reads within a byte limit", async () => {
+    const files = createFileTree();
+    const readme = join(root, "README.md");
+    expect((await files.stat(readme))?.isFile).toBe(true);
+    expect(await files.stat(join(root, "missing"))).toBeUndefined();
+    expect(await files.realpath(readme)).toBe(readme);
+    expect(await files.realpath(join(root, "missing"))).toBeUndefined();
+    expect(await files.readText(readme, 100)).toBe("hi");
+    await expect(files.readText(readme, 1)).rejects.toThrow();
+  });
+
+  it("streams a byte range", async () => {
+    const stream = createFileTree().stream(join(root, "README.md"), {
+      start: 1,
+      end: 1,
+    });
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    expect(Buffer.concat(chunks).toString()).toBe("i");
+  });
+
   it("reads a capture file and refuses a directory", async () => {
     const files = createFileTree();
     await writeFile(join(root, "capture.log"), "output");

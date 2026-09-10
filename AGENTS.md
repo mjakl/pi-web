@@ -28,8 +28,10 @@ browser holds none.
 src/core       rules and ports: transcript projection, session derivations
                (stars, statistics, branches), project selection, the
                conversation rail layout, terminal-output conversion, context
-               usage, composer input rules, path containment, workspace
-src/adapters   Pi SDK, filesystem, and in-memory implementations of the ports
+               usage, composer input rules, path containment, file kinds,
+               Git status parsing, patches, frontmatter, workspace
+src/adapters   Pi SDK, filesystem, Git, and in-memory implementations of the
+               ports
 src/web        Hono routes, JSX views, HTMX/SSE delivery, client bundle
 src/container.ts  the only file that wires adapters into the core
 src/main.ts    process entrypoint
@@ -57,6 +59,10 @@ Rules enforced by `.oxlintrc.json`:
 Read `docs/architecture.md` before changing a port, the SSE contract, or context
 accounting. Shell commands run with a sanitised environment; read
 `docs/adr/0001-project-command-environment.md` before changing that.
+
+Every file request goes through `authorize` in `src/core/workspace.ts`; add a
+root through the allowed-root flow there, never a check in a route handler.
+`docs/specs/files-git.md` is the behaviour it mirrors.
 
 ## Validation
 

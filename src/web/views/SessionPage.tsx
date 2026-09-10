@@ -1,6 +1,7 @@
 import { relativeTime } from "@core/sessions";
 import type { SessionView, SidebarView } from "@core/workspace";
 import { Composer } from "./Composer.tsx";
+import { FilePanel } from "./Files.tsx";
 import { Rail } from "./Rail.tsx";
 import { Shelf } from "./Shelf.tsx";
 import {
@@ -181,6 +182,15 @@ export function SessionPage({
           >
             Full history
           </a>
+          <button
+            type="button"
+            id="file-panel-toggle"
+            class="btn btn-ghost btn-xs"
+            aria-controls="file-panel"
+            aria-expanded="false"
+          >
+            Files
+          </button>
         </div>
         {view.otherBranch ? (
           <div class="alert flex items-center gap-2 py-1 text-sm alert-info">
@@ -220,6 +230,7 @@ export function SessionPage({
         <div id="rail-column" class="pr-2">
           <Rail view={view} />
         </div>
+        <FilePanel sessionId={summary.id} cwd={summary.cwd} />
       </div>
       <button
         type="button"

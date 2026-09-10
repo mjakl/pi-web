@@ -1,3 +1,4 @@
+import { resolveUnder } from "./path-access.ts";
 import type { RunningTool } from "./ports.ts";
 import type {
   AssistantBlock,
@@ -47,12 +48,51 @@ export function isEditToolName(name: string): boolean {
   );
 }
 
+export function isReadToolName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return (
+    lower === "read" ||
+    lower.startsWith("read_") ||
+    lower.endsWith(".read") ||
+    lower.endsWith("_read")
+  );
+}
+
+/**
+ * The absolute file a read, write, or edit call names. The transcript turns
+ * it into a link into the file panel; anything else keeps its plain preview.
+ */
+export function toolFilePath(
+  call: { name: string; arguments: unknown },
+  cwd = "",
+): string | undefined {
+  if (
+    !isReadToolName(call.name) &&
+    !isWriteToolName(call.name) &&
+    !isEditToolName(call.name)
+  ) {
+    return undefined;
+  }
+  const args = call.arguments;
+  if (typeof args !== "object" || args === null) return undefined;
+  const record = args as Record<string, unknown>;
+  const path = record["file_path"] ?? record["path"];
+  if (typeof path !== "string" || path === "" || path.startsWith("~")) {
+    return undefined;
+  }
+  // A pattern or a glob is not a file; a path is what the panel can open.
+  return /[*?]/.test(path) ? undefined : resolveUnder(cwd, path);
+}
+
 /**
  * The files a turn actually wrote: only write/edit calls whose result came
  * back without an error, in first-seen order. A path the answer merely
  * mentions is no evidence that anything was written, so prose is never read.
  */
-export function writtenFiles(items: readonly TranscriptItem[]): string[] {
+export function writtenFiles(
+  items: readonly TranscriptItem[],
+  cwd = "",
+): string[] {
   const files: string[] = [];
   for (const item of items) {
     if (item.kind !== "assistant") continue;
@@ -64,8 +104,9 @@ export function writtenFiles(items: readonly TranscriptItem[]): string[] {
       const args = call.arguments;
       if (typeof args !== "object" || args === null) continue;
       const record = args as Record<string, unknown>;
-      const path = record["file_path"] ?? record["path"];
-      if (typeof path !== "string" || path === "") continue;
+      const reported = record["file_path"] ?? record["path"];
+      if (typeof reported !== "string" || reported === "") continue;
+      const path = resolveUnder(cwd, reported);
       if (!files.includes(path)) files.push(path);
     }
   }
@@ -130,6 +171,7 @@ function countToolCalls(items: readonly TranscriptItem[]): number {
 function buildTurn(
   boundary: TranscriptItem | undefined,
   rest: readonly TranscriptItem[],
+  cwd: string,
 ): Turn {
   const items = rest.map(cleaned);
   const assistants = items
@@ -139,7 +181,7 @@ function buildTurn(
     assistants.findLast((entry) => hasAnswerContent(entry.item))?.index ??
     assistants.at(-1)?.index;
 
-  const written = writtenFiles(items);
+  const written = writtenFiles(items, cwd);
   if (finalIndex === undefined) {
     return {
       ...(boundary ? { boundary } : {}),
@@ -180,15 +222,18 @@ function buildTurn(
   };
 }
 
-/** Group a settled transcript into turns: boundary, process, answer, rest. */
-export function groupTurns(items: readonly TranscriptItem[]): Turn[] {
+/**
+ * Group a settled transcript into turns: boundary, process, answer, rest.
+ * `cwd` resolves the paths tools reported relative to the folder they ran in.
+ */
+export function groupTurns(items: readonly TranscriptItem[], cwd = ""): Turn[] {
   const turns: Turn[] = [];
   let boundary: TranscriptItem | undefined;
   let rest: TranscriptItem[] = [];
   let started = false;
   for (const item of items) {
     if (isTurnBoundary(item)) {
-      if (started) turns.push(buildTurn(boundary, rest));
+      if (started) turns.push(buildTurn(boundary, rest, cwd));
       boundary = item;
       rest = [];
       started = true;
@@ -196,7 +241,7 @@ export function groupTurns(items: readonly TranscriptItem[]): Turn[] {
     }
     rest.push(item);
   }
-  if (started || rest.length > 0) turns.push(buildTurn(boundary, rest));
+  if (started || rest.length > 0) turns.push(buildTurn(boundary, rest, cwd));
   return turns;
 }
 

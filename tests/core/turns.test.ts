@@ -2,6 +2,7 @@ import type { TranscriptItem } from "@core/transcript";
 import {
   activityLabel,
   groupTurns,
+  toolFilePath,
   isEditToolName,
   isWriteToolName,
   pageItems,
@@ -104,6 +105,37 @@ describe("written files", () => {
       assistant("a2", [text("done")]),
     ]);
     expect(turn?.written).toEqual([]);
+  });
+
+  it("resolves a path a tool reported relative to the folder it ran in", () => {
+    const items = [
+      user("u1"),
+      assistant("a1", [
+        writeCall("c1", "write", { file_path: "src/a.ts" }),
+        writeCall("c2", "edit", { file_path: "/abs/b.ts" }),
+      ]),
+      assistant("a2", [text("done")]),
+    ];
+    const [turn] = groupTurns(items, "/repo");
+    expect(turn?.written).toEqual(["/repo/src/a.ts", "/abs/b.ts"]);
+  });
+});
+
+describe("toolFilePath", () => {
+  it("links a read, write, or edit path and nothing else", () => {
+    const call = (name: string, args: unknown) => ({ name, arguments: args });
+    expect(toolFilePath(call("read", { path: "src/a.ts" }), "/repo")).toBe(
+      "/repo/src/a.ts",
+    );
+    expect(toolFilePath(call("edit", { file_path: "/abs/b.ts" }))).toBe(
+      "/abs/b.ts",
+    );
+    expect(
+      toolFilePath(call("grep", { path: "src" }), "/repo"),
+    ).toBeUndefined();
+    expect(
+      toolFilePath(call("read", { path: "src/*.ts" }), "/repo"),
+    ).toBeUndefined();
   });
 });
 

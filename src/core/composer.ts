@@ -143,9 +143,19 @@ export type FileEntry = { path: string; isDir: boolean };
  * Completing a directory leaves the token open so the next keystroke drills
  * into it; completing a file closes it with a trailing space.
  */
+/** `:12` or `:12-20`, clamped to real line numbers and put back in order. */
+function lineSuffix(range: { start: number; end?: number }): string {
+  const first = Math.max(1, Math.trunc(range.start));
+  const last = Math.max(1, Math.trunc(range.end ?? first));
+  const from = Math.min(first, last);
+  const to = Math.max(first, last);
+  return from === to ? `:${String(from)}` : `:${String(from)}-${String(to)}`;
+}
+
 export function buildAtInsertText(
   entry: FileEntry,
   quoted: boolean,
+  range?: { start: number; end?: number },
 ): { text: string; caret: number } {
   const path =
     entry.isDir && !entry.path.endsWith("/") ? `${entry.path}/` : entry.path;
@@ -154,7 +164,9 @@ export function buildAtInsertText(
     const text = quote ? `@"${path}"` : `@${path}`;
     return { text, caret: quote ? text.length - 1 : text.length };
   }
-  const text = quote ? `@"${path}" ` : `@${path} `;
+  // The range sits inside the quotes, so the whole reference stays one token.
+  const token = range === undefined ? path : `${path}${lineSuffix(range)}`;
+  const text = quote ? `@"${token}" ` : `@${token} `;
   return { text, caret: text.length };
 }
 

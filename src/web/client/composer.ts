@@ -50,8 +50,7 @@ export function setUpComposer(): void {
   const sessionId = form.dataset["sessionId"] ?? null;
   const cwd = form.dataset["cwd"] ?? null;
 
-  // A written-file chip in the transcript puts its path into the composer;
-  // Phase 4 replaces this with opening the file.
+  // The file panel's `@` buttons put a path into the composer.
   document.body.addEventListener("click", (event) => {
     const chip = (event.target as HTMLElement).closest<HTMLElement>(
       "[data-mention]",
@@ -60,7 +59,8 @@ export function setUpComposer(): void {
     if (!chip || !area) return;
     const path = chip.dataset["mention"] ?? "";
     if (path === "") return;
-    const insert = buildAtInsertText({ path, isDir: false }, false);
+    const isDir = chip.dataset["mentionDir"] === "1";
+    const insert = buildAtInsertText({ path, isDir }, false);
     const caret = area.selectionStart;
     replaceRange(area, caret, area.selectionEnd, insert.text, insert.caret);
   });

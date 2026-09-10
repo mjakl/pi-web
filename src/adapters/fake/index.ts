@@ -1,8 +1,12 @@
+import { createFileTree } from "@adapters/fs/file-tree";
+import { createWatcher } from "@adapters/fs/watch";
+import { createGit } from "@adapters/git/git";
 import type { SlashCommand } from "@core/composer";
 import type {
   AgentRuntime,
   ExtensionWidget,
   Files,
+  Git,
   LiveEvent,
   LiveSession,
   LiveSnapshot,
@@ -17,6 +21,7 @@ import type {
   RuntimeEvent,
   SessionCatalog,
   ThinkingLevel,
+  Watcher,
 } from "@core/ports";
 import {
   readStars,
@@ -621,6 +626,8 @@ export type FakeWorld = {
   projects: ProjectResolver;
   resources: ProjectResources;
   files: Files;
+  git: Git;
+  watcher: Watcher;
   tmpdir: string;
   store: Map<string, FakeStoredSession>;
 };
@@ -645,6 +652,7 @@ export function createFakeWorld(
   const script =
     options.script ?? ((prompt: string) => [{ text: reply(prompt) }]);
   const delayMs = options.delayMs ?? 5;
+  const realFiles = createFileTree();
   let created = 0;
 
   function announce(event: RuntimeEvent): void {
@@ -850,7 +858,17 @@ export function createFakeWorld(
             .filter((entry) => entry.path.includes(query.replace(/^\.\//, ""))),
         ),
       readOutput: () => Promise.resolve("full shell output"),
+      // The file system itself is never faked: a viewer or a diff is only
+      // worth checking against real bytes in a temporary directory.
+      list: (directory) => realFiles.list(directory),
+      stat: (path) => realFiles.stat(path),
+      realpath: (path) => realFiles.realpath(path),
+      readText: (path, maxBytes) => realFiles.readText(path, maxBytes),
+      stream: (path, range) => realFiles.stream(path, range),
+      docxHtml: (path) => realFiles.docxHtml(path),
     },
+    git: createGit(),
+    watcher: createWatcher(),
     tmpdir: options.tmpdir ?? "/tmp",
   };
 }

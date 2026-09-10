@@ -6,6 +6,8 @@ import {
   userEntry,
 } from "@adapters/fake/index";
 import { createFileTree } from "@adapters/fs/file-tree";
+import { createWatcher } from "@adapters/fs/watch";
+import { createGit } from "@adapters/git/git";
 import { createPiAgentRuntime } from "@adapters/pi/agent-runtime";
 import { createPiModelCatalog } from "@adapters/pi/model-catalog";
 import { createPiProjectResolver } from "@adapters/pi/projects";
@@ -132,8 +134,9 @@ export function createDeps(config: Config): { workspace: Workspace } {
       delayMs: 40,
       script: (prompt) => demoScript(config.defaultCwd, prompt),
     });
-    // Files stay real even in the demo world: `@` completion is only worth
-    // looking at against an actual checkout.
+    // Files, Git, and the watcher stay real even in the demo world: an
+    // explorer is only worth looking at against an actual checkout, and the
+    // fake index only knows two invented paths.
     return {
       workspace: createWorkspace({
         ...world,
@@ -151,6 +154,8 @@ export function createDeps(config: Config): { workspace: Workspace } {
       projects: createPiProjectResolver({ agentDir: config.agentDir }),
       resources: createPiProjectResources({ agentDir: config.agentDir }),
       files: createFileTree(),
+      git: createGit(),
+      watcher: createWatcher(),
       tmpdir: tmpdir(),
     }),
   };

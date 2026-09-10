@@ -4,6 +4,7 @@ import type {
 } from "@earendil-works/pi-agent-core";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { FileEntry, SlashCommand } from "./composer.ts";
+import type { GitFileStatus } from "./git-status.ts";
 import type { SessionRowMetadata, SessionSummary } from "./sessions.ts";
 
 // Outbound ports. The core describes what it needs from Pi and the file
@@ -200,6 +201,15 @@ export type ProjectResources = {
   commands(cwd: string): Promise<SlashCommand[]>;
 };
 
+export type DirEntry = { name: string; isDir: boolean };
+
+export type FileStat = {
+  size: number;
+  mtimeMs: number;
+  isFile: boolean;
+  isDirectory: boolean;
+};
+
 /** Files under a working folder, for `@` completion and shell output. */
 export type Files = {
   /** Every tracked and untracked file, cwd-relative; capped. */
@@ -212,4 +222,55 @@ export type Files = {
   children(query: string, cwd: string): Promise<FileEntry[]>;
   /** A shell-output capture file, capped; throws when it cannot be read. */
   readOutput(path: string): Promise<string>;
+  /** Directory children, sorted and filtered by the explorer's ignore list. */
+  list(directory: string): Promise<DirEntry[]>;
+  /** Undefined when the path does not exist. */
+  stat(path: string): Promise<FileStat | undefined>;
+  /** The path with every symlink resolved; undefined when it cannot be. */
+  realpath(path: string): Promise<string | undefined>;
+  /** UTF-8 text; throws when the file is larger than `maxBytes`. */
+  readText(path: string, maxBytes: number): Promise<string>;
+  /** Bytes for a media response, optionally one Range slice. */
+  stream(
+    path: string,
+    range?: { start: number; end: number },
+  ): ReadableStream<Uint8Array>;
+  /** A .docx converted to a standalone HTML body. */
+  docxHtml(path: string): Promise<string>;
+};
+
+/** One file the working tree changed, as `git status` reports it. */
+export type GitChangeFile = {
+  /** Absolute, in the platform's own spelling. */
+  path: string;
+  status: GitFileStatus;
+  code: string;
+  /** Absolute path a rename or copy came from. */
+  original?: string;
+};
+
+export type GitStatus = {
+  isRepository: boolean;
+  root: string | null;
+  files: GitChangeFile[];
+  additions: number;
+  deletions: number;
+};
+
+/** Git as the explorer needs it: what changed, and the patch for one file. */
+export type Git = {
+  status(cwd: string): Promise<GitStatus>;
+  /** Null when the file has no diff web-pi can show (binary, too large). */
+  diff(cwd: string, file: GitChangeFile): Promise<string | null>;
+};
+
+/** One file's changes on disk, for the viewer's live indicator. */
+export type Watcher = {
+  watch(
+    path: string,
+    handlers: {
+      change(info: { mtime: number; size: number }): void;
+      error(): void;
+    },
+  ): () => void;
 };

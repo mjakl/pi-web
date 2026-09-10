@@ -38,6 +38,13 @@ function testApp(options: Parameters<typeof createFakeWorld>[0] = {}) {
   return { app, world };
 }
 
+/** The URL behind a collapsed tool card, as htmx would follow it. */
+function deferredUrl(page: string): string {
+  const url = /hx-get="([^"]*tool-result[^"]*)"/.exec(page)?.[1] ?? "";
+  expect(url).not.toBe("");
+  return url.replaceAll("&amp;", "&");
+}
+
 describe("web app", () => {
   it("lists stored sessions grouped by project", async () => {
     const { app } = testApp();
@@ -386,10 +393,12 @@ describe("web app", () => {
       truncated: false,
     });
 
-    const scoped = await app.request(
+    // A folder inside the session's own is allowed but still has to exist,
+    // and one outside every root is refused before any file system call.
+    const missing = await app.request(
       "/sessions/s1/file-index?cwd=%2Frepo%2Fone%2Fsrc&q=main",
     );
-    expect(scoped.status).toBe(200);
+    expect(missing.status).toBe(404);
     const outside = await app.request("/sessions/s1/file-index?cwd=%2Fetc");
     expect(outside.status).toBe(403);
   });
@@ -642,8 +651,63 @@ describe("conversation rail, shelf, and written files", () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
     const page = await (await app.request("/sessions/s1")).text();
     expect(page).toContain('aria-label="Files changed"');
-    expect(page).toContain('data-mention="src/answer.ts"');
+    // The chip opens the file panel rather than typing a mention.
+    expect(page).toContain('data-file-path="/repo/one/src/answer.ts"');
     expect(page).toContain('title="/repo/one/src/answer.ts"');
+  });
+
+  it("keeps a huge tool result off the page and cuts it when opened", async () => {
+    const output = "x".repeat(40_000);
+    const { app } = testApp({
+      script: () => [
+        { tool: "grep", arguments: { pattern: "x" }, result: output },
+        { text: "found them" },
+      ],
+    });
+    const form = new FormData();
+    form.set("text", "go");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).not.toContain("xxxxx");
+    expect(page.length).toBeLessThan(40_000);
+
+    const url = deferredUrl(page);
+    const opened = await (await app.request(url)).text();
+    expect(opened).toContain("Show the whole output");
+    expect(opened.length).toBeLessThan(output.length);
+    const full = await (await app.request(`${url}?full=1`)).text();
+    expect(full).toContain(output);
+    expect(full).not.toContain("Show the whole output");
+  });
+
+  it("cuts a diff that is longer than the budget", async () => {
+    const hunk = Array.from(
+      { length: 300 },
+      (_, index) => `-old ${String(index)}\n+new ${String(index)}`,
+    ).join("\n");
+    const patch = `--- a/x.ts\n+++ b/x.ts\n@@ -1,600 +1,600 @@\n${hunk}\n`;
+    const { app } = testApp({
+      script: () => [
+        {
+          tool: "edit",
+          arguments: { file_path: "/repo/one/x.ts" },
+          details: { patch },
+          result: "edited",
+        },
+        { text: "done" },
+      ],
+    });
+    const form = new FormData();
+    form.set("text", "go");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const url = deferredUrl(await (await app.request("/sessions/s1")).text());
+    const opened = await (await app.request(url)).text();
+    expect(opened).toContain("Show the whole output");
+    expect(opened).not.toContain("new 299");
+    const full = await (await app.request(`${url}?full=1`)).text();
+    expect(full).toContain("new 299");
   });
 });
 
@@ -687,12 +751,15 @@ describe("transcript rendering", () => {
     await app.request("/sessions/s1/prompt", { method: "POST", body: form });
     await new Promise((resolve) => setTimeout(resolve, 60));
 
+    // A settled card ships a placeholder; the diff arrives when it opens.
     const page = await (await app.request("/sessions/s1")).text();
-    expect(page).toContain("const a = 1;");
-    expect(page).toContain("const a = 2;");
-    expect(page).toContain("grid-cols-2");
+    expect(page).not.toContain("const a = 1;");
+    const body = await (await app.request(deferredUrl(page))).text();
+    expect(body).toContain("const a = 1;");
+    expect(body).toContain("const a = 2;");
+    expect(body).toContain("grid-cols-2");
     // Edit tools show the diff instead of repeating their arguments.
-    expect(page).not.toContain("&quot;file_path&quot;");
+    expect(body).not.toContain("&quot;file_path&quot;");
   });
 
   it("names the running tool while a turn works", async () => {

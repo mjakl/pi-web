@@ -2,6 +2,7 @@
 
 import { abortTurn, setUpComposer } from "./composer.ts";
 import { DARK_THEME, LIGHT_THEME, THEME_KEY } from "./theme.ts";
+import { setUpFilePanel } from "./panel.ts";
 import { setUpRail } from "./rail.ts";
 import { setUpToasts } from "./toasts.ts";
 import { setUpTranscript } from "./transcript.ts";
@@ -247,3 +248,4 @@ setUpProjectFilter();
 setUpUnread();
 setUpToasts();
 setUpComposer();
+setUpFilePanel();

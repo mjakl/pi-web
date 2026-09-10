@@ -24,7 +24,9 @@ Internal interfaces, all consumers in this repository. Defined in
 | `ModelCatalog`     | Models Pi has credentials for, narrowed by `enabledModels`                                                                   | `src/adapters/pi/model-catalog.ts`   |
 | `ProjectResolver`  | The repository a working folder belongs to, and its branch                                                                   | `src/adapters/pi/projects.ts`        |
 | `ProjectResources` | Prompt templates and skills of a folder, without starting an agent                                                           | `src/adapters/pi/resources.ts`       |
-| `Files`            | The `@` completion index, directory children, shell-output captures                                                          | `src/adapters/fs/file-tree.ts`       |
+| `Files`            | The `@` completion index, directory listings, file bytes and text, `.docx` conversion, shell-output captures                 | `src/adapters/fs/file-tree.ts`       |
+| `Git`              | `git status` of a folder and the patch for one file                                                                          | `src/adapters/git/git.ts`            |
+| `Watcher`          | One file's changes on disk, deduplicated                                                                                     | `src/adapters/fs/watch.ts`           |
 
 `LiveSession` is the deep module: SDK event choreography (partial messages,
 compaction, retries, queue, extension notices) stays inside; callers only read a
@@ -177,11 +179,37 @@ composition root and the only importer of Pi adapters.
   endpoints exist, both for the `@` menu: a keystroke cannot wait for a rendered
   fragment. Everything else the composer opens — the slash menu, the queue
   panel, the notice shelf — is server-rendered HTML.
-- **File requests are scoped to the session's working folder.**
-  `directoryWithin` in `src/core/path-access.ts` is the only check, and Phase 4
-  extends it with the full allowed-root policy rather than adding checks to
-  routes. Shell-output captures need both a `<tmpdir>/pi-bash-*.log` name and a
-  persisted `bashExecution` entry in that session that references the file.
+- **One containment policy, in one function.** `authorize` in
+  `src/core/workspace.ts` answers every file request the same way, and
+  `src/core/path-access.ts` holds the rules it applies: a lexical check before
+  any file system call, then the same check on the resolved path against the
+  resolved roots. The roots are the open session's folder and the repository it
+  belongs to, plus the folders a reader validated through
+  `POST /workspaces/validate` (in memory, forgotten on restart, as in pi-web); a
+  path outside those widens the search to every session's folder before it is
+  refused. The one exception is a file the session's transcript literally names
+  (`referencesPath`): the agent already showed its contents, so it may be read —
+  but never listed, because naming a file does not open its folder. Failures
+  carry the status the route sends (400, 403, 404, 413). Shell-output captures
+  need both a `<tmpdir>/pi-bash-*.log` name and a persisted `bashExecution`
+  entry in that session that references the file.
+- **The file panel is server-rendered; the browser keeps only the tabs.** Each
+  directory is fetched when it is opened (`hx-get` per node), the changes list
+  and the tree re-render when a turn settles (`sse:settled`), and the viewer is
+  one fragment per mode. `src/web/client/panel.ts` owns what the server cannot
+  know: the panel width (`web-pi:panel-width`), which paths are open, each tab's
+  mode, wrap and scroll position, the `EventSource` on the active tab, and the
+  text selection a line-range mention comes from. Syntax colouring for a file
+  happens on the server (`src/web/syntax.ts`, shared with the transcript's
+  browser-side highlighter), because a whole file has to be split into numbered
+  rows and highlight.js colours a block, not a line.
+- **A settled tool call's body is fetched when it is opened.** A card is
+  collapsed, so its arguments, output and diff do not have to be on the page:
+  they arrive from `GET /sessions/:id/entries/:entryId/tool-result/:callId` on
+  the first toggle, cut to 16 KB of text and 200 diff rows, with a button that
+  asks for the rest. A real session page went from 1.05 MB to 480 KB. The
+  running turn keeps its bodies inline, because it is re-rendered from the
+  snapshot every 100 ms.
 - **Project commands run in the project's environment.** See
   [ADR 0001](adr/0001-project-command-environment.md).
 
@@ -189,23 +217,22 @@ composition root and the only importer of Pi adapters.
 
 pi-web features absent from this slice, roughly in order of value:
 
-1. File explorer, file viewer, Git status and diffs, download.
-2. `@` completion and the slash menu need a session: the new-session composer
+1. `@` completion and the slash menu need a session: the new-session composer
    offers neither until the session exists. Drafts persist text, not
    attachments. The model selector is a native `<select>` (its type-ahead
    replaces pi-web's filter box); startup model preferences are Pi's own
    defaults rather than a browser choice persisted into settings.
-3. Extension dialogs (`select`, `confirm`, `input`, `editor`, custom UI) are
+2. Extension dialogs (`select`, `confirm`, `input`, `editor`, custom UI) are
    auto-cancelled; footers and headers are ignored, and a widget whose content
    is a terminal component shows as an empty chip. Tool output is preformatted
    text: ANSI is converted in the extension shelf, not in the transcript.
-4. Worktree-aware folder picker, project trust dialog (trust is honoured
+3. Worktree-aware folder picker, project trust dialog (trust is honoured
    read-only from Pi's store), skills and plugins management. Sessions already
    group under the repository a worktree belongs to.
-5. A written-files chip opens the file viewer (Phase 4); for now it inserts the
-   path into the composer as an `@` mention. The rail's branch marks move the
-   session's leaf through `/navigate`, which offers the prompt there for
-   editing, rather than opening that branch read-only.
-6. PWA, push notifications, completion sound.
-7. A running-session cap. Idle shutdown exists only for drafts Pi never wrote to
+4. The rail's branch marks move the session's leaf through `/navigate`, which
+   offers the prompt there for editing, rather than opening that branch
+   read-only. The explorer has no create, rename, delete or upload, and its
+   expanded state is not remembered across a reload.
+5. PWA, push notifications, completion sound.
+6. A running-session cap. Idle shutdown exists only for drafts Pi never wrote to
    disk (10 minutes), as in pi-web.

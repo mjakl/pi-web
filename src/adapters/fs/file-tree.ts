@@ -1,9 +1,12 @@
 import type { FileEntry } from "@core/composer";
-import type { Files } from "@core/ports";
+import type { DirEntry, Files, FileStat } from "@core/ports";
+import mammoth from "mammoth";
 import { execFile } from "node:child_process";
-import { constants, open, readdir, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { constants, open, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
+import { Readable } from "node:stream";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
@@ -19,6 +22,7 @@ const CACHE_TTL_MS = 10_000;
 const CACHE_MAX_ENTRIES = 20;
 const MAX_OUTPUT_BYTES = 5 * 1024 * 1024;
 
+/** Names the explorer never lists, whatever `.gitignore` says (spec §2). */
 const SKIPPED_DIRECTORIES = new Set([
   "node_modules",
   ".git",
@@ -185,6 +189,81 @@ export function createFileTree(): Files {
       } finally {
         await handle.close();
       }
+    },
+
+    async list(directory) {
+      const entries = await readdir(directory, { withFileTypes: true });
+      const listed: DirEntry[] = [];
+      for (const entry of entries) {
+        if (SKIPPED_DIRECTORIES.has(entry.name)) continue;
+        if (entry.name === ".DS_Store" || entry.name.endsWith(".pyc")) continue;
+        let isDir = entry.isDirectory();
+        if (!isDir && !entry.isFile()) {
+          // A symlink or a socket: ask the target what it is, and drop the
+          // entry when the answer is an error (a dangling link).
+          const info = await stat(join(directory, entry.name)).catch(
+            () => undefined,
+          );
+          if (!info) continue;
+          isDir = info.isDirectory();
+        }
+        listed.push({ name: entry.name, isDir });
+      }
+      return listed.sort(
+        (a, b) =>
+          Number(b.isDir) - Number(a.isDir) ||
+          a.name.localeCompare(b.name, "en"),
+      );
+    },
+
+    stat(path) {
+      return stat(path).then(
+        (info): FileStat => ({
+          size: info.size,
+          mtimeMs: info.mtimeMs,
+          isFile: info.isFile(),
+          isDirectory: info.isDirectory(),
+        }),
+        () => undefined,
+      );
+    },
+
+    realpath(path) {
+      return realpath(path).then(
+        (resolved) => resolved,
+        () => undefined,
+      );
+    },
+
+    async readText(path, maxBytes) {
+      const handle = await open(path, constants.O_RDONLY);
+      try {
+        const info = await handle.stat();
+        if (info.size > maxBytes) throw new Error("too large");
+        return await handle.readFile("utf8");
+      } finally {
+        await handle.close();
+      }
+    },
+
+    stream(path, range) {
+      const node = createReadStream(
+        path,
+        range === undefined ? {} : { start: range.start, end: range.end },
+      );
+      return Readable.toWeb(node) as ReadableStream<Uint8Array>;
+    },
+
+    async docxHtml(path) {
+      const { value } = await mammoth.convertToHtml(
+        { path },
+        {
+          // The converter must never reach for anything outside this file.
+          externalFileAccess: false,
+          convertImage: mammoth.images.dataUri,
+        },
+      );
+      return value;
     },
   };
 }

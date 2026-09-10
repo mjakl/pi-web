@@ -153,3 +153,96 @@ export function patchLines(text: string): PatchLine[] {
           : "context",
   }));
 }
+
+export type UnifiedRow =
+  | { type: "hunk"; text: string }
+  | { type: "collapsed"; count: number }
+  | {
+      type: "line";
+      lineNo: number | null;
+      text: string;
+      kind: "context" | "added" | "removed";
+    };
+
+/** Unchanged runs longer than this keep `CONTEXT` lines on either side. */
+const CONTEXT = 3;
+
+/**
+ * A whole-file diff as one column. `parseUnifiedPatch` pairs lines for the
+ * transcript's side-by-side cards; the file viewer wants what `git diff`
+ * prints, with the long untouched stretches folded away.
+ */
+export function unifiedRows(text: string): UnifiedRow[] {
+  const rows: UnifiedRow[] = [];
+  let oldLineNo = 0;
+  let newLineNo = 0;
+  let inHunk = false;
+  const lines = text.split(/\r?\n/);
+  // The newline that ends the patch is not an empty context line.
+  if (lines.at(-1) === "") lines.pop();
+  for (const line of lines) {
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+    if (hunk) {
+      oldLineNo = Number(hunk[1]);
+      newLineNo = Number(hunk[2]);
+      inHunk = true;
+      rows.push({ type: "hunk", text: line });
+      continue;
+    }
+    if (!inHunk) continue;
+    if (line.startsWith("+")) {
+      rows.push({
+        type: "line",
+        lineNo: newLineNo,
+        text: line.slice(1),
+        kind: "added",
+      });
+      newLineNo += 1;
+    } else if (line.startsWith("-")) {
+      rows.push({
+        type: "line",
+        lineNo: oldLineNo,
+        text: line.slice(1),
+        kind: "removed",
+      });
+      oldLineNo += 1;
+    } else if (line.startsWith(" ") || line === "") {
+      rows.push({
+        type: "line",
+        lineNo: newLineNo,
+        text: line.slice(1),
+        kind: "context",
+      });
+      oldLineNo += 1;
+      newLineNo += 1;
+    } else {
+      // "\ No newline at end of file" and anything else unrecognised.
+      rows.push({ type: "hunk", text: line });
+    }
+  }
+  return collapseContext(rows);
+}
+
+function collapseContext(rows: UnifiedRow[]): UnifiedRow[] {
+  const out: UnifiedRow[] = [];
+  let run: UnifiedRow[] = [];
+  const flush = () => {
+    if (run.length > CONTEXT * 2 + 1) {
+      out.push(
+        ...run.slice(0, CONTEXT),
+        { type: "collapsed", count: run.length - CONTEXT * 2 },
+        ...run.slice(-CONTEXT),
+      );
+    } else out.push(...run);
+    run = [];
+  };
+  for (const row of rows) {
+    if (row.type === "line" && row.kind === "context") run.push(row);
+    else {
+      flush();
+      out.push(row);
+    }
+  }
+  flush();
+  return out;
+}

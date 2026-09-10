@@ -9,9 +9,18 @@ const MAX_MARKDOWN_CHARS = 100_000;
 export type MarkdownOptions = {
   /** Resolves relative file links; the session's working folder. */
   cwd?: string;
+  /** Opens local paths in the file panel and serves local images. */
+  sessionId?: string;
   /** Inside the live turn: no diagram preview until the text settles. */
   live?: boolean;
 };
+
+/** The route the file panel reads bytes from; also used for local images. */
+export function rawFileUrl(path: string, sessionId?: string): string {
+  const query = new URLSearchParams({ path });
+  if (sessionId !== undefined) query.set("session", sessionId);
+  return `/files/raw?${query.toString()}`;
+}
 
 export function escapeHtml(text: string): string {
   return text
@@ -46,7 +55,7 @@ const LINE_SUFFIX = /:\d+(?::\d+)?$/;
 
 /**
  * A link or image that points into the working folder rather than the web.
- * Phase 4 turns these into file-viewer links; until then the path is shown.
+ * These open in the file panel.
  */
 export function localFilePath(
   href: string,
@@ -167,7 +176,7 @@ function markedFor(options: MarkdownOptions): Marked {
         }
         const file = localFilePath(href, options.cwd);
         if (file !== null) {
-          return `<span class="markdown-file-ref" data-file-path="${attribute(file)}" title="${attribute(file)}">${content}</span>`;
+          return `<button type="button" class="markdown-file-ref" data-file-path="${attribute(file)}" title="${attribute(file)}">${content}</button>`;
         }
         return content;
       },
@@ -182,7 +191,11 @@ function markedFor(options: MarkdownOptions): Marked {
         }
         const file = localFilePath(href, options.cwd);
         if (file === null) return alt;
-        return `<span class="markdown-file-ref" data-file-path="${attribute(file)}" title="${attribute(file)}">${alt === "" ? attribute(file) : alt}</span>`;
+        const label = alt === "" ? attribute(file) : alt;
+        if (options.sessionId === undefined) {
+          return `<button type="button" class="markdown-file-ref" data-file-path="${attribute(file)}" title="${attribute(file)}">${label}</button>`;
+        }
+        return `<button type="button" class="markdown-file-image" data-file-path="${attribute(file)}" title="${attribute(file)}"><img src="${attribute(rawFileUrl(file, options.sessionId))}" alt="${label}" loading="lazy"></button>`;
       },
     },
   });

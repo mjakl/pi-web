@@ -23,6 +23,7 @@ import {
   groupTurns,
   isEditToolName,
   timestampedEntries,
+  toolFilePath,
   type Turn,
 } from "@core/turns";
 import { renderMarkdown } from "@web/markdown";
@@ -53,7 +54,9 @@ function Markdown({
     <div class="prose max-w-none break-words">
       {raw(
         renderMarkdown(source, {
-          ...(actions ? { cwd: actions.cwd } : {}),
+          ...(actions
+            ? { cwd: actions.cwd, sessionId: actions.sessionId }
+            : {}),
           ...(actions?.live ? { live: true } : {}),
         }),
       )}
@@ -367,13 +370,66 @@ function PatchText({ patch }: { patch: string }) {
   );
 }
 
-function Diff({ patch }: { patch: string }) {
-  const files = parseUnifiedPatch(patch);
-  return files === null ? (
-    <PatchText patch={patch} />
-  ) : (
-    <SplitDiff files={files} />
+/** Past this a tool result is cut, with a button that fetches the whole. */
+const MAX_RESULT_CHARS = 16 * 1024;
+const MAX_DIFF_ROWS = 200;
+
+function ShowAll({ url }: { url: string }) {
+  return (
+    <button
+      type="button"
+      class="btn btn-ghost btn-xs"
+      hx-get={url}
+      hx-target="closest .tool-result"
+      hx-swap="outerHTML"
+    >
+      Show the whole output
+    </button>
   );
+}
+
+/** Keeps whole files, up to the row budget: half a file reads as a bug. */
+function trimDiff(
+  files: DiffFile[],
+  budget: number,
+): { files: DiffFile[]; cut: number } {
+  const kept: DiffFile[] = [];
+  let rows = 0;
+  let cut = 0;
+  for (const file of files) {
+    const lines = file.rows.filter((row) => row.type === "line").length;
+    if (rows > 0 && rows + lines > budget) {
+      cut += lines;
+      continue;
+    }
+    if (rows + lines > budget) {
+      const partial: typeof file.rows = [];
+      let taken = 0;
+      for (const row of file.rows) {
+        if (row.type === "line" && taken >= budget) break;
+        if (row.type === "line") taken += 1;
+        partial.push(row);
+      }
+      kept.push({ ...file, rows: partial });
+      cut += lines - taken;
+      rows = budget;
+      continue;
+    }
+    kept.push(file);
+    rows += lines;
+  }
+  return { files: kept, cut };
+}
+
+/** The diff rows of a patch, capped; `cut` counts what did not fit. */
+function trimmedDiff(
+  patch: string,
+  budget: number,
+): { node: unknown; cut: number } {
+  const files = parseUnifiedPatch(patch);
+  if (files === null) return { node: <PatchText patch={patch} />, cut: 0 };
+  const trimmed = trimDiff(files, budget);
+  return { node: <SplitDiff files={trimmed.files} />, cut: trimmed.cut };
 }
 
 const STATUS_GLYPH = {
@@ -514,40 +570,80 @@ function Subagent({
   );
 }
 
-function ToolResultBody({
+/**
+ * A tool call's arguments and its result. A real session holds hundreds of
+ * kilobytes of these, so a settled card ships a placeholder that fetches this
+ * when the reader opens it, and what arrives is still cut to a budget with a
+ * button for the rest.
+ */
+export function ToolBody({
   call,
   actions,
+  full,
 }: {
   call: ToolCallView;
   actions?: ItemActions;
+  full?: boolean;
 }) {
   const result = call.result;
-  if (!result) return <></>;
-  if (result.patch !== undefined) return <Diff patch={result.patch} />;
-  const empty =
-    result.text.trim() === "" || result.text.trim() === "(no output)";
+  const budgeted = actions !== undefined && full !== true;
+  const more =
+    result && budgeted
+      ? `/sessions/${actions.sessionId}/entries/${result.entryId}/tool-result/${encodeURIComponent(call.id)}?full=1`
+      : undefined;
+  const showInput =
+    call.partialArguments !== undefined || !isEditToolName(call.name);
+  const input = showInput
+    ? (call.partialArguments ?? JSON.stringify(call.arguments, null, 2))
+    : "";
+  const inputCut = budgeted && input.length > MAX_RESULT_CHARS;
+  const text = result?.text ?? "";
+  const empty = text.trim() === "" || text.trim() === "(no output)";
+  const textCut =
+    result !== undefined &&
+    result.patch === undefined &&
+    budgeted &&
+    text.length > MAX_RESULT_CHARS;
+  const diff =
+    result?.patch === undefined
+      ? null
+      : trimmedDiff(result.patch, budgeted ? MAX_DIFF_ROWS : Infinity);
   return (
-    <>
-      <Images
-        entryId={result.entryId}
-        indices={result.images}
-        actions={actions}
-        size="full"
-      />
-      {empty ? (
-        result.images.length > 0 ? null : (
-          <p class="text-xs text-base-content/50 italic">(no output)</p>
-        )
-      ) : (
-        <pre
-          class={`max-h-[400px] overflow-auto text-xs break-all whitespace-pre-wrap ${
-            result.isError ? "text-error" : ""
-          }`}
-        >
-          {result.text}
+    <div class="tool-result">
+      {showInput ? (
+        <pre class="max-h-72 overflow-auto text-xs whitespace-pre-wrap">
+          {inputCut ? input.slice(0, MAX_RESULT_CHARS) : input}
         </pre>
+      ) : null}
+      {result === undefined ? null : diff !== null ? (
+        diff.node
+      ) : (
+        <>
+          <Images
+            entryId={result.entryId}
+            indices={result.images}
+            actions={actions}
+            size="full"
+          />
+          {empty ? (
+            result.images.length > 0 ? null : (
+              <p class="text-xs text-base-content/50 italic">(no output)</p>
+            )
+          ) : (
+            <pre
+              class={`max-h-[400px] overflow-auto text-xs break-all whitespace-pre-wrap ${
+                result.isError ? "text-error" : ""
+              }`}
+            >
+              {textCut ? text.slice(0, MAX_RESULT_CHARS) : text}
+            </pre>
+          )}
+        </>
       )}
-    </>
+      {more !== undefined && (inputCut || textCut || (diff?.cut ?? 0) > 0) ? (
+        <ShowAll url={more} />
+      ) : null}
+    </div>
   );
 }
 
@@ -562,8 +658,14 @@ function ToolCard({
     return <Subagent view={call.subagent} call={call} actions={actions} />;
   }
   const failed = call.result?.isError === true;
-  const showInput =
-    call.partialArguments !== undefined || !isEditToolName(call.name);
+  const filePath = toolFilePath(call, actions?.cwd ?? "");
+  // A settled card is collapsed, so its body only has to exist once someone
+  // opens it. That is what keeps a long session's page from reaching a
+  // megabyte of tool output nobody reads.
+  const deferred =
+    actions && !actions.live && call.result
+      ? `/sessions/${actions.sessionId}/entries/${call.result.entryId}/tool-result/${encodeURIComponent(call.id)}`
+      : undefined;
   return (
     <details
       class={`my-2 rounded-box border text-sm ${
@@ -578,9 +680,20 @@ function ToolCard({
           {call.name}
         </span>
         <span class="min-w-0 flex-1 truncate text-xs text-base-content/60">
-          {call.partialArguments === undefined
-            ? call.preview
-            : "Generating parameters..."}
+          {call.partialArguments !== undefined ? (
+            "Generating parameters..."
+          ) : filePath === undefined ? (
+            call.preview
+          ) : (
+            <button
+              type="button"
+              class="tool-path"
+              data-file-path={filePath}
+              title={filePath}
+            >
+              {call.preview}
+            </button>
+          )}
         </span>
         {call.result?.seconds === undefined ? null : (
           <span class="text-xs text-base-content/50">
@@ -589,12 +702,18 @@ function ToolCard({
         )}
       </summary>
       <div class="px-3 pb-2">
-        {showInput ? (
-          <pre class="max-h-72 overflow-auto text-xs whitespace-pre-wrap">
-            {call.partialArguments ?? JSON.stringify(call.arguments, null, 2)}
-          </pre>
-        ) : null}
-        <ToolResultBody call={call} actions={actions} />
+        {deferred === undefined ? (
+          <ToolBody call={call} actions={actions} />
+        ) : (
+          <div
+            class="tool-result"
+            hx-get={deferred}
+            hx-trigger="toggle once from:closest details"
+            hx-swap="outerHTML"
+          >
+            <p class="text-xs text-base-content/50">Loading output…</p>
+          </div>
+        )}
       </div>
     </details>
   );
@@ -907,10 +1026,7 @@ export function Item({
   }
 }
 
-/**
- * The files a turn wrote, under its answer. Clicking one puts the path into
- * the composer as an `@` mention; Phase 4 opens the file itself.
- */
+/** The files a turn wrote, under its answer. Clicking one opens the viewer. */
 function WrittenFiles({
   files,
   actions,
@@ -919,22 +1035,18 @@ function WrittenFiles({
   actions?: ItemActions;
 }) {
   if (files.length === 0 || actions?.live) return <></>;
-  const cwd = actions?.cwd ?? "";
   return (
     <div class="my-2 flex flex-wrap gap-1" aria-label="Files changed">
-      {files.map((path) => {
-        const inside = cwd !== "" && path.startsWith(`${cwd}/`);
-        return (
-          <button
-            type="button"
-            class="btn btn-ghost font-mono btn-xs"
-            data-mention={inside ? path.slice(cwd.length + 1) : path}
-            title={path}
-          >
-            {path.split("/").pop() ?? path}
-          </button>
-        );
-      })}
+      {files.map((path) => (
+        <button
+          type="button"
+          class="btn btn-ghost font-mono btn-xs"
+          data-file-path={path}
+          title={path}
+        >
+          {path.split("/").pop() ?? path}
+        </button>
+      ))}
     </div>
   );
 }
@@ -1001,7 +1113,7 @@ export function Items({
   }
   return (
     <>
-      {groupTurns(items).map((turn) => (
+      {groupTurns(items, actions?.cwd ?? "").map((turn) => (
         <TurnView turn={turn} actions={withTimes} />
       ))}
     </>

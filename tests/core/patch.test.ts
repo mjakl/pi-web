@@ -1,4 +1,4 @@
-import { parseUnifiedPatch, patchLines } from "@core/patch";
+import { parseUnifiedPatch, patchLines, unifiedRows } from "@core/patch";
 import { describe, expect, it } from "vitest";
 
 describe("parseUnifiedPatch", () => {
@@ -53,5 +53,61 @@ describe("patchLines", () => {
       "removed",
       "context",
     ]);
+  });
+});
+
+describe("unifiedRows", () => {
+  const patch = [
+    "diff --git a/x.ts b/x.ts",
+    "--- a/x.ts",
+    "+++ b/x.ts",
+    "@@ -1,4 +1,4 @@",
+    " one",
+    "-two",
+    "+TWO",
+    " three",
+    " four",
+    "",
+  ].join("\n");
+
+  it("numbers removals from the old side and everything else from the new", () => {
+    const rows = unifiedRows(patch);
+    expect(rows[0]).toEqual({ type: "hunk", text: "@@ -1,4 +1,4 @@" });
+    expect(rows[1]).toEqual({
+      type: "line",
+      lineNo: 1,
+      text: "one",
+      kind: "context",
+    });
+    expect(rows[2]).toEqual({
+      type: "line",
+      lineNo: 2,
+      text: "two",
+      kind: "removed",
+    });
+    expect(rows[3]).toEqual({
+      type: "line",
+      lineNo: 2,
+      text: "TWO",
+      kind: "added",
+    });
+  });
+
+  it("collapses an unchanged run longer than twice the context", () => {
+    const long = [
+      "@@ -1,12 +1,12 @@",
+      ...Array.from({ length: 10 }, (_, index) => ` line ${String(index)}`),
+      "-old",
+      "+new",
+      "",
+    ].join("\n");
+    const rows = unifiedRows(long);
+    const collapsed = rows.find((row) => row.type === "collapsed");
+    expect(collapsed).toEqual({ type: "collapsed", count: 4 });
+    expect(rows.filter((row) => row.type === "line")).toHaveLength(8);
+  });
+
+  it("ignores anything before the first hunk header", () => {
+    expect(unifiedRows("garbage\nno hunk here\n")).toEqual([]);
   });
 });
