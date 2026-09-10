@@ -1,0 +1,118 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": ["./node_modules/@mjakl/core/oxlint.base.json"],
+  "plugins": ["typescript", "import"],
+  "jsPlugins": [{ "name": "eslint-js", "specifier": "oxlint-plugin-eslint" }],
+  "options": {
+    "typeAware": true,
+    "typeCheck": true
+  },
+  "ignorePatterns": ["*", "!src/**", "!tests/**"],
+  "overrides": [
+    {
+      "files": ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["..", "../**"],
+                "message": "Use path aliases or same-folder imports instead of parent-relative imports."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/core/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["..", "../**"],
+                "message": "Use path aliases or same-folder imports instead of parent-relative imports."
+              },
+              {
+                "group": [
+                  "@web",
+                  "@web/*",
+                  "@adapters",
+                  "@adapters/*",
+                  "hono",
+                  "hono/*",
+                  "node:*"
+                ],
+                "message": "The core owns rules and ports only; delivery, SDK, and platform access live in adapters."
+              },
+              {
+                "group": ["@earendil-works/*"],
+                "allowTypeImports": true,
+                "message": "The core may describe Pi's session format with SDK types but must not call the SDK."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/adapters/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["..", "../**"],
+                "message": "Use path aliases or same-folder imports instead of parent-relative imports."
+              },
+              {
+                "group": ["@web", "@web/*", "hono", "hono/*"],
+                "message": "Adapters implement core ports and must not depend on the web delivery layer."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/web/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["..", "../**"],
+                "message": "Use path aliases or same-folder imports instead of parent-relative imports."
+              },
+              {
+                "group": ["@adapters", "@adapters/*", "@earendil-works/*"],
+                "message": "Only the composition root (src/container.ts) wires adapters; web code talks to core ports."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/**/*.{ts,tsx}"],
+      "rules": {
+        "eslint-js/no-restricted-syntax": [
+          "error",
+          {
+            "selector": "JSXAttribute[name.name='className']",
+            "message": "Use `class` instead of `className` in Hono JSX."
+          },
+          {
+            "selector": "ImportExpression",
+            "message": "Use static imports in src/."
+          }
+        ]
+      }
+    }
+  ]
+}

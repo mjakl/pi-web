@@ -1,0 +1,8 @@
+/node_modules
+.env
+.env.*
+*.tsbuildinfo
+.DS_Store
+/static/app.css
+/coverage
+*.log
