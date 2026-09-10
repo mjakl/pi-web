@@ -21,6 +21,57 @@ export function isTurnBoundary(item: TranscriptItem): boolean {
   );
 }
 
+/**
+ * Pi's own tools are plain `write` and `edit`, but MCP servers expose the same
+ * operations under prefixed or namespaced names.
+ */
+export function isWriteToolName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return (
+    lower === "write" ||
+    lower.startsWith("write_") ||
+    lower.endsWith(".write") ||
+    lower.endsWith("_write")
+  );
+}
+
+export function isEditToolName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return (
+    lower === "edit" ||
+    lower.startsWith("edit_") ||
+    lower.endsWith(".edit") ||
+    lower.endsWith("_edit") ||
+    lower.includes("str_replace") ||
+    lower.includes("replace_editor")
+  );
+}
+
+/**
+ * The files a turn actually wrote: only write/edit calls whose result came
+ * back without an error, in first-seen order. A path the answer merely
+ * mentions is no evidence that anything was written, so prose is never read.
+ */
+export function writtenFiles(items: readonly TranscriptItem[]): string[] {
+  const files: string[] = [];
+  for (const item of items) {
+    if (item.kind !== "assistant") continue;
+    for (const block of item.blocks) {
+      if (block.kind !== "tool") continue;
+      const { call } = block;
+      if (!isWriteToolName(call.name) && !isEditToolName(call.name)) continue;
+      if (!call.result || call.result.isError) continue;
+      const args = call.arguments;
+      if (typeof args !== "object" || args === null) continue;
+      const record = args as Record<string, unknown>;
+      const path = record["file_path"] ?? record["path"];
+      if (typeof path !== "string" || path === "") continue;
+      if (!files.includes(path)) files.push(path);
+    }
+  }
+  return files;
+}
+
 export type Turn = {
   boundary?: TranscriptItem;
   /** Thinking, tool calls, and intermediate messages, behind a disclosure. */
@@ -31,6 +82,8 @@ export type Turn = {
   trailing: TranscriptItem[];
   processMessages: number;
   processToolCalls: number;
+  /** Files this turn wrote or edited, shown as chips under the answer. */
+  written: string[];
   /** Open the disclosure without being asked. */
   expanded: boolean;
 };
@@ -86,6 +139,7 @@ function buildTurn(
     assistants.findLast((entry) => hasAnswerContent(entry.item))?.index ??
     assistants.at(-1)?.index;
 
+  const written = writtenFiles(items);
   if (finalIndex === undefined) {
     return {
       ...(boundary ? { boundary } : {}),
@@ -93,6 +147,7 @@ function buildTurn(
       trailing: [],
       processMessages: items.length,
       processToolCalls: countToolCalls(items),
+      written,
       expanded: true,
     };
   }
@@ -119,6 +174,7 @@ function buildTurn(
     trailing: items.slice(finalIndex + 1),
     processMessages: process.length,
     processToolCalls: countToolCalls(process),
+    written,
     // Nothing to fold into, or the reader would lose prose by folding it.
     expanded: answer === undefined || process.some(hasAnswerContent),
   };

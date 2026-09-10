@@ -209,13 +209,6 @@ export function Status({ view }: { view: SessionView }) {
           </button>
         </>
       ) : null}
-      {status
-        ? Object.entries(status.statuses).map(([key, text]) => (
-            <span class="badge badge-ghost badge-sm" title={key}>
-              {text}
-            </span>
-          ))
-        : null}
       {view.modelWarnings.length > 0 ? (
         <div class="alert w-full py-1 text-xs alert-warning" role="alert">
           {view.modelWarnings.join("\n")}

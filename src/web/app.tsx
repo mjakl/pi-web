@@ -1,8 +1,12 @@
 import { bashCommand, imageLimitError } from "@core/composer";
 import type { ImageAttachment } from "@core/ports";
-import { isSessionId } from "@core/sessions";
+import { isSessionId, projectKeyOf } from "@core/sessions";
 import { staticAssets } from "@web/assets";
-import { ForbiddenPath, type Workspace } from "@core/workspace";
+import {
+  ForbiddenPath,
+  type SidebarView,
+  type Workspace,
+} from "@core/workspace";
 import { honoFactory } from "@web/hono";
 import { HtmlLayout } from "@web/HtmlLayout";
 import { renderMarkdown } from "@web/markdown";
@@ -14,8 +18,18 @@ import {
   StarButton,
   TurnFragment,
 } from "@web/views/Items";
+import { Rail } from "@web/views/Rail";
+import { changedWidgets, ShelfBody, shelfSignature } from "@web/views/Shelf";
 import { IndexPage, NewSessionPage, SessionPage } from "@web/views/SessionPage";
-import { SessionList, SessionRow } from "@web/views/Sidebar";
+import {
+  ProjectNav,
+  ProjectPicker,
+  ProjectSelect,
+  SessionList,
+  SessionRow,
+  SessionRows,
+  SIDEBAR_PAGE,
+} from "@web/views/Sidebar";
 import { StatsPanel } from "@web/views/Stats";
 import { Status } from "@web/views/Status";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -23,6 +37,7 @@ import type { Context } from "hono";
 import { raw } from "hono/html";
 import { jsxRenderer } from "hono/jsx-renderer";
 import { streamSSE } from "hono/streaming";
+import { getCookie, setCookie } from "hono/cookie";
 
 export type WebDeps = {
   workspace: Workspace;
@@ -46,6 +61,20 @@ const sleep = (ms: number) =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms);
   });
+
+/**
+ * Which project the sidebar shows, across page loads and the shared stream.
+ * A cookie name is an RFC 6265 token, so the `web-pi:` prefix the browser
+ * storage keys use is spelled with a dash here.
+ */
+const PROJECT_COOKIE = "web-pi-project";
+
+/** The session the reader has open, for requests that only carry a referrer. */
+function currentSessionId(c: Context): string | undefined {
+  const url = c.req.header("HX-Current-URL") ?? c.req.header("Referer") ?? "";
+  const id = /\/sessions\/([^/?#]+)/.exec(url)?.[1];
+  return id !== undefined && isSessionId(id) ? id : undefined;
+}
 
 function field(form: FormData, name: string): string {
   const value = form.get(name);
@@ -99,19 +128,42 @@ export function createWebApp(deps: WebDeps) {
   const renderIntervalMs = deps.renderIntervalMs ?? 100;
   const assets = staticAssets(deps.staticRoot);
 
+  /** The remembered project, and the sidebar the current request shows. */
+  function sidebarOf(c: Context, activeId?: string) {
+    const remembered = getCookie(c, PROJECT_COOKIE);
+    return deps.workspace.sidebar({
+      ...(remembered === undefined ? {} : { remembered }),
+      ...(activeId === undefined ? {} : { activeId }),
+    });
+  }
+
+  /** Opening a session selects its project, for this and every later page. */
+  function rememberProject(c: Context, sidebar: SidebarView): void {
+    if (sidebar.selected === undefined) return;
+    if (getCookie(c, PROJECT_COOKIE) === sidebar.selected) return;
+    setCookie(c, PROJECT_COOKIE, sidebar.selected, {
+      path: "/",
+      sameSite: "Lax",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  }
+
   /** The whole session page, swapped into <body> after a history change. */
   async function page(
     c: Context,
     id: string,
     draft?: string,
   ): Promise<Response> {
-    const [groups, view] = await Promise.all([
-      deps.workspace.listSessions(),
+    const [sidebar, view] = await Promise.all([
+      sidebarOf(c, id),
       deps.workspace.viewSession(id),
     ]);
     if (!view) return c.notFound();
+    rememberProject(c, sidebar);
     c.header("HX-Push-Url", `/sessions/${id}`);
-    return c.render(<SessionPage groups={groups} view={view} draft={draft} />);
+    return c.render(
+      <SessionPage sidebar={sidebar} view={view} draft={draft} />,
+    );
   }
 
   async function row(c: Context, id: string): Promise<Response> {
@@ -149,18 +201,93 @@ export function createWebApp(deps: WebDeps) {
   app.use("*", jsxRenderer(HtmlLayout));
 
   app.get("/", async (c) => {
-    const groups = await deps.workspace.listSessions();
-    return c.render(<IndexPage groups={groups} />);
+    return c.render(<IndexPage sidebar={await sidebarOf(c)} />);
   });
 
   app.get("/new", async (c) => {
-    const groups = await deps.workspace.listSessions();
     return c.render(
       <NewSessionPage
-        groups={groups}
+        sidebar={await sidebarOf(c)}
         cwd={c.req.query("cwd") ?? deps.defaultCwd}
         draft={c.req.query("text")}
       />,
+    );
+  });
+
+  /** Switching project: remember the choice and re-render the whole nav. */
+  app.get("/sidebar", async (c) => {
+    const project = c.req.query("project");
+    if (project !== undefined && project !== "") {
+      setCookie(c, PROJECT_COOKIE, project, {
+        path: "/",
+        sameSite: "Lax",
+        maxAge: 60 * 60 * 24 * 365,
+      });
+    }
+    const sidebar = await deps.workspace.sidebar(
+      project === undefined ? {} : { remembered: project },
+    );
+    const activeId = currentSessionId(c);
+    return c.html(
+      <ProjectNav
+        view={sidebar}
+        {...(activeId === undefined ? {} : { activeId })}
+      />,
+    );
+  });
+
+  /** The projects to choose from; fetched when the selector opens. */
+  app.get("/sidebar/projects", async (c) => {
+    return c.html(
+      <ProjectPicker view={await sidebarOf(c, currentSessionId(c))} />,
+    );
+  });
+
+  /** The next page of rows for the project on screen. */
+  app.get("/sidebar/rows", async (c) => {
+    const project = c.req.query("project");
+    const offset = Number(c.req.query("after") ?? "0");
+    if (!Number.isInteger(offset) || offset < 0) return c.notFound();
+    const view = await deps.workspace.sidebar(
+      project === undefined || project === "" ? {} : { remembered: project },
+    );
+    const activeId = currentSessionId(c);
+    return c.html(
+      <SessionRows
+        view={view}
+        offset={offset}
+        {...(activeId === undefined ? {} : { activeId })}
+      />,
+    );
+  });
+
+  /** The runs behind a collapsed "N subagent runs" line. */
+  app.get("/sidebar/subagents", async (c) => {
+    const project = c.req.query("project") ?? "";
+    const parent = c.req.query("parent");
+    const runs = await deps.workspace.subagentRuns(
+      project,
+      parent === undefined || parent === "" ? undefined : parent,
+    );
+    if (runs.length === 0) {
+      return c.html(
+        <li class="px-2 py-1 text-xs text-base-content/50">No runs</li>,
+      );
+    }
+    // A project can hold thousands of runs; the newest page is enough to
+    // find the one a reader is after.
+    const shown = runs.slice(0, SIDEBAR_PAGE);
+    return c.html(
+      <>
+        {shown.map((summary) => (
+          <SessionRow summary={summary} />
+        ))}
+        {runs.length > shown.length ? (
+          <li class="px-2 py-1 text-xs text-base-content/50">
+            {String(runs.length - shown.length)} older runs not shown
+          </li>
+        ) : null}
+      </>,
     );
   });
 
@@ -203,12 +330,13 @@ export function createWebApp(deps: WebDeps) {
         : { leaf: c.req.query("leaf") }),
       ...(through === undefined ? {} : { through }),
     };
-    const [groups, view] = await Promise.all([
-      deps.workspace.listSessions(),
+    const [sidebar, view] = await Promise.all([
+      sidebarOf(c, id),
       deps.workspace.viewSession(id, options).catch(() => undefined),
     ]);
     if (!view) return c.notFound();
-    return c.render(<SessionPage groups={groups} view={view} />);
+    rememberProject(c, sidebar);
+    return c.render(<SessionPage sidebar={sidebar} view={view} />);
   });
 
   app.get("/sessions/:id/row", async (c) => {
@@ -628,36 +756,72 @@ export function createWebApp(deps: WebDeps) {
     });
   });
 
-  /** One stream for the sidebar: every session's lifecycle, re-rendered. */
-  app.get("/events", (c) =>
-    streamSSE(c, async (stream) => {
+  /**
+   * One stream for the sidebar: every session's lifecycle, re-rendered. Rows
+   * are only sent for the project on screen — the other few thousand sessions
+   * have no row to swap — while the selector's badges are re-sent whenever the
+   * running counts change, so activity elsewhere still shows.
+   */
+  app.get("/events", (c) => {
+    const remembered = getCookie(c, PROJECT_COOKIE);
+    const activeId = currentSessionId(c);
+    return streamSSE(c, async (stream) => {
+      let badges = "";
       let queue: Promise<void> = Promise.resolve();
+      const sidebar = () =>
+        deps.workspace.sidebar({
+          ...(remembered === undefined ? {} : { remembered }),
+          ...(activeId === undefined ? {} : { activeId }),
+        });
       const send = (event: {
         type: "opened" | "finished" | "stopped";
         sessionId: string;
       }) => {
         queue = queue
           .then(async () => {
-            if (event.type === "opened") {
-              // A session that was not in the list yet has no row to swap.
-              const groups = await deps.workspace.listSessions();
-              await stream.writeSSE({
-                event: "rows",
-                data: await html(<SessionList groups={groups} oob />),
-              });
-              return;
-            }
+            const view = await sidebar();
             const found = await deps.workspace.row(event.sessionId);
-            if (found) {
+            const project = found && projectKeyOf(found.summary);
+            if (found && project === view.selected) {
+              // A session with no row yet needs the whole list; an existing
+              // row is swapped on its own.
+              const known = view.sessions.some(
+                (row) => row.summary.id === event.sessionId,
+              );
               await stream.writeSSE({
                 event: "rows",
-                data: await html(<SessionRow {...found} oob />),
+                data: await html(
+                  known && event.type !== "opened" ? (
+                    <SessionRow {...found} oob />
+                  ) : (
+                    <SessionList
+                      view={view}
+                      oob
+                      {...(activeId === undefined ? {} : { activeId })}
+                    />
+                  ),
+                ),
+              });
+            }
+            const signature = view.projects
+              .map((entry) => `${entry.key}:${String(entry.running)}`)
+              .join("|");
+            if (signature !== badges) {
+              badges = signature;
+              await stream.writeSSE({
+                event: "rows",
+                data: await html(<ProjectSelect view={view} oob />),
               });
             }
             if (event.type === "finished") {
+              // The browser marks it unread; the project it belongs to is
+              // what the selector needs to badge.
               await stream.writeSSE({
                 event: "finished",
-                data: event.sessionId,
+                data: JSON.stringify({
+                  id: event.sessionId,
+                  project: project ?? "",
+                }),
               });
             }
           })
@@ -683,13 +847,17 @@ export function createWebApp(deps: WebDeps) {
       });
       if (heartbeat) clearInterval(heartbeat);
       unsubscribe();
-    }),
-  );
+    });
+  });
 
   app.get("/sessions/:id/events", (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
     return streamSSE(c, async (stream) => {
+      // The shelf holds open panels, so it is only re-sent when an extension
+      // actually changed a status or a widget.
+      let shelf = "";
+      const widgetLines = new Map<string, string>();
       const render = async (kind: "activity" | "turn_done") => {
         const view = await deps.workspace.viewSession(id);
         if (!view) return;
@@ -699,9 +867,16 @@ export function createWebApp(deps: WebDeps) {
           starred: view.starred,
         };
         if (kind === "turn_done") {
+          // The rail rides along out of band: a settled turn is the only
+          // thing that adds marks to it.
           await stream.writeSSE({
             event: "settled",
-            data: await html(<Items items={view.turn} actions={actions} />),
+            data: await html(
+              <>
+                <Items items={view.turn} actions={actions} />
+                <Rail view={view} oob />
+              </>,
+            ),
           });
           await stream.writeSSE({ event: "turn", data: "" });
         } else {
@@ -720,6 +895,19 @@ export function createWebApp(deps: WebDeps) {
           event: "status",
           data: await html(<Status view={view} />),
         });
+        const signature = shelfSignature(view.status);
+        if (signature !== shelf) {
+          shelf = signature;
+          await stream.writeSSE({
+            event: "shelf",
+            data: await html(
+              <ShelfBody
+                status={view.status}
+                updated={changedWidgets(widgetLines, view.status)}
+              />,
+            ),
+          });
+        }
         // Notices are drained by the snapshot: send them once, as toasts.
         const notices = view.status?.notices ?? [];
         if (notices.length > 0) {

@@ -449,7 +449,70 @@ describe("web app", () => {
     // Opening the session re-renders the list; finishing swaps just its row.
     expect(received).toContain("event: rows");
     expect(received).toContain('hx-swap-oob="true"');
-    expect(received).toContain("data: s1");
+    expect(received).toContain('id="row-s1"');
+    // The finished marker names the project, so the selector can badge it.
+    expect(received).toContain('data: {"id":"s1","project":"/repo/one"}');
+  });
+
+  it("scopes the sidebar to one project and remembers the choice", async () => {
+    const { app, world } = testApp();
+    world.store.set("s2", {
+      summary: {
+        id: "s2",
+        cwd: "/repo/two",
+        name: "Other project",
+        createdAt: "2026-09-03T00:00:00.000Z",
+        modifiedAt: "2026-09-03T00:00:00.000Z",
+        fileSize: 2,
+      },
+      entries: [userEntry("v1", null, "second project")],
+    });
+
+    // The newest project wins with nothing remembered.
+    const first = await (await app.request("/")).text();
+    expect(first).toContain('href="/sessions/s2"');
+    expect(first).not.toContain('href="/sessions/s1"');
+
+    // Choosing a project sets the cookie and answers with the whole nav.
+    const chosen = await app.request("/sidebar?project=%2Frepo%2Fone");
+    expect(chosen.headers.get("set-cookie")).toContain("web-pi-project=");
+    const nav = await chosen.text();
+    expect(nav).toContain('id="project-nav"');
+    expect(nav).toContain('href="/sessions/s1"');
+    expect(nav).not.toContain('href="/sessions/s2"');
+
+    // Opening a session of the other project selects that project again.
+    const page = await (
+      await app.request("/sessions/s2", {
+        headers: { cookie: "web-pi-project=/repo/one" },
+      })
+    ).text();
+    expect(page).toContain('href="/sessions/s2"');
+    expect(page).not.toContain('href="/sessions/s1"');
+  });
+
+  it("folds subagent runs out of the list and loads them on demand", async () => {
+    const { app, world } = testApp();
+    world.store.set("subagent.abc", {
+      summary: {
+        id: "subagent.abc",
+        cwd: "/repo/one",
+        createdAt: "2026-09-04T00:00:00.000Z",
+        modifiedAt: "2026-09-04T00:00:00.000Z",
+        fileSize: 1,
+        parentId: "s1",
+      },
+      entries: [userEntry("g1", null, "explore the repo")],
+    });
+
+    const list = await (await app.request("/")).text();
+    expect(list).toContain("1 subagent run");
+    expect(list).not.toContain('href="/sessions/subagent.abc"');
+
+    const runs = await (
+      await app.request("/sidebar/subagents?project=%2Frepo%2Fone&parent=s1")
+    ).text();
+    expect(runs).toContain('href="/sessions/subagent.abc"');
   });
 });
 
@@ -491,6 +554,98 @@ function longApp(answers = 60) {
     ],
   });
 }
+
+describe("conversation rail, shelf, and written files", () => {
+  it("renders a mark per prompt, star, and branch, with previews", async () => {
+    const { app, world } = testApp();
+    const stored = world.store.get("s1");
+    if (!stored) throw new Error("no session");
+    // A second branch off the first question.
+    stored.entries.push(userEntry("u2", "u1", "another approach"));
+    stored.entries.push(assistantEntry("a2", "u2", "other answer", 41_000));
+    stored.leafId = "a1";
+
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain('id="rail"');
+    expect(page).toContain('data-branched="true"');
+    expect(page).toContain('data-preview="first &lt;b&gt;question&lt;/b&gt;"');
+    // The mark on the other branch navigates instead of scrolling.
+    expect(page).toContain('data-branch="true"');
+    expect(page).toContain('hx-post="/sessions/s1/navigate"');
+    expect(page).toContain("rail-links");
+  });
+
+  it("re-sends the rail out of band when a turn settles", async () => {
+    const { app } = testApp({ reply: () => "done" });
+    const form = new FormData();
+    form.set("text", "go");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+    const res = await app.request("/sessions/s1/events");
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("no body");
+    let received = "";
+    const decoder = new TextDecoder();
+    while (!received.includes("event: settled")) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      received += decoder.decode(chunk.value);
+    }
+    await reader.cancel();
+    expect(received).toContain('id="rail" class="rail"');
+    expect(received).toContain('hx-swap-oob="true"');
+  });
+
+  it("shows extension statuses and widgets in the shelf, ANSI converted", async () => {
+    const { app } = testApp({
+      script: () => [
+        { status: "git", statusText: "\u001B[32mmain\u001B[0m  clean" },
+        { widget: "todo", lines: ["\u001B[1mOpen\u001B[0m", "one", "two"] },
+        { text: "done" },
+      ],
+    });
+    const form = new FormData();
+    form.set("text", "go");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+    const res = await app.request("/sessions/s1/events");
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("no body");
+    let received = "";
+    const decoder = new TextDecoder();
+    while (!received.includes("todo")) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      received += decoder.decode(chunk.value);
+    }
+    await reader.cancel();
+    expect(received).toContain("event: shelf");
+    expect(received).toContain('<span style="color:#13703a">main</span>');
+    expect(received).toContain('<span style="font-weight:600">Open</span>');
+    // Three lines is small enough to open unasked.
+    expect(received).toContain("widget-panel");
+    expect(received).not.toContain("\u001B[");
+  });
+
+  it("chips the files a turn wrote and offers them as mentions", async () => {
+    const { app } = testApp({
+      script: () => [
+        {
+          tool: "edit",
+          arguments: { file_path: "/repo/one/src/answer.ts" },
+          result: "edited",
+        },
+        { text: "changed it" },
+      ],
+    });
+    const form = new FormData();
+    form.set("text", "go");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain('aria-label="Files changed"');
+    expect(page).toContain('data-mention="src/answer.ts"');
+    expect(page).toContain('title="/repo/one/src/answer.ts"');
+  });
+});
 
 describe("transcript rendering", () => {
   it("groups a turn into process details and the answer", async () => {
@@ -562,7 +717,10 @@ describe("transcript rendering", () => {
     const page = await (await app.request("/sessions/s1")).text();
     expect(page).toContain("Scroll up to load earlier messages");
     expect(page).toContain("question 59");
-    expect(page).not.toContain("question 10");
+    // The rail carries a preview of every prompt, so only the transcript
+    // itself is checked for the messages the page left out.
+    expect(page).toContain(">question 59<");
+    expect(page).not.toContain(">question 10<");
 
     const before = /before=([^&"]+)/.exec(page)?.[1] ?? "";
     expect(before).not.toBe("");

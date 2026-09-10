@@ -41,9 +41,12 @@ use it.
 including the in-progress assistant message), `status`, `usage`, and `models`.
 Page load, HTMX responses, and SSE events all render the same three views:
 
-- `#messages` receives settled turn items (`sse-swap="settled"`, `beforeend`);
+- `#messages` receives settled turn items (`sse-swap="settled"`, `beforeend`),
+  with the re-rendered conversation rail riding along out of band;
 - `#turn` receives the whole current turn (`sse-swap="turn"`, `innerHTML`);
 - `#status` receives model, state, queue, compaction, and the context badge;
+- `#shelf` receives the extension status line and widgets (`sse-swap="shelf"`),
+  and only when one of them actually changed, because it holds an open panel;
 - `#toasts` receives notices (`sse-swap="notice"`, `beforeend`).
 
 The SSE endpoint coalesces activity into one re-render per 100 ms. Because the
@@ -51,11 +54,15 @@ turn is re-rendered from the snapshot rather than patched from deltas, a missed
 event costs nothing: the next render is complete.
 
 A second stream, `GET /events`, belongs to the sidebar rather than to one
-session. It pushes a re-rendered row (`hx-swap-oob`) whenever a session starts,
-finishes, or stops, the whole list when a session appears that has no row yet,
-and a `finished` event carrying the session id. The browser turns that id into
-an unread dot in `localStorage` when the session is not the one on screen; it
-replaces pi-web's 2.5 s polling.
+session. It pushes a re-rendered row (`hx-swap-oob`) whenever a session of the
+project on screen starts, finishes, or stops, the whole list when such a session
+appears that has no row yet, the project selector whenever the running counts
+change, and a `finished` event carrying the session id and its project. The
+browser turns that into an unread dot in `localStorage` — on the row when the
+session is listed, on the project when it is not; it replaces pi-web's 2.5 s
+polling. The stream reads the project cookie at connect time, and the selector,
+the list and the stream live in one `#project-nav` element, so switching project
+replaces all three and reconnects.
 
 `src/core/transcript.ts` projects one branch into items, and `src/core/turns.ts`
 groups those items into turns, pages them, and writes the activity line. Every
@@ -95,12 +102,46 @@ composition root and the only importer of Pi adapters.
   needs Pi installed before `pnpm install` succeeds.
 - **Raw HTML in Markdown is escaped**, not sanitised. No allowlist to maintain,
   no script can pass.
+- **The sidebar shows one project, in pages.** A real store holds ~2,750
+  sessions across ~256 projects, and shipping all of them made a session page
+  3.0 MB. `src/core/sessions.ts` owns the rules — project key, recent projects,
+  which one is selected, the order within it — and the workspace returns one
+  `SidebarView`. The selected project is the open session's, else the
+  `web-pi-project` cookie, else the most recent. Three things are fetched only
+  when asked for: the project list (when the selector opens), rows past the
+  first 50 (`hx-trigger="intersect once"`, the transcript's own sentinel
+  pattern), and each row's counts. That is 3.0 MB down to 48 KB of sidebar.
 - **Sidebar rows load their own metadata.** Listing 2,700 sessions reads one
   header per file; a row's title, message count and star count need a pass over
   the whole file, so each row fetches its own (`hx-trigger="revealed"`) and the
   adapter streams the file line by line and caches the result by size and mtime.
   The real store renders in well under a second and a revisited row costs
   nothing.
+- **pi-subagent runs are folded away.** Half the files in a real store are
+  `subagent.<hex>` sessions: transcripts of one tool call, not conversations.
+  They are kept out of the list and offered as one collapsed "N subagent runs"
+  line — under their parent session when the header names one, otherwise at the
+  top of the project — which loads the 50 newest when opened.
+- **The conversation rail is server-rendered and positioned in percentages.**
+  `src/core/conversation-rail.ts` is pi-web's `lib/conversation-rail.ts` fed
+  from the flat entry list rather than a compressed tree: web-pi already holds
+  every entry with its parent, so the tree walk disappears and the layout
+  (active path, lanes, rows, target leaf per lane) is what is left. Marks sit at
+  `calc(12px + (100% - 42px) * row/rows)`, so the server needs no measurement of
+  the reader's viewport, and the connector SVG is stretched over the same box.
+  The rail covers the whole session from the first render — the marks come from
+  the entries, not from the page — so paging never changes it and only a settled
+  turn re-sends it. `src/web/client/rail.ts` measures the transcript for the
+  active mark, the hover preview, and press-and-drag; a mark whose entry the
+  page has not loaded is reached through the "load earlier" sentinel with
+  `through=`.
+- **Extension output is converted server-side.** Extensions write status lines
+  and widgets for a terminal. `src/core/ansi.ts` turns SGR colour and bold into
+  `<span style>` and escapes everything else, so extension text can never become
+  markup; every other escape sequence is dropped. The shelf below the composer
+  holds the one status line and a chip per widget, with at most one panel open
+  (`<details name>`, no script). Widgets whose content is a terminal component
+  keep an inert chip until a headless pi-tui renders them in Phase 6.
 - **Session edits go through Pi's `SessionManager`.** Renames, stars, forks and
   clones are appends the SDK writes, so the CLI and web-pi never disagree about
   the format; stars are `pi-web:star` custom entries, the same ones pi-web
@@ -155,17 +196,16 @@ pi-web features absent from this slice, roughly in order of value:
    replaces pi-web's filter box); startup model preferences are Pi's own
    defaults rather than a browser choice persisted into settings.
 3. Extension dialogs (`select`, `confirm`, `input`, `editor`, custom UI) are
-   auto-cancelled; widgets and footers are ignored. Extension statuses and
-   notices are shown. Tool output is preformatted text; ANSI escapes are not
-   converted anywhere yet.
+   auto-cancelled; footers and headers are ignored, and a widget whose content
+   is a terminal component shows as an empty chip. Tool output is preformatted
+   text: ANSI is converted in the extension shelf, not in the transcript.
 4. Worktree-aware folder picker, project trust dialog (trust is honoured
    read-only from Pi's store), skills and plugins management. Sessions already
    group under the repository a worktree belongs to.
-5. The conversation rail with hover previews, star markers and branch
-   navigation, and the per-turn written-files summary. The branch switcher in
-   the header is the placeholder for that rail, and it only refreshes on a page
-   load. Extension widgets and the ANSI-rendered status shelf are still missing;
-   extension statuses show as plain badges.
+5. A written-files chip opens the file viewer (Phase 4); for now it inserts the
+   path into the composer as an `@` mention. The rail's branch marks move the
+   session's leaf through `/navigate`, which offers the prompt there for
+   editing, rather than opening that branch read-only.
 6. PWA, push notifications, completion sound.
 7. A running-session cap. Idle shutdown exists only for drafts Pi never wrote to
    disk (10 minutes), as in pi-web.

@@ -29,14 +29,25 @@ describe("workspace over the fake runtime", () => {
     expect(Math.round(after?.usage.percent ?? 0)).toBe(2);
   });
 
-  it("groups stored sessions by project and marks live ones", async () => {
+  it("shows one project at a time and marks live sessions", async () => {
     const world = createFakeWorld({ delayMs: 2 });
     const workspace = createWorkspace(world);
     await workspace.startSession("/repo/a", "x");
     await settle(30);
-    const groups = await workspace.listSessions();
-    expect(groups).toHaveLength(1);
-    expect(groups[0]?.label).toBe("repo/a");
-    expect(groups[0]?.sessions[0]?.live).toBe(true);
+    await workspace.startSession("/repo/b", "y");
+    await settle(30);
+
+    const sidebar = await workspace.sidebar();
+    expect(sidebar.projects.map((project) => project.key)).toEqual([
+      "/repo/b",
+      "/repo/a",
+    ]);
+    expect(sidebar.selected).toBe("/repo/b");
+    expect(sidebar.sessions).toHaveLength(1);
+    expect(sidebar.sessions[0]?.summary.live).toBe(true);
+
+    const remembered = await workspace.sidebar({ remembered: "/repo/a" });
+    expect(remembered.selected).toBe("/repo/a");
+    expect(remembered.sessions[0]?.summary.cwd).toBe("/repo/a");
   });
 });

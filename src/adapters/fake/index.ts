@@ -1,6 +1,7 @@
 import type { SlashCommand } from "@core/composer";
 import type {
   AgentRuntime,
+  ExtensionWidget,
   Files,
   LiveEvent,
   LiveSession,
@@ -48,6 +49,14 @@ export const FAKE_MODEL: ModelOption = {
 export type ScriptedStep =
   | { thinking: string }
   | { text: string }
+  /** An extension status; omit `statusText` to clear it. */
+  | { status: string; statusText?: string }
+  /** An extension widget; omit `lines` to remove it. */
+  | {
+      widget: string;
+      lines?: string[];
+      placement?: ExtensionWidget["placement"];
+    }
   | {
       tool: string;
       arguments?: unknown;
@@ -221,6 +230,8 @@ class FakeLiveSession implements LiveSession {
   private tools: RunningTool[] = [];
   private retry: LiveStatus["retry"] = null;
   private notices: LiveStatus["notices"] = [];
+  private statuses = new Map<string, string>();
+  private widgets = new Map<string, ExtensionWidget>();
   private thinkingLevel: ThinkingLevel = "medium";
   private readonly listeners = new Set<(event: LiveEvent) => void>();
   private counter = 0;
@@ -297,7 +308,8 @@ class FakeLiveSession implements LiveSession {
         compaction: this.compaction,
         tools: [...this.tools],
         retry: this.retry,
-        statuses: {},
+        statuses: Object.fromEntries(this.statuses),
+        widgets: [...this.widgets.values()],
         notices,
       },
     };
@@ -368,6 +380,26 @@ class FakeLiveSession implements LiveSession {
     await this.wait();
     for (const step of steps) {
       if (!this.running) break;
+      if ("status" in step) {
+        if (step.statusText === undefined) this.statuses.delete(step.status);
+        else this.statuses.set(step.status, step.statusText);
+        this.emit({ type: "activity" });
+        await this.wait();
+        continue;
+      }
+      if ("widget" in step) {
+        if (step.lines === undefined) this.widgets.delete(step.widget);
+        else {
+          this.widgets.set(step.widget, {
+            key: step.widget,
+            lines: step.lines,
+            placement: step.placement ?? "aboveEditor",
+          });
+        }
+        this.emit({ type: "activity" });
+        await this.wait();
+        continue;
+      }
       if ("thinking" in step) {
         content.push({ type: "thinking", thinking: step.thinking });
         this.setPartial(content);

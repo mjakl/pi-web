@@ -21,6 +21,7 @@ import type { LiveStatus } from "@core/ports";
 import {
   activityLabel,
   groupTurns,
+  isEditToolName,
   timestampedEntries,
   type Turn,
 } from "@core/turns";
@@ -513,19 +514,6 @@ function Subagent({
   );
 }
 
-/** Pi's own edit tools show the diff instead of the arguments they took. */
-function isEditToolName(name: string): boolean {
-  const lower = name.toLowerCase();
-  return (
-    lower === "edit" ||
-    lower.startsWith("edit_") ||
-    lower.endsWith(".edit") ||
-    lower.endsWith("_edit") ||
-    lower.includes("str_replace") ||
-    lower.includes("replace_editor")
-  );
-}
-
 function ToolResultBody({
   call,
   actions,
@@ -919,6 +907,38 @@ export function Item({
   }
 }
 
+/**
+ * The files a turn wrote, under its answer. Clicking one puts the path into
+ * the composer as an `@` mention; Phase 4 opens the file itself.
+ */
+function WrittenFiles({
+  files,
+  actions,
+}: {
+  files: string[];
+  actions?: ItemActions;
+}) {
+  if (files.length === 0 || actions?.live) return <></>;
+  const cwd = actions?.cwd ?? "";
+  return (
+    <div class="my-2 flex flex-wrap gap-1" aria-label="Files changed">
+      {files.map((path) => {
+        const inside = cwd !== "" && path.startsWith(`${cwd}/`);
+        return (
+          <button
+            type="button"
+            class="btn btn-ghost font-mono btn-xs"
+            data-mention={inside ? path.slice(cwd.length + 1) : path}
+            title={path}
+          >
+            {path.split("/").pop() ?? path}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function TurnView({ turn, actions }: { turn: Turn; actions?: ItemActions }) {
   const count = (value: number, noun: string) =>
     `${String(value)} ${noun}${value === 1 ? "" : "s"}`;
@@ -946,6 +966,7 @@ function TurnView({ turn, actions }: { turn: Turn; actions?: ItemActions }) {
       {turn.answer ? (
         <Item item={turn.answer} actions={actions} starrable />
       ) : null}
+      <WrittenFiles files={turn.written} actions={actions} />
       {turn.trailing.map((item) => (
         <Item item={item} actions={actions} />
       ))}

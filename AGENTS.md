@@ -26,8 +26,9 @@ browser holds none.
 
 ```text
 src/core       rules and ports: transcript projection, session derivations
-               (stars, statistics, branches), context usage, composer input
-               rules, path containment, workspace
+               (stars, statistics, branches), project selection, the
+               conversation rail layout, terminal-output conversion, context
+               usage, composer input rules, path containment, workspace
 src/adapters   Pi SDK, filesystem, and in-memory implementations of the ports
 src/web        Hono routes, JSX views, HTMX/SSE delivery, client bundle
 src/container.ts  the only file that wires adapters into the core
@@ -49,6 +50,9 @@ Rules enforced by `.oxlintrc.json`:
 - `src/web/client/*` is bundled by esbuild and may import `@core/*`; anything it
   imports must run in a browser (no Node, no SDK). `main.ts` and
   `mermaid-lib.ts` are the two bundle entry points.
+- Anything a page can do without script does: the workspace selector, the
+  subagent fold, and the extension widget panel are `<details>` elements the
+  server fills on demand.
 
 Read `docs/architecture.md` before changing a port, the SSE contract, or context
 accounting. Shell commands run with a sanitised environment; read

@@ -13,6 +13,8 @@ export type SessionSummary = {
   projectRoot?: string;
   /** Checked-out branch of `cwd`, when it is a worktree of `projectRoot`. */
   worktreeBranch?: string;
+  /** Id of the session this one was forked from, when the header names one. */
+  parentId?: string;
 };
 
 /** What a sidebar row shows once its file has been read. */
@@ -25,10 +27,13 @@ export type SessionRowMetadata = {
   fileSize: number;
 };
 
-export type ProjectGroup = {
-  root: string;
+/** One project in the workspace selector, with the activity it holds. */
+export type ProjectEntry = {
+  key: string;
   label: string;
-  sessions: SessionSummary[];
+  /** Newest session of the project: the selector's order. */
+  modifiedAt: string;
+  running: number;
 };
 
 function projectLabel(root: string): string {
@@ -36,6 +41,20 @@ function projectLabel(root: string): string {
   return parts.length >= 2
     ? `${parts.at(-2) ?? ""}/${parts.at(-1) ?? ""}`
     : (parts.at(-1) ?? root);
+}
+
+/** Sessions group by the git top level of their folder, else by the folder. */
+export function projectKeyOf(session: SessionSummary): string {
+  return session.projectRoot ?? session.cwd;
+}
+
+/**
+ * pi-subagent writes each run as its own session file named
+ * `<timestamp>_subagent.<hex>.jsonl`, so its id is `subagent.<hex>`. They are
+ * transcripts of a tool call, not conversations somebody started.
+ */
+export function isSubagentSession(summary: SessionSummary): boolean {
+  return summary.id.startsWith("subagent.");
 }
 
 /** Sidebar order: working sessions first, then live ones, then by age. */
@@ -47,30 +66,54 @@ export function compareSessions(a: SessionSummary, b: SessionSummary): number {
   );
 }
 
-/** Group by project root (the git top level when there is one). */
-export function groupByProject(
+/** One entry per project, newest first; the selector lists these. */
+export function recentProjects(
   sessions: readonly SessionSummary[],
-): ProjectGroup[] {
-  const groups = new Map<string, ProjectGroup>();
+): ProjectEntry[] {
+  const byKey = new Map<string, ProjectEntry>();
   for (const session of sessions) {
-    const root = session.projectRoot ?? session.cwd;
-    const group = groups.get(root) ?? {
-      root,
-      label: projectLabel(root),
-      sessions: [],
+    const key = projectKeyOf(session);
+    const entry = byKey.get(key) ?? {
+      key,
+      label: projectLabel(key),
+      modifiedAt: session.modifiedAt,
+      running: 0,
     };
-    group.sessions.push(session);
-    groups.set(root, group);
+    if (session.modifiedAt > entry.modifiedAt) {
+      entry.modifiedAt = session.modifiedAt;
+    }
+    if (session.running) entry.running += 1;
+    byKey.set(key, entry);
   }
-  const result = [...groups.values()];
-  for (const group of result) group.sessions.sort(compareSessions);
-  result.sort((a, b) => {
-    const first = a.sessions[0];
-    const second = b.sessions[0];
-    if (!first || !second) return 0;
-    return compareSessions(first, second);
-  });
-  return result;
+  return [...byKey.values()].sort((a, b) =>
+    b.modifiedAt.localeCompare(a.modifiedAt),
+  );
+}
+
+/**
+ * Which project the sidebar shows: the one the open session belongs to, else
+ * the remembered choice while it still exists, else the most recent.
+ */
+export function selectedProject(
+  projects: readonly ProjectEntry[],
+  options: { active?: string; remembered?: string } = {},
+): string | undefined {
+  if (options.active !== undefined) return options.active;
+  const remembered = options.remembered;
+  if (remembered !== undefined && projects.some((p) => p.key === remembered)) {
+    return remembered;
+  }
+  return projects[0]?.key;
+}
+
+/** The visible list: one project's own sessions, in sidebar order. */
+export function sessionsForProject(
+  sessions: readonly SessionSummary[],
+  key: string | undefined,
+): SessionSummary[] {
+  return sessions
+    .filter((session) => key === undefined || projectKeyOf(session) === key)
+    .sort(compareSessions);
 }
 
 /** Row title: the name, else the start of the first message, else the id. */

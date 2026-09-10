@@ -60,6 +60,15 @@ function demoSessions(cwd: string): FakeStoredSession[] {
 function demoScript(cwd: string, prompt: string): ScriptedStep[] {
   const patch = `--- a/src/answer.ts\n+++ b/src/answer.ts\n@@ -1,3 +1,3 @@\n export function answer() {\n-  return 41;\n+  return 42;\n }\n`;
   return [
+    { status: "git", statusText: "\u001B[32mmain\u001B[0m ✓ clean" },
+    {
+      widget: "todo",
+      lines: [
+        "\u001B[1mOpen\u001B[0m",
+        "  1. change the answer",
+        "  2. check the callers",
+      ],
+    },
     { thinking: "Reading the file before changing it, then checking callers." },
     {
       tool: "read",
@@ -104,6 +113,11 @@ function demoScript(cwd: string, prompt: string): ScriptedStep[] {
       },
       result: "explorer finished",
     },
+    {
+      widget: "todo",
+      lines: ["\u001B[1mDone\u001B[0m", "  \u001B[32m✓\u001B[0m all clear"],
+    },
+    { status: "git", statusText: "\u001B[32mmain\u001B[0m ● 1 changed" },
     {
       text: `You asked: **${prompt}**\n\nThis reply comes from the fake runtime, streamed word by word so the page can be checked without a model.\n\n\`\`\`ts\nexport const answer = 42;\n\`\`\`\n\n\`\`\`mermaid\nflowchart LR\n  ask --> think --> tools --> answer\n\`\`\`\n\n| step | state |\n| --- | --- |\n| edit | done |`,
     },

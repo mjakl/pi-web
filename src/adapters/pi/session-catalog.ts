@@ -14,6 +14,7 @@ import { createInterface } from "node:readline";
 import { exportSessionHtml } from "./session-export.ts";
 import {
   branchToNewFile,
+  pathKey,
   removeSessionFile,
   rewindSessionFile,
 } from "./session-files.ts";
@@ -26,7 +27,13 @@ import {
 const HEADER_MAX_BYTES = 8192;
 const METADATA_CACHE_MAX = 4096;
 
-type Header = { id: string; cwd: string; timestamp: string };
+type Header = {
+  id: string;
+  cwd: string;
+  timestamp: string;
+  /** Absolute path of the session this one was forked or branched from. */
+  parentSession?: string;
+};
 
 function readHeader(filePath: string): Header | undefined {
   const fd = openSync(filePath, "r");
@@ -48,7 +55,15 @@ function readHeader(filePath: string): Header | undefined {
     ) {
       return undefined;
     }
-    return { id: header.id, cwd: header.cwd, timestamp: header.timestamp };
+    return {
+      id: header.id,
+      cwd: header.cwd,
+      timestamp: header.timestamp,
+      ...(typeof header.parentSession === "string" &&
+      isAbsolute(header.parentSession)
+        ? { parentSession: header.parentSession }
+        : {}),
+    };
   } catch {
     return undefined;
   } finally {
@@ -135,6 +150,10 @@ export function createPiSessionCatalog(options: {
 
   async function scan(): Promise<SessionSummary[]> {
     const summaries: SessionSummary[] = [];
+    // parentSession is a path; the sidebar needs the id it belongs to, and
+    // only this scan knows both.
+    const idByPath = new Map<string, string>();
+    const parents = new Map<string, string>();
     let folders: string[] = [];
     try {
       folders = await readdir(sessionsDir);
@@ -156,6 +175,10 @@ export function createPiSessionCatalog(options: {
           if (!header) continue;
           const info = await stat(filePath);
           paths.set(header.id, filePath);
+          idByPath.set(pathKey(filePath), header.id);
+          if (header.parentSession !== undefined) {
+            parents.set(header.id, pathKey(header.parentSession));
+          }
           summaries.push({
             id: header.id,
             cwd: header.cwd,
@@ -168,7 +191,10 @@ export function createPiSessionCatalog(options: {
         }
       }
     }
-    return summaries;
+    return summaries.map((summary) => {
+      const parentId = idByPath.get(parents.get(summary.id) ?? "");
+      return parentId === undefined ? summary : { ...summary, parentId };
+    });
   }
 
   async function pathOf(id: string): Promise<string | undefined> {

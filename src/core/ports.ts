@@ -87,6 +87,14 @@ export type RetryState = {
   message: string;
 };
 
+/** A panel an extension keeps up to date, as lines of terminal output. */
+export type ExtensionWidget = {
+  key: string;
+  /** Empty for a widget whose content is a terminal component (Phase 6). */
+  lines: string[];
+  placement: "aboveEditor" | "belowEditor";
+};
+
 export type LiveStatus = {
   running: boolean;
   compacting: boolean;
@@ -105,6 +113,8 @@ export type LiveStatus = {
   retry: RetryState | null;
   /** Extension status texts keyed by extension-chosen key. */
   statuses: Record<string, string>;
+  /** Extension widgets, in the order the extensions registered them. */
+  widgets: ExtensionWidget[];
   /** Notices raised by extensions or failures since the last snapshot. */
   notices: Notice[];
 };

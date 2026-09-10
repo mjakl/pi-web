@@ -1,3 +1,4 @@
+import type { ExtensionWidget } from "@core/ports";
 import {
   type ExtensionUIContext,
   Theme,
@@ -58,6 +59,12 @@ const PLAIN_TEXT_THEME = new PlainTextTheme();
 export type HeadlessUiSink = {
   notify(level: "info" | "warning" | "error", message: string): void;
   setStatus(key: string, text: string | undefined): void;
+  /** `undefined` removes the widget; an empty array keeps an inert chip. */
+  setWidget(
+    key: string,
+    lines: string[] | undefined,
+    placement: ExtensionWidget["placement"],
+  ): void;
 };
 
 /**
@@ -107,7 +114,24 @@ export function createHeadlessUi(sink: HeadlessUiSink): ExtensionUIContext {
     setWorkingVisible() {},
     setWorkingIndicator() {},
     setHiddenThinkingLabel() {},
-    setWidget() {},
+    // Line widgets are rendered as chips with a panel. A widget whose content
+    // is a terminal component needs a headless pi-tui to render; until then it
+    // keeps an inert chip so the reader sees the extension is there.
+    setWidget(
+      key: string,
+      content: unknown,
+      options?: { placement?: ExtensionWidget["placement"] },
+    ) {
+      sink.setWidget(
+        key,
+        content === undefined
+          ? undefined
+          : Array.isArray(content)
+            ? content
+            : [],
+        options?.placement ?? "aboveEditor",
+      );
+    },
     setFooter() {},
     setHeader() {},
     setTitle() {},

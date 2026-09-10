@@ -6,6 +6,11 @@ import {
   rankCommands,
   type SlashCommand,
 } from "./composer.ts";
+import {
+  conversationRail,
+  hasBranches,
+  type RailMark,
+} from "./conversation-rail.ts";
 import { contextUsage, type ContextUsage } from "./context-usage.ts";
 import { directoryWithin, isBashOutputPath } from "./path-access.ts";
 import type {
@@ -34,10 +39,15 @@ import {
   type SessionStats,
 } from "./session-entries.ts";
 import {
-  groupByProject,
-  type ProjectGroup,
+  compareSessions,
+  isSubagentSession,
+  type ProjectEntry,
+  projectKeyOf,
+  recentProjects,
+  selectedProject,
   type SessionRowMetadata,
   type SessionSummary,
+  sessionsForProject,
 } from "./sessions.ts";
 import {
   assistantItem,
@@ -87,6 +97,25 @@ export type SessionView = {
   leaves: BranchLeaf[];
   /** True while viewing a branch other than the session's own leaf. */
   otherBranch: boolean;
+  /** Marks for the conversation rail: prompts, stars, and compactions. */
+  rail: RailMark[];
+  /** The session forked at least once, so the rail can expand into a graph. */
+  branched: boolean;
+};
+
+/**
+ * The sidebar shows one project at a time. Listing every session of a real
+ * store is what made the page heavy, and a reader works in one repository.
+ */
+export type SidebarView = {
+  projects: ProjectEntry[];
+  selected?: string;
+  /** Conversations of the selected project, with the runs each spawned. */
+  sessions: { summary: SessionSummary; subagents: number }[];
+  /** Subagent runs of this project whose parent session is not in the list. */
+  orphans: number;
+  /** Some other project has a session running: the closed selector says so. */
+  activityElsewhere: boolean;
 };
 
 export type Workspace = ReturnType<typeof createWorkspace>;
@@ -182,6 +211,8 @@ export function createWorkspace(deps: {
       });
     }
     const { status } = snapshot;
+    const starred = readStars(snapshot.entries);
+    const leafId = snapshot.branch.at(-1)?.id ?? null;
     const reported = status.contextTokens;
     const fallback = turn.lastContextTokens ?? settled.lastContextTokens;
     return {
@@ -199,12 +230,11 @@ export function createWorkspace(deps: {
       }),
       models: models.models,
       modelWarnings: models.warnings,
-      starred: readStars(snapshot.entries),
-      leaves: branchLeaves(
-        snapshot.entries,
-        snapshot.branch.at(-1)?.id ?? null,
-      ),
+      starred,
+      leaves: branchLeaves(snapshot.entries, leafId),
       otherBranch: false,
+      rail: conversationRail(snapshot.entries, leafId, starred),
+      branched: hasBranches(snapshot.entries),
     };
   }
 
@@ -214,6 +244,8 @@ export function createWorkspace(deps: {
     options: ViewOptions,
   ): Promise<SessionView> {
     const transcript = projectTranscript(stored.branch);
+    const starred = readStars(stored.entries);
+    const leafId = stored.branch.at(-1)?.id ?? null;
     const page = pageItems(transcript.items, options);
     deferThinking(page.items);
     const listing = await modelsFor(stored.summary.cwd);
@@ -238,9 +270,11 @@ export function createWorkspace(deps: {
       }),
       models: listing.models,
       modelWarnings: listing.warnings,
-      starred: readStars(stored.entries),
-      leaves: branchLeaves(stored.entries, stored.branch.at(-1)?.id ?? null),
+      starred,
+      leaves: branchLeaves(stored.entries, leafId),
       otherBranch: options.leaf !== undefined && options.leaf !== stored.leafId,
+      rail: conversationRail(stored.entries, leafId, starred),
+      branched: hasBranches(stored.entries),
     };
   }
 
@@ -329,8 +363,83 @@ export function createWorkspace(deps: {
     stop,
     setStar,
 
-    async listSessions(): Promise<ProjectGroup[]> {
-      return groupByProject(await decorate(await deps.sessions.list()));
+    /**
+     * The whole sidebar: the projects to choose from, and the sessions of the
+     * chosen one. `activeId` wins over the remembered choice, so opening a
+     * session always shows the project it belongs to.
+     */
+    async sidebar(
+      options: { remembered?: string; activeId?: string } = {},
+    ): Promise<SidebarView> {
+      const all = await decorate(await deps.sessions.list());
+      const projects = recentProjects(all);
+      const open =
+        options.activeId === undefined
+          ? undefined
+          : all.find((session) => session.id === options.activeId);
+      const selected = selectedProject(projects, {
+        ...(open ? { active: projectKeyOf(open) } : {}),
+        ...(options.remembered === undefined
+          ? {}
+          : { remembered: options.remembered }),
+      });
+      const inProject = all.filter(
+        (session) => projectKeyOf(session) === selected,
+      );
+      const sessions = sessionsForProject(
+        inProject.filter((session) => !isSubagentSession(session)),
+        undefined,
+      );
+      const known = new Set(sessions.map((session) => session.id));
+      const runs = new Map<string, number>();
+      let orphans = 0;
+      for (const run of inProject.filter(isSubagentSession)) {
+        const parent = run.parentId;
+        if (parent !== undefined && known.has(parent)) {
+          runs.set(parent, (runs.get(parent) ?? 0) + 1);
+        } else orphans += 1;
+      }
+      return {
+        projects,
+        ...(selected === undefined ? {} : { selected }),
+        sessions: sessions.map((summary) => ({
+          summary,
+          subagents: runs.get(summary.id) ?? 0,
+        })),
+        orphans,
+        activityElsewhere: projects.some(
+          (project) => project.key !== selected && project.running > 0,
+        ),
+      };
+    },
+
+    /**
+     * The runs behind a collapsed "N subagent runs" line: either one session's
+     * children, or the project's runs that have no parent to hang under.
+     */
+    async subagentRuns(
+      project: string,
+      parentId?: string,
+    ): Promise<SessionSummary[]> {
+      const all = await decorate(await deps.sessions.list());
+      const known = new Set(
+        all
+          .filter(
+            (session) =>
+              !isSubagentSession(session) && projectKeyOf(session) === project,
+          )
+          .map((session) => session.id),
+      );
+      return all
+        .filter(
+          (session) =>
+            isSubagentSession(session) &&
+            projectKeyOf(session) === project &&
+            (parentId === undefined
+              ? session.parentId === undefined || !known.has(session.parentId)
+              : session.parentId === parentId),
+        )
+        .sort(compareSessions);
     },
 
     /**

@@ -1,12 +1,18 @@
 import {
   bashCommand,
+  buildAtInsertText,
   cycleHistory,
   exactBuiltin,
   inputHistory,
 } from "@core/composer";
 import { setUpAtCompletion } from "./at-complete.ts";
 import { setUpDrafts } from "./drafts.ts";
-import { composerForm, setComposerValue, textarea } from "./editor.ts";
+import {
+  composerForm,
+  replaceRange,
+  setComposerValue,
+  textarea,
+} from "./editor.ts";
 import { setUpImages } from "./images.ts";
 import { setUpSlashMenu } from "./slash-menu.ts";
 import { showToast } from "./toasts.ts";
@@ -43,6 +49,21 @@ export function setUpComposer(): void {
   if (!form) return;
   const sessionId = form.dataset["sessionId"] ?? null;
   const cwd = form.dataset["cwd"] ?? null;
+
+  // A written-file chip in the transcript puts its path into the composer;
+  // Phase 4 replaces this with opening the file.
+  document.body.addEventListener("click", (event) => {
+    const chip = (event.target as HTMLElement).closest<HTMLElement>(
+      "[data-mention]",
+    );
+    const area = textarea();
+    if (!chip || !area) return;
+    const path = chip.dataset["mention"] ?? "";
+    if (path === "") return;
+    const insert = buildAtInsertText({ path, isDir: false }, false);
+    const caret = area.selectionStart;
+    replaceRange(area, caret, area.selectionEnd, insert.text, insert.caret);
+  });
 
   const slash = setUpSlashMenu(sessionId);
   const at = setUpAtCompletion(sessionId);

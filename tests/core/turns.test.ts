@@ -2,6 +2,8 @@ import type { TranscriptItem } from "@core/transcript";
 import {
   activityLabel,
   groupTurns,
+  isEditToolName,
+  isWriteToolName,
   pageItems,
   timestampedEntries,
 } from "@core/turns";
@@ -40,6 +42,70 @@ const thinking = {
   text: "hm",
   deferred: false,
 };
+
+/** A tool call with a result, the shape the written-files rule reads. */
+function writeCall(id: string, name: string, args: unknown, isError = false) {
+  return {
+    kind: "tool" as const,
+    call: {
+      id,
+      name,
+      arguments: args,
+      preview: "x",
+      result: { entryId: `r${id}`, text: "ok", isError, images: [] },
+    },
+  };
+}
+
+describe("written files", () => {
+  it("accepts the decorated names an MCP server exposes", () => {
+    expect(
+      ["write", "write_file", "fs.write", "mcp_write"].every(isWriteToolName),
+    ).toBe(true);
+    expect(
+      ["edit", "str_replace_editor", "fs.edit", "replace_editor"].every(
+        isEditToolName,
+      ),
+    ).toBe(true);
+    expect(isWriteToolName("read")).toBe(false);
+    expect(isEditToolName("grep")).toBe(false);
+  });
+
+  it("lists the files a turn wrote, once each, in first-seen order", () => {
+    const [turn] = groupTurns([
+      user("u1"),
+      assistant("a1", [
+        writeCall("c1", "write", { file_path: "/repo/a.ts" }),
+        writeCall("c2", "edit", { path: "/repo/b.ts" }),
+        writeCall("c3", "edit", { file_path: "/repo/a.ts" }),
+      ]),
+      assistant("a2", [text("done")]),
+    ]);
+    expect(turn?.written).toEqual(["/repo/a.ts", "/repo/b.ts"]);
+  });
+
+  it("ignores failed writes, calls with no result, and other tools", () => {
+    const [turn] = groupTurns([
+      user("u1"),
+      assistant("a1", [
+        writeCall("c1", "write", { file_path: "/repo/failed.ts" }, true),
+        {
+          kind: "tool" as const,
+          call: {
+            id: "c2",
+            name: "edit",
+            arguments: { file_path: "/repo/pending.ts" },
+            preview: "x",
+          },
+        },
+        writeCall("c3", "read", { file_path: "/repo/read.ts" }),
+        writeCall("c4", "write", { contents: "no path" }),
+      ]),
+      assistant("a2", [text("done")]),
+    ]);
+    expect(turn?.written).toEqual([]);
+  });
+});
 
 describe("groupTurns", () => {
   it("splits a turn into process details and the final answer", () => {

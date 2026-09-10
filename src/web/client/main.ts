@@ -2,6 +2,7 @@
 
 import { abortTurn, setUpComposer } from "./composer.ts";
 import { DARK_THEME, LIGHT_THEME, THEME_KEY } from "./theme.ts";
+import { setUpRail } from "./rail.ts";
 import { setUpToasts } from "./toasts.ts";
 import { setUpTranscript } from "./transcript.ts";
 
@@ -83,21 +84,28 @@ function setUpShortcuts(): void {
   });
 }
 
-// Which sessions finished a turn while the reader was looking elsewhere.
+// Which sessions finished a turn while the reader was looking elsewhere, and
+// the project each belongs to: the sidebar shows one project at a time, so a
+// completion elsewhere can only show up as a badge on that project.
 const UNREAD_KEY = "web-pi:unread";
 
-function unreadIds(): Set<string> {
+function unreadIds(): Map<string, string> {
   try {
-    const raw: unknown = JSON.parse(localStorage.getItem(UNREAD_KEY) ?? "[]");
-    return new Set(Array.isArray(raw) ? (raw as string[]) : []);
+    const raw: unknown = JSON.parse(localStorage.getItem(UNREAD_KEY) ?? "{}");
+    // Phase 3a stored a plain array of ids; those keep working, unattributed.
+    if (Array.isArray(raw)) {
+      return new Map((raw as string[]).map((id) => [id, ""]));
+    }
+    if (typeof raw !== "object" || raw === null) return new Map();
+    return new Map(Object.entries(raw as Record<string, string>));
   } catch {
-    return new Set();
+    return new Map();
   }
 }
 
-function storeUnread(ids: Set<string>): void {
+function storeUnread(ids: Map<string, string>): void {
   try {
-    localStorage.setItem(UNREAD_KEY, JSON.stringify([...ids]));
+    localStorage.setItem(UNREAD_KEY, JSON.stringify(Object.fromEntries(ids)));
   } catch {
     // Without storage the dots last for this page only.
   }
@@ -115,20 +123,47 @@ function paintUnread(): void {
     const unread = ids.has(row.dataset["sessionId"] ?? "");
     row.querySelector(".unread-dot")?.classList.toggle("hidden", !unread);
   }
+  const shown =
+    document.getElementById("project-select")?.dataset["projectKey"] ?? "";
+  // The project rows are only in the DOM once the selector has been opened,
+  // so the dot on the closed selector comes from the unread map itself.
+  const dot = document.getElementById("project-activity");
+  if (dot && [...ids.values()].some((key) => key !== "" && key !== shown)) {
+    dot.hidden = false;
+  }
+  for (const row of document.querySelectorAll<HTMLElement>(
+    "li[data-project-key]",
+  )) {
+    const key = row.dataset["projectKey"] ?? "";
+    const count = [...ids.values()].filter((project) => project === key).length;
+    const badge = row.querySelector<HTMLElement>(".project-unread");
+    if (badge) {
+      badge.textContent = String(count);
+      badge.classList.toggle("hidden", count === 0);
+    }
+  }
 }
 
 function setUpUnread(): void {
   const ids = unreadIds();
   if (ids.delete(currentSessionId())) storeUnread(ids);
   paintUnread();
-  // The global stream drops the id of every session whose turn just ended.
+  // The global stream drops the id and project of every session whose turn
+  // just ended.
   document
     .getElementById("session-finished")
     ?.addEventListener("htmx:afterSwap", (event) => {
-      const id = (event.target as HTMLElement).textContent?.trim() ?? "";
+      const text = (event.target as HTMLElement).textContent?.trim() ?? "";
+      let finished: { id?: string; project?: string } = {};
+      try {
+        finished = JSON.parse(text) as typeof finished;
+      } catch {
+        return;
+      }
+      const id = finished.id ?? "";
       if (!id || id === currentSessionId()) return;
       const pending = unreadIds();
-      pending.add(id);
+      pending.set(id, finished.project ?? "");
       storeUnread(pending);
       paintUnread();
     });
@@ -156,12 +191,44 @@ function applyFilter(): void {
     row.hidden =
       needle !== "" && !title.includes(needle) && !id.includes(needle);
   }
-  for (const group of document.querySelectorAll<HTMLElement>(
-    "#session-list section",
+}
+
+/** The workspace selector's own filter, shown once there are many projects. */
+function applyProjectFilter(): void {
+  const input = document.querySelector<HTMLInputElement>("#project-filter");
+  if (!input) return;
+  const needle = input.value.trim().toLowerCase();
+  let matches = 0;
+  for (const row of document.querySelectorAll<HTMLElement>(
+    "#project-select li[data-project-key]",
   )) {
-    // Only session rows count; a row's action menu has list items too.
-    group.hidden = !group.querySelector("li[data-session-id]:not([hidden])");
+    const key = (row.dataset["projectKey"] ?? "").toLowerCase();
+    row.hidden = needle !== "" && !key.includes(needle);
+    if (!row.hidden) matches += 1;
   }
+  const empty = document.getElementById("project-empty");
+  if (empty) empty.hidden = matches > 0;
+}
+
+function setUpProjectFilter(): void {
+  document.body.addEventListener("input", (event) => {
+    if ((event.target as HTMLElement).id === "project-filter") {
+      applyProjectFilter();
+    }
+  });
+  document.body.addEventListener("keydown", (event) => {
+    const input = event.target;
+    if (
+      event.key !== "Escape" ||
+      !(input instanceof HTMLInputElement) ||
+      input.id !== "project-filter"
+    ) {
+      return;
+    }
+    input.value = "";
+    applyProjectFilter();
+    input.closest("details")?.removeAttribute("open");
+  });
 }
 
 function setUpFilter(): void {
@@ -173,8 +240,10 @@ function setUpFilter(): void {
 applyTheme(storedTheme());
 setUpTheme();
 setUpTranscript();
+setUpRail();
 setUpShortcuts();
 setUpFilter();
+setUpProjectFilter();
 setUpUnread();
 setUpToasts();
 setUpComposer();

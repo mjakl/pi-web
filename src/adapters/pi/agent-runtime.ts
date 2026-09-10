@@ -1,6 +1,7 @@
 import type { SlashCommand } from "@core/composer";
 import type {
   AgentRuntime,
+  ExtensionWidget,
   LiveEvent,
   LiveSession,
   LiveSnapshot,
@@ -49,6 +50,7 @@ class PiLiveSession implements LiveSession {
   private compaction: LiveStatus["compaction"] = null;
   private bash: { command: string; output: string } | undefined;
   private readonly statuses = new Map<string, string>();
+  private readonly widgets = new Map<string, ExtensionWidget>();
   private readonly tools = new Map<string, RunningTool>();
   private retry: LiveStatus["retry"] = null;
   private notices: LiveStatus["notices"] = [];
@@ -84,6 +86,11 @@ class PiLiveSession implements LiveSession {
     setStatus: (key, text) => {
       if (text === undefined) this.statuses.delete(key);
       else this.statuses.set(key, text);
+      this.emit({ type: "activity" });
+    },
+    setWidget: (key, lines, placement) => {
+      if (lines === undefined) this.widgets.delete(key);
+      else this.widgets.set(key, { key, lines, placement });
       this.emit({ type: "activity" });
     },
   });
@@ -243,6 +250,7 @@ class PiLiveSession implements LiveSession {
       tools: [...this.tools.values()],
       retry: this.retry,
       statuses: Object.fromEntries(this.statuses),
+      widgets: [...this.widgets.values()],
       notices,
     };
   }

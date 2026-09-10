@@ -1,6 +1,8 @@
-import { relativeTime, type ProjectGroup } from "@core/sessions";
-import type { SessionView } from "@core/workspace";
+import { relativeTime } from "@core/sessions";
+import type { SessionView, SidebarView } from "@core/workspace";
 import { Composer } from "./Composer.tsx";
+import { Rail } from "./Rail.tsx";
+import { Shelf } from "./Shelf.tsx";
 import {
   type ItemActions,
   Items,
@@ -11,11 +13,11 @@ import { Sidebar } from "./Sidebar.tsx";
 import { Status } from "./Status.tsx";
 
 function Shell({
-  groups,
+  sidebar,
   activeId,
   children,
 }: {
-  groups: ProjectGroup[];
+  sidebar: SidebarView;
   activeId?: string;
   children?: unknown;
 }) {
@@ -56,15 +58,15 @@ function Shell({
           class="drawer-overlay"
           aria-label="Hide sessions"
         />
-        <Sidebar groups={groups} activeId={activeId} />
+        <Sidebar view={sidebar} activeId={activeId} />
       </div>
     </div>
   );
 }
 
-export function IndexPage({ groups }: { groups: ProjectGroup[] }) {
+export function IndexPage({ sidebar }: { sidebar: SidebarView }) {
   return (
-    <Shell groups={groups}>
+    <Shell sidebar={sidebar}>
       <div class="m-auto text-base-content/60">
         Pick a session or start a new one.
       </div>
@@ -73,16 +75,16 @@ export function IndexPage({ groups }: { groups: ProjectGroup[] }) {
 }
 
 export function NewSessionPage({
-  groups,
+  sidebar,
   cwd,
   draft,
 }: {
-  groups: ProjectGroup[];
+  sidebar: SidebarView;
   cwd: string;
   draft?: string;
 }) {
   return (
-    <Shell groups={groups}>
+    <Shell sidebar={sidebar}>
       <div class="m-auto px-4 text-base-content/60">
         New session. Type the first request below.
       </div>
@@ -130,11 +132,11 @@ function pageTitle(view: SessionView): string {
 }
 
 export function SessionPage({
-  groups,
+  sidebar,
   view,
   draft,
 }: {
-  groups: ProjectGroup[];
+  sidebar: SidebarView;
   view: SessionView;
   draft?: string;
 }) {
@@ -147,7 +149,7 @@ export function SessionPage({
     ...(view.otherBranch ? { readOnly: true } : {}),
   };
   return (
-    <Shell groups={groups} activeId={summary.id}>
+    <Shell sidebar={sidebar} activeId={summary.id}>
       <header class="flex flex-col gap-1 border-b border-base-300 px-4 py-2">
         <div class="flex items-baseline gap-2">
           <h1 class="truncate font-semibold">{pageTitle(view)}</h1>
@@ -195,23 +197,28 @@ export function SessionPage({
           </div>
         ) : null}
       </header>
-      <div id="log" class="relative min-h-0 flex-1 overflow-y-auto px-4">
-        <div id="messages" sse-swap="settled" hx-swap="beforeend">
-          {view.hasMore && view.oldestId !== undefined ? (
-            <LoadEarlier
-              sessionId={summary.id}
-              before={view.oldestId}
-              {...(view.leaf === undefined ? {} : { leaf: view.leaf })}
+      <div class="flex min-h-0 flex-1">
+        <div id="log" class="relative min-h-0 flex-1 overflow-y-auto px-4">
+          <div id="messages" sse-swap="settled" hx-swap="beforeend">
+            {view.hasMore && view.oldestId !== undefined ? (
+              <LoadEarlier
+                sessionId={summary.id}
+                before={view.oldestId}
+                {...(view.leaf === undefined ? {} : { leaf: view.leaf })}
+              />
+            ) : null}
+            <Items items={view.items} actions={actions} />
+          </div>
+          <div id="turn" sse-swap="turn" hx-swap="innerHTML">
+            <TurnFragment
+              items={view.turn}
+              actions={actions}
+              status={view.status}
             />
-          ) : null}
-          <Items items={view.items} actions={actions} />
+          </div>
         </div>
-        <div id="turn" sse-swap="turn" hx-swap="innerHTML">
-          <TurnFragment
-            items={view.turn}
-            actions={actions}
-            status={view.status}
-          />
+        <div id="rail-column" class="pr-2">
+          <Rail view={view} />
         </div>
       </div>
       <button
@@ -242,6 +249,7 @@ export function SessionPage({
       {view.otherBranch ? null : (
         <Composer sessionId={summary.id} cwd={summary.cwd} draft={draft} />
       )}
+      <Shelf status={view.status} />
     </Shell>
   );
 }
