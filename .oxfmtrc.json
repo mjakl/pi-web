@@ -12,7 +12,12 @@
   "arrowParens": "always",
   "bracketSameLine": false,
   "bracketSpacing": true,
-  "ignorePatterns": ["static/vendor", "tsconfig.json", "pnpm-lock.yaml"],
+  "ignorePatterns": [
+    "static/vendor",
+    "tsconfig.json",
+    "pnpm-lock.yaml",
+    "docs/specs"
+  ],
   "overrides": [
     {
       "files": ["*.md"],
