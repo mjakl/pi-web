@@ -77,6 +77,16 @@ export type CompactionSummary = {
   reason: string;
 };
 
+/** A tool executing right now, with the last line it reported. */
+export type RunningTool = { name: string; progress?: string };
+
+/** Pi is retrying a failed provider call by itself. */
+export type RetryState = {
+  attempt: number;
+  maxAttempts: number;
+  message: string;
+};
+
 export type LiveStatus = {
   running: boolean;
   compacting: boolean;
@@ -89,6 +99,10 @@ export type LiveStatus = {
   queue: QueuedMessage[];
   /** The last compaction that finished, for the success strip. */
   compaction: CompactionSummary | null;
+  /** Tools running right now, for the activity line. */
+  tools: RunningTool[];
+  /** Set while Pi retries a failed provider call. */
+  retry: RetryState | null;
   /** Extension status texts keyed by extension-chosen key. */
   statuses: Record<string, string>;
   /** Notices raised by extensions or failures since the last snapshot. */

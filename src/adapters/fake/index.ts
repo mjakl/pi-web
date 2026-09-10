@@ -12,6 +12,7 @@ import type {
   ProjectResources,
   PromptInput,
   QueuedMessage,
+  RunningTool,
   RuntimeEvent,
   SessionCatalog,
   ThinkingLevel,
@@ -38,6 +39,24 @@ export const FAKE_MODEL: ModelOption = {
   contextWindow: 100_000,
   reasoning: true,
 };
+
+/**
+ * What a scripted answer does, step by step. Enough to exercise the parts of
+ * the transcript a plain text reply never reaches: reasoning, tool cards,
+ * diffs, and subagent results.
+ */
+export type ScriptedStep =
+  | { thinking: string }
+  | { text: string }
+  | {
+      tool: string;
+      arguments?: unknown;
+      /** Lines the tool reports while it runs, one per tick. */
+      progress?: string[];
+      result?: string;
+      isError?: boolean;
+      details?: unknown;
+    };
 
 export type FakeStoredSession = {
   summary: SessionSummary;
@@ -187,6 +206,8 @@ export const FAKE_COMMANDS: SlashCommand[] = [
   },
 ];
 
+type Part = Record<string, unknown> & { type: string };
+
 class FakeLiveSession implements LiveSession {
   readonly id: string;
   private partial: Extract<AgentMessage, { role: "assistant" }> | undefined;
@@ -197,24 +218,26 @@ class FakeLiveSession implements LiveSession {
   private bash: { command: string; output: string } | undefined;
   private queue: QueuedMessage[] = [];
   private compaction: LiveStatus["compaction"] = null;
+  private tools: RunningTool[] = [];
+  private retry: LiveStatus["retry"] = null;
   private notices: LiveStatus["notices"] = [];
   private thinkingLevel: ThinkingLevel = "medium";
   private readonly listeners = new Set<(event: LiveEvent) => void>();
   private counter = 0;
 
   private readonly stored: FakeStoredSession;
-  private readonly reply: (prompt: string) => string;
+  private readonly script: (prompt: string) => ScriptedStep[];
   private readonly delayMs: number;
   private readonly onStop: () => void;
 
   constructor(
     stored: FakeStoredSession,
-    reply: (prompt: string) => string,
+    script: (prompt: string) => ScriptedStep[],
     delayMs: number,
     onStop: () => void,
   ) {
     this.stored = stored;
-    this.reply = reply;
+    this.script = script;
     this.delayMs = delayMs;
     this.onStop = onStop;
     this.id = stored.summary.id;
@@ -272,10 +295,141 @@ class FakeLiveSession implements LiveSession {
         contextTokens,
         queue: [...this.queue],
         compaction: this.compaction,
+        tools: [...this.tools],
+        retry: this.retry,
         statuses: {},
         notices,
       },
     };
+  }
+
+  private setPartial(content: Part[]): void {
+    this.partial = {
+      role: "assistant",
+      content: content as never,
+      api: "openai-responses",
+      provider: FAKE_MODEL.provider,
+      model: FAKE_MODEL.id,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "pending",
+      timestamp: Date.now(),
+    };
+    this.emit({ type: "activity" });
+  }
+
+  private wait(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, this.delayMs));
+  }
+
+  /** Store the message the partial has become, and start the next one. */
+  private settle(parentId: string | null, content: Part[]): string {
+    const id = this.nextId();
+    const previous = this.snapshot().status.contextTokens ?? 1000;
+    this.partial = undefined;
+    this.stored.entries.push({
+      type: "message",
+      id,
+      parentId,
+      timestamp: new Date().toISOString(),
+      message: {
+        role: "assistant",
+        content: content as never,
+        api: "openai-responses",
+        provider: FAKE_MODEL.provider,
+        model: FAKE_MODEL.id,
+        usage: {
+          input: previous + 490,
+          output: 10,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: previous + 500,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: "stop",
+        timestamp: Date.now(),
+      },
+    });
+    this.stored.leafId = id;
+    touch(this.stored);
+    return id;
+  }
+
+  /** Play a scripted answer: reasoning, prose, and tool calls with results. */
+  private async play(userId: string, steps: ScriptedStep[]): Promise<void> {
+    let parentId = userId;
+    let content: Part[] = [];
+    await this.wait();
+    for (const step of steps) {
+      if (!this.running) break;
+      if ("thinking" in step) {
+        content.push({ type: "thinking", thinking: step.thinking });
+        this.setPartial(content);
+        await this.wait();
+        continue;
+      }
+      if ("text" in step) {
+        const words = step.text.split(" ");
+        for (let shown = 1; shown <= words.length; shown += 1) {
+          this.setPartial([
+            ...content,
+            { type: "text", text: words.slice(0, shown).join(" ") },
+          ]);
+          await this.wait();
+          if (!this.running) return;
+        }
+        content.push({ type: "text", text: step.text });
+        continue;
+      }
+      const callId = `call-${this.nextId()}`;
+      content.push({
+        type: "toolCall",
+        id: callId,
+        name: step.tool,
+        arguments: step.arguments ?? {},
+      });
+      this.setPartial(content);
+      await this.wait();
+      parentId = this.settle(parentId, content);
+      content = [];
+      for (const line of step.progress ?? []) {
+        this.tools = [{ name: step.tool, progress: line }];
+        this.emit({ type: "activity" });
+        await this.wait();
+      }
+      this.tools = [];
+      const resultId = this.nextId();
+      this.stored.entries.push({
+        type: "message",
+        id: resultId,
+        parentId,
+        timestamp: new Date().toISOString(),
+        message: {
+          role: "toolResult",
+          toolCallId: callId,
+          toolName: step.tool,
+          content: [{ type: "text", text: step.result ?? "ok" }],
+          ...(step.details === undefined ? {} : { details: step.details }),
+          isError: step.isError === true,
+          timestamp: Date.now(),
+        },
+      });
+      this.stored.leafId = resultId;
+      touch(this.stored);
+      parentId = resultId;
+      this.emit({ type: "activity" });
+    }
+    if (content.length > 0) this.settle(parentId, content);
+    this.partial = undefined;
+    this.tools = [];
+    this.running = false;
+    this.emit({ type: "turn_done" });
   }
 
   prompt(text: string, input: PromptInput = {}): Promise<void> {
@@ -292,50 +446,14 @@ class FakeLiveSession implements LiveSession {
       userEntry(userId, leafOf(this.stored), text, input.images?.length ?? 0),
     );
     this.emit({ type: "activity" });
-
-    const answer = this.reply(text);
-    const words = answer.split(" ");
-    let shown = 0;
-    const tick = () => {
-      shown += 1;
-      const textSoFar = words.slice(0, shown).join(" ");
-      this.partial = {
-        role: "assistant",
-        content: [{ type: "text", text: textSoFar }],
-        api: "openai-responses",
-        provider: FAKE_MODEL.provider,
-        model: FAKE_MODEL.id,
-        usage: {
-          input: 0,
-          output: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          totalTokens: 0,
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-        },
-        stopReason: "pending",
-        timestamp: Date.now(),
-      };
-      this.emit({ type: "activity" });
-      if (shown < words.length) {
-        setTimeout(tick, this.delayMs);
-        return;
-      }
-      this.partial = undefined;
-      const previousTokens = this.snapshot().status.contextTokens ?? 1000;
-      this.append(
-        assistantEntry(this.nextId(), userId, answer, previousTokens + 500),
-      );
-      this.running = false;
-      this.emit({ type: "turn_done" });
-    };
-    setTimeout(tick, this.delayMs);
+    void this.play(userId, this.script(text));
     return Promise.resolve();
   }
 
   abort(): Promise<void> {
     this.running = false;
     this.partial = undefined;
+    this.tools = [];
     this.emit({ type: "turn_done" });
     return Promise.resolve();
   }
@@ -479,6 +597,8 @@ export function createFakeWorld(
   options: {
     sessions?: FakeStoredSession[];
     reply?: (prompt: string) => string;
+    /** A scripted answer, for turns with reasoning, tools, or subagents. */
+    script?: (prompt: string) => ScriptedStep[];
     delayMs?: number;
     files?: string[];
     tmpdir?: string;
@@ -490,6 +610,8 @@ export function createFakeWorld(
   const live = new Map<string, FakeLiveSession>();
   const watchers = new Set<(event: RuntimeEvent) => void>();
   const reply = options.reply ?? ((prompt) => `You said: ${prompt}`);
+  const script =
+    options.script ?? ((prompt: string) => [{ text: reply(prompt) }]);
   const delayMs = options.delayMs ?? 5;
   let created = 0;
 
@@ -498,7 +620,7 @@ export function createFakeWorld(
   }
 
   function open(stored: FakeStoredSession): FakeLiveSession {
-    const session = new FakeLiveSession(stored, reply, delayMs, () => {
+    const session = new FakeLiveSession(stored, script, delayMs, () => {
       live.delete(stored.summary.id);
       announce({ type: "stopped", sessionId: stored.summary.id });
     });

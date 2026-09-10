@@ -1,7 +1,12 @@
 import { relativeTime, type ProjectGroup } from "@core/sessions";
 import type { SessionView } from "@core/workspace";
 import { Composer } from "./Composer.tsx";
-import { Items } from "./Items.tsx";
+import {
+  type ItemActions,
+  Items,
+  LoadEarlier,
+  TurnFragment,
+} from "./Items.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { Status } from "./Status.tsx";
 
@@ -135,6 +140,12 @@ export function SessionPage({
 }) {
   const { summary } = view;
   const leafId = view.leaves.find((leaf) => leaf.current)?.id;
+  const actions: ItemActions = {
+    sessionId: summary.id,
+    cwd: summary.cwd,
+    starred: view.starred,
+    ...(view.otherBranch ? { readOnly: true } : {}),
+  };
   return (
     <Shell groups={groups} activeId={summary.id}>
       <header class="flex flex-col gap-1 border-b border-base-300 px-4 py-2">
@@ -184,28 +195,35 @@ export function SessionPage({
           </div>
         ) : null}
       </header>
-      <div id="log" class="min-h-0 flex-1 overflow-y-auto px-4">
+      <div id="log" class="relative min-h-0 flex-1 overflow-y-auto px-4">
         <div id="messages" sse-swap="settled" hx-swap="beforeend">
-          <Items
-            items={view.items}
-            actions={{
-              sessionId: summary.id,
-              starred: view.starred,
-              ...(view.otherBranch ? { readOnly: true } : {}),
-            }}
-          />
+          {view.hasMore && view.oldestId !== undefined ? (
+            <LoadEarlier
+              sessionId={summary.id}
+              before={view.oldestId}
+              {...(view.leaf === undefined ? {} : { leaf: view.leaf })}
+            />
+          ) : null}
+          <Items items={view.items} actions={actions} />
         </div>
         <div id="turn" sse-swap="turn" hx-swap="innerHTML">
-          <Items
+          <TurnFragment
             items={view.turn}
-            actions={{
-              sessionId: summary.id,
-              starred: view.starred,
-              ...(view.otherBranch ? { readOnly: true } : {}),
-            }}
+            actions={actions}
+            status={view.status}
           />
         </div>
       </div>
+      <button
+        type="button"
+        id="jump-to-latest"
+        class="btn absolute right-6 bottom-32 z-20 btn-circle shadow btn-sm"
+        aria-label="Jump to the latest message"
+        title="Jump to the latest message"
+        hidden
+      >
+        ↓
+      </button>
       <div
         id="status"
         class="border-t border-base-300 px-4 py-2"
@@ -214,6 +232,13 @@ export function SessionPage({
       >
         <Status view={view} />
       </div>
+      <p
+        id="branch-sync"
+        class="htmx-indicator px-4 py-1 text-xs text-base-content/60"
+        role="status"
+      >
+        Loading branch history. Sending is paused.
+      </p>
       {view.otherBranch ? null : (
         <Composer sessionId={summary.id} cwd={summary.cwd} draft={draft} />
       )}

@@ -32,7 +32,10 @@ export function HtmlLayout(
         <script src={HTMX_SSE_SRC} defer></script>
         <script type="module" src={assets.js}></script>
       </head>
-      <body class="h-dvh overflow-hidden bg-base-100 text-base-content">
+      <body
+        class="h-dvh overflow-hidden bg-base-100 text-base-content"
+        data-mermaid-src={assets.mermaid}
+      >
         {children}
       </body>
     </html>

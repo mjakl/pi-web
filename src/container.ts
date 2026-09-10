@@ -2,6 +2,7 @@ import {
   assistantEntry,
   createFakeWorld,
   type FakeStoredSession,
+  type ScriptedStep,
   userEntry,
 } from "@adapters/fake/index";
 import { createFileTree } from "@adapters/fs/file-tree";
@@ -51,14 +52,71 @@ function demoSessions(cwd: string): FakeStoredSession[] {
   ];
 }
 
+/**
+ * The demo answer: reasoning, a tool call with progress, an edit with a diff,
+ * a subagent, and prose with a code fence and a diagram. Everything the
+ * transcript can render, without a model.
+ */
+function demoScript(cwd: string, prompt: string): ScriptedStep[] {
+  const patch = `--- a/src/answer.ts\n+++ b/src/answer.ts\n@@ -1,3 +1,3 @@\n export function answer() {\n-  return 41;\n+  return 42;\n }\n`;
+  return [
+    { thinking: "Reading the file before changing it, then checking callers." },
+    {
+      tool: "read",
+      arguments: { path: `${cwd}/src/answer.ts` },
+      progress: ["reading src/answer.ts"],
+      result: "export function answer() {\n  return 41;\n}",
+    },
+    {
+      tool: "edit",
+      arguments: { file_path: `${cwd}/src/answer.ts` },
+      progress: ["applying the edit"],
+      details: { patch },
+      result: "Edited src/answer.ts",
+    },
+    {
+      tool: "subagent",
+      arguments: {
+        calls: [
+          { agent: "explorer", prompt: "Find every caller of answer()." },
+        ],
+      },
+      details: {
+        kind: "pi-subagent",
+        results: [
+          {
+            agent: "explorer",
+            exitCode: 0,
+            model: "fake-1",
+            messages: [
+              {
+                role: "assistant",
+                content: [
+                  {
+                    type: "text",
+                    text: "Two callers: `src/main.ts` and the test.",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      result: "explorer finished",
+    },
+    {
+      text: `You asked: **${prompt}**\n\nThis reply comes from the fake runtime, streamed word by word so the page can be checked without a model.\n\n\`\`\`ts\nexport const answer = 42;\n\`\`\`\n\n\`\`\`mermaid\nflowchart LR\n  ask --> think --> tools --> answer\n\`\`\`\n\n| step | state |\n| --- | --- |\n| edit | done |`,
+    },
+  ];
+}
+
 // The only place that knows both the core and the Pi adapters.
 export function createDeps(config: Config): { workspace: Workspace } {
   if (config.runtime === "fake") {
     const world = createFakeWorld({
       sessions: demoSessions(config.defaultCwd),
       delayMs: 40,
-      reply: (prompt) =>
-        `You asked: **${prompt}**\n\nThis reply comes from the fake runtime, streamed word by word so the page can be checked without a model.\n\n\`\`\`ts\nconst answer = 42;\n\`\`\``,
+      script: (prompt) => demoScript(config.defaultCwd, prompt),
     });
     // Files stay real even in the demo world: `@` completion is only worth
     // looking at against an actual checkout.

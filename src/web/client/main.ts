@@ -3,6 +3,7 @@
 import { abortTurn, setUpComposer } from "./composer.ts";
 import { DARK_THEME, LIGHT_THEME, THEME_KEY } from "./theme.ts";
 import { setUpToasts } from "./toasts.ts";
+import { setUpTranscript } from "./transcript.ts";
 
 type Theme = "light" | "dark" | "system";
 
@@ -43,21 +44,6 @@ function setUpTheme(): void {
   darkQuery.addEventListener("change", () => {
     if (storedTheme() === "system") applyTheme("system");
   });
-}
-
-// Keep the reader at the end of the conversation while a turn streams in,
-// unless they scrolled up to read something earlier.
-function setUpScrollFollow(): void {
-  const log = document.getElementById("log");
-  if (!log) return;
-  let stick = true;
-  log.addEventListener("scroll", () => {
-    stick = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-  });
-  document.body.addEventListener("htmx:afterSwap", () => {
-    if (stick) log.scrollTop = log.scrollHeight;
-  });
-  log.scrollTop = log.scrollHeight;
 }
 
 function inTextEntry(target: EventTarget | null): boolean {
@@ -186,7 +172,7 @@ function setUpFilter(): void {
 
 applyTheme(storedTheme());
 setUpTheme();
-setUpScrollFollow();
+setUpTranscript();
 setUpShortcuts();
 setUpFilter();
 setUpUnread();

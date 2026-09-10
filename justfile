@@ -2,6 +2,7 @@ set quiet := true
 
 tailwind := "./node_modules/.bin/tailwindcss -i ./src/web/app.css -o ./static/app.css"
 esbuild := "./node_modules/.bin/esbuild src/web/client/main.ts --bundle --format=esm --target=es2022 --alias:@core=./src/core --outfile=static/client.js"
+esbuild-mermaid := "./node_modules/.bin/esbuild src/web/client/mermaid-lib.ts --bundle --format=esm --target=es2022 --outfile=static/mermaid.js"
 
 # INFO: List all available commands
 default:
@@ -18,6 +19,7 @@ doctor:
 # DEV: Start the server with reload plus the CSS and client-script watchers
 dev: link-pi
     {{ tailwind }}
+    {{ esbuild-mermaid }}
     {{ esbuild }} --sourcemap
     node --watch --import tsx src/main.ts & \
     {{ esbuild }} --sourcemap --watch & \
@@ -28,9 +30,10 @@ dev: link-pi
 build-css:
     {{ tailwind }} --minify
 
-# DEV: Build the client script bundle once
+# DEV: Build the client script bundles once
 build-js:
     {{ esbuild }} --minify
+    {{ esbuild-mermaid }} --minify
 
 # DEV: Start the production server
 start: link-pi build-css build-js

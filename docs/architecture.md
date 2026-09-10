@@ -57,6 +57,13 @@ and a `finished` event carrying the session id. The browser turns that id into
 an unread dot in `localStorage` when the session is not the one on screen; it
 replaces pi-web's 2.5 s polling.
 
+`src/core/transcript.ts` projects one branch into items, and `src/core/turns.ts`
+groups those items into turns, pages them, and writes the activity line. Every
+transcript fragment — a page load, an earlier page, the settled turn appended to
+the log, the running turn — renders through the one `Items` view in
+`src/web/views/Items.tsx`; the running turn renders flat and everything else
+renders grouped.
+
 `src/core/session-entries.ts` derives everything a session's raw entries imply:
 starred answers, statistics and active time, the tip of every branch, and the
 sidebar row summary. The catalog hands the core entries; no rule reads a file.
@@ -103,6 +110,20 @@ composition root and the only importer of Pi adapters.
   behind the package export map. The exported page's recursive tree walks are
   rewritten as iterative ones, or a long session overflows the browser's stack;
   if a rewrite no longer matches the SDK's template the page is still served.
+- **The transcript pages backwards, and defers old reasoning.** A page holds the
+  last 50 items of the branch, extended back to a turn boundary, and a sentinel
+  with `hx-trigger="intersect once"` swaps itself for the page before it; the
+  client keeps the distance to the bottom so the text does not move under the
+  reader. `through=<entryId>` widens a page until a given entry is on it, which
+  is how a link into an unloaded part of a long session works. Once a page
+  carries more than 20,000 characters of thinking, the older blocks are sent as
+  placeholders that fetch their text when opened.
+- **Two lazily-loaded libraries, each in its own bundle.** highlight.js is part
+  of `static/client.js` and colours settled code blocks (never the running turn,
+  whose text changes every frame). Mermaid is larger than everything else put
+  together, so `src/web/client/mermaid-lib.ts` builds to `static/mermaid.js` and
+  the page imports it by URL only when a reader asks for a diagram preview.
+  Source is the default view, as in pi-web.
 - **One client bundle besides htmx.** `src/web/client/main.ts` (scroll-follow,
   theme, keyboard shortcuts) is bundled by esbuild into `static/client.js` and
   loaded as a module with a content hash in its URL. The only inline script is
@@ -135,14 +156,16 @@ pi-web features absent from this slice, roughly in order of value:
    defaults rather than a browser choice persisted into settings.
 3. Extension dialogs (`select`, `confirm`, `input`, `editor`, custom UI) are
    auto-cancelled; widgets and footers are ignored. Extension statuses and
-   notices are shown.
+   notices are shown. Tool output is preformatted text; ANSI escapes are not
+   converted anywhere yet.
 4. Worktree-aware folder picker, project trust dialog (trust is honoured
    read-only from Pi's store), skills and plugins management. Sessions already
    group under the repository a worktree belongs to.
-5. Syntax highlighting, Mermaid preview, lazy loading of long transcripts, the
-   conversation rail with hover previews and star markers. The branch switcher
-   in the header is the placeholder for that rail, and it only refreshes on a
-   page load.
+5. The conversation rail with hover previews, star markers and branch
+   navigation, and the per-turn written-files summary. The branch switcher in
+   the header is the placeholder for that rail, and it only refreshes on a page
+   load. Extension widgets and the ANSI-rendered status shelf are still missing;
+   extension statuses show as plain badges.
 6. PWA, push notifications, completion sound.
 7. A running-session cap. Idle shutdown exists only for drafts Pi never wrote to
    disk (10 minutes), as in pi-web.

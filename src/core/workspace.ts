@@ -41,17 +41,39 @@ import {
 } from "./sessions.ts";
 import {
   assistantItem,
+  type ContentPart,
+  contentParts,
+  deferThinking,
   projectTranscript,
   type TranscriptItem,
 } from "./transcript.ts";
+import { pageItems } from "./turns.ts";
 
 // The application service. Inbound port for every page and partial: the web
 // layer renders what this returns and never touches Pi or the file system.
+
+/** Which slice of which branch a page shows. */
+export type ViewOptions = {
+  /** Branch tip to view; the session's own leaf by default. */
+  leaf?: string;
+  /** How many settled items the page holds. */
+  tail?: number;
+  /** Page backwards from an entry already on screen. */
+  before?: string;
+  /** Widen the page until this entry is part of it. */
+  through?: string;
+};
 
 export type SessionView = {
   summary: SessionSummary;
   /** Settled conversation, before the current turn. */
   items: TranscriptItem[];
+  /** Older entries exist before the first item on the page. */
+  hasMore: boolean;
+  /** The oldest item on the page: the cursor for the previous page. */
+  oldestId?: string;
+  /** The branch being viewed, so paging requests stay on it. */
+  leaf?: string;
   /** The current (or just finished) turn, re-rendered while streaming. */
   turn: TranscriptItem[];
   status: LiveStatus | null;
@@ -133,21 +155,30 @@ export function createWorkspace(deps: {
     live: LiveSession,
     summary: SessionSummary,
     models: ModelListing,
+    options: ViewOptions,
   ): SessionView {
     const snapshot = live.snapshot();
     const settled = projectTranscript(
       snapshot.branch.slice(0, snapshot.turnStart),
     );
+    const page = pageItems(settled.items, options);
+    deferThinking(page.items);
     const turn = projectTranscript(snapshot.branch.slice(snapshot.turnStart));
     if (snapshot.partial) {
       turn.items.push(assistantItem("partial", snapshot.partial));
     }
     if (snapshot.bash) {
       turn.items.push({
-        kind: "note",
+        kind: "bash",
         entryId: "bash-pending",
-        customType: "bash",
-        text: `$ ${snapshot.bash.command}\n${snapshot.bash.output}`,
+        command: snapshot.bash.command,
+        output: snapshot.bash.output,
+        exitCode: null,
+        cancelled: false,
+        truncated: false,
+        excluded: false,
+        pending: true,
+        timestamp: new Date().toISOString(),
       });
     }
     const { status } = snapshot;
@@ -155,7 +186,10 @@ export function createWorkspace(deps: {
     const fallback = turn.lastContextTokens ?? settled.lastContextTokens;
     return {
       summary,
-      items: settled.items,
+      items: page.items,
+      hasMore: page.hasMore,
+      ...(page.oldestId === undefined ? {} : { oldestId: page.oldestId }),
+      ...(options.leaf === undefined ? {} : { leaf: options.leaf }),
       turn: turn.items,
       status,
       usage: contextUsage({
@@ -177,9 +211,11 @@ export function createWorkspace(deps: {
   async function storedView(
     stored: SessionRead,
     summary: SessionSummary,
-    leafId: string | undefined,
+    options: ViewOptions,
   ): Promise<SessionView> {
     const transcript = projectTranscript(stored.branch);
+    const page = pageItems(transcript.items, options);
+    deferThinking(page.items);
     const listing = await modelsFor(stored.summary.cwd);
     const model = transcript.lastModel
       ? listing.models.find(
@@ -190,7 +226,10 @@ export function createWorkspace(deps: {
       : undefined;
     return {
       summary,
-      items: transcript.items,
+      items: page.items,
+      hasMore: page.hasMore,
+      ...(page.oldestId === undefined ? {} : { oldestId: page.oldestId }),
+      ...(options.leaf === undefined ? {} : { leaf: options.leaf }),
       turn: [],
       status: null,
       usage: contextUsage({
@@ -201,7 +240,7 @@ export function createWorkspace(deps: {
       modelWarnings: listing.warnings,
       starred: readStars(stored.entries),
       leaves: branchLeaves(stored.entries, stored.branch.at(-1)?.id ?? null),
-      otherBranch: leafId !== undefined && leafId !== stored.leafId,
+      otherBranch: options.leaf !== undefined && options.leaf !== stored.leafId,
     };
   }
 
@@ -220,21 +259,36 @@ export function createWorkspace(deps: {
     return deps.sessions.read(id);
   }
 
+  /** The content parts of one entry, whichever kind of message it holds. */
+  async function entryContent(
+    id: string,
+    entryId: string,
+  ): Promise<ContentPart[]> {
+    const stored = await entriesOf(id);
+    const entry = stored?.entries.find((item) => item.id === entryId);
+    if (entry?.type === "message") {
+      const { message } = entry;
+      return "content" in message ? contentParts(message.content) : [];
+    }
+    if (entry?.type === "custom_message") return contentParts(entry.content);
+    return [];
+  }
+
   async function viewSession(
     id: string,
-    leafId?: string,
+    options: ViewOptions = {},
   ): Promise<SessionView | undefined> {
-    const live = leafId === undefined ? deps.runtime.get(id) : undefined;
+    const live = options.leaf === undefined ? deps.runtime.get(id) : undefined;
     if (live) {
       const summary = await summaryOf(id);
       if (!summary) return undefined;
-      return liveView(live, summary, await modelsFor(summary.cwd));
+      return liveView(live, summary, await modelsFor(summary.cwd), options);
     }
-    const stored = await deps.sessions.read(id, leafId);
+    const stored = await deps.sessions.read(id, options.leaf);
     if (!stored) return undefined;
     const [summary] = await decorate([stored.summary]);
     if (!summary) return undefined;
-    return storedView(stored, summary, leafId);
+    return storedView(stored, summary, options);
   }
 
   async function stop(id: string): Promise<void> {
@@ -397,21 +451,35 @@ export function createWorkspace(deps: {
       await live.runBash(command, excludeFromContext);
     },
 
-    /** One image of a user message, straight out of the session file. */
+    /**
+     * One image of an entry, straight out of the session file: an attachment
+     * of a question, or an image a tool returned. Indexed among the image
+     * parts of that entry, which is what the transcript renders links for.
+     */
     async entryImage(
       id: string,
       entryId: string,
       index: number,
     ): Promise<ImageAttachment | undefined> {
-      const stored = await entriesOf(id);
-      const entry = stored?.entries.find((item) => item.id === entryId);
-      if (entry?.type !== "message" || entry.message.role !== "user") {
-        return undefined;
-      }
-      const { content } = entry.message;
-      if (typeof content === "string") return undefined;
-      const image = content.filter((part) => part.type === "image")[index];
-      return image ? { data: image.data, mimeType: image.mimeType } : undefined;
+      const image = (await entryContent(id, entryId)).filter(
+        (part) => part.type === "image",
+      )[index];
+      return typeof image?.data === "string" &&
+        typeof image.mimeType === "string"
+        ? { data: image.data, mimeType: image.mimeType }
+        : undefined;
+    },
+
+    /** One thinking block, for the ones the page left out of a long session. */
+    async entryThinking(
+      id: string,
+      entryId: string,
+      index: number,
+    ): Promise<string | undefined> {
+      const block = (await entryContent(id, entryId)).filter(
+        (part) => part.type === "thinking",
+      )[index];
+      return typeof block?.thinking === "string" ? block.thinking : undefined;
     },
 
     /** The `@` index for a folder inside the session's own working folder. */

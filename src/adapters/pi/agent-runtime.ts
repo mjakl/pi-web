@@ -8,10 +8,12 @@ import type {
   ModelOption,
   PromptInput,
   QueuedMessage,
+  RunningTool,
   RuntimeEvent,
   ThinkingChoice,
   ThinkingLevel,
 } from "@core/ports";
+import { toolProgress } from "@core/transcript";
 import { STAR_TYPE } from "@core/session-entries";
 import type { SessionSummary } from "@core/sessions";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
@@ -47,6 +49,8 @@ class PiLiveSession implements LiveSession {
   private compaction: LiveStatus["compaction"] = null;
   private bash: { command: string; output: string } | undefined;
   private readonly statuses = new Map<string, string>();
+  private readonly tools = new Map<string, RunningTool>();
+  private retry: LiveStatus["retry"] = null;
   private notices: LiveStatus["notices"] = [];
   private readonly listeners = new Set<(event: LiveEvent) => void>();
   private readonly unsubscribe: () => void;
@@ -95,6 +99,35 @@ class PiLiveSession implements LiveSession {
         this.partial = undefined;
         this.emit({ type: "activity" });
         break;
+      case "tool_execution_start":
+        this.tools.set(event.toolCallId, { name: event.toolName });
+        this.emit({ type: "activity" });
+        break;
+      case "tool_execution_update": {
+        const progress = toolProgress(event.partialResult);
+        this.tools.set(event.toolCallId, {
+          name: event.toolName,
+          ...(progress === undefined ? {} : { progress }),
+        });
+        this.emit({ type: "activity" });
+        break;
+      }
+      case "tool_execution_end":
+        this.tools.delete(event.toolCallId);
+        this.emit({ type: "activity" });
+        break;
+      case "auto_retry_start":
+        this.retry = {
+          attempt: event.attempt,
+          maxAttempts: event.maxAttempts,
+          message: event.errorMessage,
+        };
+        this.emit({ type: "activity" });
+        break;
+      case "auto_retry_end":
+        this.retry = null;
+        this.emit({ type: "activity" });
+        break;
       case "compaction_start":
         this.compacting = true;
         this.emit({ type: "activity" });
@@ -131,16 +164,13 @@ class PiLiveSession implements LiveSession {
         break;
       case "agent_settled":
         this.partial = undefined;
+        this.tools.clear();
+        this.retry = null;
         this.emit({ type: "turn_done" });
         break;
       case "agent_start":
       case "agent_end":
       case "entry_appended":
-      case "tool_execution_start":
-      case "tool_execution_update":
-      case "tool_execution_end":
-      case "auto_retry_start":
-      case "auto_retry_end":
       case "session_info_changed":
       case "thinking_level_changed":
         this.emit({ type: "activity" });
@@ -210,6 +240,8 @@ class PiLiveSession implements LiveSession {
       contextTokens: this.inner.getContextUsage()?.tokens ?? null,
       queue: this.queue,
       compaction: this.compaction,
+      tools: [...this.tools.values()],
+      retry: this.retry,
       statuses: Object.fromEntries(this.statuses),
       notices,
     };

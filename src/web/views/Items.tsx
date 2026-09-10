@@ -1,65 +1,153 @@
 import { formatTokens } from "@core/context-usage";
-import type { ToolCallView, TranscriptItem } from "@core/transcript";
+import {
+  type DiffCell,
+  type DiffFile,
+  parseUnifiedPatch,
+  patchLines,
+} from "@core/patch";
+import type {
+  AssistantBlock,
+  AssistantItem,
+  BashItem,
+  CompactionItem,
+  NoteItem,
+  SubagentRun,
+  SubagentView,
+  ToolCallView,
+  TranscriptItem,
+  UserItem,
+} from "@core/transcript";
+import type { LiveStatus } from "@core/ports";
+import {
+  activityLabel,
+  groupTurns,
+  timestampedEntries,
+  type Turn,
+} from "@core/turns";
 import { renderMarkdown } from "@web/markdown";
 import { raw } from "hono/html";
-
-function Markdown({ source }: { source: string }) {
-  return <div class="prose max-w-none">{raw(renderMarkdown(source))}</div>;
-}
-
-function ToolCall({ call }: { call: ToolCallView }) {
-  const args = JSON.stringify(call.arguments, null, 2);
-  const result = call.result;
-  return (
-    <details class="collapse-arrow collapse my-2 bg-base-200 text-sm">
-      <summary class="collapse-title min-h-0 py-2 font-mono">
-        {call.name}
-        {result ? (
-          <span
-            class={result.isError ? "ml-2 text-error" : "ml-2 text-success"}
-          >
-            {result.isError ? "failed" : "done"}
-          </span>
-        ) : (
-          <span class="ml-2 text-base-content/60">no result yet</span>
-        )}
-      </summary>
-      <div class="collapse-content">
-        <pre class="overflow-x-auto text-xs whitespace-pre-wrap">{args}</pre>
-        {result ? (
-          <pre class="mt-2 max-h-96 overflow-auto text-xs whitespace-pre-wrap">
-            {result.text}
-          </pre>
-        ) : null}
-      </div>
-    </details>
-  );
-}
 
 /** What the transcript may do to the session it belongs to. */
 export type ItemActions = {
   sessionId: string;
+  /** Resolves relative file links in Markdown. */
+  cwd: string;
   starred: Set<string>;
   /** Set while another branch is being viewed: nothing may be changed. */
   readOnly?: boolean;
+  /** Entry ids whose message shows a time. */
+  timestamps?: Set<string>;
+  /** Inside the running turn: no actions, no diagram preview. */
+  live?: boolean;
 };
 
-function MessageActions({
+function Markdown({
+  source,
+  actions,
+}: {
+  source: string;
+  actions?: ItemActions;
+}) {
+  return (
+    <div class="prose max-w-none break-words">
+      {raw(
+        renderMarkdown(source, {
+          ...(actions ? { cwd: actions.cwd } : {}),
+          ...(actions?.live ? { live: true } : {}),
+        }),
+      )}
+    </div>
+  );
+}
+
+/** Copies the text the button hides next to itself. */
+function Copy({ text, label = "Copy" }: { text: string; label?: string }) {
+  if (text === "") return <></>;
+  return (
+    <span class="inline-flex">
+      <span hidden data-copy-source>
+        {text}
+      </span>
+      <button type="button" class="btn btn-ghost btn-xs" data-copy>
+        {label}
+      </button>
+    </span>
+  );
+}
+
+function Time({ value }: { value: string }) {
+  const at = new Date(value);
+  if (Number.isNaN(at.getTime())) return <></>;
+  return (
+    <time class="text-[10px] text-base-content/50" datetime={value}>
+      {at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+    </time>
+  );
+}
+
+function imageUrl(
+  actions: ItemActions,
+  entryId: string,
+  index: number,
+): string {
+  return `/sessions/${actions.sessionId}/entries/${entryId}/image/${String(index)}`;
+}
+
+function Images({
+  entryId,
+  indices,
+  actions,
+  size,
+}: {
+  entryId: string;
+  indices: number[];
+  actions?: ItemActions;
+  size: "thumb" | "full";
+}) {
+  if (!actions || indices.length === 0) return <></>;
+  return (
+    <div class="my-2 flex flex-wrap gap-2">
+      {indices.map((index) => (
+        <a href={imageUrl(actions, entryId, index)} target="_blank">
+          <img
+            class={
+              size === "thumb"
+                ? "max-h-60 max-w-60 rounded border border-base-300 object-contain"
+                : "max-h-[520px] max-w-full rounded border border-base-300 object-contain"
+            }
+            alt={`Image ${String(index + 1)}`}
+            loading="lazy"
+            src={imageUrl(actions, entryId, index)}
+          />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+/** Branch and fork: the same two actions on every kind of message. */
+function HistoryActions({
   entryId,
   actions,
+  children,
 }: {
   entryId: string;
   actions: ItemActions;
+  children?: unknown;
 }) {
+  if (actions.readOnly || actions.live) return <>{children}</>;
   const post = (path: string) => `/sessions/${actions.sessionId}/${path}`;
   const swap = {
     "hx-vals": JSON.stringify({ entryId }),
     "hx-target": "body",
     "hx-swap": "innerHTML",
+    "hx-indicator": "#branch-sync",
   };
   return (
-    <div class="mt-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+    <div class="flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+      {children}
       <button
+        type="button"
         class="btn btn-ghost btn-xs"
         title="Continue from this point within this session"
         hx-post={post("navigate")}
@@ -68,21 +156,13 @@ function MessageActions({
         New branch
       </button>
       <button
+        type="button"
         class="btn btn-ghost btn-xs"
         title="Copy the history up to this point into a separate session"
         hx-post={post("fork")}
         {...swap}
       >
         New session
-      </button>
-      <button
-        class="btn btn-ghost text-error btn-xs"
-        title="Remove this message and everything after it, then edit it again"
-        hx-post={post("rewind")}
-        hx-confirm="Remove this message and all later history?"
-        {...swap}
-      >
-        Rewind
       </button>
     </div>
   );
@@ -98,6 +178,7 @@ export function StarButton({
   const starred = actions.starred.has(entryId);
   return (
     <button
+      type="button"
       class={`btn btn-ghost btn-xs ${starred ? "text-warning" : ""}`}
       aria-pressed={starred ? "true" : "false"}
       aria-label={starred ? "Unstar answer" : "Star answer"}
@@ -111,132 +192,773 @@ export function StarButton({
   );
 }
 
-export function Item({
+function UserMessage({
   item,
   actions,
 }: {
-  item: TranscriptItem;
+  item: UserItem;
   actions?: ItemActions;
 }) {
-  const editable = actions && !actions.readOnly;
-  switch (item.kind) {
-    case "user":
-      return (
-        <article
-          id={`entry-${item.entryId}`}
-          data-role="user"
-          class="group my-3 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3"
-        >
-          <div class="whitespace-pre-wrap" data-user-text>
+  const editable = actions && !actions.readOnly && !actions.live;
+  return (
+    <article
+      id={`entry-${item.entryId}`}
+      data-role="user"
+      class="group -mx-4 my-4 bg-primary/5 px-4 py-3"
+    >
+      <div class="ml-auto flex max-w-[85%] flex-col items-end gap-1">
+        <Images
+          entryId={item.entryId}
+          indices={item.images}
+          actions={actions}
+          size="thumb"
+        />
+        {item.command === undefined ? (
+          <div class="w-full rounded-box bg-base-200 px-3 py-2 whitespace-pre-wrap">
             {item.text}
           </div>
-          {item.imageCount > 0 && actions ? (
-            <div class="mt-2 flex flex-wrap gap-2">
-              {Array.from({ length: item.imageCount }, (_, index) => (
-                <img
-                  class="h-14 w-14 rounded border border-base-300 object-cover"
-                  alt={`Attachment ${String(index + 1)}`}
-                  loading="lazy"
-                  src={`/sessions/${actions.sessionId}/entries/${item.entryId}/image/${String(index)}`}
-                />
-              ))}
+        ) : (
+          <details class="w-full rounded-box bg-base-200 px-3 py-2">
+            <summary class="cursor-pointer font-mono text-sm">
+              {item.command}
+            </summary>
+            <Markdown source={item.text} actions={actions} />
+          </details>
+        )}
+        <div class="flex items-center gap-1">
+          <Copy text={item.command ?? item.text} />
+          {editable && actions ? (
+            <>
+              <button
+                type="button"
+                class="btn btn-ghost text-error btn-xs"
+                title="Remove this message and everything after it, then edit it again"
+                hx-post={`/sessions/${actions.sessionId}/rewind`}
+                hx-vals={JSON.stringify({ entryId: item.entryId })}
+                hx-confirm="Remove this message and all later history?"
+                hx-target="body"
+                hx-swap="innerHTML"
+              >
+                Rewind
+              </button>
+              <HistoryActions entryId={item.entryId} actions={actions} />
+            </>
+          ) : null}
+          {actions?.timestamps?.has(item.entryId) ? (
+            <Time value={item.timestamp} />
+          ) : null}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ThinkingBlock({
+  item,
+  block,
+  actions,
+}: {
+  item: AssistantItem;
+  block: Extract<AssistantBlock, { kind: "thinking" }>;
+  actions?: ItemActions;
+}) {
+  const fetchUrl =
+    block.deferred && actions
+      ? `/sessions/${actions.sessionId}/entries/${item.entryId}/thinking/${String(block.index)}`
+      : undefined;
+  return (
+    <details class="my-2 rounded-box border border-base-300 text-sm">
+      <summary class="cursor-pointer px-3 py-1 text-base-content/70">
+        Thinking
+        {block.seconds === undefined ? null : (
+          <span class="ml-2 text-xs text-base-content/50">
+            {String(block.seconds)}s
+          </span>
+        )}
+      </summary>
+      <div class="px-3 pb-2 text-base-content/70">
+        {fetchUrl === undefined ? (
+          <Markdown source={block.text} actions={actions} />
+        ) : (
+          <div
+            hx-get={fetchUrl}
+            hx-trigger="toggle once from:closest details"
+            hx-swap="outerHTML"
+          >
+            Loading thinking...
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function DiffCellText({ cell }: { cell: DiffCell }) {
+  return (
+    <>
+      <span class="w-10 shrink-0 pr-1 text-right text-base-content/40 select-none">
+        {cell.lineNo === null ? "" : String(cell.lineNo)}
+      </span>
+      <span class="w-4 shrink-0 select-none">
+        {cell.type === "added" ? "+" : cell.type === "removed" ? "-" : " "}
+      </span>
+      <span class="break-all whitespace-pre-wrap">{cell.text}</span>
+    </>
+  );
+}
+
+const CELL_CLASS = {
+  added: "bg-success/15",
+  removed: "bg-error/15",
+  context: "",
+  empty: "bg-base-200",
+} as const;
+
+function SplitDiff({ files }: { files: DiffFile[] }) {
+  return (
+    <div class="my-2 max-h-[560px] overflow-auto rounded-box border border-base-300 font-mono text-xs">
+      {files.map((file) => (
+        <div>
+          {files.length > 1 ? (
+            <div class="sticky top-0 z-10 flex justify-between gap-2 bg-base-200 px-2 py-1 text-base-content/60">
+              <span class="truncate">{file.oldPath ?? "Before"}</span>
+              <span class="truncate">{file.newPath ?? "After"}</span>
             </div>
           ) : null}
-          {editable && actions ? (
-            <MessageActions entryId={item.entryId} actions={actions} />
+          {file.rows.map((row) =>
+            row.type === "hunk" ? null : (
+              <div class="grid grid-cols-2">
+                <div class={`flex ${CELL_CLASS[row.left.type]}`}>
+                  <DiffCellText cell={row.left} />
+                </div>
+                <div class={`flex ${CELL_CLASS[row.right.type]}`}>
+                  <DiffCellText cell={row.right} />
+                </div>
+              </div>
+            ),
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const PATCH_LINE_CLASS = {
+  added: "border-success bg-success/10",
+  removed: "border-error bg-error/10",
+  hunk: "border-info bg-info/10",
+  context: "border-transparent",
+} as const;
+
+/** Fallback when the patch does not parse: the text, lightly classified. */
+function PatchText({ patch }: { patch: string }) {
+  return (
+    <div class="my-2 max-h-[520px] overflow-auto rounded-box border border-base-300 font-mono text-xs">
+      {patchLines(patch).map((line) => (
+        <div class={`flex border-l-[3px] ${PATCH_LINE_CLASS[line.type]}`}>
+          <span class="w-10 shrink-0 pr-1 text-right text-base-content/40 select-none">
+            {String(line.lineNo)}
+          </span>
+          <span class="break-all whitespace-pre-wrap">{line.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Diff({ patch }: { patch: string }) {
+  const files = parseUnifiedPatch(patch);
+  return files === null ? (
+    <PatchText patch={patch} />
+  ) : (
+    <SplitDiff files={files} />
+  );
+}
+
+const STATUS_GLYPH = {
+  completed: "✓",
+  failed: "!",
+  cancelled: "—",
+  unknown: "—",
+} as const;
+
+function SubagentRunBody({
+  run,
+  prompt,
+  actions,
+}: {
+  run: SubagentRun;
+  prompt: string;
+  actions?: ItemActions;
+}) {
+  return (
+    <div class="flex flex-col gap-2">
+      <div class="text-xs text-base-content/60">
+        {run.model ?? ""}{" "}
+        {run.cwd ? <span title={run.cwd}>{run.cwd}</span> : null}
+      </div>
+      {run.error === undefined ? null : (
+        <p class="text-sm text-error">{run.error}</p>
+      )}
+      {run.output === "" ? (
+        <p class="text-sm text-base-content/60 italic">
+          {run.handledWithoutAgent
+            ? "Prompt handled without an agent response."
+            : "No output."}
+        </p>
+      ) : (
+        <Markdown source={run.output} actions={actions} />
+      )}
+      {run.captureTruncated ? (
+        <p class="text-xs text-warning">Output was truncated.</p>
+      ) : null}
+      <details class="text-sm">
+        <summary class="cursor-pointer text-base-content/60">Prompt</summary>
+        <pre class="overflow-auto text-xs whitespace-pre-wrap">{prompt}</pre>
+      </details>
+    </div>
+  );
+}
+
+function Subagent({
+  view,
+  call,
+  actions,
+}: {
+  view: SubagentView;
+  call: ToolCallView;
+  actions?: ItemActions;
+}) {
+  const { calls, runs } = view;
+  const running = call.result === undefined;
+  const counts = new Map<string, number>();
+  for (const run of runs ?? []) {
+    counts.set(run.status, (counts.get(run.status) ?? 0) + 1);
+  }
+  const summary =
+    calls.length === 1
+      ? `Subagent · ${calls[0]?.agent ?? ""}`
+      : `Subagent · ${String(calls.length)} agents`;
+  return (
+    <details
+      class={`my-2 rounded-box border text-sm ${
+        view.failed ? "border-error/50 bg-error/5" : "border-base-300"
+      }`}
+    >
+      <summary class="flex cursor-pointer flex-wrap items-center gap-2 px-3 py-1">
+        <span class="font-mono text-xs">{summary}</span>
+        {running ? (
+          <span class="text-xs text-base-content/60">◌ running</span>
+        ) : (
+          <span class="text-xs text-base-content/60">
+            {[...counts.entries()]
+              .map(([status, count]) => `${String(count)} ${status}`)
+              .join(" · ")}
+          </span>
+        )}
+        {call.result?.seconds === undefined ? null : (
+          <span class="text-xs text-base-content/50">
+            {String(call.result.seconds)}s
+          </span>
+        )}
+      </summary>
+      <div class="flex flex-col gap-2 px-3 pb-2">
+        {calls.map((item, index) => {
+          const run = runs?.[index];
+          return (
+            <details open={calls.length === 1}>
+              <summary class="cursor-pointer">
+                <span class="font-mono text-xs">{item.agent}</span>
+                <span class="ml-2 text-xs text-base-content/60">
+                  {run ? `${STATUS_GLYPH[run.status]} ${run.status}` : "◌"}
+                </span>
+              </summary>
+              {run ? (
+                <SubagentRunBody
+                  run={run}
+                  prompt={item.prompt}
+                  actions={actions}
+                />
+              ) : (
+                <pre class="overflow-auto text-xs whitespace-pre-wrap">
+                  {item.prompt}
+                </pre>
+              )}
+            </details>
+          );
+        })}
+        {runs === null && call.result ? (
+          <div>
+            <div class="text-xs text-base-content/60">Result</div>
+            <pre class="max-h-96 overflow-auto text-xs whitespace-pre-wrap">
+              {call.result.text}
+            </pre>
+          </div>
+        ) : null}
+        <details>
+          <summary class="cursor-pointer text-xs text-base-content/60">
+            Raw input and output
+          </summary>
+          <pre class="max-h-96 overflow-auto text-xs whitespace-pre-wrap">
+            {JSON.stringify(call.arguments, null, 2)}
+          </pre>
+          {call.result ? (
+            <pre class="max-h-96 overflow-auto text-xs whitespace-pre-wrap">
+              {call.result.text}
+            </pre>
           ) : null}
-        </article>
-      );
+        </details>
+      </div>
+    </details>
+  );
+}
+
+/** Pi's own edit tools show the diff instead of the arguments they took. */
+function isEditToolName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return (
+    lower === "edit" ||
+    lower.startsWith("edit_") ||
+    lower.endsWith(".edit") ||
+    lower.endsWith("_edit") ||
+    lower.includes("str_replace") ||
+    lower.includes("replace_editor")
+  );
+}
+
+function ToolResultBody({
+  call,
+  actions,
+}: {
+  call: ToolCallView;
+  actions?: ItemActions;
+}) {
+  const result = call.result;
+  if (!result) return <></>;
+  if (result.patch !== undefined) return <Diff patch={result.patch} />;
+  const empty =
+    result.text.trim() === "" || result.text.trim() === "(no output)";
+  return (
+    <>
+      <Images
+        entryId={result.entryId}
+        indices={result.images}
+        actions={actions}
+        size="full"
+      />
+      {empty ? (
+        result.images.length > 0 ? null : (
+          <p class="text-xs text-base-content/50 italic">(no output)</p>
+        )
+      ) : (
+        <pre
+          class={`max-h-[400px] overflow-auto text-xs break-all whitespace-pre-wrap ${
+            result.isError ? "text-error" : ""
+          }`}
+        >
+          {result.text}
+        </pre>
+      )}
+    </>
+  );
+}
+
+function ToolCard({
+  call,
+  actions,
+}: {
+  call: ToolCallView;
+  actions?: ItemActions;
+}) {
+  if (call.subagent) {
+    return <Subagent view={call.subagent} call={call} actions={actions} />;
+  }
+  const failed = call.result?.isError === true;
+  const showInput =
+    call.partialArguments !== undefined || !isEditToolName(call.name);
+  return (
+    <details
+      class={`my-2 rounded-box border text-sm ${
+        failed ? "border-error/50 bg-error/5" : "border-success/40 bg-success/5"
+      }`}
+      data-tool={call.name}
+    >
+      <summary class="flex cursor-pointer flex-wrap items-center gap-2 px-3 py-1">
+        <span
+          class={`font-mono text-xs ${failed ? "text-error" : "text-success"}`}
+        >
+          {call.name}
+        </span>
+        <span class="min-w-0 flex-1 truncate text-xs text-base-content/60">
+          {call.partialArguments === undefined
+            ? call.preview
+            : "Generating parameters..."}
+        </span>
+        {call.result?.seconds === undefined ? null : (
+          <span class="text-xs text-base-content/50">
+            {String(call.result.seconds)}s
+          </span>
+        )}
+      </summary>
+      <div class="px-3 pb-2">
+        {showInput ? (
+          <pre class="max-h-72 overflow-auto text-xs whitespace-pre-wrap">
+            {call.partialArguments ?? JSON.stringify(call.arguments, null, 2)}
+          </pre>
+        ) : null}
+        <ToolResultBody call={call} actions={actions} />
+      </div>
+    </details>
+  );
+}
+
+function Blocks({
+  item,
+  actions,
+}: {
+  item: AssistantItem;
+  actions?: ItemActions;
+}) {
+  return (
+    <div class="flex flex-col gap-2">
+      {item.blocks.map((block) => {
+        switch (block.kind) {
+          case "text":
+            return <Markdown source={block.text} actions={actions} />;
+          case "thinking":
+            return (
+              <ThinkingBlock item={item} block={block} actions={actions} />
+            );
+          case "image":
+            return (
+              <Images
+                entryId={item.entryId}
+                indices={[block.index]}
+                actions={actions}
+                size="full"
+              />
+            );
+          default:
+            return <ToolCard call={block.call} actions={actions} />;
+        }
+      })}
+    </div>
+  );
+}
+
+function usageLine(item: AssistantItem): string {
+  const { usage } = item;
+  if (!usage) return "";
+  const number = (value: number) => value.toLocaleString("en-US");
+  return [
+    usage.input > 0 ? `${number(usage.input)} in` : "",
+    usage.output > 0 ? `${number(usage.output)} out` : "",
+    usage.cacheRead > 0 ? `${number(usage.cacheRead)} cache R` : "",
+    usage.cacheWrite > 0 ? `${number(usage.cacheWrite)} cache W` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function answerText(item: AssistantItem): string {
+  return item.blocks
+    .filter((block) => block.kind === "text")
+    .map((block) => block.text)
+    .join("\n");
+}
+
+function AssistantMessage({
+  item,
+  actions,
+  starrable,
+}: {
+  item: AssistantItem;
+  actions?: ItemActions;
+  starrable?: boolean;
+}) {
+  if (
+    item.blocks.length === 0 &&
+    item.errorMessage === undefined &&
+    item.stopReason !== "aborted"
+  ) {
+    return <></>;
+  }
+  const editable = actions && !actions.readOnly && !actions.live;
+  const usage = usageLine(item);
+  return (
+    <article
+      id={`entry-${item.entryId}`}
+      data-role="assistant"
+      class="group my-3"
+    >
+      <div class="flex items-center gap-2 text-xs text-base-content/50">
+        {editable &&
+        actions &&
+        (starrable || actions.starred.has(item.entryId)) ? (
+          <StarButton entryId={item.entryId} actions={actions} />
+        ) : null}
+        <span class="font-mono">{item.model}</span>
+      </div>
+      <Blocks item={item} actions={actions} />
+      {item.errorMessage === undefined && item.stopReason !== "error" ? null : (
+        <div class="my-2 alert text-sm alert-error" role="alert">
+          Error: {item.errorMessage ?? "Unknown provider error"}
+        </div>
+      )}
+      {item.stopReason === "aborted" ? (
+        <div class="text-xs text-base-content/60">Stopped</div>
+      ) : null}
+      <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-base-content/50">
+        {usage === "" ? null : <span>{usage}</span>}
+        <Copy text={answerText(item)} />
+        {actions && !actions.live ? (
+          <HistoryActions entryId={item.entryId} actions={actions} />
+        ) : null}
+        <span class="flex-1" />
+        {actions?.timestamps?.has(item.entryId) ? (
+          <Time value={item.timestamp} />
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function FileList({ title, files }: { title: string; files: string[] }) {
+  if (files.length === 0) return <></>;
+  return (
+    <div>
+      <div class="text-xs font-semibold">{title}</div>
+      <ul class="list-inside list-disc font-mono text-xs">
+        {files.map((file) => (
+          <li class="truncate" title={file}>
+            {file}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Compaction({
+  item,
+  actions,
+}: {
+  item: CompactionItem;
+  actions?: ItemActions;
+}) {
+  const files = item.readFiles.length + item.modifiedFiles.length;
+  return (
+    <details
+      id={`entry-${item.entryId}`}
+      class="group my-4 rounded-box border border-dashed border-warning/50 px-4 py-2 text-sm"
+    >
+      <summary
+        class="cursor-pointer text-base-content/70"
+        aria-label={`Conversation compacted: ${formatTokens(item.tokensBefore)} tokens before`}
+      >
+        Conversation compacted · {formatTokens(item.tokensBefore)} tokens before
+      </summary>
+      <p class="my-2 text-xs text-base-content/60">
+        Everything before this point was replaced by the summary below.
+      </p>
+      {item.summary === "" ? (
+        <p class="text-xs italic">No summary</p>
+      ) : (
+        <Markdown source={item.summary} actions={actions} />
+      )}
+      {files > 0 ? (
+        <details class="mt-2">
+          <summary class="cursor-pointer text-xs text-base-content/60">
+            File context ({String(item.readFiles.length)} read,{" "}
+            {String(item.modifiedFiles.length)} modified)
+          </summary>
+          <div class="flex flex-col gap-2 pt-1">
+            <FileList title="Read" files={item.readFiles} />
+            <FileList title="Modified" files={item.modifiedFiles} />
+          </div>
+        </details>
+      ) : null}
+    </details>
+  );
+}
+
+function Note({ item, actions }: { item: NoteItem; actions?: ItemActions }) {
+  return (
+    <details
+      id={`entry-${item.entryId}`}
+      class="group my-3 rounded-box border border-base-300 px-4 py-2 text-sm"
+    >
+      <summary class="flex cursor-pointer flex-wrap items-center gap-2">
+        <span class="font-mono text-xs">{item.customType || "extension"}</span>
+        <span class="min-w-0 flex-1 truncate text-xs text-base-content/60">
+          {item.preview === "" ? "Show extension message" : item.preview}
+        </span>
+      </summary>
+      <Images
+        entryId={item.entryId}
+        indices={item.images}
+        actions={actions}
+        size="thumb"
+      />
+      {item.text === "" ? (
+        <p class="text-xs italic">No message</p>
+      ) : (
+        <Markdown source={item.text} actions={actions} />
+      )}
+      <div class="mt-1 flex items-center gap-1">
+        <Copy text={item.text === "" ? (item.details ?? "") : item.text} />
+        {actions ? (
+          <HistoryActions entryId={item.entryId} actions={actions} />
+        ) : null}
+      </div>
+      {item.details === undefined ? null : (
+        <details class="mt-1">
+          <summary class="cursor-pointer text-xs text-base-content/60">
+            Show details
+          </summary>
+          <pre class="max-h-[360px] overflow-auto text-xs whitespace-pre-wrap">
+            {item.details}
+          </pre>
+        </details>
+      )}
+    </details>
+  );
+}
+
+function Bash({ item, actions }: { item: BashItem; actions?: ItemActions }) {
+  const failed =
+    item.cancelled || (item.exitCode !== null && item.exitCode !== 0);
+  const name = item.excluded ? "bash (local)" : "bash";
+  return (
+    <details
+      id={`entry-${item.entryId}`}
+      open
+      class={`group my-2 rounded-box border text-sm ${
+        failed ? "border-error/50 bg-error/5" : "border-success/40 bg-success/5"
+      }`}
+    >
+      <summary class="flex cursor-pointer flex-wrap items-center gap-2 px-3 py-1">
+        <span
+          class={`font-mono text-xs ${failed ? "text-error" : "text-success"}`}
+        >
+          {name}
+        </span>
+        <span class="min-w-0 flex-1 truncate font-mono text-xs text-base-content/60">
+          {item.command}
+        </span>
+        {item.pending ? (
+          <span class="loading loading-xs loading-dots" aria-label="Running" />
+        ) : null}
+      </summary>
+      <div class="px-3 pb-2">
+        {item.pending && item.output === "" ? null : (
+          <pre class="max-h-[400px] overflow-auto text-xs break-all whitespace-pre-wrap">
+            {item.output}
+          </pre>
+        )}
+        <div class="flex items-center gap-2">
+          {item.truncated && item.outputPath !== undefined && actions ? (
+            <a
+              class="link text-xs"
+              target="_blank"
+              rel="noreferrer"
+              href={`/sessions/${actions.sessionId}/bash-output?path=${encodeURIComponent(item.outputPath)}`}
+            >
+              View full output
+            </a>
+          ) : null}
+          <Copy text={item.output} />
+          {actions && !item.pending ? (
+            <HistoryActions entryId={item.entryId} actions={actions} />
+          ) : null}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+export function Item({
+  item,
+  actions,
+  starrable,
+}: {
+  item: TranscriptItem;
+  actions?: ItemActions;
+  starrable?: boolean;
+}) {
+  switch (item.kind) {
+    case "user":
+      return <UserMessage item={item} actions={actions} />;
     case "assistant":
       return (
-        <article
-          id={`entry-${item.entryId}`}
-          data-role="assistant"
-          class="my-3 px-1"
-        >
-          {item.thinking ? (
-            <details class="my-2 text-sm text-base-content/70">
-              <summary class="cursor-pointer">Thinking</summary>
-              <div class="whitespace-pre-wrap">{item.thinking}</div>
-            </details>
-          ) : null}
-          {item.text ? <Markdown source={item.text} /> : null}
-          {item.toolCalls.map((call) => (
-            <ToolCall call={call} />
-          ))}
-          {item.errorMessage ? (
-            <div class="my-2 alert text-sm alert-error">
-              {item.errorMessage}
-            </div>
-          ) : null}
-          {item.stopReason === "aborted" ? (
-            <div class="text-xs text-base-content/60">Stopped</div>
-          ) : null}
-          <div class="mt-1 flex items-center gap-2 text-xs text-base-content/50">
-            {item.usage ? (
-              <span>
-                {item.model} · {formatTokens(item.usage.total)} tokens in
-                context
-              </span>
-            ) : null}
-            {editable && actions && item.entryId !== "partial" ? (
-              <StarButton entryId={item.entryId} actions={actions} />
-            ) : null}
-          </div>
-        </article>
+        <AssistantMessage
+          item={item}
+          actions={actions}
+          starrable={starrable ?? false}
+        />
       );
     case "compaction":
-      return (
-        <details
-          id={`entry-${item.entryId}`}
-          class="my-3 rounded-lg border border-dashed border-warning/50 px-4 py-2 text-sm"
-        >
-          <summary class="cursor-pointer">
-            Context compacted ({formatTokens(item.tokensBefore)} tokens before)
-          </summary>
-          <Markdown source={item.summary} />
-        </details>
-      );
+      return <Compaction item={item} actions={actions} />;
     case "branch_summary":
       return (
-        <details
+        <div
           id={`entry-${item.entryId}`}
-          class="my-3 rounded-lg border border-dashed border-info/50 px-4 py-2 text-sm"
+          class="my-4 rounded-box border border-dashed border-info/50 px-4 py-2 text-sm"
         >
-          <summary class="cursor-pointer">Branch summary</summary>
-          <Markdown source={item.summary} />
-        </details>
+          <p class="text-xs italic">
+            The conversation briefly explored another branch and returned with
+            this summary:
+          </p>
+          <Markdown source={item.summary} actions={actions} />
+        </div>
       );
     case "note":
-      return (
-        <article
-          id={`entry-${item.entryId}`}
-          class="my-3 rounded-lg bg-base-200 px-4 py-2 font-mono text-xs whitespace-pre-wrap"
-        >
-          <div class="mb-1 flex items-center gap-2 text-base-content/60">
-            <span>{item.customType}</span>
-            {item.excluded ? (
-              <span class="badge badge-ghost badge-xs">not sent to model</span>
-            ) : null}
-            {item.outputPath && actions ? (
-              <a
-                class="link"
-                target="_blank"
-                rel="noreferrer"
-                href={`/sessions/${actions.sessionId}/bash-output?path=${encodeURIComponent(item.outputPath)}`}
-              >
-                full output
-              </a>
-            ) : null}
-          </div>
-          {item.text}
-        </article>
-      );
+      return <Note item={item} actions={actions} />;
     default:
-      return null;
+      return <Bash item={item} actions={actions} />;
   }
 }
 
+function TurnView({ turn, actions }: { turn: Turn; actions?: ItemActions }) {
+  const count = (value: number, noun: string) =>
+    `${String(value)} ${noun}${value === 1 ? "" : "s"}`;
+  const label = [
+    count(turn.processMessages, "message"),
+    turn.processToolCalls > 0 ? count(turn.processToolCalls, "tool call") : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <section class="turn">
+      {turn.boundary ? <Item item={turn.boundary} actions={actions} /> : null}
+      {turn.process.length > 0 ? (
+        <details class="my-2" open={turn.expanded}>
+          <summary class="cursor-pointer text-xs text-base-content/60">
+            Process details · {label}
+          </summary>
+          <div class="border-l border-base-300 pl-3">
+            {turn.process.map((item) => (
+              <Item item={item} actions={actions} />
+            ))}
+          </div>
+        </details>
+      ) : null}
+      {turn.answer ? (
+        <Item item={turn.answer} actions={actions} starrable />
+      ) : null}
+      {turn.trailing.map((item) => (
+        <Item item={item} actions={actions} />
+      ))}
+    </section>
+  );
+}
+
+/**
+ * The one transcript rendering: a page load, a prepended earlier page, a
+ * settled turn appended to the log, and the running turn all come through
+ * here. The running turn renders flat, because grouping a moving target
+ * hides what just happened.
+ */
 export function Items({
   items,
   actions,
@@ -244,11 +966,111 @@ export function Items({
   items: TranscriptItem[];
   actions?: ItemActions;
 }) {
+  const withTimes: ItemActions | undefined = actions
+    ? { ...actions, timestamps: timestampedEntries(items) }
+    : undefined;
+  if (actions?.live) {
+    return (
+      <>
+        {items.map((item) => (
+          <Item item={item} actions={actions} />
+        ))}
+      </>
+    );
+  }
   return (
     <>
-      {items.map((item) => (
-        <Item item={item} actions={actions} />
+      {groupTurns(items).map((turn) => (
+        <TurnView turn={turn} actions={withTimes} />
       ))}
+    </>
+  );
+}
+
+/**
+ * The sentinel above the oldest message on the page. Scrolling it into view
+ * swaps it for the previous page, which carries the next sentinel.
+ */
+export function LoadEarlier({
+  sessionId,
+  before,
+  leaf,
+}: {
+  sessionId: string;
+  before: string;
+  leaf?: string;
+}) {
+  const query = new URLSearchParams({ before });
+  if (leaf !== undefined) query.set("leaf", leaf);
+  return (
+    <div
+      class="load-earlier my-2 text-center text-xs text-base-content/50"
+      hx-get={`/sessions/${sessionId}/earlier?${query.toString()}`}
+      hx-trigger="intersect once"
+      hx-target="this"
+      hx-swap="outerHTML"
+    >
+      Scroll up to load earlier messages
+    </div>
+  );
+}
+
+/** A page of older messages, with the sentinel for the page before it. */
+export function EarlierPage({
+  items,
+  actions,
+  hasMore,
+  oldestId,
+  leaf,
+}: {
+  items: TranscriptItem[];
+  actions: ItemActions;
+  hasMore: boolean;
+  oldestId?: string;
+  leaf?: string;
+}) {
+  return (
+    <>
+      {hasMore && oldestId !== undefined ? (
+        <LoadEarlier
+          sessionId={actions.sessionId}
+          before={oldestId}
+          {...(leaf === undefined ? {} : { leaf })}
+        />
+      ) : null}
+      <Items items={items} actions={actions} />
+    </>
+  );
+}
+
+/**
+ * The running turn: its messages flat, plus the line that says what the
+ * session is doing while nothing has streamed yet.
+ */
+export function TurnFragment({
+  items,
+  actions,
+  status,
+}: {
+  items: TranscriptItem[];
+  actions: ItemActions;
+  status: LiveStatus | null;
+}) {
+  const label = status ? activityLabel(status) : null;
+  // Only a turn that is actually working renders flat: grouping a moving
+  // target hides what just happened. A finished turn groups like any other.
+  const live = status?.running === true || status?.bashRunning === true;
+  return (
+    <>
+      <Items
+        items={items}
+        actions={{ ...actions, ...(live ? { live } : {}) }}
+      />
+      {label === null ? null : (
+        <p class="my-2 animate-pulse font-mono text-xs text-base-content/60">
+          {label}
+        </p>
+      )}
     </>
   );
 }

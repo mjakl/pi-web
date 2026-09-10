@@ -221,6 +221,13 @@ export function Status({ view }: { view: SessionView }) {
           {view.modelWarnings.join("\n")}
         </div>
       ) : null}
+      {status?.retry ? (
+        <div class="alert w-full py-1 text-xs alert-warning" role="status">
+          Retrying ({String(status.retry.attempt)}/
+          {String(status.retry.maxAttempts)})…
+          <span class="opacity-60">{status.retry.message}</span>
+        </div>
+      ) : null}
       {status?.compaction ? (
         <div class="alert w-full py-1 text-xs alert-success">
           {status.compaction.reason === "manual"

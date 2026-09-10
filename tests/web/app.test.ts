@@ -1,6 +1,7 @@
 import {
   assistantEntry,
   createFakeWorld,
+  type ScriptedStep,
   userEntry,
 } from "@adapters/fake/index";
 import { createWorkspace } from "@core/workspace";
@@ -117,7 +118,7 @@ describe("web app", () => {
     expect(received).toContain("event: turn");
     expect(received).toContain("alpha beta");
     expect(received).toContain("event: status");
-    expect(received).toMatch(/event: settled\ndata: <article/);
+    expect(received).toMatch(/event: settled\ndata: <section class="turn"/);
   });
 
   it("loads row metadata lazily and shows the title, counts, and stars", async () => {
@@ -449,5 +450,140 @@ describe("web app", () => {
     expect(received).toContain("event: rows");
     expect(received).toContain('hx-swap-oob="true"');
     expect(received).toContain("data: s1");
+  });
+});
+
+/** A session long enough to page, with one thinking block per answer. */
+function longApp(answers = 60) {
+  const entries = [];
+  let parent: string | null = null;
+  for (let index = 0; index < answers; index += 1) {
+    const userId = `u${String(index)}`;
+    const answerId = `a${String(index)}`;
+    entries.push(userEntry(userId, parent, `question ${String(index)}`));
+    const answer = assistantEntry(
+      answerId,
+      userId,
+      `answer ${String(index)}`,
+      100,
+    );
+    if (answer.type === "message" && answer.message.role === "assistant") {
+      answer.message.content = [
+        { type: "thinking", thinking: "z".repeat(2000) },
+        ...answer.message.content,
+      ];
+    }
+    entries.push(answer);
+    parent = answerId;
+  }
+  return testApp({
+    sessions: [
+      {
+        summary: {
+          id: "s1",
+          cwd: "/repo/one",
+          createdAt: "2026-09-01T00:00:00.000Z",
+          modifiedAt: "2026-09-02T00:00:00.000Z",
+          fileSize: 10,
+        },
+        entries,
+      },
+    ],
+  });
+}
+
+describe("transcript rendering", () => {
+  it("groups a turn into process details and the answer", async () => {
+    const { app } = testApp({
+      script: (): ScriptedStep[] => [
+        { thinking: "checking the file" },
+        { tool: "read", arguments: { path: "/repo/one/a.ts" }, result: "ok" },
+        { text: "all done" },
+      ],
+    });
+    const form = new FormData();
+    form.set("text", "look");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain("Process details · 1 message · 1 tool call");
+    expect(page).toContain("checking the file");
+    expect(page).toContain("/repo/one/a.ts");
+    expect(page).toContain("all done");
+  });
+
+  it("renders a reported patch as a side-by-side diff", async () => {
+    const { app } = testApp({
+      script: (): ScriptedStep[] => [
+        {
+          tool: "edit",
+          arguments: { file_path: "/repo/one/a.ts" },
+          details: {
+            patch:
+              "--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-const a = 1;\n+const a = 2;\n",
+          },
+        },
+        { text: "changed it" },
+      ],
+    });
+    const form = new FormData();
+    form.set("text", "edit it");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain("const a = 1;");
+    expect(page).toContain("const a = 2;");
+    expect(page).toContain("grid-cols-2");
+    // Edit tools show the diff instead of repeating their arguments.
+    expect(page).not.toContain("&quot;file_path&quot;");
+  });
+
+  it("names the running tool while a turn works", async () => {
+    const { app } = testApp({
+      delayMs: 40,
+      script: (): ScriptedStep[] => [
+        { tool: "bash", arguments: { command: "ls" }, progress: ["scanning"] },
+        { text: "done" },
+      ],
+    });
+    const form = new FormData();
+    form.set("text", "run it");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(await (await app.request("/sessions/s1")).text()).toContain(
+      "Running bash... scanning",
+    );
+  });
+
+  it("pages a long transcript and prepends the page before it", async () => {
+    const { app } = longApp();
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain("Scroll up to load earlier messages");
+    expect(page).toContain("question 59");
+    expect(page).not.toContain("question 10");
+
+    const before = /before=([^&"]+)/.exec(page)?.[1] ?? "";
+    expect(before).not.toBe("");
+    const earlier = await (
+      await app.request(`/sessions/s1/earlier?before=${before}`)
+    ).text();
+    expect(earlier).toContain("question 34");
+    expect(earlier).toContain('hx-get="/sessions/s1/earlier?before=');
+
+    const bad = await app.request("/sessions/s1/earlier?before=nope");
+    expect(bad.status).toBe(400);
+  });
+
+  it("fetches a thinking block the page was too long to carry", async () => {
+    const { app } = longApp();
+    const page = await (await app.request("/sessions/s1")).text();
+    const url = /\/sessions\/s1\/entries\/[^/]+\/thinking\/0/.exec(page)?.[0];
+    expect(url).toBeDefined();
+    const block = await (await app.request(url ?? "")).text();
+    expect(block).toContain("zzz");
+    const missing = await app.request("/sessions/s1/entries/nope/thinking/0");
+    expect(await missing.text()).toContain("unavailable");
   });
 });

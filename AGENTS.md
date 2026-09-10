@@ -43,9 +43,12 @@ Rules enforced by `.oxlintrc.json`:
 - `src/web` never imports adapters or the SDK; it talks to `Workspace`.
 - No parent-relative imports; use `@core/*`, `@adapters/*`, `@web/*`,
   `@scripts/*`, `#/*`.
-- Hono JSX uses `class`, never `className`. No dynamic imports in `src/`.
+- Hono JSX uses `class`, never `className`. No dynamic imports in `src/`; the
+  one exception is `src/web/client/mermaid.ts`, which loads the separately
+  bundled `static/mermaid.js` by URL and carries a narrowed lint override.
 - `src/web/client/*` is bundled by esbuild and may import `@core/*`; anything it
-  imports must run in a browser (no Node, no SDK).
+  imports must run in a browser (no Node, no SDK). `main.ts` and
+  `mermaid-lib.ts` are the two bundle entry points.
 
 Read `docs/architecture.md` before changing a port, the SSE contract, or context
 accounting. Shell commands run with a sanitised environment; read

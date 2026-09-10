@@ -113,6 +113,18 @@
           }
         ]
       }
+    },
+    {
+      "files": ["src/web/client/mermaid.ts"],
+      "rules": {
+        "eslint-js/no-restricted-syntax": [
+          "error",
+          {
+            "selector": "JSXAttribute[name.name='className']",
+            "message": "Use `class` instead of `className` in Hono JSX."
+          }
+        ]
+      }
     }
   ]
 }

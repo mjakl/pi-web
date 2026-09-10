@@ -5,14 +5,22 @@ import { staticAssets } from "@web/assets";
 import { ForbiddenPath, type Workspace } from "@core/workspace";
 import { honoFactory } from "@web/hono";
 import { HtmlLayout } from "@web/HtmlLayout";
+import { renderMarkdown } from "@web/markdown";
 import { CommandMenu, ComposerText, Toasts } from "@web/views/Composer";
-import { Items, StarButton } from "@web/views/Items";
+import {
+  EarlierPage,
+  type ItemActions,
+  Items,
+  StarButton,
+  TurnFragment,
+} from "@web/views/Items";
 import { IndexPage, NewSessionPage, SessionPage } from "@web/views/SessionPage";
 import { SessionList, SessionRow } from "@web/views/Sidebar";
 import { StatsPanel } from "@web/views/Stats";
 import { Status } from "@web/views/Status";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { Context } from "hono";
+import { raw } from "hono/html";
 import { jsxRenderer } from "hono/jsx-renderer";
 import { streamSSE } from "hono/streaming";
 
@@ -188,9 +196,16 @@ export function createWebApp(deps: WebDeps) {
   app.get("/sessions/:id", async (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
+    const through = c.req.query("through");
+    const options = {
+      ...(c.req.query("leaf") === undefined
+        ? {}
+        : { leaf: c.req.query("leaf") }),
+      ...(through === undefined ? {} : { through }),
+    };
     const [groups, view] = await Promise.all([
       deps.workspace.listSessions(),
-      deps.workspace.viewSession(id, c.req.query("leaf")),
+      deps.workspace.viewSession(id, options).catch(() => undefined),
     ]);
     if (!view) return c.notFound();
     return c.render(<SessionPage groups={groups} view={view} />);
@@ -333,6 +348,64 @@ export function createWebApp(deps: WebDeps) {
     if (!isSessionId(id)) return c.notFound();
     deps.workspace.clearQueue(id);
     return c.body(null, 204);
+  });
+
+  /** The previous page of a long transcript, with its own sentinel on top. */
+  app.get("/sessions/:id/earlier", async (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    const leaf = c.req.query("leaf");
+    const before = c.req.query("before");
+    const through = c.req.query("through");
+    if (before === undefined) return c.text("before is required", 400);
+    let view;
+    try {
+      view = await deps.workspace.viewSession(id, {
+        before,
+        ...(leaf === undefined ? {} : { leaf }),
+        ...(through === undefined ? {} : { through }),
+      });
+    } catch {
+      return c.text("Unknown entry for this branch", 400);
+    }
+    if (!view) return c.notFound();
+    return c.html(
+      <EarlierPage
+        items={view.items}
+        actions={{
+          sessionId: id,
+          cwd: view.summary.cwd,
+          starred: view.starred,
+          ...(view.otherBranch ? { readOnly: true } : {}),
+        }}
+        hasMore={view.hasMore}
+        {...(view.oldestId === undefined ? {} : { oldestId: view.oldestId })}
+        {...(leaf === undefined ? {} : { leaf })}
+      />,
+    );
+  });
+
+  /** One thinking block, for the ones a long page left out. */
+  app.get("/sessions/:id/entries/:entryId/thinking/:index", async (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    const index = Number(c.req.param("index"));
+    if (!Number.isInteger(index) || index < 0) return c.notFound();
+    const thinking = await deps.workspace.entryThinking(
+      id,
+      c.req.param("entryId"),
+      index,
+    );
+    if (thinking === undefined) {
+      return c.html(<p class="text-error">Thinking content unavailable</p>);
+    }
+    // No cwd here: reading the session again to resolve relative file links
+    // would cost a full pass over the file for one collapsed block.
+    return c.html(
+      <div class="prose max-w-none break-words">
+        {raw(renderMarkdown(thinking))}
+      </div>,
+    );
   });
 
   app.get("/sessions/:id/entries/:entryId/image/:index", async (c) => {
@@ -498,7 +571,11 @@ export function createWebApp(deps: WebDeps) {
         <>
           <StarButton
             entryId={entryId}
-            actions={{ sessionId: id, starred: view.starred }}
+            actions={{
+              sessionId: id,
+              cwd: view.summary.cwd,
+              starred: view.starred,
+            }}
           />
           {found ? <SessionRow {...found} oob /> : null}
         </>,
@@ -616,7 +693,11 @@ export function createWebApp(deps: WebDeps) {
       const render = async (kind: "activity" | "turn_done") => {
         const view = await deps.workspace.viewSession(id);
         if (!view) return;
-        const actions = { sessionId: id, starred: view.starred };
+        const actions: ItemActions = {
+          sessionId: id,
+          cwd: view.summary.cwd,
+          starred: view.starred,
+        };
         if (kind === "turn_done") {
           await stream.writeSSE({
             event: "settled",
@@ -626,7 +707,13 @@ export function createWebApp(deps: WebDeps) {
         } else {
           await stream.writeSSE({
             event: "turn",
-            data: await html(<Items items={view.turn} actions={actions} />),
+            data: await html(
+              <TurnFragment
+                items={view.turn}
+                actions={actions}
+                status={view.status}
+              />,
+            ),
           });
         }
         await stream.writeSSE({

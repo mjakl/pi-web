@@ -1,25 +1,201 @@
-import { Marked } from "marked";
+import { Marked, type Tokens } from "marked";
 
-function escapeHtml(text: string): string {
+// Model output is untrusted. Raw HTML inside Markdown is shown as text rather
+// than sanitised, which needs no allowlist and cannot leak a script.
+
+/** Past this the page prints the source instead of parsing it (§3.2). */
+const MAX_MARKDOWN_CHARS = 100_000;
+
+export type MarkdownOptions = {
+  /** Resolves relative file links; the session's working folder. */
+  cwd?: string;
+  /** Inside the live turn: no diagram preview until the text settles. */
+  live?: boolean;
+};
+
+export function escapeHtml(text: string): string {
   return text
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
-// Model output is untrusted. Raw HTML inside Markdown is shown as text rather
-// than sanitised, which needs no allowlist and cannot leak a script.
-const renderer = new Marked({
-  gfm: true,
-  breaks: false,
-  renderer: {
-    html({ text }) {
-      return escapeHtml(text);
-    },
-  },
-});
+function attribute(value: string): string {
+  return escapeHtml(value);
+}
 
-export function renderMarkdown(source: string): string {
-  return renderer.parse(source, { async: false });
+/** GitHub's own id shape, so `#heading` links keep working. */
+function headingId(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replaceAll(/[^\p{L}\p{N}\s-]/gu, "")
+    .replaceAll(/\s+/g, "-");
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${String(Math.round(bytes / 1024))} KB`;
+  return `${String(bytes)} B`;
+}
+
+const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(\r?\n|$)/;
+const LINE_SUFFIX = /:\d+(?::\d+)?$/;
+
+/**
+ * A link or image that points into the working folder rather than the web.
+ * Phase 4 turns these into file-viewer links; until then the path is shown.
+ */
+export function localFilePath(
+  href: string,
+  cwd: string | undefined,
+): string | null {
+  const clean = (href.split(/[?#]/)[0] ?? "").trim();
+  if (clean === "" || clean.startsWith("//")) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(clean)) {
+    if (!clean.toLowerCase().startsWith("file:")) return null;
+    try {
+      return decodeURIComponent(new URL(clean).pathname);
+    } catch {
+      return null;
+    }
+  }
+  if (clean.startsWith("/")) return clean.replace(LINE_SUFFIX, "");
+  if (cwd === undefined) return null;
+  // Relative links only count when they look like a path, not like prose.
+  if (!/^\.{1,2}\//.test(clean) && !/^[\w@.-]+(?:\/|\.\w+)/.test(clean)) {
+    return null;
+  }
+  const parts: string[] = [];
+  for (const part of `${cwd}/${clean}`.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  const resolved = `/${parts.join("/")}`.replace(LINE_SUFFIX, "");
+  return resolved.startsWith(cwd) ? resolved : null;
+}
+
+function codeBlock(code: string, language: string, live: boolean): string {
+  const label = language === "" ? "text" : language;
+  const body = `<pre class="code-body"><code class="language-${attribute(label)}">${escapeHtml(code)}</code></pre>`;
+  const copy = `<button type="button" class="code-copy" data-copy-code>Copy</button>`;
+  if (label !== "mermaid") {
+    return `<div class="code-block"><div class="code-header"><span class="code-lang">${escapeHtml(label)}</span>${copy}</div>${body}</div>`;
+  }
+  const toggle = `<button type="button" class="code-copy" data-mermaid-toggle${
+    live ? ' disabled title="Preview after streaming"' : ""
+  }>Preview</button>`;
+  return `<div class="code-block" data-mermaid><div class="code-header"><span class="code-lang">mermaid</span>${toggle}${copy}</div>${body}<div class="mermaid-preview" hidden></div></div>`;
+}
+
+/**
+ * A single `~` is ordinary text: CJK ranges use it, and GitHub's strikethrough
+ * needs `~~`. Matching it here keeps marked's own `del` rule from seeing it.
+ */
+const literalTilde = {
+  name: "literalTilde",
+  level: "inline" as const,
+  start: (source: string) => source.indexOf("~"),
+  tokenizer(source: string) {
+    return /^~(?!~)/.test(source)
+      ? { type: "literalTilde", raw: "~", text: "~" }
+      : undefined;
+  },
+  renderer: () => "~",
+};
+
+function markedFor(options: MarkdownOptions): Marked {
+  const seenHeadings = new Set<string>();
+  const marked = new Marked({
+    gfm: true,
+    breaks: false,
+    extensions: [literalTilde],
+    renderer: {
+      html({ text }: Tokens.HTML | Tokens.Tag) {
+        return escapeHtml(text);
+      },
+      code({ text, lang }: Tokens.Code) {
+        const language = (lang ?? "").trim().split(/\s+/)[0] ?? "";
+        return codeBlock(text, language.toLowerCase(), options.live === true);
+      },
+      codespan({ text }: Tokens.Codespan) {
+        return `<code class="markdown-inline-code">${escapeHtml(text)}</code>`;
+      },
+      heading(
+        this: { parser: { parseInline(tokens: unknown[]): string } },
+        token: Tokens.Heading,
+      ) {
+        const content = this.parser.parseInline(token.tokens);
+        const base = headingId(token.text);
+        let id = base;
+        for (let n = 1; seenHeadings.has(id); n += 1)
+          id = `${base}-${String(n)}`;
+        seenHeadings.add(id);
+        const depth = String(token.depth);
+        return `<h${depth} id="user-content-${attribute(id)}">${content}</h${depth}>`;
+      },
+      table(
+        this: { parser: { parseInline(tokens: unknown[]): string } },
+        token: Tokens.Table,
+      ) {
+        const cell = (item: Tokens.TableCell, tag: "th" | "td") => {
+          const align = item.align ? ` align="${item.align}"` : "";
+          return `<${tag}${align}>${this.parser.parseInline(item.tokens)}</${tag}>`;
+        };
+        const head = token.header.map((item) => cell(item, "th")).join("");
+        const body = token.rows
+          .map(
+            (row) => `<tr>${row.map((item) => cell(item, "td")).join("")}</tr>`,
+          )
+          .join("");
+        return `<div class="markdown-table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+      },
+      link(
+        this: { parser: { parseInline(tokens: unknown[]): string } },
+        token: Tokens.Link,
+      ) {
+        const content = this.parser.parseInline(token.tokens);
+        const href = token.href;
+        if (href.startsWith("#")) {
+          return `<a href="#user-content-${attribute(href.slice(1))}">${content}</a>`;
+        }
+        if (/^(https?:|mailto:)/i.test(href)) {
+          return `<a href="${attribute(href)}" target="_blank" rel="noopener noreferrer">${content}</a>`;
+        }
+        const file = localFilePath(href, options.cwd);
+        if (file !== null) {
+          return `<span class="markdown-file-ref" data-file-path="${attribute(file)}" title="${attribute(file)}">${content}</span>`;
+        }
+        return content;
+      },
+      image({ href, text, title }: Tokens.Image) {
+        const alt = attribute(text);
+        if (/^https?:/i.test(href)) {
+          const titleAttribute =
+            title === null || title === undefined
+              ? ""
+              : ` title="${attribute(title)}"`;
+          return `<img src="${attribute(href)}" alt="${alt}"${titleAttribute} loading="lazy">`;
+        }
+        const file = localFilePath(href, options.cwd);
+        if (file === null) return alt;
+        return `<span class="markdown-file-ref" data-file-path="${attribute(file)}" title="${attribute(file)}">${alt === "" ? attribute(file) : alt}</span>`;
+      },
+    },
+  });
+  return marked;
+}
+
+export function renderMarkdown(
+  source: string,
+  options: MarkdownOptions = {},
+): string {
+  if (source.length > MAX_MARKDOWN_CHARS) {
+    return `<details class="markdown-oversized"><summary>⚠ ${escapeHtml(formatBytes(source.length))} of Markdown, click to show the source</summary><pre class="code-body">${escapeHtml(source)}</pre></details>`;
+  }
+  const text = source.replace(FRONTMATTER, "");
+  return markedFor(options).parse(text, { async: false });
 }
