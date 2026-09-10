@@ -25,7 +25,8 @@ browser holds none.
 ## Layout and boundaries
 
 ```text
-src/core       rules and ports: transcript projection, context usage, workspace
+src/core       rules and ports: transcript projection, session derivations
+               (stars, statistics, branches), context usage, workspace
 src/adapters   Pi SDK and in-memory implementations of the ports
 src/web        Hono routes, JSX views, HTMX/SSE delivery
 src/container.ts  the only file that wires adapters into the core
@@ -49,7 +50,10 @@ accounting.
 ## Validation
 
 - `just test` runs vitest. Web tests call `app.request()` against the fake world
-  in `src/adapters/fake/index.ts`; no Pi installation is needed.
+  in `src/adapters/fake/index.ts`; no Pi installation is needed. A new port
+  method lands there in the same change, or every web test stops running.
+- Tests that write session files build them with `SessionManager` in a `mkdtemp`
+  directory and pass that as the agent directory.
 - Add or update the nearest test for changed behaviour; assert on rendered
   output or port behaviour, never on source text.
 - Inspect `git status` and the diff before handoff.

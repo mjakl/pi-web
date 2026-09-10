@@ -16,12 +16,13 @@ are the only state; the browser shows whatever the server last rendered.
 Internal interfaces, all consumers in this repository. Defined in
 `src/core/ports.ts`:
 
-| Port             | Purpose                                                          | Pi adapter                           |
-| ---------------- | ---------------------------------------------------------------- | ------------------------------------ |
-| `SessionCatalog` | List stored sessions from headers only; read one branch          | `src/adapters/pi/session-catalog.ts` |
-| `AgentRuntime`   | Open or resume a `LiveSession`                                   | `src/adapters/pi/agent-runtime.ts`   |
-| `LiveSession`    | `snapshot()`, `prompt()`, `abort()`, `setModel()`, `subscribe()` | same                                 |
-| `ModelCatalog`   | Models Pi has credentials for                                    | `src/adapters/pi/model-catalog.ts`   |
+| Port              | Purpose                                                                                                  | Pi adapter                           |
+| ----------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `SessionCatalog`  | List from headers only; read one branch; row metadata; rename, delete, star, fork, clone, rewind, export | `src/adapters/pi/session-catalog.ts` |
+| `AgentRuntime`    | Open or resume a `LiveSession`; watch every session's lifecycle                                          | `src/adapters/pi/agent-runtime.ts`   |
+| `LiveSession`     | `snapshot()`, `prompt()`, `abort()`, `setModel()`, `setStar()`, `navigateTree()`, `subscribe()`          | same                                 |
+| `ModelCatalog`    | Models Pi has credentials for                                                                            | `src/adapters/pi/model-catalog.ts`   |
+| `ProjectResolver` | The repository a working folder belongs to, and its branch                                               | `src/adapters/pi/projects.ts`        |
 
 `LiveSession` is the deep module: SDK event choreography (partial messages,
 compaction, retries, queue, extension notices) stays inside; callers only read a
@@ -45,6 +46,17 @@ Page load, HTMX responses, and SSE events all render the same three views:
 The SSE endpoint coalesces activity into one re-render per 100 ms. Because the
 turn is re-rendered from the snapshot rather than patched from deltas, a missed
 event costs nothing: the next render is complete.
+
+A second stream, `GET /events`, belongs to the sidebar rather than to one
+session. It pushes a re-rendered row (`hx-swap-oob`) whenever a session starts,
+finishes, or stops, the whole list when a session appears that has no row yet,
+and a `finished` event carrying the session id. The browser turns that id into
+an unread dot in `localStorage` when the session is not the one on screen; it
+replaces pi-web's 2.5 s polling.
+
+`src/core/session-entries.ts` derives everything a session's raw entries imply:
+starred answers, statistics and active time, the tip of every branch, and the
+sidebar row summary. The catalog hands the core entries; no rule reads a file.
 
 ### Context usage
 
@@ -73,6 +85,21 @@ composition root and the only importer of Pi adapters.
   needs Pi installed before `pnpm install` succeeds.
 - **Raw HTML in Markdown is escaped**, not sanitised. No allowlist to maintain,
   no script can pass.
+- **Sidebar rows load their own metadata.** Listing 2,700 sessions reads one
+  header per file; a row's title, message count and star count need a pass over
+  the whole file, so each row fetches its own (`hx-trigger="revealed"`) and the
+  adapter streams the file line by line and caches the result by size and mtime.
+  The real store renders in well under a second and a revisited row costs
+  nothing.
+- **Session edits go through Pi's `SessionManager`.** Renames, stars, forks and
+  clones are appends the SDK writes, so the CLI and web-pi never disagree about
+  the format; stars are `pi-web:star` custom entries, the same ones pi-web
+  reads. Only delete (re-parenting children) and rewind rewrite a file, because
+  the SDK cannot remove entries.
+- **HTML export spawns the Pi CLI**, as pi-web does: the SDK's exporter is
+  behind the package export map. The exported page's recursive tree walks are
+  rewritten as iterative ones, or a long session overflows the browser's stack;
+  if a rewrite no longer matches the SDK's template the page is still served.
 - **One client bundle besides htmx.** `src/web/client/main.ts` (scroll-follow,
   theme, keyboard shortcuts) is bundled by esbuild into `static/client.js` and
   loaded as a module with a content hash in its URL. The only inline script is
@@ -82,18 +109,20 @@ composition root and the only importer of Pi adapters.
 
 pi-web features absent from this slice, roughly in order of value:
 
-1. Session titles from the first message (listing reads headers only, so the
-   sidebar shows ids); session rename, delete, export, fork, clone, rewind,
-   branch navigation, stars.
-2. File explorer, file viewer, Git status and diffs, `@` path completion.
-3. Image attachments, slash-command menu, steer vs follow-up choice, queue
-   recall, manual compaction button.
-4. Extension dialogs (`select`, `confirm`, `input`, `editor`, custom UI) are
+1. File explorer, file viewer, Git status and diffs, `@` path completion.
+2. Image attachments, the slash-command menu (`/name`, `/session` and `/clone`
+   exist as buttons, not as commands), steer vs follow-up choice, queue recall,
+   manual compaction button.
+3. Extension dialogs (`select`, `confirm`, `input`, `editor`, custom UI) are
    auto-cancelled; widgets and footers are ignored. Extension statuses and
    notices are shown.
-5. Worktree-aware folder picker, project trust dialog (trust is honoured
-   read-only from Pi's store), skills and plugins management.
-6. Syntax highlighting, Mermaid preview, lazy loading of long transcripts, a
-   minimap rail, message actions (copy, star).
-7. PWA, push notifications, completion sound.
-8. Idle shutdown of live sessions and a running-session cap.
+4. Worktree-aware folder picker, project trust dialog (trust is honoured
+   read-only from Pi's store), skills and plugins management. Sessions already
+   group under the repository a worktree belongs to.
+5. Syntax highlighting, Mermaid preview, lazy loading of long transcripts, the
+   conversation rail with hover previews and star markers. The branch switcher
+   in the header is the placeholder for that rail, and it only refreshes on a
+   page load.
+6. PWA, push notifications, completion sound.
+7. A running-session cap. Idle shutdown exists only for drafts Pi never wrote to
+   disk (10 minutes), as in pi-web.

@@ -5,8 +5,10 @@ import type {
   LiveSnapshot,
   LiveStatus,
   ModelOption,
+  RuntimeEvent,
   ThinkingLevel,
 } from "@core/ports";
+import { STAR_TYPE } from "@core/session-entries";
 import type { SessionSummary } from "@core/sessions";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import {
@@ -17,7 +19,7 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { createHeadlessUi } from "./headless-ui.ts";
 import { projectTrustReloadOptions } from "./project-trust.ts";
 import type { PiSessionCatalog } from "./session-catalog.ts";
@@ -171,6 +173,7 @@ class PiLiveSession implements LiveSession {
     return {
       summary: this.summary(),
       branch: this.inner.sessionManager.getBranch(),
+      entries: this.inner.sessionManager.getEntries(),
       turnStart: this.turnStart,
       ...(this.partial ? { partial: this.partial } : {}),
       status: this.status(),
@@ -218,6 +221,39 @@ class PiLiveSession implements LiveSession {
     this.emit({ type: "activity" });
   }
 
+  setName(name: string): void {
+    this.inner.setSessionName(name);
+    this.emit({ type: "activity" });
+  }
+
+  setStar(targetId: string, starred: boolean): void {
+    const manager = this.inner.sessionManager;
+    const target = manager.getEntry(targetId);
+    if (target?.type !== "message" || target.message.role !== "assistant") {
+      throw new Error("Star target must be an assistant answer");
+    }
+    manager.appendCustomEntry(STAR_TYPE, { targetId, starred });
+    this.emit({ type: "activity" });
+  }
+
+  /** Moves the leaf inside the same file; extensions see `session_before_tree`. */
+  async navigateTree(targetId: string): Promise<string | undefined> {
+    const result = await this.inner.navigateTree(targetId);
+    this.turnStart = this.inner.sessionManager.getBranch().length;
+    this.emit({ type: "activity" });
+    return result.cancelled ? undefined : result.editorText;
+  }
+
+  /** A session Pi never wrote to disk: an abandoned draft, safe to drop. */
+  hasTranscript(): boolean {
+    const file = this.inner.sessionManager.getSessionFile();
+    return file !== undefined && existsSync(file);
+  }
+
+  get busy(): boolean {
+    return this.inner.isStreaming;
+  }
+
   subscribe(listener: (event: LiveEvent) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -233,12 +269,20 @@ class PiLiveSession implements LiveSession {
   }
 }
 
+/** Abandoned drafts are shut down; a session with a file on disk is not. */
+const DRAFT_IDLE_MS = 10 * 60 * 1000;
+
 export function createPiAgentRuntime(options: {
   agentDir: string;
   catalog: PiSessionCatalog;
 }): AgentRuntime {
   const live = new Map<string, PiLiveSession>();
   const starting = new Map<string, Promise<PiLiveSession>>();
+  const watchers = new Set<(event: RuntimeEvent) => void>();
+
+  function announce(event: RuntimeEvent): void {
+    for (const watcher of watchers) watcher(event);
+  }
 
   async function start(manager: SessionManager): Promise<PiLiveSession> {
     const cwd = manager.getCwd();
@@ -258,7 +302,27 @@ export function createPiAgentRuntime(options: {
       sessionManager: manager,
     });
     const id = session.sessionId;
-    const wrapper = new PiLiveSession(session, () => live.delete(id));
+    const wrapper = new PiLiveSession(session, () => {
+      live.delete(id);
+      announce({ type: "stopped", sessionId: id });
+    });
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const resetIdle = () => {
+      if (idle) clearTimeout(idle);
+      idle = setTimeout(() => {
+        if (!wrapper.hasTranscript() && !wrapper.busy) void wrapper.stop();
+        else resetIdle();
+      }, DRAFT_IDLE_MS).unref();
+    };
+    wrapper.subscribe((event) => {
+      if (event.type === "turn_done") {
+        announce({ type: "finished", sessionId: id });
+      }
+      if (event.type === "stopped") {
+        if (idle) clearTimeout(idle);
+      } else resetIdle();
+    });
+    resetIdle();
     await session.bindExtensions({
       uiContext: wrapper.ui,
       mode: "rpc",
@@ -269,11 +333,16 @@ export function createPiAgentRuntime(options: {
     const file = manager.getSessionFile();
     if (file) options.catalog.remember(id, file);
     live.set(id, wrapper);
+    announce({ type: "opened", sessionId: id });
     return wrapper;
   }
 
   return {
     get: (sessionId) => live.get(sessionId),
+    subscribeAll(listener) {
+      watchers.add(listener);
+      return () => watchers.delete(listener);
+    },
     async open(target) {
       if ("cwd" in target) {
         return start(SessionManager.create(target.cwd));

@@ -99,7 +99,96 @@ function setUpShortcuts(): void {
   });
 }
 
+// Which sessions finished a turn while the reader was looking elsewhere.
+const UNREAD_KEY = "web-pi:unread";
+
+function unreadIds(): Set<string> {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(UNREAD_KEY) ?? "[]");
+    return new Set(Array.isArray(raw) ? (raw as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function storeUnread(ids: Set<string>): void {
+  try {
+    localStorage.setItem(UNREAD_KEY, JSON.stringify([...ids]));
+  } catch {
+    // Without storage the dots last for this page only.
+  }
+}
+
+function currentSessionId(): string {
+  return document.querySelector("main")?.getAttribute("data-session-id") ?? "";
+}
+
+function paintUnread(): void {
+  const ids = unreadIds();
+  for (const row of document.querySelectorAll<HTMLElement>(
+    "[data-session-id]",
+  )) {
+    const unread = ids.has(row.dataset["sessionId"] ?? "");
+    row.querySelector(".unread-dot")?.classList.toggle("hidden", !unread);
+  }
+}
+
+function setUpUnread(): void {
+  const ids = unreadIds();
+  if (ids.delete(currentSessionId())) storeUnread(ids);
+  paintUnread();
+  // The global stream drops the id of every session whose turn just ended.
+  document
+    .getElementById("session-finished")
+    ?.addEventListener("htmx:afterSwap", (event) => {
+      const id = (event.target as HTMLElement).textContent?.trim() ?? "";
+      if (!id || id === currentSessionId()) return;
+      const pending = unreadIds();
+      pending.add(id);
+      storeUnread(pending);
+      paintUnread();
+    });
+  // Rows arrive lazily and out of band; a streaming turn swaps ten times a
+  // second and must not drag the whole sidebar through this.
+  document.body.addEventListener("htmx:afterSwap", (event) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest("#sidebar")) {
+      paintUnread();
+      applyFilter();
+    }
+  });
+}
+
+// Sidebar text filter. Rows carry their title in `data-title`, so filtering
+// never needs the server.
+function applyFilter(): void {
+  const input = document.querySelector<HTMLInputElement>("#session-filter");
+  const needle = (input?.value ?? "").trim().toLowerCase();
+  for (const row of document.querySelectorAll<HTMLElement>(
+    "#session-list li[data-session-id]",
+  )) {
+    const id = row.dataset["sessionId"] ?? "";
+    const title = row.dataset["title"] ?? "";
+    row.hidden =
+      needle !== "" && !title.includes(needle) && !id.includes(needle);
+  }
+  for (const group of document.querySelectorAll<HTMLElement>(
+    "#session-list section",
+  )) {
+    // Only session rows count; a row's action menu has list items too.
+    group.hidden = !group.querySelector("li[data-session-id]:not([hidden])");
+  }
+}
+
+function setUpFilter(): void {
+  document
+    .querySelector<HTMLInputElement>("#session-filter")
+    ?.addEventListener("input", applyFilter);
+}
+
 applyTheme(storedTheme());
 setUpTheme();
 setUpScrollFollow();
 setUpShortcuts();
+setUpFilter();
+setUpUnread();
