@@ -7,12 +7,19 @@ under `~/.pi/agent` and runs live turns in-process through Pi's SDK.
 
 ## Run
 
+Install Pi first: web-pi compiles and runs against the `pi` on your `PATH`
+rather than a pinned copy, and `pnpm install` links that install into
+`node_modules/@earendil-works/`.
+
 ```bash
 mise install
 pnpm install
-just doctor          # the SDK pin must match the pi on PATH
+just doctor          # which pi on PATH this checkout resolved
 just dev             # http://127.0.0.1:30142
 ```
+
+After upgrading Pi, run `just link-pi` (or any `just` recipe) to repoint the
+links.
 
 Environment: `WEB_PI_PORT` (default 30142), `WEB_PI_HOST` (127.0.0.1),
 `WEB_PI_DEFAULT_CWD` (home), `PI_CODING_AGENT_DIR` (Pi's agent directory),

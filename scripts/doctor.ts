@@ -1,25 +1,26 @@
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { CHECKOUT_DIR, resolveHostPi, staleLinks } from "./host-pi.ts";
 
-// The Pi SDK is a pinned dependency, while sessions and settings are shared
-// with the `pi` on PATH. A version gap can mean a session format this
-// checkout cannot read; say so before it surprises anyone.
-const manifest = JSON.parse(readFileSync("package.json", "utf8")) as {
-  dependencies: Record<string, string>;
-};
-const pinned = manifest.dependencies["@earendil-works/pi-coding-agent"];
-let host = "not found";
+// Nothing is pinned: report which Pi this checkout compiles and runs against.
+let host;
 try {
-  host = execFileSync("pi", ["--version"], { encoding: "utf8" }).trim();
-} catch {
-  // A missing host pi is reported below.
+  host = resolveHostPi();
+} catch (error) {
+  process.stderr.write(
+    `${error instanceof Error ? error.message : String(error)}\n`,
+  );
+  process.exit(1);
 }
-const ok = host === pinned;
-process.stdout.write(
-  `pinned @earendil-works/pi-coding-agent: ${pinned ?? "?"}\nhost pi on PATH: ${host}\n${
-    ok
-      ? "OK: versions match"
-      : "WARNING: bump the pin to the host version (pnpm add @earendil-works/pi-coding-agent@<v> @earendil-works/pi-ai@<v> @earendil-works/pi-agent-core@<v>)"
-  }\n`,
+
+const stale = staleLinks(CHECKOUT_DIR, host);
+const lines = Object.entries(host.packages).map(
+  ([name, target]) =>
+    `  ${name} -> ${target}${stale.includes(name) ? "  (not linked)" : ""}`,
 );
-process.exit(ok ? 0 : 1);
+process.stdout.write(
+  `pi executable: ${host.executable}\nversion: ${host.version}\n${lines.join("\n")}\n${
+    stale.length === 0
+      ? "OK: node_modules/@earendil-works points at the host install\n"
+      : "WARNING: run `just link-pi` to relink node_modules/@earendil-works\n"
+  }`,
+);
+process.exit(stale.length === 0 ? 0 : 1);

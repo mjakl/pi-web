@@ -4,5 +4,7 @@
 *.tsbuildinfo
 .DS_Store
 /static/app.css
+/static/client.js
+/static/client.js.map
 /coverage
 *.log

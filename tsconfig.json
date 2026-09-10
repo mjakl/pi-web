@@ -32,8 +32,9 @@
       "@core/*": ["./src/core/*"],
       "@adapters/*": ["./src/adapters/*"],
       "@web/*": ["./src/web/*"],
+      "@scripts/*": ["./scripts/*"],
       "#/*": ["./tests/*"]
     }
   },
-  "include": ["src", "tests", "vitest.config.ts"]
+  "include": ["src", "tests", "scripts", "vitest.config.ts"]
 }

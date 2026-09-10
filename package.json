@@ -6,12 +6,9 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "prepare": "husky"
+    "prepare": "husky && node --import tsx scripts/link-host-pi.ts"
   },
   "dependencies": {
-    "@earendil-works/pi-agent-core": "0.85.1",
-    "@earendil-works/pi-ai": "0.85.1",
-    "@earendil-works/pi-coding-agent": "0.85.1",
     "@hono/node-server": "2.1.1",
     "@mjakl/core": "github:mjakl/core#v0.3.0",
     "hono": "4.13.7",
@@ -23,6 +20,7 @@
     "@types/node": "^24.13.3",
     "@vitest/coverage-v8": "^5.0.0",
     "daisyui": "5.7.33",
+    "esbuild": "0.28.2",
     "htmx-ext-sse": "2.2.4",
     "htmx.org": "2.0.10",
     "husky": "9.1.7",

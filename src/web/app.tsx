@@ -1,4 +1,5 @@
 import { isSessionId } from "@core/sessions";
+import { staticAssets } from "@web/assets";
 import type { Workspace } from "@core/workspace";
 import { honoFactory } from "@web/hono";
 import { HtmlLayout } from "@web/HtmlLayout";
@@ -45,9 +46,11 @@ function field(form: FormData, name: string): string {
 export function createWebApp(deps: WebDeps) {
   const app = honoFactory.createApp();
   const renderIntervalMs = deps.renderIntervalMs ?? 100;
+  const assets = staticAssets(deps.staticRoot);
 
   app.use("*", (c, next) => {
     c.set("workspace", deps.workspace);
+    c.set("assets", assets);
     return next();
   });
   app.use(

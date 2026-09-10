@@ -20,6 +20,10 @@ export default defineConfig({
         replacement: `${path.resolve(rootDir, "src/web")}/$1`,
       },
       {
+        find: /^@scripts\/(.*)$/,
+        replacement: `${path.resolve(rootDir, "scripts")}/$1`,
+      },
+      {
         find: /^#\/(.*)$/,
         replacement: `${path.resolve(rootDir, "tests")}/$1`,
       },

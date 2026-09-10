@@ -61,13 +61,22 @@ composition root and the only importer of Pi adapters.
 
 ## Decisions
 
-- **Pi SDK as a pinned dependency**, not resolved from the host `pi` on `PATH`.
-  Without a bundler there is no shim machinery to justify; `just doctor` flags a
-  version gap. Trade-off: after `pi` upgrades, bump the pin.
+- **Pi SDK resolved from the host `pi` on `PATH`**, never pinned. web-pi reads
+  and writes the same session files as the installed CLI, so a pin would let the
+  two drift apart silently. `scripts/link-host-pi.ts` walks `PATH` for the first
+  `pi` outside this checkout, finds the `@earendil-works/pi-coding-agent`
+  package that owns it (a bare version-manager shim is rejected: it says nothing
+  about the version), resolves `pi-ai`, `pi-agent-core`, and `pi-tui` through
+  Node from that package, checks all four report the same version, and symlinks
+  them into `node_modules/@earendil-works/`. It runs from `prepare` and from
+  every `just` recipe that compiles or runs code. Trade-off: a fresh checkout
+  needs Pi installed before `pnpm install` succeeds.
 - **Raw HTML in Markdown is escaped**, not sanitised. No allowlist to maintain,
   no script can pass.
-- **No client-side JavaScript beyond htmx**, plus a 12-line scroll-follow script
-  in `src/web/HtmlLayout.tsx`.
+- **One client bundle besides htmx.** `src/web/client/main.ts` (scroll-follow,
+  theme, keyboard shortcuts) is bundled by esbuild into `static/client.js` and
+  loaded as a module with a content hash in its URL. The only inline script is
+  the two-line theme read in `<head>`, which has to run before the first paint.
 
 ## Not carried over yet
 
@@ -86,6 +95,5 @@ pi-web features absent from this slice, roughly in order of value:
    read-only from Pi's store), skills and plugins management.
 6. Syntax highlighting, Mermaid preview, lazy loading of long transcripts, a
    minimap rail, message actions (copy, star).
-7. PWA, push notifications, completion sound, theme toggle (the stylesheet
-   follows `prefers-color-scheme`).
+7. PWA, push notifications, completion sound.
 8. Idle shutdown of live sessions and a running-session cap.

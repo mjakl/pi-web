@@ -3,6 +3,20 @@ import type { SessionView } from "@core/workspace";
 import { Items } from "./Items.tsx";
 import { Status } from "./Status.tsx";
 
+function ThemeSelect() {
+  return (
+    <label class="flex items-center gap-2 border-t border-base-300 px-3 py-2 text-xs">
+      <span class="text-base-content/60">Theme</span>
+      {/* Wired up by src/web/client/main.ts; without it the system theme wins. */}
+      <select id="theme-select" class="select select-xs" aria-label="Theme">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </label>
+  );
+}
+
 function Sidebar({
   groups,
   activeId,
@@ -11,40 +25,50 @@ function Sidebar({
   activeId?: string;
 }) {
   return (
-    <aside class="flex w-72 shrink-0 flex-col overflow-y-auto border-r border-base-300 bg-base-200">
+    <aside
+      id="sidebar"
+      class="flex h-full w-72 flex-col border-r border-base-300 bg-base-200"
+    >
       <div class="flex items-center justify-between px-3 py-2">
         <a href="/" class="font-semibold">
           Pi
         </a>
-        <a href="/new" class="btn btn-primary btn-xs">
+        <a
+          href="/new"
+          class="btn btn-primary btn-xs"
+          title="New session (Ctrl+K)"
+        >
           New
         </a>
       </div>
-      {groups.map((group) => (
-        <section class="px-2 pb-2">
-          <h2
-            class="truncate px-1 text-xs text-base-content/60"
-            title={group.cwd}
-          >
-            {group.label}
-          </h2>
-          <ul class="menu menu-sm p-0">
-            {group.sessions.map((session) => (
-              <li>
-                <a
-                  href={`/sessions/${session.id}`}
-                  class={session.id === activeId ? "menu-active" : ""}
-                >
-                  <span class="truncate">{session.name ?? session.id}</span>
-                  {session.live ? (
-                    <span class="status status-success" aria-label="live" />
-                  ) : null}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      <div class="min-h-0 flex-1 overflow-y-auto">
+        {groups.map((group) => (
+          <section class="px-2 pb-2">
+            <h2
+              class="truncate px-1 text-xs text-base-content/60"
+              title={group.cwd}
+            >
+              {group.label}
+            </h2>
+            <ul class="menu menu-sm p-0">
+              {group.sessions.map((session) => (
+                <li>
+                  <a
+                    href={`/sessions/${session.id}`}
+                    class={session.id === activeId ? "menu-active" : ""}
+                  >
+                    <span class="truncate">{session.name ?? session.id}</span>
+                    {session.live ? (
+                      <span class="status status-success" aria-label="live" />
+                    ) : null}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+      <ThemeSelect />
     </aside>
   );
 }
@@ -59,15 +83,38 @@ function Shell({
   children?: unknown;
 }) {
   return (
-    <div class="flex h-full">
-      <Sidebar groups={groups} activeId={activeId} />
-      <main
-        class="flex min-w-0 flex-1 flex-col"
-        hx-ext="sse"
-        sse-connect={activeId ? `/sessions/${activeId}/events` : undefined}
-      >
-        {children}
-      </main>
+    <div class="drawer h-dvh md:drawer-open">
+      <input id="nav-drawer" type="checkbox" class="drawer-toggle" />
+      <div class="drawer-content flex min-h-0 flex-col">
+        <div class="flex items-center gap-2 border-b border-base-300 px-2 py-1 md:hidden">
+          <label
+            for="nav-drawer"
+            class="btn btn-ghost btn-sm"
+            aria-label="Show sessions"
+          >
+            ☰
+          </label>
+          <a href="/" class="font-semibold">
+            Pi
+          </a>
+        </div>
+        <main
+          class="flex min-h-0 flex-1 flex-col"
+          data-session-id={activeId}
+          hx-ext="sse"
+          sse-connect={activeId ? `/sessions/${activeId}/events` : undefined}
+        >
+          {children}
+        </main>
+      </div>
+      <div class="drawer-side">
+        <label
+          for="nav-drawer"
+          class="drawer-overlay"
+          aria-label="Hide sessions"
+        />
+        <Sidebar groups={groups} activeId={activeId} />
+      </div>
     </div>
   );
 }
@@ -136,7 +183,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
         rows={3}
         placeholder="Ask Pi… (Ctrl+Enter to send)"
         required
-        hx-on--keydown="if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); this.form.requestSubmit(); }"
+        hx-on-keydown="if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); this.form.requestSubmit(); }"
       />
       <button class="btn self-end btn-primary">Send</button>
     </form>
@@ -172,7 +219,7 @@ export function SessionPage({
           <Status view={view} />
         </div>
       </header>
-      <div id="log" class="flex-1 overflow-y-auto px-4">
+      <div id="log" class="min-h-0 flex-1 overflow-y-auto px-4">
         <div id="messages" sse-swap="settled" hx-swap="beforeend">
           <Items items={view.items} />
         </div>

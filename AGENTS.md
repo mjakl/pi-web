@@ -15,8 +15,11 @@ browser holds none.
   tests. Experiments that run a model use `PI_CODING_AGENT_DIR` pointing at a
   temporary directory with copied `auth.json`, `models.json`, and a minimal
   `settings.json`.
-- The Pi SDK is a pinned dependency. `just doctor` compares the pin with the
-  `pi` on `PATH`; bump all three `@earendil-works/*` pins together.
+- The Pi SDK is never pinned: `scripts/link-host-pi.ts` points
+  `node_modules/@earendil-works/*` at the `pi` on `PATH`, and `prepare` plus
+  every `just` recipe that compiles or runs code re-links first. Pi must be
+  installed separately; `just doctor` reports which install was resolved. Never
+  add an `@earendil-works/*` dependency to `package.json`.
 - `CLAUDE.md` is a symlink to this file.
 
 ## Layout and boundaries
@@ -27,7 +30,8 @@ src/adapters   Pi SDK and in-memory implementations of the ports
 src/web        Hono routes, JSX views, HTMX/SSE delivery
 src/container.ts  the only file that wires adapters into the core
 src/main.ts    process entrypoint
-tests/         vitest, mirrors src/
+tests/         vitest, mirrors src/ and scripts/
+scripts/       repository tooling: host Pi linking, doctor, doc checks
 ```
 
 Rules enforced by `.oxlintrc.json`:
@@ -35,7 +39,8 @@ Rules enforced by `.oxlintrc.json`:
 - `src/core` may import SDK **types** but never call the SDK, Node, or Hono.
 - `src/adapters` never import `src/web`.
 - `src/web` never imports adapters or the SDK; it talks to `Workspace`.
-- No parent-relative imports; use `@core/*`, `@adapters/*`, `@web/*`, `#/*`.
+- No parent-relative imports; use `@core/*`, `@adapters/*`, `@web/*`,
+  `@scripts/*`, `#/*`.
 - Hono JSX uses `class`, never `className`. No dynamic imports in `src/`.
 
 Read `docs/architecture.md` before changing a port, the SSE contract, or context

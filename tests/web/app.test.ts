@@ -57,6 +57,20 @@ describe("web app", () => {
     expect(html).toContain("not running");
   });
 
+  it("ships the shell: theme before paint, drawer, and hashed assets", async () => {
+    const { app } = testApp();
+    const html = await (await app.request("/sessions/s1")).text();
+    expect(html).toContain("web-pi:theme");
+    expect(html).toContain('<script type="module" src="/static/client.js?v=');
+    expect(html).toContain('<link rel="stylesheet" href="/static/app.css?v=');
+    expect(html).toContain("md:drawer-open");
+    expect(html).toContain('id="nav-drawer"');
+    expect(html).toContain('id="theme-select"');
+    expect(html).toContain('data-session-id="s1"');
+    // `hx-on--keydown` would bind the htmx event htmx:keydown, not the DOM one.
+    expect(html).toContain("hx-on-keydown");
+  });
+
   it("returns a fragment for HTMX requests and 404 for unknown ids", async () => {
     const { app } = testApp();
     const fragment = await (

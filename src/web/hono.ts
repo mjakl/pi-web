@@ -1,3 +1,4 @@
+import type { StaticAssets } from "@web/assets";
 import type { Workspace } from "@core/workspace";
 import type { Context, Env, Input } from "hono";
 import { createFactory } from "hono/factory";
@@ -5,6 +6,7 @@ import { createFactory } from "hono/factory";
 type AppEnvironment = {
   Variables: {
     workspace: Workspace;
+    assets: StaticAssets;
   };
 } & Env;
 
