@@ -93,6 +93,27 @@ describe("sidebar order and grouping", () => {
     ).toEqual(["b", "a"]);
   });
 
+  it("lists the working folders a project's sessions were started in", () => {
+    const projects = recentProjects([
+      summary("a", {
+        cwd: "/repo/wt",
+        projectRoot: "/repo/main",
+        worktreeBranch: "feature",
+      }),
+      summary("b", { cwd: "/repo/main", projectRoot: "/repo/main" }),
+      // A second session in a folder already listed adds nothing.
+      summary("c", { cwd: "/repo/main", projectRoot: "/repo/main" }),
+      summary("d", { cwd: "/other" }),
+    ]);
+    expect(projects.find((p) => p.key === "/repo/main")?.folders).toEqual([
+      { path: "/repo/main", branch: null },
+      { path: "/repo/wt", branch: "feature" },
+    ]);
+    expect(projects.find((p) => p.key === "/other")?.folders).toEqual([
+      { path: "/other", branch: null },
+    ]);
+  });
+
   it("counts running sessions per project", () => {
     const projects = recentProjects([
       summary("a", { projectRoot: "/repo/one", running: true }),
@@ -137,12 +158,18 @@ describe("sidebar order and grouping", () => {
 });
 
 describe("relative time", () => {
-  it("shortens the age until a date is clearer", () => {
+  it("spells the age out the way pi-web's rows do", () => {
     const now = Date.parse("2026-03-01T12:00:00.000Z");
-    expect(relativeTime("2026-03-01T11:59:30.000Z", now)).toBe("now");
-    expect(relativeTime("2026-03-01T11:30:00.000Z", now)).toBe("30m");
-    expect(relativeTime("2026-03-01T06:00:00.000Z", now)).toBe("6h");
-    expect(relativeTime("2026-02-25T12:00:00.000Z", now)).toBe("4d");
-    expect(relativeTime("2025-12-01T12:00:00.000Z", now)).toBe("2025-12-01");
+    expect(relativeTime("2026-03-01T11:59:30.000Z", now)).toBe(
+      "30 seconds ago",
+    );
+    expect(relativeTime("2026-03-01T11:30:00.000Z", now)).toBe(
+      "30 minutes ago",
+    );
+    expect(relativeTime("2026-03-01T06:00:00.000Z", now)).toBe("6 hours ago");
+    expect(relativeTime("2026-02-25T12:00:00.000Z", now)).toBe("4 days ago");
+    // Nothing switches to a date: pi-web counts days however many there are.
+    expect(relativeTime("2025-12-01T12:00:00.000Z", now)).toBe("90 days ago");
+    expect(relativeTime("not a date", now)).toBe("");
   });
 });

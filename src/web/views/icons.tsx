@@ -218,7 +218,10 @@ export function CloseIcon({ size = 15 }: IconProps) {
 }
 
 /* 13 · more menus, session row menu */
-export function MoreDotsIcon({ size = 17 }: IconProps) {
+export function MoreDotsIcon({
+  size = 17,
+  radius = 1.5,
+}: IconProps & { radius?: number }) {
   return (
     <svg
       width={size}
@@ -227,9 +230,9 @@ export function MoreDotsIcon({ size = 17 }: IconProps) {
       fill="currentColor"
       aria-hidden="true"
     >
-      <circle cx="5" cy="12" r="1.5" />
-      <circle cx="12" cy="12" r="1.5" />
-      <circle cx="19" cy="12" r="1.5" />
+      <circle cx="5" cy="12" r={radius} />
+      <circle cx="12" cy="12" r={radius} />
+      <circle cx="19" cy="12" r={radius} />
     </svg>
   );
 }
@@ -441,21 +444,38 @@ export function StarIcon({
   );
 }
 
-/* 27 · folder in the workspace menu */
+/* 27 · folder in the workspace menu. Drawn without cap or join attributes,
+   as ProjectFolderGroup.tsx does, so the corners stay mitred. */
 export function ProjectFolderIcon({ size = 13 }: IconProps) {
   return (
-    <Stroked size={size} width={1.5} cap="butt" join="round">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      aria-hidden="true"
+    >
       <path d="M3 7V5h6l2 2h10v13H3Z" />
-    </Stroked>
+    </svg>
   );
 }
 
 /* 28 · worktree group chevron (rotate 90deg when expanded) */
 export function ChevronRightIcon({ size = 13 }: IconProps) {
   return (
-    <Stroked size={size} width={1.5}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      aria-hidden="true"
+    >
       <path d="m9 5 7 7-7 7" />
-    </Stroked>
+    </svg>
   );
 }
 

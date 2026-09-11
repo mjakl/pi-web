@@ -1,5 +1,56 @@
 /* Sidebar area.
 
-   pi-web's stylesheets in ../ are the pixel spec; this file is the only
-   CSS this area may edit. Empty on purpose: add a rule only when pi-web's
-   own CSS cannot express it, and say why. */
+   pi-web's stylesheets in ../ are the pixel spec; this file is the only CSS
+   this area may edit. Everything here is a value pi-web writes from React —
+   an inline style on an element rendered per state, or a hover handler that
+   assigns element.style — which a server-rendered page has to express as a
+   rule instead. */
+
+/* The new-session and settings buttons are links here, because they navigate
+   and web-pi renders without script; globals.css scopes the header button's
+   hover to :enabled, which never matches a link. */
+a.sidebar-icon-button:hover {
+  background: var(--bg-selected);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+/* pi-web puts `flex-shrink: 0` inline on the folder icon and the group
+   chevron (ProjectFolderGroup.tsx L27, L143); icons.tsx takes no style. */
+.project-folder-row > svg {
+  flex-shrink: 0;
+}
+
+/* ...and rotates that chevron when the group is expanded. The browser never
+   reflects popover/disclosure state in the DOM, so aria-expanded, which
+   client/sidebar.ts flips, is the hook. */
+.project-folder-row[aria-expanded="true"] > svg:first-child {
+  transform: rotate(90deg);
+}
+
+/* SessionItem.tsx L855: the row's menu trigger takes --bg-selected while its
+   popover is open. React re-renders for that; :has does it without script. */
+.session-row:has(> .menu-surface:popover-open) .session-menu-trigger {
+  background: var(--bg-selected);
+}
+
+/* SessionSidebar.tsx L1381-L1406: the header refresh button is the one
+   sidebar button pi-web styles entirely inline, including its hover and the
+   green "done" flash it holds for two seconds after a refresh. */
+.sidebar-refresh-button:hover:not([data-done]) {
+  background: var(--bg-selected);
+  color: var(--accent);
+  border-color: rgba(37, 99, 235, 0.35);
+}
+.sidebar-refresh-button[data-done] {
+  background: rgba(74, 222, 128, 0.18);
+  border-color: rgba(74, 222, 128, 0.4);
+  color: var(--success);
+}
+.sidebar-refresh-button[data-done] .sidebar-refresh-idle {
+  display: none;
+}
+.sidebar-refresh-button[data-done] .sidebar-refresh-done {
+  display: flex;
+  color: var(--success);
+}

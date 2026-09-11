@@ -48,7 +48,13 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
   } = ctx;
 
   app.get("/", async (c) => {
-    return c.render(<IndexPage sidebar={await sidebarOf(c)} />);
+    return c.render(
+      <IndexPage
+        sidebar={await sidebarOf(c)}
+        cwd={currentCwd(c)}
+        {...(deps.home === undefined ? {} : { home: deps.home })}
+      />,
+    );
   });
 
   app.get("/new", async (c) => {
@@ -63,6 +69,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
         sidebar={sidebar}
         view={view}
         draft={c.req.query("text")}
+        {...(deps.home === undefined ? {} : { home: deps.home })}
       />,
     );
   });
@@ -97,6 +104,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
         sidebar={sidebar}
         view={view}
         {...(trust === undefined ? {} : { trust })}
+        {...(deps.home === undefined ? {} : { home: deps.home })}
       />,
     );
   });

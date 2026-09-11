@@ -66,7 +66,7 @@ export function setUpFolderMemory(): void {
   document.body.addEventListener("htmx:afterSwap", (event) => {
     const target = event.target;
     if (!(target instanceof Element) || target.id !== "dialogs") return;
-    const input = target.querySelector<HTMLInputElement>("#browse-path");
+    const input = target.querySelector<HTMLInputElement>("#directory-path");
     const remembered = read(LAST_CWD_KEY);
     if (input && remembered !== null && remembered !== input.value) {
       input.value = remembered;

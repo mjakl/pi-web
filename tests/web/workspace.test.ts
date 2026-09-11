@@ -66,14 +66,32 @@ const form = (fields: Record<string, string>) => {
   return { method: "POST", body };
 };
 
-describe("the folder picker", () => {
-  it("opens as a modal dialog with the known projects and a browse pane", async () => {
+describe("the directory picker", () => {
+  it("opens as pi-web's modal dialog, on the folder in use", async () => {
     const { app } = testApp();
     const html = await (await app.request("/workspaces/picker")).text();
-    expect(html).toContain('id="workspace-picker"');
+    expect(html).toContain('class="directory-picker-dialog"');
     expect(html).toContain("data-modal");
-    expect(html).toContain('id="browse-pane"');
-    expect(html).toContain("/workspaces/folders?cwd=");
+    expect(html).toContain('class="directory-picker-panel"');
+    expect(html).toContain("Select directory");
+    // Header, path form, listing and footer, in pi-web's order (§3.7).
+    const order = [
+      "Select directory",
+      "directory-picker-back",
+      'id="directory-path"',
+      ">Go<",
+      "directory-picker-list",
+      "directory-picker-footer",
+      ">Cancel<",
+      "Select this folder",
+    ];
+    let at = 0;
+    for (const marker of order) {
+      const found = html.indexOf(marker, at);
+      expect([marker, found > -1]).toStrictEqual([marker, true]);
+      at = found;
+    }
+    expect(html).toContain(`value="${repo}"`);
   });
 
   it("lists a project's worktrees and marks the folder in use", async () => {
@@ -148,16 +166,19 @@ describe("the folder picker", () => {
     ).text();
     expect(html).toContain(".hidden");
     expect(html).toContain("src");
-    expect(html).toContain("Use this folder");
+    expect(html).toContain('class="directory-picker-entry"');
+    expect(html).toContain("Select this folder");
   });
 
-  it("shows the error inside the pane and falls back to the home listing", async () => {
+  it("shows the error inside the panel and falls back to the home listing", async () => {
     const { app } = testApp();
     const html = await (
       await app.request("/workspaces/browse?path=/definitely/not/here")
     ).text();
     expect(html).toContain("Directory does not exist");
     expect(html).toContain('role="alert"');
+    // The whole panel is swapped, so the path form comes back with it.
+    expect(html).toContain('id="directory-picker-panel"');
   });
 
   it("remembers the chosen folder and its project in cookies", async () => {
