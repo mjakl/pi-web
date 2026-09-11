@@ -21,7 +21,7 @@ Internal interfaces, all consumers in this repository. Defined in
 | `SessionCatalog`   | List from headers only; read one branch; row metadata; rename, delete, star, fork, clone, rewind, export                     | `src/adapters/pi/session-catalog.ts` |
 | `AgentRuntime`     | Open or resume a `LiveSession`; watch every session's lifecycle                                                              | `src/adapters/pi/agent-runtime.ts`   |
 | `LiveSession`      | `snapshot()`, `prompt()`, `abort()`, `commands()`, `compact()`, `clearQueue()`, `runBash()`, `navigateTree()`, `subscribe()` | same                                 |
-| `ModelCatalog`     | Models Pi has credentials for, narrowed by `enabledModels`                                                                   | `src/adapters/pi/model-catalog.ts`   |
+| `ModelCatalog`     | Models Pi has credentials for, narrowed by `enabledModels`, with the configured default and per-pattern reasoning pins       | `src/adapters/pi/model-catalog.ts`   |
 | `ProjectResolver`  | The repository a working folder belongs to, and its branch                                                                   | `src/adapters/pi/projects.ts`        |
 | `ProjectResources` | Prompt templates and skills of a folder, without starting an agent                                                           | `src/adapters/pi/resources.ts`       |
 | `Files`            | The `@` completion index, directory listings, file bytes and text, `.docx` conversion, shell-output captures                 | `src/adapters/fs/file-tree.ts`       |
@@ -212,27 +212,88 @@ composition root and the only importer of Pi adapters.
   snapshot every 100 ms.
 - **Project commands run in the project's environment.** See
   [ADR 0001](adr/0001-project-command-environment.md).
+- **The chosen folder is a cookie, and validating it is what grants access.**
+  `web-pi-cwd` holds the folder new sessions start in, `web-pi-project` the
+  sidebar's project. The picker commits through `POST /workspaces/validate`,
+  which adds the folder to the in-memory allowed roots — so the new-session
+  composer gets `@` completion, the slash menu and a model picker, and `/new`
+  re-validates its cookie on every load rather than trusting it. Browsing
+  (`GET /workspaces/browse`) is deliberately outside that policy: it exposes
+  directory _names_ only, and a reader has to be able to see a folder before
+  asking for it. pi-web keeps the last custom path in `localStorage`; here the
+  cookie is the memory and `web-pi:last-cwd` only pre-fills the browse box.
+- **Worktree discovery is a rule plus a map.** `src/core/workspaces.ts` holds
+  the identity rules (bare repositories, linked worktrees, subdirectories keep
+  their own identity) and the parse of `git worktree list --porcelain -z`; the
+  adapter runs git, caches for 60 s, checks availability _before_ the cache so a
+  deleted folder can never be masked, and writes
+  `<agentDir>/web-worktree-projects.json` atomically at mode 0600 and only when
+  a mapping actually changed. Git forgets a worktree the moment it is deleted;
+  that map is what keeps its sessions grouped under the repository.
+- **A missing working folder is read-only, not an error.** The session still
+  reads, exports, shows statistics and stops; sending, branching, forking,
+  cloning, compacting, rewinding, switching model, activating and the file
+  explorer all disappear, and `createWorkspace` refuses them server-side with
+  the same sentence the page shows. One `requireFolder` guard, in the workspace,
+  so a new route cannot forget it.
+- **Trust is a gate, not a setting.** `hasTrustRequiringProjectResources`
+  decides whether a folder is gated at all; a grant writes Pi's own `trust.json`
+  through `ProjectTrustStore`, is refused while a session in that folder is
+  mid-turn, and then **stops** that folder's sessions so they restart with
+  project resources loaded. Untrusted projects keep working, with their
+  extensions, skills and prompts dormant.
+- **Config pages are pages.** `/settings` is server-rendered with three sections
+  (general, skills, plugins), the last one remembered in a cookie rather than
+  `localStorage`, and the mobile navigation is the same list as a native
+  `<select>` — no script. A section that fails to load says so; falling back to
+  general would quietly show the wrong page under the right tab.
+- **Dialogs are `<dialog open>` from the server, upgraded in the browser.**
+  `src/web/client/dialogs.ts` removes the `open` attribute and calls
+  `showModal()` for backdrop, focus trap, top layer and focus restore, and
+  removes the element when it closes. It must not call `close()` first: that
+  queues a `close` event which would fire after the listener is attached and
+  take the dialog straight back out of the page.
+- **The skill toggle is a line edit, never a re-serialisation.**
+  `src/core/skill-toggle.ts` inserts, rewrites or deletes one
+  `disable-model-invocation` line inside the frontmatter block. Presence is
+  tested, not truthiness, so an explicit `false` is rewritten in place instead
+  of collecting a duplicate key — which would make the file unparseable and drop
+  the skill. A shape the line edit cannot reach is refused rather than guessed
+  at. The file belongs to whoever wrote it.
+- **Startup model preferences are written only when Pi honoured them.**
+  `src/core/models.ts` is pi-web's `persistExplicitStartupPreferences`: the
+  default model is written when the session really started on the requested one,
+  the reasoning level unless it was clamped to `off` on a model that cannot
+  reason. The session is constructed with the choice, so `setModel` is never
+  called a second time; repeating it would append a duplicate session entry and
+  a duplicate extension event.
+- **The models cache is stamped, not just timed.** Credentials and model
+  metadata are edited in the Pi terminal, so the cache key carries the
+  modification times of `auth.json` and `models.json`: a terminal login shows up
+  on the next request instead of after the whole 60 s TTL. Granting trust, a
+  plugin action, or writing a new default invalidates it outright.
+- **Re-enabling a package loses its filters.** Disabling rewrites the entry as
+  an object whose four resource lists are empty; enabling writes the plain
+  source string back, so per-resource filters an entry carried do not survive
+  the round trip. That is Pi's own spelling and pi-web's behaviour; the UI says
+  so in the button's title rather than pretending otherwise.
 
 ## Not carried over yet
 
 pi-web features absent from this slice, roughly in order of value:
 
-1. `@` completion and the slash menu need a session: the new-session composer
-   offers neither until the session exists. Drafts persist text, not
-   attachments. The model selector is a native `<select>` (its type-ahead
-   replaces pi-web's filter box); startup model preferences are Pi's own
-   defaults rather than a browser choice persisted into settings.
-2. Extension dialogs (`select`, `confirm`, `input`, `editor`, custom UI) are
+1. Extension dialogs (`select`, `confirm`, `input`, `editor`, custom UI) are
    auto-cancelled; footers and headers are ignored, and a widget whose content
    is a terminal component shows as an empty chip. Tool output is preformatted
    text: ANSI is converted in the extension shelf, not in the transcript.
-3. Worktree-aware folder picker, project trust dialog (trust is honoured
-   read-only from Pi's store), skills and plugins management. Sessions already
-   group under the repository a worktree belongs to.
-4. The rail's branch marks move the session's leaf through `/navigate`, which
+2. The rail's branch marks move the session's leaf through `/navigate`, which
    offers the prompt there for editing, rather than opening that branch
    read-only. The explorer has no create, rename, delete or upload, and its
    expanded state is not remembered across a reload.
-5. PWA, push notifications, completion sound.
-6. A running-session cap. Idle shutdown exists only for drafts Pi never wrote to
+3. PWA, push notifications, completion sound. The sound _preference_ exists
+   (settings, `web-pi:sound`); Phase 6 plays the tone.
+4. A running-session cap. Idle shutdown exists only for drafts Pi never wrote to
    disk (10 minutes), as in pi-web.
+5. Workspace memory (`pi-web:last-open-by-workspace`): switching project does
+   not reopen the session last read there.
+6. Drafts persist text, not attachments.

@@ -1,5 +1,5 @@
 import { slashQuery } from "@core/composer";
-import { replaceRange, textarea } from "./editor.ts";
+import { type MenuEndpoints, replaceRange, textarea } from "./editor.ts";
 import { createMenu, type Menu } from "./menu.ts";
 
 // Typing `/` opens the command menu. The list and its ranking are rendered by
@@ -13,7 +13,7 @@ export type SlashMenu = {
   handleKey(event: KeyboardEvent): boolean;
 };
 
-export function setUpSlashMenu(sessionId: string | null): SlashMenu {
+export function setUpSlashMenu(endpoints: MenuEndpoints | null): SlashMenu {
   const menu: Menu = createMenu("slash-menu", (item) => {
     const area = textarea();
     const name = item.dataset["command"];
@@ -26,11 +26,11 @@ export function setUpSlashMenu(sessionId: string | null): SlashMenu {
   let inFlight: AbortController | undefined;
 
   const load = (query: string): void => {
-    if (sessionId === null) return;
+    if (endpoints === null) return;
     inFlight?.abort();
     const controller = new AbortController();
     inFlight = controller;
-    fetch(`/sessions/${sessionId}/commands?q=${encodeURIComponent(query)}`, {
+    fetch(endpoints.commands(query), {
       signal: controller.signal,
     })
       .then((response) => response.text())

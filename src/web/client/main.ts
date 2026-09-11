@@ -1,6 +1,8 @@
 // The only script the browser runs besides htmx. Bundled to static/client.js.
 
 import { abortTurn, setUpComposer } from "./composer.ts";
+import { dialogOpen, setUpDialogs } from "./dialogs.ts";
+import { setUpFolderMemory, setUpPreferences } from "./preferences.ts";
 import { DARK_THEME, LIGHT_THEME, THEME_KEY } from "./theme.ts";
 import { setUpFilePanel } from "./panel.ts";
 import { setUpRail } from "./rail.ts";
@@ -58,8 +60,11 @@ function inTextEntry(target: EventTarget | null): boolean {
 
 function setUpShortcuts(): void {
   document.addEventListener("keydown", (event) => {
-    // Escape inside a field is the composer's: it closes a menu first.
+    // Escape inside a field is the composer's: it closes a menu first, and
+    // an open dialog owns it outright, or closing the picker would abort the
+    // turn behind it.
     if (event.key === "Escape") {
+      if (dialogOpen()) return;
       if (!event.defaultPrevented && !inTextEntry(event.target)) abortTurn();
       return;
     }
@@ -240,6 +245,9 @@ function setUpFilter(): void {
 
 applyTheme(storedTheme());
 setUpTheme();
+setUpPreferences();
+setUpDialogs();
+setUpFolderMemory();
 setUpTranscript();
 setUpRail();
 setUpShortcuts();

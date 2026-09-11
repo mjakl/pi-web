@@ -35,6 +35,18 @@ function segmentsOf(path: string): string[] | null {
   return out;
 }
 
+/**
+ * One spelling per folder, for keying maps of paths: normalised, without a
+ * trailing separator, case-folded on Windows only. Not a security check —
+ * containment is `directoryWithin`.
+ */
+export function pathKey(path: string): string {
+  const segments = segmentsOf(path);
+  if (!segments) return path;
+  const joined = segments.join("/");
+  return joined === "" ? "/" : joined;
+}
+
 export function isAbsolutePath(path: string): boolean {
   return segmentsOf(path) !== null;
 }

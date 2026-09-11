@@ -1,0 +1,59 @@
+import type { ModelOption, ThinkingLevel } from "./ports.ts";
+
+// Which model a new session starts on, and which of those choices are written
+// back to Pi's settings as the new default.
+
+/** The configured default when it is still in scope, else the first model. */
+export function initialModel(
+  models: readonly ModelOption[],
+  preferred?: { provider: string; id: string },
+): ModelOption | undefined {
+  const match = preferred
+    ? models.find(
+        (model) =>
+          model.provider === preferred.provider && model.id === preferred.id,
+      )
+    : undefined;
+  return match ?? models[0];
+}
+
+/** The reasoning level a model starts on: its `enabledModels` pin, else off. */
+export function initialThinking(model: ModelOption | undefined): ThinkingLevel {
+  return model?.pin ?? "off";
+}
+
+export type StartupChoice = {
+  model?: { provider: string; modelId: string };
+  thinkingLevel?: ThinkingLevel;
+};
+
+/**
+ * pi-web's `persistExplicitStartupPreferences`: only a choice the reader
+ * actually made is written back, and only when Pi honoured it.
+ *
+ * - the default model is written when the session really started on the
+ *   requested model, so a silent fallback never becomes the new default;
+ * - the thinking level is written unless it was clamped to `off` because the
+ *   model cannot reason at all.
+ */
+export function startupWrites(
+  explicit: StartupChoice,
+  effective: {
+    model: { provider: string; modelId: string };
+    thinkingLevel: ThinkingLevel;
+    supportsThinking: boolean;
+  },
+): StartupChoice {
+  const wanted = explicit.model;
+  const sameModel =
+    wanted !== undefined &&
+    wanted.provider === effective.model.provider &&
+    wanted.modelId === effective.model.modelId;
+  const keepLevel =
+    explicit.thinkingLevel !== undefined &&
+    (effective.supportsThinking || effective.thinkingLevel !== "off");
+  return {
+    ...(sameModel ? { model: effective.model } : {}),
+    ...(keepLevel ? { thinkingLevel: effective.thinkingLevel } : {}),
+  };
+}

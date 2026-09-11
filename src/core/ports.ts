@@ -5,7 +5,15 @@ import type {
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { FileEntry, SlashCommand } from "./composer.ts";
 import type { GitFileStatus } from "./git-status.ts";
+import type { PackagesView, PackageScope } from "./packages.ts";
 import type { SessionRowMetadata, SessionSummary } from "./sessions.ts";
+import type {
+  SkillInfo,
+  SkillScope,
+  SkillSearchHit,
+  SkillUpdate,
+} from "./skills.ts";
+import type { ProjectInfo, WorktreeInfo } from "./workspaces.ts";
 
 // Outbound ports. The core describes what it needs from Pi and the file
 // system; adapters in src/adapters implement them. Everything here is an
@@ -17,6 +25,8 @@ export type ModelOption = {
   name: string;
   contextWindow: number;
   reasoning: boolean;
+  /** Reasoning level pinned for this model by an `enabledModels` pattern. */
+  pin?: ThinkingLevel;
 };
 
 export type { ThinkingLevel };
@@ -60,7 +70,72 @@ export type SessionCatalog = {
 
 /** Where a working folder belongs: its git top level and checked-out branch. */
 export type ProjectResolver = {
-  resolve(cwd: string): Promise<{ root: string; branch: string | null }>;
+  resolve(cwd: string): Promise<ProjectInfo>;
+  /**
+   * Whether the folder is still a directory on disk. A session whose folder
+   * is gone stays readable but may not run anything, so this is asked before
+   * every mutating command and is never served from a cache.
+   */
+  available(cwd: string): Promise<boolean>;
+  /**
+   * The sibling worktrees of a folder, always freshly probed: the picker is
+   * the only caller and a stale list would hide a worktree just created.
+   * `isGit` is false when git could not answer at all.
+   */
+  worktrees(cwd: string): Promise<{
+    project: ProjectInfo;
+    isGit: boolean;
+    worktrees: WorktreeInfo[];
+  }>;
+};
+
+/** Directories a reader may browse to when picking a working folder. */
+export type DirectoryBrowser = {
+  /**
+   * Immediate subdirectories of a folder, hidden ones included: this lists
+   * names only and grants no access to file contents. `path` accepts `~` and
+   * defaults to the home directory.
+   */
+  browse(path?: string): Promise<{
+    path: string;
+    parentPath: string | null;
+    directories: { name: string; path: string }[];
+  }>;
+};
+
+/** Pi's trust store, shared with the terminal: `<agentDir>/trust.json`. */
+export type ProjectTrust = {
+  status(cwd: string): Promise<{ requiresTrust: boolean; trusted: boolean }>;
+  /** No-op when the folder has no resources that require trust. */
+  trust(cwd: string): Promise<void>;
+};
+
+/** Skills of a folder, and the registry operations the settings page offers. */
+export type Skills = {
+  list(cwd: string): Promise<{
+    skills: SkillInfo[];
+    diagnostics: string[];
+    projectResourcesLoaded: boolean;
+  }>;
+  /** Rewrites one frontmatter line of the skill's own Markdown file. */
+  setDisabled(filePath: string, disable: boolean): Promise<void>;
+  search(query: string, limit: number): Promise<SkillSearchHit[]>;
+  /** Throws with the command's output when the install did not report success. */
+  install(pkg: string, scope: SkillScope, cwd: string): Promise<string>;
+  check(
+    cwd: string,
+    target?: { package: string; scope: SkillScope },
+  ): Promise<SkillUpdate[]>;
+  update(cwd: string, pkg: string, scope: SkillScope): Promise<string>;
+};
+
+/** Extension packages: Pi's `packages` setting and its install roots. */
+export type Packages = {
+  list(cwd: string): Promise<PackagesView>;
+  run(
+    action: "install" | "remove" | "update" | "enable" | "disable",
+    request: { cwd: string; source?: string; scope: PackageScope },
+  ): Promise<void>;
 };
 
 export type Notice = { level: "info" | "warning" | "error"; message: string };
@@ -76,6 +151,25 @@ export type CompactionSummary = {
   tokensBefore: number;
   tokensAfter: number | null;
   reason: string;
+};
+
+/** One parameter of a tool, as its JSON Schema describes it. */
+export type ToolParameter = {
+  name: string;
+  required: boolean;
+  type: string;
+  description?: string;
+  enum?: string[];
+  default?: string;
+};
+
+/** A tool definition, for the panel behind the session header. */
+export type ToolView = {
+  name: string;
+  description: string;
+  active: boolean;
+  parameters: ToolParameter[];
+  promptGuidelines?: string[];
 };
 
 /** A tool executing right now, with the last line it reported. */
@@ -161,6 +255,10 @@ export type LiveSession = {
   navigateTree(targetId: string): Promise<string | undefined>;
   /** Extension commands, prompt templates, and skills this session knows. */
   commands(): SlashCommand[];
+  /** Every configured tool, with the ones this turn may call marked active. */
+  toolDefinitions(): ToolView[];
+  /** The prompt the model is running with, extension edits included. */
+  systemPrompt(): string;
   compact(instructions?: string): Promise<void>;
   abortCompaction(): void;
   reload(): Promise<void>;
@@ -180,16 +278,35 @@ export type RuntimeEvent = {
 
 export type AgentRuntime = {
   get(sessionId: string): LiveSession | undefined;
-  /** Resume a persisted session, or create a new one in `cwd`. */
-  open(target: { sessionId: string } | { cwd: string }): Promise<LiveSession>;
+  /**
+   * Resume a persisted session, or create a new one in `cwd`. An explicit
+   * model or reasoning level starts the session there and is written back as
+   * Pi's default when the session really started on it.
+   */
+  open(
+    target:
+      | { sessionId: string }
+      | {
+          cwd: string;
+          model?: { provider: string; modelId: string };
+          thinkingLevel?: ThinkingLevel;
+        },
+  ): Promise<LiveSession>;
   subscribeAll(listener: (event: RuntimeEvent) => void): () => void;
 };
 
 /** Models in scope for a folder, plus what `enabledModels` could not resolve. */
-export type ModelListing = { models: ModelOption[]; warnings: string[] };
+export type ModelListing = {
+  models: ModelOption[];
+  warnings: string[];
+  /** `defaultProvider`/`defaultModel` from Pi's settings, when set. */
+  preferred?: { provider: string; id: string };
+};
 
 export type ModelCatalog = {
   list(cwd: string): Promise<ModelListing>;
+  /** After a trust grant or a settings write, the cached listing is stale. */
+  invalidate(cwd?: string): void;
 };
 
 /**

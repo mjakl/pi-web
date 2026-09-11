@@ -9,6 +9,7 @@ import { setUpAtCompletion } from "./at-complete.ts";
 import { setUpDrafts } from "./drafts.ts";
 import {
   composerForm,
+  menuEndpoints,
   replaceRange,
   setComposerValue,
   textarea,
@@ -65,8 +66,9 @@ export function setUpComposer(): void {
     replaceRange(area, caret, area.selectionEnd, insert.text, insert.caret);
   });
 
-  const slash = setUpSlashMenu(sessionId);
-  const at = setUpAtCompletion(sessionId);
+  const endpoints = menuEndpoints(form);
+  const slash = setUpSlashMenu(endpoints);
+  const at = setUpAtCompletion(endpoints);
   const images = setUpImages();
   const drafts = setUpDrafts(sessionId, cwd, textarea);
 

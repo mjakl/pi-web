@@ -1,5 +1,6 @@
 import type { SlashCommand, SlashSource } from "@core/composer";
-import type { Notice } from "@core/ports";
+import type { ModelOption, Notice, ThinkingLevel } from "@core/ports";
+import type { NewSessionView } from "@core/workspace";
 
 // The composer is one form. The server renders it and every menu it opens;
 // the client bundle owns only the keyboard, the local file index, and the
@@ -105,6 +106,71 @@ export function ComposerText({ draft }: { draft?: string }) {
   );
 }
 
+/** Reasoning levels a model may be asked for; the model clamps what it cannot. */
+const THINKING_LEVELS: ThinkingLevel[] = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
+/**
+ * The model a new session starts on. An explicit pick also becomes Pi's
+ * default for the next session, which is why it is a field of the form
+ * rather than a live command.
+ */
+function StartupModel({ view }: { view: NewSessionView }) {
+  if (view.models.length === 0) return <></>;
+  const providers = [...new Set(view.models.map((model) => model.provider))];
+  const option = (model: ModelOption) => (
+    <option
+      value={`${model.provider}/${model.id}`}
+      selected={
+        view.model?.provider === model.provider && view.model.id === model.id
+      }
+    >
+      {model.name}
+    </option>
+  );
+  return (
+    <div class="flex flex-wrap items-center gap-1">
+      <select
+        name="model"
+        class="select max-w-48 select-xs"
+        aria-label="Model"
+        title={`${String(view.models.length)} models. Type to search.`}
+      >
+        {providers.length > 1
+          ? providers.map((provider) => (
+              <optgroup label={provider}>
+                {view.models
+                  .filter((model) => model.provider === provider)
+                  .map(option)}
+              </optgroup>
+            ))
+          : view.models.map(option)}
+      </select>
+      {view.model?.reasoning ? (
+        <select name="thinking" class="select select-xs" aria-label="Reasoning">
+          {THINKING_LEVELS.map((level) => (
+            <option value={level} selected={level === view.thinkingLevel}>
+              {level}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      {view.modelWarnings.length > 0 ? (
+        <span class="w-full text-xs text-warning" role="alert">
+          {view.modelWarnings.join("\n")}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * `sessionId` posts into an existing session; `cwd` starts a new one. The two
  * differ only in where the form posts and whether the menus have a session to
@@ -114,10 +180,13 @@ export function Composer({
   sessionId,
   cwd,
   draft,
+  start,
 }: {
   sessionId?: string;
   cwd?: string;
   draft?: string;
+  /** Set on the new-session page: the model picker and the folder it starts in. */
+  start?: NewSessionView;
 }) {
   return (
     <form
@@ -131,17 +200,10 @@ export function Composer({
       hx-swap="beforeend"
       {...(sessionId === undefined ? {} : { "data-session-id": sessionId })}
       {...(cwd === undefined ? {} : { "data-cwd": cwd })}
+      {...(start?.usable === true ? { "data-complete": "folder" } : {})}
     >
       {sessionId === undefined && cwd !== undefined ? (
-        <label class="form-control">
-          <span class="label-text text-xs">Working folder</span>
-          <input
-            name="cwd"
-            value={cwd}
-            class="input-bordered input w-full input-sm"
-            required
-          />
-        </label>
+        <input type="hidden" name="cwd" value={cwd} />
       ) : null}
       {/* htmx reads the last clicked button, not requestSubmit's submitter,
           so the delivery mode travels in a field of its own. */}
@@ -165,7 +227,8 @@ export function Composer({
         <Menu id="at-menu" label="Files" />
         <ComposerText draft={draft} />
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        {start ? <StartupModel view={start} /> : null}
         <button
           type="button"
           id="attach-image"

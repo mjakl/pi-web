@@ -1,5 +1,5 @@
 import { relativeTime } from "@core/sessions";
-import type { SessionView, SidebarView } from "@core/workspace";
+import type { NewSessionView, SessionView, SidebarView } from "@core/workspace";
 import { Composer } from "./Composer.tsx";
 import { FilePanel } from "./Files.tsx";
 import { Rail } from "./Rail.tsx";
@@ -12,6 +12,7 @@ import {
 } from "./Items.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { Status } from "./Status.tsx";
+import { DialogHost, MissingFolderNotice, TrustBadge } from "./Workspace.tsx";
 
 function Shell({
   sidebar,
@@ -51,6 +52,7 @@ function Shell({
             sse-swap="notice"
             hx-swap="beforeend"
           />
+          <DialogHost />
         </main>
       </div>
       <div class="drawer-side">
@@ -77,26 +79,44 @@ export function IndexPage({ sidebar }: { sidebar: SidebarView }) {
 
 export function NewSessionPage({
   sidebar,
-  cwd,
+  view,
   draft,
 }: {
   sidebar: SidebarView;
-  cwd: string;
+  view: NewSessionView;
   draft?: string;
 }) {
   return (
     <Shell sidebar={sidebar}>
-      <div class="m-auto px-4 text-base-content/60">
-        New session. Type the first request below.
+      <header class="flex flex-wrap items-center gap-2 border-b border-base-300 px-4 py-2">
+        <span class="text-sm font-semibold">New session</span>
+        <code class="truncate text-xs text-base-content/60">{view.cwd}</code>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs"
+          hx-get="/workspaces/picker"
+          hx-target="#dialogs"
+          hx-swap="innerHTML"
+        >
+          Change folder…
+        </button>
+        <TrustBadge cwd={view.cwd} status={view.trust} />
+      </header>
+      <div class="m-auto px-4 text-center text-base-content/60">
+        {view.available
+          ? "Type the first request below."
+          : "That folder is gone. Pick another one to start a session."}
       </div>
-      <Composer cwd={cwd} draft={draft} />
+      {view.available ? (
+        <Composer cwd={view.cwd} draft={draft} start={view} />
+      ) : null}
     </Shell>
   );
 }
 
 function BranchSwitcher({ view }: { view: SessionView }) {
   const { leaves, summary } = view;
-  if (leaves.length < 2) return <></>;
+  if (leaves.length < 2 || view.summary.cwdAvailable === false) return <></>;
   return (
     <details class="dropdown dropdown-end">
       <summary class="btn btn-ghost btn-xs">
@@ -136,18 +156,23 @@ export function SessionPage({
   sidebar,
   view,
   draft,
+  trust,
 }: {
   sidebar: SidebarView;
   view: SessionView;
   draft?: string;
+  trust?: { requiresTrust: boolean; trusted: boolean };
 }) {
   const { summary } = view;
   const leafId = view.leaves.find((leaf) => leaf.current)?.id;
+  // A session whose folder is gone stays readable: only the actions that
+  // would run the agent in it disappear.
+  const missingFolder = summary.cwdAvailable === false;
   const actions: ItemActions = {
     sessionId: summary.id,
     cwd: summary.cwd,
     starred: view.starred,
-    ...(view.otherBranch ? { readOnly: true } : {}),
+    ...(view.otherBranch || missingFolder ? { readOnly: true } : {}),
   };
   return (
     <Shell sidebar={sidebar} activeId={summary.id}>
@@ -184,13 +209,36 @@ export function SessionPage({
           </a>
           <button
             type="button"
-            id="file-panel-toggle"
             class="btn btn-ghost btn-xs"
-            aria-controls="file-panel"
-            aria-expanded="false"
+            title="The tools this session may call"
+            hx-get={`/sessions/${summary.id}/tools`}
+            hx-target="#dialogs"
+            hx-swap="innerHTML"
           >
-            Files
+            Tools
           </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            title="The prompt this session runs with"
+            hx-get={`/sessions/${summary.id}/system-prompt`}
+            hx-target="#dialogs"
+            hx-swap="innerHTML"
+          >
+            Prompt
+          </button>
+          {trust ? <TrustBadge cwd={summary.cwd} status={trust} /> : null}
+          {missingFolder ? null : (
+            <button
+              type="button"
+              id="file-panel-toggle"
+              class="btn btn-ghost btn-xs"
+              aria-controls="file-panel"
+              aria-expanded="false"
+            >
+              Files
+            </button>
+          )}
         </div>
         {view.otherBranch ? (
           <div class="alert flex items-center gap-2 py-1 text-sm alert-info">
@@ -230,7 +278,9 @@ export function SessionPage({
         <div id="rail-column" class="pr-2">
           <Rail view={view} />
         </div>
-        <FilePanel sessionId={summary.id} cwd={summary.cwd} />
+        {missingFolder ? null : (
+          <FilePanel sessionId={summary.id} cwd={summary.cwd} />
+        )}
       </div>
       <button
         type="button"
@@ -257,7 +307,9 @@ export function SessionPage({
       >
         Loading branch history. Sending is paused.
       </p>
-      {view.otherBranch ? null : (
+      {missingFolder ? (
+        <MissingFolderNotice cwd={summary.cwd} />
+      ) : view.otherBranch ? null : (
         <Composer sessionId={summary.id} cwd={summary.cwd} draft={draft} />
       )}
       <Shelf status={view.status} />

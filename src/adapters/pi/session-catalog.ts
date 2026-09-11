@@ -1,3 +1,4 @@
+import { pathKey } from "@core/path-access";
 import type { SessionCatalog, SessionRead } from "@core/ports";
 import { STAR_TYPE, userMessageText } from "@core/session-entries";
 import {
@@ -14,7 +15,6 @@ import { createInterface } from "node:readline";
 import { exportSessionHtml } from "./session-export.ts";
 import {
   branchToNewFile,
-  pathKey,
   removeSessionFile,
   rewindSessionFile,
 } from "./session-files.ts";

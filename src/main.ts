@@ -1,5 +1,6 @@
 import { createWebApp } from "@web/app";
 import { serve } from "@hono/node-server";
+import { homedir } from "node:os";
 import { loadConfig } from "./config.ts";
 import { createDeps } from "./container.ts";
 
@@ -9,6 +10,7 @@ const app = createWebApp({
   workspace,
   staticRoot: config.staticRoot,
   defaultCwd: config.defaultCwd,
+  home: homedir(),
 });
 
 const server = serve(

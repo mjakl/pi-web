@@ -5,14 +5,18 @@ import {
   type ScriptedStep,
   userEntry,
 } from "@adapters/fake/index";
+import { createDirectoryBrowser } from "@adapters/fs/browse";
 import { createFileTree } from "@adapters/fs/file-tree";
 import { createWatcher } from "@adapters/fs/watch";
 import { createGit } from "@adapters/git/git";
 import { createPiAgentRuntime } from "@adapters/pi/agent-runtime";
 import { createPiModelCatalog } from "@adapters/pi/model-catalog";
+import { createPiPackages } from "@adapters/pi/packages";
 import { createPiProjectResolver } from "@adapters/pi/projects";
+import { createPiProjectTrust } from "@adapters/pi/project-trust";
 import { createPiProjectResources } from "@adapters/pi/resources";
 import { createPiSessionCatalog } from "@adapters/pi/session-catalog";
+import { createPiSkills } from "@adapters/pi/skills";
 import { createWorkspace, type Workspace } from "@core/workspace";
 import { tmpdir } from "node:os";
 import type { Config } from "./config.ts";
@@ -133,6 +137,14 @@ export function createDeps(config: Config): { workspace: Workspace } {
       sessions: demoSessions(config.defaultCwd),
       delayMs: 40,
       script: (prompt) => demoScript(config.defaultCwd, prompt),
+      worktrees: (cwd) => [
+        { path: cwd, branch: "main" },
+        { path: `${cwd}/worktree`, branch: "feature" },
+      ],
+      // The second demo session lives in a folder that is not there, which
+      // is what the read-only notice is for.
+      trustRequired: [config.defaultCwd],
+      missingFolders: [`${config.defaultCwd}/worktree`],
     });
     // Files, Git, and the watcher stay real even in the demo world: an
     // explorer is only worth looking at against an actual checkout, and the
@@ -152,6 +164,10 @@ export function createDeps(config: Config): { workspace: Workspace } {
       runtime: createPiAgentRuntime({ agentDir: config.agentDir, catalog }),
       models: createPiModelCatalog({ agentDir: config.agentDir }),
       projects: createPiProjectResolver({ agentDir: config.agentDir }),
+      browser: createDirectoryBrowser(),
+      trust: createPiProjectTrust({ agentDir: config.agentDir }),
+      skills: createPiSkills({ agentDir: config.agentDir }),
+      packages: createPiPackages({ agentDir: config.agentDir }),
       resources: createPiProjectResources({ agentDir: config.agentDir }),
       files: createFileTree(),
       git: createGit(),

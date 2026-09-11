@@ -9,6 +9,40 @@ export function composerForm(): HTMLFormElement | null {
   return document.querySelector<HTMLFormElement>("#composer");
 }
 
+/**
+ * Where the two composer menus fetch from. A session answers about itself; a
+ * validated folder answers the same questions before any session exists, so
+ * the new-session composer is not a lesser one.
+ */
+export type MenuEndpoints = {
+  commands(query: string): string;
+  index(query: string): string;
+  completion(query: string): string;
+};
+
+export function menuEndpoints(form: HTMLFormElement): MenuEndpoints | null {
+  const sessionId = form.dataset["sessionId"];
+  const encode = (query: string) => encodeURIComponent(query);
+  if (sessionId !== undefined && sessionId !== "") {
+    const base = `/sessions/${sessionId}`;
+    return {
+      commands: (query) => `${base}/commands?q=${encode(query)}`,
+      index: (query) => `${base}/file-index?q=${encode(query)}`,
+      completion: (query) => `${base}/file-completion?q=${encode(query)}`,
+    };
+  }
+  const cwd = form.dataset["cwd"];
+  // Only a folder the server validated: an unchecked path lists nothing.
+  if (form.dataset["complete"] !== "folder" || cwd === undefined) return null;
+  const folder = `cwd=${encodeURIComponent(cwd)}`;
+  return {
+    commands: (query) => `/workspaces/commands?${folder}&q=${encode(query)}`,
+    index: (query) => `/workspaces/file-index?${folder}&q=${encode(query)}`,
+    completion: (query) =>
+      `/workspaces/file-completion?${folder}&q=${encode(query)}`,
+  };
+}
+
 /** Replaces `[start, end)` and puts the caret at `start + caret`. */
 export function replaceRange(
   area: HTMLTextAreaElement,

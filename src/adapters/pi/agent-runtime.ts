@@ -1,6 +1,7 @@
 import type { SlashCommand } from "@core/composer";
 import type {
   AgentRuntime,
+  ToolView,
   ExtensionWidget,
   LiveEvent,
   LiveSession,
@@ -14,6 +15,8 @@ import type {
   ThinkingChoice,
   ThinkingLevel,
 } from "@core/ports";
+import { startupWrites } from "@core/models";
+import { toolParameters } from "@core/tools";
 import { toolProgress } from "@core/transcript";
 import { STAR_TYPE } from "@core/session-entries";
 import type { SessionSummary } from "@core/sessions";
@@ -371,6 +374,24 @@ class PiLiveSession implements LiveSession {
     ];
   }
 
+  /** Every configured tool; the active ones are what this turn may call. */
+  toolDefinitions(): ToolView[] {
+    const active = new Set(this.inner.getActiveToolNames());
+    return this.inner.getAllTools().map((tool): ToolView => ({
+      name: tool.name,
+      description: tool.description,
+      active: active.has(tool.name),
+      parameters: toolParameters(tool.parameters),
+      ...(tool.promptGuidelines && tool.promptGuidelines.length > 0
+        ? { promptGuidelines: tool.promptGuidelines }
+        : {}),
+    }));
+  }
+
+  systemPrompt(): string {
+    return this.inner.systemPrompt;
+  }
+
   async compact(instructions?: string): Promise<void> {
     this.compaction = null;
     await this.inner.compact(instructions);
@@ -458,6 +479,38 @@ class PiLiveSession implements LiveSession {
   }
 }
 
+/**
+ * A model or reasoning level the reader picked for a new session becomes Pi's
+ * default for the next one — but only when the session really started on it.
+ * `setModel`/`setThinkingLevel` are deliberately not called again: the
+ * constructor already recorded them, and repeating the call would append a
+ * duplicate session entry and a duplicate extension event.
+ */
+async function persistStartup(
+  settings: SettingsManager,
+  explicit: { model?: { provider: string; modelId: string } },
+  session: AgentSession,
+): Promise<void> {
+  const model = session.model;
+  if (!model) return;
+  const writes = startupWrites(explicit, {
+    model: { provider: model.provider, modelId: model.id },
+    thinkingLevel: session.thinkingLevel,
+    supportsThinking: model.reasoning,
+  });
+  if (writes.model) {
+    settings.setDefaultModelAndProvider(
+      writes.model.provider,
+      writes.model.modelId,
+    );
+  }
+  if (writes.thinkingLevel !== undefined) {
+    settings.setDefaultThinkingLevel(writes.thinkingLevel);
+  }
+  if (!writes.model && writes.thinkingLevel === undefined) return;
+  await settings.flush();
+}
+
 /** Abandoned drafts are shut down; a session with a file on disk is not. */
 const DRAFT_IDLE_MS = 10 * 60 * 1000;
 
@@ -473,7 +526,16 @@ export function createPiAgentRuntime(options: {
     for (const watcher of watchers) watcher(event);
   }
 
-  async function start(manager: SessionManager): Promise<PiLiveSession> {
+  /** How a new session may be started: on a model the reader picked. */
+  type StartupChoice = {
+    model?: { provider: string; modelId: string };
+    thinkingLevel?: ThinkingLevel;
+  };
+
+  async function start(
+    manager: SessionManager,
+    startup: StartupChoice = {},
+  ): Promise<PiLiveSession> {
     const cwd = manager.getCwd();
     const settingsManager = SettingsManager.create(cwd, options.agentDir);
     const trust = projectTrustReloadOptions(cwd, options.agentDir);
@@ -494,10 +556,21 @@ export function createPiAgentRuntime(options: {
       },
       ...(trust ? { resourceLoaderReloadOptions: trust } : {}),
     });
+    const wanted = startup.model
+      ? services.modelRuntime.getModel(
+          startup.model.provider,
+          startup.model.modelId,
+        )
+      : undefined;
     const { session } = await createAgentSessionFromServices({
       services,
       sessionManager: manager,
+      ...(wanted ? { model: wanted } : {}),
+      ...(startup.thinkingLevel === undefined
+        ? {}
+        : { thinkingLevel: startup.thinkingLevel }),
     });
+    await persistStartup(settingsManager, startup, session);
     const id = session.sessionId;
     const shellPath = settingsManager.getShellPath();
     const wrapper = new PiLiveSession(
@@ -550,7 +623,12 @@ export function createPiAgentRuntime(options: {
     },
     async open(target) {
       if ("cwd" in target) {
-        return start(SessionManager.create(target.cwd));
+        return start(SessionManager.create(target.cwd), {
+          ...(target.model === undefined ? {} : { model: target.model }),
+          ...(target.thinkingLevel === undefined
+            ? {}
+            : { thinkingLevel: target.thinkingLevel }),
+        });
       }
       const existing = live.get(target.sessionId);
       if (existing) return existing;

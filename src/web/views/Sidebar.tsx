@@ -399,6 +399,15 @@ export function ProjectPicker({ view }: { view: SidebarView }) {
       >
         No matching projects
       </p>
+      <button
+        type="button"
+        class="btn mt-1 w-full btn-ghost btn-xs"
+        hx-get="/workspaces/picker"
+        hx-target="#dialogs"
+        hx-swap="innerHTML"
+      >
+        Change folder…
+      </button>
     </>
   );
 }
@@ -475,9 +484,9 @@ export function ProjectNav({
   );
 }
 
-function ThemeSelect() {
+function Footer() {
   return (
-    <label class="flex items-center gap-2 border-t border-base-300 px-3 py-2 text-xs">
+    <div class="flex items-center gap-2 border-t border-base-300 px-3 py-2 text-xs">
       <span class="text-base-content/60">Theme</span>
       {/* Wired up by src/web/client/main.ts; without it the system theme wins. */}
       <select id="theme-select" class="select select-xs" aria-label="Theme">
@@ -485,7 +494,11 @@ function ThemeSelect() {
         <option value="light">Light</option>
         <option value="dark">Dark</option>
       </select>
-    </label>
+      <span class="flex-1" />
+      <a href="/settings" class="btn btn-ghost btn-xs" title="Settings">
+        ⚙
+      </a>
+    </div>
   );
 }
 
@@ -523,7 +536,7 @@ export function Sidebar({
         />
       </div>
       <ProjectNav view={view} activeId={activeId} />
-      <ThemeSelect />
+      <Footer />
     </aside>
   );
 }

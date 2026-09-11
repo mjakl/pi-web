@@ -4,9 +4,29 @@ import {
   resolveModelScopeWithDiagnostics,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { statSync } from "node:fs";
 import { join } from "node:path";
 
 const CACHE_TTL_MS = 60_000;
+
+/**
+ * Credentials and model metadata are edited in the Pi terminal, never here,
+ * so nothing invalidates the cache when they change. Stamping it with the
+ * modification times of `auth.json` and `models.json` makes a terminal login
+ * show up on the next request instead of after the whole TTL. Opaque: only
+ * equality matters.
+ */
+export function agentConfigStamp(agentDir: string): string {
+  return ["auth.json", "models.json"]
+    .map((name) => {
+      try {
+        return String(statSync(join(agentDir, name)).mtimeMs);
+      } catch {
+        return "-";
+      }
+    })
+    .join(":");
+}
 
 /**
  * Models Pi has credentials for, narrowed by the `enabledModels` setting.
@@ -21,7 +41,7 @@ export function createPiModelCatalog(options: {
 }): ModelCatalog {
   const cache = new Map<
     string,
-    { expiresAt: number; listing: Promise<ModelListing> }
+    { expiresAt: number; stamp: string; listing: Promise<ModelListing> }
   >();
 
   async function load(cwd: string): Promise<ModelListing> {
@@ -37,30 +57,52 @@ export function createPiModelCatalog(options: {
       contextWindow: model.contextWindow,
       reasoning: model.reasoning,
     });
-    const patterns = (
-      SettingsManager.create(cwd, options.agentDir).getEnabledModels() ?? []
-    )
+    const settings = SettingsManager.create(cwd, options.agentDir);
+    const provider = settings.getDefaultProvider();
+    const model = settings.getDefaultModel();
+    const preferred =
+      provider !== undefined && model !== undefined
+        ? { preferred: { provider, id: model } }
+        : {};
+    const patterns = (settings.getEnabledModels() ?? [])
       .map((pattern) => pattern.trim())
       .filter((pattern) => pattern !== "");
     if (patterns.length === 0) {
-      return { models: available.map(describe), warnings: [] };
+      return { models: available.map(describe), warnings: [], ...preferred };
     }
     const scope = await resolveModelScopeWithDiagnostics(patterns, runtime);
     const warnings = scope.diagnostics.map((diagnostic) => diagnostic.message);
-    const scoped = scope.scopedModels.map((entry) => describe(entry.model));
+    // `provider/*:high` pins a reasoning level for every model it matched.
+    const scoped = scope.scopedModels.map((entry) => ({
+      ...describe(entry.model),
+      ...(entry.thinkingLevel === undefined
+        ? {}
+        : { pin: entry.thinkingLevel }),
+    }));
     return scoped.length === 0
-      ? { models: available.map(describe), warnings }
-      : { models: scoped, warnings };
+      ? { models: available.map(describe), warnings, ...preferred }
+      : { models: scoped, warnings, ...preferred };
   }
 
   return {
     list(cwd) {
+      const stamp = agentConfigStamp(options.agentDir);
       const hit = cache.get(cwd);
-      if (hit && hit.expiresAt > Date.now()) return hit.listing;
+      if (hit && hit.expiresAt > Date.now() && hit.stamp === stamp) {
+        return hit.listing;
+      }
       const listing = load(cwd);
-      cache.set(cwd, { expiresAt: Date.now() + CACHE_TTL_MS, listing });
+      cache.set(cwd, {
+        stamp,
+        expiresAt: Date.now() + CACHE_TTL_MS,
+        listing,
+      });
       listing.catch(() => cache.delete(cwd));
       return listing;
+    },
+    invalidate(cwd) {
+      if (cwd === undefined) cache.clear();
+      else cache.delete(cwd);
     },
   };
 }

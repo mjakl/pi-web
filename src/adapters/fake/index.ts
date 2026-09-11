@@ -1,9 +1,18 @@
+import { createDirectoryBrowser } from "@adapters/fs/browse";
 import { createFileTree } from "@adapters/fs/file-tree";
 import { createWatcher } from "@adapters/fs/watch";
 import { createGit } from "@adapters/git/git";
 import type { SlashCommand } from "@core/composer";
+import {
+  type PackageInfo,
+  packageStatus,
+  resourceTotals,
+} from "@core/packages";
+import type { SkillInfo } from "@core/skills";
+import type { ProjectInfo, WorktreeInfo } from "@core/workspaces";
 import type {
   AgentRuntime,
+  DirectoryBrowser,
   ExtensionWidget,
   Files,
   Git,
@@ -13,14 +22,18 @@ import type {
   LiveStatus,
   ModelCatalog,
   ModelOption,
+  Packages,
   ProjectResolver,
+  ProjectTrust,
   ProjectResources,
   PromptInput,
   QueuedMessage,
   RunningTool,
   RuntimeEvent,
   SessionCatalog,
+  Skills,
   ThinkingLevel,
+  ToolView,
   Watcher,
 } from "@core/ports";
 import {
@@ -208,6 +221,88 @@ function starEntry(
     timestamp: new Date().toISOString(),
   };
 }
+
+/** A folder is its own project unless the world says otherwise. */
+function fakeProject(cwd: string): ProjectInfo {
+  return { root: cwd, branch: null, isWorktree: false, isTopLevel: true };
+}
+
+export const FAKE_SKILLS: SkillInfo[] = [
+  {
+    name: "testing",
+    description: "How this repository tests things",
+    filePath: "/repo/one/.pi/skills/testing/SKILL.md",
+    baseDir: "/repo/one/.pi/skills/testing",
+    disableModelInvocation: true,
+    scope: "project",
+  },
+  {
+    name: "changelog",
+    description: "Draft a changelog entry",
+    filePath: "/agent/skills/changelog/SKILL.md",
+    baseDir: "/agent/skills/changelog",
+    disableModelInvocation: false,
+    scope: "global",
+    install: {
+      package: "acme/skills@changelog",
+      scope: "global",
+      source: "acme/skills",
+      sourceType: "github",
+      skillsShUrl: "https://skills.sh/acme/skills/changelog",
+      skillPath: "changelog/SKILL.md",
+      versionHash: "0123456789abcdef0123456789abcdef01234567",
+      canCheckForUpdates: true,
+    },
+  },
+];
+
+export const FAKE_PACKAGES: PackageInfo[] = [
+  {
+    source: "npm:@acme/pi-plugin@1.2.0",
+    scope: "user",
+    status: "loaded",
+    filtered: false,
+    disabled: false,
+    installedPath: "/agent/npm/node_modules/@acme/pi-plugin",
+    packageName: "@acme/pi-plugin",
+    version: "1.2.0",
+    configuredVersion: "1.2.0",
+    resources: [
+      {
+        kind: "extensions",
+        name: "review",
+        relativePath: "extensions/review/index.ts",
+        path: "/agent/npm/node_modules/@acme/pi-plugin/extensions/review/index.ts",
+      },
+    ],
+  },
+];
+
+export const FAKE_SYSTEM_PROMPT = "You are Pi, a coding agent.\n\nBe concise.";
+
+export const FAKE_TOOLS: ToolView[] = [
+  {
+    name: "read",
+    description: "Read a file from disk",
+    active: true,
+    parameters: [
+      {
+        name: "path",
+        required: true,
+        type: "string",
+        description: "Absolute path of the file",
+      },
+      { name: "limit", required: false, type: "number", default: "200" },
+    ],
+    promptGuidelines: ["Read before you edit."],
+  },
+  {
+    name: "legacy",
+    description: "A tool nothing may call this turn",
+    active: false,
+    parameters: [],
+  },
+];
 
 export const FAKE_COMMANDS: SlashCommand[] = [
   { name: "review", description: "Review the diff", source: "extension" },
@@ -521,6 +616,14 @@ class FakeLiveSession implements LiveSession {
     return FAKE_COMMANDS;
   }
 
+  toolDefinitions(): ToolView[] {
+    return FAKE_TOOLS;
+  }
+
+  systemPrompt(): string {
+    return FAKE_SYSTEM_PROMPT;
+  }
+
   compact(instructions?: string): Promise<void> {
     this.compacting = true;
     this.compaction = null;
@@ -624,6 +727,10 @@ export type FakeWorld = {
   runtime: AgentRuntime;
   models: ModelCatalog;
   projects: ProjectResolver;
+  browser: DirectoryBrowser;
+  trust: ProjectTrust;
+  skills: Skills;
+  packages: Packages;
   resources: ProjectResources;
   files: Files;
   git: Git;
@@ -641,6 +748,15 @@ export function createFakeWorld(
     delayMs?: number;
     files?: string[];
     tmpdir?: string;
+    models?: ModelOption[];
+    /** Sibling worktrees the picker offers for a folder. */
+    worktrees?: (cwd: string) => WorktreeInfo[];
+    /** Folders whose project resources are gated behind trust. */
+    trustRequired?: string[];
+    /** Folders that are no longer on disk: their sessions are read-only. */
+    missingFolders?: string[];
+    skills?: SkillInfo[];
+    packages?: PackageInfo[];
   } = {},
 ): FakeWorld {
   const store = new Map(
@@ -653,6 +769,13 @@ export function createFakeWorld(
     options.script ?? ((prompt: string) => [{ text: reply(prompt) }]);
   const delayMs = options.delayMs ?? 5;
   const realFiles = createFileTree();
+  const gated = new Set(options.trustRequired ?? []);
+  const missing = new Set(options.missingFolders ?? []);
+  const trusted = new Set<string>();
+  const skills = (options.skills ?? FAKE_SKILLS).map((skill) => ({ ...skill }));
+  const plugins = (options.packages ?? FAKE_PACKAGES).map((entry) => ({
+    ...entry,
+  }));
   let created = 0;
 
   function announce(event: RuntimeEvent): void {
@@ -831,10 +954,113 @@ export function createFakeWorld(
       },
     },
     models: {
-      list: () => Promise.resolve({ models: [FAKE_MODEL], warnings: [] }),
+      list: () =>
+        Promise.resolve({
+          models: options.models ?? [FAKE_MODEL],
+          warnings: [],
+        }),
+      invalidate: () => undefined,
     },
     projects: {
-      resolve: (cwd) => Promise.resolve({ root: cwd, branch: null }),
+      resolve: (cwd) => Promise.resolve(fakeProject(cwd)),
+      available: (cwd) => Promise.resolve(!missing.has(cwd)),
+      worktrees: (cwd) =>
+        Promise.resolve({
+          project: fakeProject(cwd),
+          isGit: true,
+          worktrees: options.worktrees?.(cwd) ?? [
+            { path: cwd, branch: "main" },
+          ],
+        }),
+    },
+    browser: createDirectoryBrowser(),
+    trust: {
+      status: (cwd) =>
+        Promise.resolve({
+          requiresTrust: gated.has(cwd),
+          trusted: !gated.has(cwd) || trusted.has(cwd),
+        }),
+      trust: (cwd) => {
+        if (gated.has(cwd)) trusted.add(cwd);
+        return Promise.resolve();
+      },
+    },
+    skills: {
+      list: (cwd) =>
+        Promise.resolve({
+          skills: [...skills],
+          diagnostics: [],
+          projectResourcesLoaded: !gated.has(cwd) || trusted.has(cwd),
+        }),
+      setDisabled: (filePath, disable) => {
+        const skill = skills.find((entry) => entry.filePath === filePath);
+        if (!skill) throw new Error("Unknown skill");
+        skill.disableModelInvocation = disable;
+        return Promise.resolve();
+      },
+      search: (query) =>
+        Promise.resolve(
+          query === ""
+            ? []
+            : [
+                {
+                  package: `acme/skills@${query}`,
+                  installs: "1.2K installs",
+                  url: "https://skills.sh/acme/skills",
+                },
+              ],
+        ),
+      install: (pkg) => Promise.resolve(`Installed ${pkg}`),
+      check: () =>
+        Promise.resolve(
+          skills
+            .filter((skill) => skill.install !== undefined)
+            .map((skill) => ({
+              package: skill.install?.package ?? "",
+              scope: skill.install?.scope ?? "global",
+              state: "up-to-date" as const,
+              currentVersion: skill.install?.versionHash ?? "",
+            })),
+        ),
+      update: (_cwd, pkg) => Promise.resolve(`Updated ${pkg}`),
+    },
+    packages: {
+      list: (cwd) =>
+        Promise.resolve({
+          packages: [...plugins],
+          totals: resourceTotals(plugins),
+          diagnostics: [],
+          projectResourcesLoaded: !gated.has(cwd) || trusted.has(cwd),
+        }),
+      run: (action, request) => {
+        const source = request.source ?? "";
+        const found = plugins.find((entry) => entry.source === source);
+        if (action === "install" && !found) {
+          plugins.push({
+            source,
+            scope: request.scope,
+            status: "installed",
+            filtered: false,
+            disabled: false,
+            installedPath: `/tmp/${source}`,
+            resources: [],
+          });
+        }
+        if (action === "remove" && found) {
+          plugins.splice(plugins.indexOf(found), 1);
+        }
+        if (found && (action === "enable" || action === "disable")) {
+          found.disabled = action === "disable";
+          found.status = packageStatus({
+            disabled: found.disabled,
+            resources: found.resources.length,
+            ...(found.installedPath === undefined
+              ? {}
+              : { installedPath: found.installedPath }),
+          });
+        }
+        return Promise.resolve();
+      },
     },
     resources: {
       commands: () =>

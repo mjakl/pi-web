@@ -351,7 +351,11 @@ describe("workspace validation", () => {
       body: form,
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ cwd: pickable, projectRoot: pickable });
+    expect(await res.json()).toEqual({
+      cwd: pickable,
+      projectRoot: pickable,
+      projectKey: pickable,
+    });
     // Validating it is what makes it reachable.
     const listed = await app.request(
       `/files/tree?session=s1&depth=1&path=${encodeURIComponent(pickable)}`,

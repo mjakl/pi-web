@@ -7,7 +7,7 @@ import {
   filterFileEntries,
   isFilePathQuery,
 } from "@core/composer";
-import { replaceRange, textarea } from "./editor.ts";
+import { type MenuEndpoints, replaceRange, textarea } from "./editor.ts";
 import { createMenu, type Menu } from "./menu.ts";
 
 // `@` completion. Plain names are matched against a cached index of the whole
@@ -43,7 +43,7 @@ export type AtMenu = {
   handleKey(event: KeyboardEvent): boolean;
 };
 
-export function setUpAtCompletion(sessionId: string | null): AtMenu {
+export function setUpAtCompletion(endpoints: MenuEndpoints | null): AtMenu {
   let token: AtQuery | null = null;
   let index: { files: string[]; truncated: boolean; loadedAt: number } | null =
     null;
@@ -77,11 +77,11 @@ export function setUpAtCompletion(sessionId: string | null): AtMenu {
   }
 
   async function loadIndex(): Promise<void> {
-    if (sessionId === null || indexInFlight) return;
+    if (endpoints === null || indexInFlight) return;
     if (index && Date.now() - index.loadedAt < INDEX_TTL_MS) return;
     indexInFlight = true;
     try {
-      const response = await fetch(`/sessions/${sessionId}/file-index`);
+      const response = await fetch(endpoints.index(""));
       if (!response.ok) return;
       const body = (await response.json()) as {
         files?: string[];
@@ -100,13 +100,11 @@ export function setUpAtCompletion(sessionId: string | null): AtMenu {
   }
 
   async function serverSearch(query: string, path: boolean): Promise<void> {
-    if (sessionId === null) return;
+    if (endpoints === null) return;
     search?.abort();
     const controller = new AbortController();
     search = controller;
-    const url = path
-      ? `/sessions/${sessionId}/file-completion?q=${encodeURIComponent(query)}`
-      : `/sessions/${sessionId}/file-index?q=${encodeURIComponent(query)}`;
+    const url = path ? endpoints.completion(query) : endpoints.index(query);
     try {
       const response = await fetch(url, { signal: controller.signal });
       const body = (await response.json()) as { matches?: FileEntry[] };
@@ -127,7 +125,7 @@ export function setUpAtCompletion(sessionId: string | null): AtMenu {
     const area = textarea();
     if (!area) return;
     token = extractAtQuery(area.value.slice(0, area.selectionStart));
-    if (!token || sessionId === null) {
+    if (!token || endpoints === null) {
       menu.close();
       return;
     }

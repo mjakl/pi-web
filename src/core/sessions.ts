@@ -7,6 +7,8 @@ export type SessionSummary = {
   fileSize: number;
   /** Set while a runtime for this session is alive in this process. */
   live?: boolean;
+  /** False when the working folder is gone: the session is read-only. */
+  cwdAvailable?: boolean;
   /** Set while that runtime is working on a turn. */
   running?: boolean;
   /** Git top level of `cwd`, when it differs. Sessions group by this. */
@@ -34,6 +36,11 @@ export type ProjectEntry = {
   /** Newest session of the project: the selector's order. */
   modifiedAt: string;
   running: number;
+  /**
+   * The folder to probe for worktrees: the newest session's own, which is a
+   * checkout that still exists more often than the repository root is.
+   */
+  entryPath: string;
 };
 
 function projectLabel(root: string): string {
@@ -78,9 +85,11 @@ export function recentProjects(
       label: projectLabel(key),
       modifiedAt: session.modifiedAt,
       running: 0,
+      entryPath: session.cwd,
     };
-    if (session.modifiedAt > entry.modifiedAt) {
+    if (session.modifiedAt >= entry.modifiedAt) {
       entry.modifiedAt = session.modifiedAt;
+      entry.entryPath = session.cwd;
     }
     if (session.running) entry.running += 1;
     byKey.set(key, entry);

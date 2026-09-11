@@ -1,3 +1,4 @@
+import { pathKey } from "@core/path-access";
 import { readStars, STAR_TYPE, userMessageText } from "@core/session-entries";
 import type {
   FileEntry,
@@ -18,19 +19,13 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
-import { dirname, join, normalize } from "node:path";
+import { dirname, join } from "node:path";
 
 // Direct edits to Pi's session JSONL. Everything here writes files the Pi CLI
 // also reads, so the formats match pi-web byte for byte where both write:
 // stars are `pi-web:star` custom entries and a rewind leaves a `pi-web-rewind`
 // marker entry. Pi's own SessionManager does every append; only delete and
 // rewind rewrite a file, because the SDK has no way to remove entries.
-
-/** Same normalisation pi-web compares paths with (POSIX hosts only here). */
-export function pathKey(filePath: string): string {
-  const normalized = normalize(filePath);
-  return normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized;
-}
 
 function writeAtomic(filePath: string, contents: string): void {
   const temporary = `${filePath}.tmp${String(process.pid)}`;

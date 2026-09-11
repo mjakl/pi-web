@@ -14,7 +14,13 @@ browser holds none.
 - Never start the dev server on port 30141 or write into `~/.pi/agent` from
   tests. Experiments that run a model use `PI_CODING_AGENT_DIR` pointing at a
   temporary directory with copied `auth.json`, `models.json`, and a minimal
-  `settings.json`.
+  `settings.json`. Anything that writes settings, trust, skills or packages —
+  every adapter in the configuration layer — takes the agent directory as an
+  argument for exactly this reason; never call `getAgentDir()` from one.
+- `npx skills add` is the one exception that cannot be redirected: it resolves
+  Pi's agent directory itself and installs into the real `~/.pi/agent/skills`
+  and `~/.agents/.skill-lock.json` whatever `PI_CODING_AGENT_DIR` says. Do not
+  run a skill install from a test or an unattended check.
 - The Pi SDK is never pinned: `scripts/link-host-pi.ts` points
   `node_modules/@earendil-works/*` at the `pi` on `PATH`, and `prepare` plus
   every `just` recipe that compiles or runs code re-links first. Pi must be
@@ -29,7 +35,10 @@ src/core       rules and ports: transcript projection, session derivations
                (stars, statistics, branches), project selection, the
                conversation rail layout, terminal-output conversion, context
                usage, composer input rules, path containment, file kinds,
-               Git status parsing, patches, frontmatter, workspace
+               Git status parsing, patches, frontmatter, worktree identity,
+               the skill frontmatter toggle, skill install metadata, package
+               list semantics, startup model preferences, tool schemas,
+               workspace
 src/adapters   Pi SDK, filesystem, Git, and in-memory implementations of the
                ports
 src/web        Hono routes, JSX views, HTMX/SSE delivery, client bundle

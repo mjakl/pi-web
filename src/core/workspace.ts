@@ -24,8 +24,22 @@ import {
   samePath,
   withinAny,
 } from "./path-access.ts";
+import { initialModel, initialThinking } from "./models.ts";
+import type { PackagesView, PackageScope } from "./packages.ts";
+import type {
+  SkillInfo,
+  SkillScope,
+  SkillSearchHit,
+  SkillUpdate,
+} from "./skills.ts";
+import {
+  type ProjectInfo,
+  unavailableFolderMessage,
+  type WorktreeInfo,
+} from "./workspaces.ts";
 import type {
   AgentRuntime,
+  DirectoryBrowser,
   DirEntry,
   Files,
   FileStat,
@@ -39,13 +53,17 @@ import type {
   ModelCatalog,
   ModelListing,
   ModelOption,
+  Packages,
   ProjectResolver,
   ProjectResources,
+  ProjectTrust,
   PromptInput,
   RuntimeEvent,
   SessionCatalog,
   SessionRead,
+  Skills,
   ThinkingLevel,
+  ToolView,
   Watcher,
 } from "./ports.ts";
 import {
@@ -136,6 +154,32 @@ export type SidebarView = {
   activityElsewhere: boolean;
 };
 
+/** One project row of the folder picker, once its worktrees are known. */
+export type FolderChoice = {
+  cwd: string;
+  available: boolean;
+  project: ProjectInfo;
+  /** False when git could not answer at all: a plain folder. */
+  isGit: boolean;
+  worktrees: WorktreeInfo[];
+  /** The listed worktree the reader is in right now, if any. */
+  current: string | null;
+};
+
+/** What the new-session page needs before there is a session. */
+export type NewSessionView = {
+  cwd: string;
+  available: boolean;
+  /** The folder passed validation, so completion and models are offered. */
+  usable: boolean;
+  projectKey: string;
+  models: ModelOption[];
+  modelWarnings: string[];
+  model: ModelOption | undefined;
+  thinkingLevel: ThinkingLevel;
+  trust: { requiresTrust: boolean; trusted: boolean };
+};
+
 /** Everything the file viewer renders, in one read. */
 export type FileView = {
   path: string;
@@ -165,6 +209,10 @@ export function createWorkspace(deps: {
   runtime: AgentRuntime;
   models: ModelCatalog;
   projects: ProjectResolver;
+  browser: DirectoryBrowser;
+  trust: ProjectTrust;
+  skills: Skills;
+  packages: Packages;
   resources: ProjectResources;
   files: Files;
   git: Git;
@@ -188,10 +236,16 @@ export function createWorkspace(deps: {
   async function decorate(
     sessions: readonly SessionSummary[],
   ): Promise<SessionSummary[]> {
-    const roots = new Map<string, { root: string; branch: string | null }>();
+    const roots = new Map<string, ProjectInfo>();
+    const present = new Map<string, boolean>();
     await Promise.all(
       [...new Set(sessions.map((session) => session.cwd))].map(async (cwd) => {
-        roots.set(cwd, await deps.projects.resolve(cwd));
+        const [project, available] = await Promise.all([
+          deps.projects.resolve(cwd),
+          deps.projects.available(cwd),
+        ]);
+        roots.set(cwd, project);
+        present.set(cwd, available);
       }),
     );
     return sessions.map((session) => {
@@ -207,8 +261,44 @@ export function createWorkspace(deps: {
         ...(worktree && project.branch
           ? { worktreeBranch: project.branch }
           : {}),
+        ...(present.get(session.cwd) === false ? { cwdAvailable: false } : {}),
       };
     });
+  }
+
+  /**
+   * Reading, exporting and stopping stay open when a session's folder is
+   * gone; everything that would run the agent in it is refused with the one
+   * message the page also shows.
+   */
+  async function requireFolder(id: string): Promise<void> {
+    const summary = await summaryOf(id);
+    if (summary?.cwdAvailable === false) {
+      throw new Error(unavailableFolderMessage(summary.cwd));
+    }
+  }
+
+  function folderAvailable(cwd: string): Promise<boolean> {
+    return deps.projects.available(cwd);
+  }
+
+  /**
+   * Installing into a project writes into a repository whose own code the
+   * agent will load. An untrusted one is refused, not silently redirected to
+   * the global scope.
+   */
+  async function requireTrustedProject(
+    cwd: string,
+    project: boolean,
+  ): Promise<void> {
+    if (!project) return;
+    const status = await deps.trust.status(cwd);
+    if (!status.trusted) {
+      throw new FileAccessError(
+        "Project resources must be trusted before installing into this project",
+        403,
+      );
+    }
   }
 
   async function summaryOf(id: string): Promise<SessionSummary | undefined> {
@@ -635,18 +725,32 @@ export function createWorkspace(deps: {
       };
     },
 
-    /** Start a session in `cwd` and send the first prompt. Returns its id. */
+    /**
+     * Start a session in `cwd` and send the first prompt. An explicit model
+     * or reasoning level starts it there and, when Pi honours the choice,
+     * becomes the default for the next session — so the listing is stale
+     * afterwards.
+     */
     async startSession(
       cwd: string,
       text: string,
       input?: PromptInput,
+      startup: {
+        model?: { provider: string; modelId: string };
+        thinkingLevel?: ThinkingLevel;
+      } = {},
     ): Promise<string> {
-      const live = await deps.runtime.open({ cwd });
+      if (!(await folderAvailable(cwd))) {
+        throw new Error(unavailableFolderMessage(cwd));
+      }
+      const live = await deps.runtime.open({ cwd, ...startup });
+      if (startup.model || startup.thinkingLevel) deps.models.invalidate(cwd);
       await live.prompt(text, input);
       return live.id;
     },
 
     async send(id: string, text: string, input?: PromptInput): Promise<void> {
+      await requireFolder(id);
       const live = await liveOrOpen(id);
       await live.prompt(text, input);
     },
@@ -682,6 +786,7 @@ export function createWorkspace(deps: {
     },
 
     async compact(id: string, instructions?: string): Promise<void> {
+      await requireFolder(id);
       const live = await liveOrOpen(id);
       await live.compact(instructions);
     },
@@ -691,6 +796,7 @@ export function createWorkspace(deps: {
     },
 
     async reload(id: string): Promise<void> {
+      await requireFolder(id);
       await (await liveOrOpen(id)).reload();
     },
 
@@ -709,6 +815,7 @@ export function createWorkspace(deps: {
       command: string,
       excludeFromContext: boolean,
     ): Promise<void> {
+      await requireFolder(id);
       const live = await liveOrOpen(id);
       await live.runBash(command, excludeFromContext);
     },
@@ -982,6 +1089,218 @@ export function createWorkspace(deps: {
       return undefined;
     },
 
+    // --- Workspace selection ---------------------------------------------
+
+    /** Directory names only, for the picker's browse pane. */
+    browse(path?: string) {
+      return deps.browser.browse(path);
+    },
+
+    /** One project row of the picker: its worktrees, freshly probed. */
+    async folders(cwd: string): Promise<FolderChoice> {
+      const available = await folderAvailable(cwd);
+      const listing = await deps.projects.worktrees(cwd);
+      const worktrees =
+        listing.worktrees.length > 0
+          ? listing.worktrees
+          : available
+            ? [{ path: cwd, branch: listing.project.branch }]
+            : [];
+      return {
+        cwd,
+        available,
+        project: listing.project,
+        isGit: listing.isGit,
+        worktrees,
+        current:
+          worktrees.find((tree) => samePath(tree.path, cwd))?.path ?? null,
+      };
+    },
+
+    /** What `/new` renders: models and trust for the chosen folder. */
+    async newSession(cwd: string): Promise<NewSessionView> {
+      const [available, trust] = await Promise.all([
+        folderAvailable(cwd),
+        deps.trust.status(cwd).catch(() => ({
+          requiresTrust: false,
+          trusted: true,
+        })),
+      ]);
+      // Validation is what makes a folder reachable, so it is also what
+      // decides whether the composer may complete paths in it.
+      let usable = false;
+      let projectKey = cwd;
+      if (available) {
+        try {
+          projectKey = (await this.validateFolder(cwd)).projectRoot;
+          usable = true;
+        } catch {
+          usable = false;
+        }
+      }
+      const listing = usable
+        ? await modelsFor(cwd)
+        : { models: [], warnings: [] };
+      const model = initialModel(listing.models, listing.preferred);
+      return {
+        cwd,
+        available,
+        usable,
+        projectKey,
+        models: listing.models,
+        modelWarnings: listing.warnings,
+        model,
+        thinkingLevel: initialThinking(model),
+        trust,
+      };
+    },
+
+    /** The slash menu before a session exists: prompts and skills of a folder. */
+    async folderCommands(cwd: string, query: string): Promise<SlashCommand[]> {
+      await authorize(cwd, { listing: true });
+      const listed = await deps.resources
+        .commands(cwd)
+        .catch(() => [] as SlashCommand[]);
+      return rankCommands([...BUILTIN_COMMANDS, ...listed], query, {
+        running: false,
+      });
+    },
+
+    /** `@` completion before a session exists, containment enforced. */
+    async folderFiles(
+      cwd: string,
+      query: string,
+      path: boolean,
+    ): Promise<
+      { files: string[]; truncated: boolean } | { matches: FileEntry[] }
+    > {
+      await authorize(cwd, { listing: true });
+      if (path) {
+        const children = await deps.files.children(query, cwd);
+        return {
+          matches: children.filter((entry) => directoryWithin(cwd, entry.path)),
+        };
+      }
+      const index = await deps.files.index(cwd);
+      if (query === "") return index;
+      return {
+        matches: filterFileEntries(buildEntriesFromFiles(index.files), query),
+      };
+    },
+
+    // --- Project trust ----------------------------------------------------
+
+    trustStatus(cwd: string) {
+      return deps.trust.status(cwd);
+    },
+
+    /**
+     * Granting trust rebuilds the folder's sessions: a session started while
+     * the project was untrusted is running without its extensions, and only a
+     * restart can load them. A session mid-turn blocks the change.
+     */
+    async trustProject(cwd: string): Promise<void> {
+      const status = await deps.trust.status(cwd);
+      if (!status.requiresTrust) {
+        throw new Error("This project has no resources that require trust");
+      }
+      const inFolder = (await deps.sessions.list()).filter((session) =>
+        samePath(session.cwd, cwd),
+      );
+      const running = inFolder
+        .map((session) => deps.runtime.get(session.id))
+        .filter((live) => live !== undefined);
+      if (running.some((live) => live.snapshot().status.running)) {
+        throw new Error(
+          "Wait for the active session to finish before trusting this project",
+        );
+      }
+      await deps.trust.trust(cwd);
+      deps.models.invalidate(cwd);
+      // Stopped here, reopened on the next use, with project resources loaded.
+      for (const live of running) await live.stop();
+    },
+
+    // --- Skills -----------------------------------------------------------
+
+    skills(cwd: string): Promise<{
+      skills: SkillInfo[];
+      diagnostics: string[];
+      projectResourcesLoaded: boolean;
+    }> {
+      return deps.skills.list(cwd);
+    },
+
+    /**
+     * The skill file is the reader's own Markdown; only the one frontmatter
+     * line changes. It may sit outside every allowed root, because global
+     * skills live in Pi's agent directory.
+     */
+    async toggleSkill(
+      cwd: string,
+      filePath: string,
+      disable: boolean,
+    ): Promise<SkillInfo | undefined> {
+      const { skills } = await deps.skills.list(cwd);
+      const known = skills.some((skill) => skill.filePath === filePath);
+      if (!known) throw new FileAccessError("Unknown skill", 404);
+      await deps.skills.setDisabled(filePath, disable);
+      const refreshed = await deps.skills.list(cwd);
+      return refreshed.skills.find((skill) => skill.filePath === filePath);
+    },
+
+    searchSkills(query: string, limit: number): Promise<SkillSearchHit[]> {
+      return deps.skills.search(query, limit);
+    },
+
+    async installSkill(
+      cwd: string,
+      pkg: string,
+      scope: SkillScope,
+    ): Promise<string> {
+      await requireTrustedProject(cwd, scope === "project");
+      return deps.skills.install(pkg, scope, cwd);
+    },
+
+    checkSkills(
+      cwd: string,
+      target?: { package: string; scope: SkillScope },
+    ): Promise<SkillUpdate[]> {
+      return deps.skills.check(cwd, target);
+    },
+
+    updateSkill(cwd: string, pkg: string, scope: SkillScope): Promise<string> {
+      return deps.skills.update(cwd, pkg, scope);
+    },
+
+    // --- Extension packages ----------------------------------------------
+
+    plugins(cwd: string): Promise<PackagesView> {
+      return deps.packages.list(cwd);
+    },
+
+    /** Every action re-reads the list, so the page always shows Pi's truth. */
+    async runPluginAction(
+      action: "install" | "remove" | "update" | "enable" | "disable",
+      request: { cwd: string; source?: string; scope: PackageScope },
+    ): Promise<PackagesView> {
+      await requireTrustedProject(request.cwd, request.scope === "project");
+      await deps.packages.run(action, request);
+      deps.models.invalidate(request.cwd);
+      return deps.packages.list(request.cwd);
+    },
+
+    // --- Session inspection ----------------------------------------------
+
+    /** Tool definitions of a running session; nothing is started to get them. */
+    toolDefinitions(id: string): ToolView[] | undefined {
+      return deps.runtime.get(id)?.toolDefinitions();
+    },
+
+    systemPrompt(id: string): string | undefined {
+      return deps.runtime.get(id)?.systemPrompt();
+    },
+
     async setModel(
       id: string,
       choice: {
@@ -990,6 +1309,7 @@ export function createWorkspace(deps: {
         thinkingLevel?: ThinkingLevel;
       },
     ): Promise<void> {
+      await requireFolder(id);
       const live =
         deps.runtime.get(id) ?? (await deps.runtime.open({ sessionId: id }));
       await live.setModel(choice.provider, choice.modelId);
@@ -997,6 +1317,7 @@ export function createWorkspace(deps: {
     },
 
     async activate(id: string): Promise<void> {
+      await requireFolder(id);
       await deps.runtime.open({ sessionId: id });
     },
 
@@ -1020,22 +1341,29 @@ export function createWorkspace(deps: {
       await deps.sessions.remove(id);
     },
 
-    fork(id: string, entryId: string): Promise<{ id: string; text: string }> {
+    async fork(
+      id: string,
+      entryId: string,
+    ): Promise<{ id: string; text: string }> {
+      await requireFolder(id);
       return deps.sessions.fork(id, entryId);
     },
 
-    clone(id: string, leafId?: string): Promise<string> {
+    async clone(id: string, leafId?: string): Promise<string> {
+      await requireFolder(id);
       return deps.sessions.clone(id, leafId);
     },
 
     /** Shuts the runtime down first: nothing may append during the rewrite. */
     async rewind(id: string, entryId: string): Promise<string> {
+      await requireFolder(id);
       await stop(id);
       return deps.sessions.rewind(id, entryId);
     },
 
     /** Moves the session's leaf, opening a runtime when there is none. */
     async navigateTree(id: string, targetId: string): Promise<string> {
+      await requireFolder(id);
       const live =
         deps.runtime.get(id) ?? (await deps.runtime.open({ sessionId: id }));
       return (await live.navigateTree(targetId)) ?? "";

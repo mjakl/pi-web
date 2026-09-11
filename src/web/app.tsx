@@ -1,8 +1,14 @@
 import { bashCommand, imageLimitError } from "@core/composer";
 import { extensionOf, mimeOf } from "@core/file-types";
 import { FileAccessError } from "@core/path-access";
-import type { GitChangeFile, ImageAttachment } from "@core/ports";
+import type {
+  GitChangeFile,
+  ImageAttachment,
+  ThinkingLevel,
+} from "@core/ports";
+import { isPackageAction, type PackageScope } from "@core/packages";
 import { isSessionId, projectKeyOf } from "@core/sessions";
+import { clampSearchLimit, type SkillScope } from "@core/skills";
 import { staticAssets } from "@web/assets";
 import {
   ForbiddenPath,
@@ -32,7 +38,23 @@ import {
 } from "@web/views/Files";
 import { Rail } from "@web/views/Rail";
 import { changedWidgets, ShelfBody, shelfSignature } from "@web/views/Shelf";
+import { ToolsPanel, SystemPromptPanel } from "@web/views/Panels";
 import { IndexPage, NewSessionPage, SessionPage } from "@web/views/SessionPage";
+import {
+  PluginsSection,
+  resolveSection,
+  SettingsBody,
+  SettingsPage,
+  SkillDetail,
+  SkillSearchResults,
+  type SkillsView,
+} from "@web/views/Settings";
+import {
+  BrowsePane,
+  FolderList,
+  TrustDialog,
+  WorkspacePicker,
+} from "@web/views/Workspace";
 import {
   ProjectNav,
   ProjectPicker,
@@ -57,6 +79,8 @@ export type WebDeps = {
   staticRoot: string;
   /** Suggested working folder for new sessions. */
   defaultCwd: string;
+  /** The reader's home folder, for shortening paths on screen. */
+  home?: string;
   /** Streaming re-render interval. */
   renderIntervalMs?: number;
 };
@@ -80,6 +104,14 @@ const sleep = (ms: number) =>
  * storage keys use is spelled with a dash here.
  */
 const PROJECT_COOKIE = "web-pi-project";
+
+/** The working folder the picker last committed: where `/new` starts. */
+const CWD_COOKIE = "web-pi-cwd";
+
+/** Which settings section was open last. */
+const SETTINGS_COOKIE = "web-pi-settings";
+
+const YEAR = 60 * 60 * 24 * 365;
 
 /** The session the reader has open, for requests that only carry a referrer. */
 function currentSessionId(c: Context): string | undefined {
@@ -149,15 +181,24 @@ export function createWebApp(deps: WebDeps) {
     });
   }
 
+  function remember(c: Context, name: string, value: string): void {
+    if (getCookie(c, name) === value) return;
+    setCookie(c, name, value, {
+      path: "/",
+      sameSite: "Lax",
+      maxAge: YEAR,
+    });
+  }
+
   /** Opening a session selects its project, for this and every later page. */
   function rememberProject(c: Context, sidebar: SidebarView): void {
     if (sidebar.selected === undefined) return;
-    if (getCookie(c, PROJECT_COOKIE) === sidebar.selected) return;
-    setCookie(c, PROJECT_COOKIE, sidebar.selected, {
-      path: "/",
-      sameSite: "Lax",
-      maxAge: 60 * 60 * 24 * 365,
-    });
+    remember(c, PROJECT_COOKIE, sidebar.selected);
+  }
+
+  /** The folder new sessions start in: the picker's choice, else the default. */
+  function currentCwd(c: Context): string {
+    return c.req.query("cwd") ?? getCookie(c, CWD_COOKIE) ?? deps.defaultCwd;
   }
 
   /** The whole session page, swapped into <body> after a history change. */
@@ -217,10 +258,16 @@ export function createWebApp(deps: WebDeps) {
   });
 
   app.get("/new", async (c) => {
+    const cwd = currentCwd(c);
+    const [sidebar, view] = await Promise.all([
+      sidebarOf(c),
+      deps.workspace.newSession(cwd),
+    ]);
+    if (view.available) remember(c, CWD_COOKIE, cwd);
     return c.render(
       <NewSessionPage
-        sidebar={await sidebarOf(c)}
-        cwd={c.req.query("cwd") ?? deps.defaultCwd}
+        sidebar={sidebar}
+        view={view}
         draft={c.req.query("text")}
       />,
     );
@@ -315,10 +362,19 @@ export function createWebApp(deps: WebDeps) {
       toastHeader(c, "A working folder and a first request are required.");
       return c.body(null, 200);
     }
+    const [provider, ...rest] = field(form, "model").split("/");
+    const modelId = rest.join("/");
+    const thinking = field(form, "thinking");
     return guard(c, async () => {
-      const id = await deps.workspace.startSession(cwd, submission.text, {
-        images: submission.images,
-      });
+      const id = await deps.workspace.startSession(
+        cwd,
+        submission.text,
+        { images: submission.images },
+        {
+          ...(provider && modelId ? { model: { provider, modelId } } : {}),
+          ...(thinking ? { thinkingLevel: thinking as ThinkingLevel } : {}),
+        },
+      );
       if (c.req.header("HX-Request") !== "true") {
         return c.redirect(`/sessions/${id}`, 303);
       }
@@ -348,7 +404,21 @@ export function createWebApp(deps: WebDeps) {
     ]);
     if (!view) return c.notFound();
     rememberProject(c, sidebar);
-    return c.render(<SessionPage sidebar={sidebar} view={view} />);
+    // Opening a session also selects its folder, so `/new` and the settings
+    // page follow the reader from session to session.
+    if (view.summary.cwdAvailable !== false) {
+      remember(c, CWD_COOKIE, view.summary.cwd);
+    }
+    const trust = await deps.workspace
+      .trustStatus(view.summary.cwd)
+      .catch(() => undefined);
+    return c.render(
+      <SessionPage
+        sidebar={sidebar}
+        view={view}
+        {...(trust === undefined ? {} : { trust })}
+      />,
+    );
   });
 
   app.get("/sessions/:id/row", async (c) => {
@@ -644,13 +714,7 @@ export function createWebApp(deps: WebDeps) {
       await deps.workspace.setModel(id, {
         provider,
         modelId,
-        ...(thinking
-          ? {
-              thinkingLevel: thinking as Parameters<
-                Workspace["setModel"]
-              >[1]["thinkingLevel"],
-            }
-          : {}),
+        ...(thinking ? { thinkingLevel: thinking as ThinkingLevel } : {}),
       });
       return c.body(null, 204);
     } catch (error) {
@@ -1085,17 +1149,448 @@ export function createWebApp(deps: WebDeps) {
     });
   });
 
-  /** Phase 5's folder picker validates here; a folder it accepts is reachable. */
+  // --- Workspace selection ------------------------------------------------
+
+  app.get("/workspaces/picker", async (c) => {
+    const [sidebar, browse] = await Promise.all([
+      sidebarOf(c, currentSessionId(c)),
+      deps.workspace.browse(currentCwd(c)).catch(() => deps.workspace.browse()),
+    ]);
+    return c.html(
+      <WorkspacePicker
+        sidebar={sidebar}
+        browse={browse}
+        {...(deps.home === undefined ? {} : { home: deps.home })}
+      />,
+    );
+  });
+
+  /** The worktrees of one project row, probed when it is opened. */
+  app.get("/workspaces/folders", async (c) => {
+    const cwd = c.req.query("cwd") ?? "";
+    if (cwd === "") return c.text("cwd is required", 400);
+    const choice = await deps.workspace.folders(cwd);
+    return c.html(
+      <FolderList
+        choice={choice}
+        {...(deps.home === undefined ? {} : { home: deps.home })}
+      />,
+    );
+  });
+
+  /**
+   * Directory names only. There is deliberately no allowed-root check here:
+   * a reader has to be able to browse to a folder before validating it, and
+   * listing a name grants no access to any file in it.
+   */
+  app.get("/workspaces/browse", async (c) => {
+    const path = c.req.query("path");
+    try {
+      const listing = await deps.workspace.browse(
+        path === undefined || path.trim() === "" ? undefined : path,
+      );
+      return await c.html(
+        <BrowsePane
+          {...listing}
+          {...(deps.home === undefined ? {} : { home: deps.home })}
+        />,
+      );
+    } catch (error) {
+      const listing = await deps.workspace.browse();
+      return c.html(
+        <BrowsePane
+          {...listing}
+          error={errorText(error)}
+          {...(deps.home === undefined ? {} : { home: deps.home })}
+        />,
+      );
+    }
+  });
+
+  /**
+   * The picker's commit. Validating is what makes a folder reachable, and the
+   * project root it resolves to is the sidebar's key for it, so both cookies
+   * are written here and the reader lands on a new session in that folder.
+   */
   app.post("/workspaces/validate", async (c) => {
     const form = await c.req.formData();
     try {
-      return c.json(await deps.workspace.validateFolder(field(form, "cwd")));
+      const chosen = await deps.workspace.validateFolder(field(form, "cwd"));
+      remember(c, CWD_COOKIE, chosen.cwd);
+      remember(c, PROJECT_COOKIE, chosen.projectRoot);
+      if (c.req.header("HX-Request") !== "true") {
+        return c.json({ ...chosen, projectKey: chosen.projectRoot });
+      }
+      c.header("HX-Redirect", "/new");
+      return c.body(null, 200);
     } catch (error) {
+      if (c.req.header("HX-Request") === "true") {
+        toastHeader(c, errorText(error));
+        c.header("HX-Reswap", "none");
+        return c.body(null, 200);
+      }
       if (error instanceof FileAccessError) {
         return c.json({ error: error.message }, error.status);
       }
       return c.json({ error: "Cannot use that folder" }, 400);
     }
+  });
+
+  // --- Project trust --------------------------------------------------------
+
+  app.get("/workspaces/trust", (c) => {
+    const cwd = c.req.query("cwd") ?? "";
+    if (cwd === "") return c.text("cwd is required", 400);
+    return c.html(<TrustDialog cwd={cwd} />);
+  });
+
+  app.post("/workspaces/trust", async (c) => {
+    const form = await c.req.formData();
+    const cwd = field(form, "cwd");
+    return guard(c, async () => {
+      await deps.workspace.trustProject(cwd);
+      toastHeader(
+        c,
+        "Project trusted. Its sessions restart on next use.",
+        "info",
+      );
+      c.header("HX-Refresh", "true");
+      return c.body(null, 200);
+    });
+  });
+
+  // --- Composer menus before a session exists ------------------------------
+
+  app.get("/workspaces/commands", async (c) => {
+    const cwd = c.req.query("cwd") ?? "";
+    return guard(c, async () => {
+      const commands = await deps.workspace.folderCommands(
+        cwd,
+        c.req.query("q") ?? "",
+      );
+      return c.html(<CommandMenu commands={commands} />);
+    });
+  });
+
+  for (const [path, isPath] of [
+    ["file-index", false],
+    ["file-completion", true],
+  ] as const) {
+    app.get(`/workspaces/${path}`, async (c) => {
+      const cwd = c.req.query("cwd") ?? "";
+      try {
+        return c.json(
+          await deps.workspace.folderFiles(cwd, c.req.query("q") ?? "", isPath),
+        );
+      } catch (error) {
+        const status = error instanceof FileAccessError ? error.status : 400;
+        return c.json({ error: errorText(error) }, status);
+      }
+    });
+  }
+
+  // --- Settings ------------------------------------------------------------
+
+  /** Skills and plugins need a folder; general does not. */
+  async function settingsView(
+    section: "general" | "skills" | "plugins",
+    cwd: string,
+    options: { updates?: SkillsView["updates"] } = {},
+  ) {
+    if (section === "skills") {
+      const listed = await deps.workspace.skills(cwd);
+      return {
+        skills: {
+          cwd,
+          ...listed,
+          ...(options.updates === undefined
+            ? {}
+            : { updates: options.updates }),
+        } satisfies SkillsView,
+      };
+    }
+    if (section === "plugins") {
+      return { plugins: await deps.workspace.plugins(cwd) };
+    }
+    return {};
+  }
+
+  app.get("/settings", async (c) => {
+    const cwd = currentCwd(c);
+    const available = await deps.workspace.newSession(cwd);
+    const usable = available.available ? cwd : "";
+    const section = resolveSection(
+      c.req.query("section") ?? getCookie(c, SETTINGS_COOKIE),
+      usable !== "",
+    );
+    remember(c, SETTINGS_COOKIE, section);
+    // A section that cannot load says so; falling back to general would
+    // quietly show the wrong page under the right tab.
+    const sections = await settingsView(section, usable).catch(
+      (error: unknown) => ({ error: errorText(error) }),
+    );
+    const back = currentSessionId(c);
+    return c.render(
+      <SettingsPage
+        section={section}
+        cwd={usable}
+        back={back === undefined ? "/" : `/sessions/${back}`}
+        {...(deps.home === undefined ? {} : { home: deps.home })}
+        {...sections}
+      />,
+    );
+  });
+
+  /** One skill's detail pane, and the toggle that rewrites its frontmatter. */
+  app.get("/settings/skills/detail", async (c) => {
+    const cwd = c.req.query("cwd") ?? "";
+    const path = c.req.query("path") ?? "";
+    return guard(c, async () => {
+      const listed = await deps.workspace.skills(cwd);
+      const skill = listed.skills.find((entry) => entry.filePath === path);
+      return c.html(
+        <SkillDetail
+          cwd={cwd}
+          {...(skill ? { skill } : {})}
+          {...(deps.home === undefined ? {} : { home: deps.home })}
+        />,
+      );
+    });
+  });
+
+  app.post("/settings/skills/toggle", async (c) => {
+    const form = await c.req.formData();
+    const cwd = field(form, "cwd");
+    const path = field(form, "path");
+    return guard(c, async () => {
+      const skill = await deps.workspace.toggleSkill(
+        cwd,
+        path,
+        field(form, "disable") !== "",
+      );
+      return c.html(
+        <SkillDetail
+          cwd={cwd}
+          {...(skill ? { skill } : {})}
+          {...(deps.home === undefined ? {} : { home: deps.home })}
+        />,
+      );
+    });
+  });
+
+  app.post("/settings/skills/search", async (c) => {
+    const form = await c.req.formData();
+    const cwd = field(form, "cwd");
+    const query = field(form, "query");
+    const trusted = await deps.workspace.trustStatus(cwd).then(
+      (status) => status.trusted,
+      () => true,
+    );
+    if (query === "") {
+      return c.html(
+        <SkillSearchResults
+          hits={[]}
+          cwd={cwd}
+          trusted={trusted}
+          message="Type something to search skills.sh."
+        />,
+      );
+    }
+    try {
+      const hits = await deps.workspace.searchSkills(
+        query,
+        clampSearchLimit(field(form, "limit")),
+      );
+      return await c.html(
+        <SkillSearchResults hits={hits} cwd={cwd} trusted={trusted} />,
+      );
+    } catch (error) {
+      return c.html(
+        <SkillSearchResults
+          hits={[]}
+          cwd={cwd}
+          trusted={trusted}
+          message={errorText(error)}
+        />,
+      );
+    }
+  });
+
+  app.post("/settings/skills/install", async (c) => {
+    const form = await c.req.formData();
+    const cwd = field(form, "cwd");
+    const scope: SkillScope =
+      field(form, "scope") === "project" ? "project" : "global";
+    const trusted = await deps.workspace.trustStatus(cwd).then(
+      (status) => status.trusted,
+      () => true,
+    );
+    let message: string;
+    try {
+      message = await deps.workspace.installSkill(
+        cwd,
+        field(form, "package"),
+        scope,
+      );
+    } catch (error) {
+      message = errorText(error);
+    }
+    return c.html(
+      <SkillSearchResults
+        hits={[]}
+        cwd={cwd}
+        trusted={trusted}
+        message={message}
+      />,
+    );
+  });
+
+  /**
+   * With a package the check is one skill's detail pane; without one it is
+   * the whole section, so the list can carry its update markers.
+   */
+  app.post("/settings/skills/check", async (c) => {
+    const form = await c.req.formData();
+    const cwd = field(form, "cwd");
+    const pkg = field(form, "package");
+    const scope: SkillScope =
+      field(form, "scope") === "project" ? "project" : "global";
+    return guard(c, async () => {
+      const updates = await deps.workspace.checkSkills(
+        cwd,
+        pkg === "" ? undefined : { package: pkg, scope },
+      );
+      if (pkg === "") {
+        const sections = await settingsView("skills", cwd, { updates });
+        return c.html(
+          <SettingsBody
+            section="skills"
+            cwd={cwd}
+            {...(deps.home === undefined ? {} : { home: deps.home })}
+            {...sections}
+          />,
+        );
+      }
+      const listed = await deps.workspace.skills(cwd);
+      const path = field(form, "path");
+      const skill = listed.skills.find((entry) => entry.filePath === path);
+      const update = updates[0];
+      return c.html(
+        <SkillDetail
+          cwd={cwd}
+          {...(skill ? { skill } : {})}
+          {...(update ? { update } : {})}
+          {...(deps.home === undefined ? {} : { home: deps.home })}
+        />,
+      );
+    });
+  });
+
+  app.post("/settings/skills/update", async (c) => {
+    const form = await c.req.formData();
+    const cwd = field(form, "cwd");
+    const path = field(form, "path");
+    const scope: SkillScope =
+      field(form, "scope") === "project" ? "project" : "global";
+    return guard(c, async () => {
+      let message: string;
+      try {
+        message = await deps.workspace.updateSkill(
+          cwd,
+          field(form, "package"),
+          scope,
+        );
+      } catch (error) {
+        message = errorText(error);
+      }
+      const listed = await deps.workspace.skills(cwd);
+      const skill = listed.skills.find((entry) => entry.filePath === path);
+      return c.html(
+        <SkillDetail
+          cwd={cwd}
+          {...(skill ? { skill } : {})}
+          message={message}
+          {...(deps.home === undefined ? {} : { home: deps.home })}
+        />,
+      );
+    });
+  });
+
+  app.get("/settings/plugins", async (c) => {
+    const cwd = c.req.query("cwd") ?? "";
+    const selected = c.req.query("selected");
+    return guard(c, async () => {
+      const view = await deps.workspace.plugins(cwd);
+      return c.html(
+        <PluginsSection
+          cwd={cwd}
+          view={view}
+          {...(selected === undefined ? {} : { selected })}
+          {...(deps.home === undefined ? {} : { home: deps.home })}
+        />,
+      );
+    });
+  });
+
+  /** Every action answers with the freshly re-read list: Pi is the truth. */
+  app.post("/settings/plugins", async (c) => {
+    const form = await c.req.formData();
+    const cwd = field(form, "cwd");
+    const action = field(form, "action");
+    const selected = field(form, "selected");
+    const source = field(form, "source");
+    const scope: PackageScope =
+      field(form, "scope") === "project" ? "project" : "user";
+    if (!isPackageAction(action)) {
+      toastHeader(c, `Unsupported action: ${action}`);
+      c.header("HX-Reswap", "none");
+      return c.body(null, 200);
+    }
+    let message: string | undefined;
+    let view;
+    try {
+      view = await deps.workspace.runPluginAction(action, {
+        cwd,
+        scope,
+        ...(source === "" ? {} : { source }),
+      });
+      message = `Package ${action}d.`;
+    } catch (error) {
+      message = errorText(error);
+      view = await deps.workspace.plugins(cwd);
+    }
+    return c.html(
+      <PluginsSection
+        cwd={cwd}
+        view={view}
+        message={message}
+        {...(selected === "" ? {} : { selected })}
+        {...(deps.home === undefined ? {} : { home: deps.home })}
+      />,
+    );
+  });
+
+  // --- Session inspection ---------------------------------------------------
+
+  app.get("/sessions/:id/tools", (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    const tool = c.req.query("tool");
+    return c.html(
+      <ToolsPanel
+        sessionId={id}
+        tools={deps.workspace.toolDefinitions(id)}
+        {...(tool === undefined ? {} : { selected: tool })}
+      />,
+    );
+  });
+
+  app.get("/sessions/:id/system-prompt", (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    return c.html(
+      <SystemPromptPanel prompt={deps.workspace.systemPrompt(id)} />,
+    );
   });
 
   /** The full body behind a truncated tool result. */
