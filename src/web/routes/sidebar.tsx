@@ -253,7 +253,15 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
    * running counts change, so activity elsewhere still shows.
    */
   app.get("/events", (c) => {
-    const remembered = getCookie(c, PROJECT_COOKIE);
+    // The page says which project it is showing. Without it a reader who
+    // never picked one drifts: a session started elsewhere makes that project
+    // the newest, the stream follows it, and the sidebar on screen stops
+    // getting both its rows and the selector's activity dot.
+    const shown = c.req.query("project");
+    const remembered =
+      shown === undefined || shown === ""
+        ? getCookie(c, PROJECT_COOKIE)
+        : shown;
     const activeId = currentSessionId(c);
     const cwd = currentCwd(c);
     return streamSSE(c, async (stream) => {

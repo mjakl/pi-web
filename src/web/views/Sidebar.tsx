@@ -667,8 +667,9 @@ function ProjectFolderRow({
 
 /**
  * The project selector and its list. One element, because the shared stream
- * lives on it: switching project replaces it, which reconnects the stream and
- * makes it push rows for the new project.
+ * lives on it: switching project replaces it, which reconnects the stream —
+ * with the new project in the URL, so the stream tracks what is on screen
+ * rather than re-deriving the choice from the cookie.
  */
 export function ProjectNav({
   view,
@@ -682,7 +683,7 @@ export function ProjectNav({
       id="project-nav"
       style="display:flex; min-height:0; flex:1 1 0; flex-direction:column"
       hx-ext="sse"
-      sse-connect="/events"
+      sse-connect={`/events${view.selected === undefined ? "" : `?project=${encodeURIComponent(view.selected)}`}`}
       sse-swap="rows"
       hx-swap="none"
     >

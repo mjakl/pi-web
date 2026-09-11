@@ -633,6 +633,53 @@ describe("web app", () => {
     expect(received).toContain('data: {"id":"s1","project":"/repo/one"}');
   });
 
+  it("keeps the stream on the project the page shows", async () => {
+    // A dialog never answered here: the session in the other project stays
+    // running while the stream is read.
+    const { app, world } = testApp({
+      script: () => [{ dialog: { method: "confirm", title: "Push it?" } }],
+    });
+    world.store.set("s2", {
+      summary: {
+        id: "s2",
+        cwd: "/repo/two",
+        name: "Other project",
+        createdAt: "2026-09-03T00:00:00.000Z",
+        modifiedAt: "2026-09-03T00:00:00.000Z",
+        fileSize: 2,
+      },
+      entries: [userEntry("v1", null, "second project")],
+    });
+
+    // The page names its project in the stream URL, so a newer project
+    // elsewhere cannot pull the stream away from what is on screen.
+    const page = await (
+      await app.request("/", {
+        headers: { cookie: "web-pi-project=/repo/one" },
+      })
+    ).text();
+    expect(page).toContain('sse-connect="/events?project=%2Frepo%2Fone"');
+
+    const res = await app.request("/events?project=%2Frepo%2Fone");
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("no body");
+    const form = new FormData();
+    form.set("text", "go");
+    await app.request("/sessions/s2/prompt", { method: "POST", body: form });
+
+    let received = "";
+    const decoder = new TextDecoder();
+    while (!received.includes('id="project-picker"')) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      received += decoder.decode(chunk.value);
+    }
+    await reader.cancel();
+    // A session running in the other project lights the dot on the closed
+    // selector; hidden would mean the stream followed the newest project.
+    expect(received).toMatch(/id="project-activity"(?![^>]*hidden)/);
+  });
+
   it("scopes the sidebar to one project and remembers the choice", async () => {
     const { app, world } = testApp();
     world.store.set("s2", {
