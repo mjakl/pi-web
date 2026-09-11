@@ -917,6 +917,13 @@ describe("the sidebar", () => {
     // Eleven projects, so the filter box is there (pi-web shows it above 8).
     expect(menu).toContain('class="menu-filter"');
     expect(menu).toContain("Filter projects…");
+    // A plain text box that opens unfocused, as pi-web's does: its autoFocus
+    // fires when the sidebar mounts, long before the popover is opened, so
+    // the field shows neither a focus ring nor a caret.
+    const filter = menu.slice(menu.indexOf('id="project-filter"'));
+    expect(filter.slice(0, filter.indexOf(">"))).not.toMatch(
+      /autofocus|type="search"/,
+    );
     // The project with two folders expands; the others select directly.
     const group = menu.slice(menu.indexOf('data-project-key="/repo/one"'));
     expect(group).toContain('aria-expanded="true"');

@@ -82,6 +82,7 @@
 
 #explorer-search-toggle[aria-pressed="true"] {
   --toolbar-button-color: var(--accent);
+  --toolbar-button-background: var(--bg-selected);
 }
 
 /* The slot the media toolbar keeps for a measurement only the browser has

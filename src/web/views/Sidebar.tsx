@@ -452,13 +452,14 @@ export function ProjectPicker({
     <>
       {view.projects.length > FILTER_FROM ? (
         <div style="padding:6px 8px; border-bottom:1px solid var(--border)">
+          {/* No autofocus: pi-web renders this field with the sidebar, long
+              before the popover opens, so React's autoFocus never fires and
+              the box opens unfocused, with no ring and no caret. */}
           <input
             id="project-filter"
             class="menu-filter"
-            type="search"
             placeholder="Filter projects…"
             aria-label="Filter projects"
-            autofocus
           />
         </div>
       ) : null}
