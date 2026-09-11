@@ -38,6 +38,12 @@ function setUpDialogCancel(): void {
     (event) => {
       const dialog = event.target;
       if (!(dialog instanceof HTMLDialogElement)) return;
+      // The custom-UI panel forwards Escape to the component as \x1b, so the
+      // dialog must never treat the same key as a request to close.
+      if (dialog.dataset["noEscape"] !== undefined) {
+        event.preventDefault();
+        return;
+      }
       const cancel = dialog.querySelector<HTMLButtonElement>(
         "[data-dialog-cancel]",
       );

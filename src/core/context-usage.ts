@@ -96,6 +96,24 @@ export function formatContextUsage(usage: ContextUsage): string {
   return `${used} / ${formatCompactCount(usage.contextWindow)} (${percent})`;
 }
 
+/**
+ * The top bar's hover text: exact numbers where the readout is compact.
+ * pi-web spells it "Context: 241,829 / 272,000 tokens (88.9%)".
+ */
+export function formatContextTooltip(usage: ContextUsage): string {
+  if (usage.contextWindow === null) return "";
+  const mark = (value: string) => (usage.estimated ? `~${value}` : value);
+  const used =
+    usage.tokens === null ? "?" : mark(usage.tokens.toLocaleString("en"));
+  const percent =
+    usage.percent === null
+      ? "?"
+      : mark(
+          `${usage.percent.toLocaleString("en", { maximumFractionDigits: 1 })}%`,
+        );
+  return `Context: ${used} / ${usage.contextWindow.toLocaleString("en")} tokens (${percent})`;
+}
+
 export function formatTokens(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
   if (tokens >= 10_000) return `${String(Math.round(tokens / 1000))}k`;

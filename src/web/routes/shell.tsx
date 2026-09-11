@@ -4,16 +4,19 @@
 import { type DialogAnswer } from "@core/extension-ui";
 import { type PackageScope, isPackageAction } from "@core/packages";
 import { isSessionId } from "@core/sessions";
-import { type SkillScope, clampSearchLimit } from "@core/skills";
+import {
+  type SkillScope,
+  type SkillUpdate,
+  clampSearchLimit,
+} from "@core/skills";
 import { OFFLINE_URL, manifest, offlinePage, serviceWorker } from "@web/pwa";
 import { SystemPromptPanel, ToolsPanel } from "@web/views/Panels";
 import { IndexPage, NewSessionPage, SessionPage } from "@web/views/SessionPage";
 import {
   PluginsSection,
-  SettingsBody,
   SettingsPage,
-  SkillDetail,
   SkillSearchResults,
+  SkillsSection,
   type SkillsView,
   resolveSection,
 } from "@web/views/Settings";
@@ -171,7 +174,10 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
 
   app.get("/settings", async (c) => {
     const cwd = currentCwd(c);
-    const available = await deps.workspace.newSession(cwd);
+    const [sidebar, available] = await Promise.all([
+      sidebarOf(c),
+      deps.workspace.newSession(cwd),
+    ]);
     const usable = available.available ? cwd : "";
     const section = resolveSection(
       c.req.query("section") ?? getCookie(c, SETTINGS_COOKIE),
@@ -187,6 +193,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
     const back = currentSessionId(c);
     return c.render(
       <SettingsPage
+        sidebar={sidebar}
         section={section}
         cwd={usable}
         warnTokens={warnTokens(c).warnTokens}
@@ -209,26 +216,57 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
       : undefined;
   }
 
+  /**
+   * The whole Skills section, around the skill this click selected. pi-web
+   * paints the selected row and its badges from the same state as the detail
+   * pane, so the swap has to carry both.
+   */
+  async function skillsSection(
+    cwd: string,
+    options: {
+      selected?: string;
+      add?: boolean;
+      update?: SkillUpdate;
+      updates?: SkillUpdate[];
+      message?: string;
+    } = {},
+  ) {
+    const listed = await deps.workspace.skills(cwd);
+    return (
+      <SkillsSection
+        view={{
+          cwd,
+          ...listed,
+          ...(options.updates === undefined
+            ? {}
+            : { updates: options.updates }),
+        }}
+        {...(options.selected === undefined
+          ? {}
+          : { selected: options.selected })}
+        {...(options.add === true ? { add: true } : {})}
+        {...(options.update === undefined ? {} : { update: options.update })}
+        {...(options.message === undefined ? {} : { message: options.message })}
+        {...(deps.home === undefined ? {} : { home: deps.home })}
+      />
+    );
+  }
+
   /** One skill's detail pane, and the toggle that rewrites its frontmatter. */
   app.get("/settings/skills/detail", async (c) => {
     const cwd = c.req.query("cwd") ?? "";
     const path = c.req.query("path") ?? "";
-    remember(
-      c,
-      SKILL_COOKIE,
-      `${encodeURIComponent(cwd)}|${encodeURIComponent(path)}`,
-    );
-    return guard(c, async () => {
-      const listed = await deps.workspace.skills(cwd);
-      const skill = listed.skills.find((entry) => entry.filePath === path);
-      return c.html(
-        <SkillDetail
-          cwd={cwd}
-          {...(skill ? { skill } : {})}
-          {...(deps.home === undefined ? {} : { home: deps.home })}
-        />,
+    const add = c.req.query("add") !== undefined;
+    if (!add) {
+      remember(
+        c,
+        SKILL_COOKIE,
+        `${encodeURIComponent(cwd)}|${encodeURIComponent(path)}`,
       );
-    });
+    }
+    return guard(c, async () =>
+      c.html(await skillsSection(cwd, { selected: path, add })),
+    );
   });
 
   app.post("/settings/skills/toggle", async (c) => {
@@ -236,18 +274,12 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
     const cwd = field(form, "cwd");
     const path = field(form, "path");
     return guard(c, async () => {
-      const skill = await deps.workspace.toggleSkill(
+      await deps.workspace.toggleSkill(
         cwd,
         path,
         field(form, "disable") !== "",
       );
-      return c.html(
-        <SkillDetail
-          cwd={cwd}
-          {...(skill ? { skill } : {})}
-          {...(deps.home === undefined ? {} : { home: deps.home })}
-        />,
-      );
+      return c.html(await skillsSection(cwd, { selected: path }));
     });
   });
 
@@ -255,16 +287,11 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
     const form = await c.req.formData();
     const cwd = field(form, "cwd");
     const query = field(form, "query");
-    const trusted = await deps.workspace.trustStatus(cwd).then(
-      (status) => status.trusted,
-      () => true,
-    );
     if (query === "") {
       return c.html(
         <SkillSearchResults
           hits={[]}
           cwd={cwd}
-          trusted={trusted}
           message="Type something to search skills.sh."
         />,
       );
@@ -274,17 +301,10 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
         query,
         clampSearchLimit(field(form, "limit")),
       );
-      return await c.html(
-        <SkillSearchResults hits={hits} cwd={cwd} trusted={trusted} />,
-      );
+      return await c.html(<SkillSearchResults hits={hits} cwd={cwd} />);
     } catch (error) {
       return c.html(
-        <SkillSearchResults
-          hits={[]}
-          cwd={cwd}
-          trusted={trusted}
-          message={errorText(error)}
-        />,
+        <SkillSearchResults hits={[]} cwd={cwd} message={errorText(error)} />,
       );
     }
   });
@@ -294,10 +314,6 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
     const cwd = field(form, "cwd");
     const scope: SkillScope =
       field(form, "scope") === "project" ? "project" : "global";
-    const trusted = await deps.workspace.trustStatus(cwd).then(
-      (status) => status.trusted,
-      () => true,
-    );
     let message: string;
     try {
       message = await deps.workspace.installSkill(
@@ -308,14 +324,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
     } catch (error) {
       message = errorText(error);
     }
-    return c.html(
-      <SkillSearchResults
-        hits={[]}
-        cwd={cwd}
-        trusted={trusted}
-        message={message}
-      />,
-    );
+    return c.html(<SkillSearchResults hits={[]} cwd={cwd} message={message} />);
   });
 
   /**
@@ -333,28 +342,14 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
         cwd,
         pkg === "" ? undefined : { package: pkg, scope },
       );
-      if (pkg === "") {
-        const sections = await settingsView("skills", cwd, { updates });
-        return c.html(
-          <SettingsBody
-            section="skills"
-            cwd={cwd}
-            {...(deps.home === undefined ? {} : { home: deps.home })}
-            {...sections}
-          />,
-        );
-      }
-      const listed = await deps.workspace.skills(cwd);
       const path = field(form, "path");
-      const skill = listed.skills.find((entry) => entry.filePath === path);
       const update = updates[0];
       return c.html(
-        <SkillDetail
-          cwd={cwd}
-          {...(skill ? { skill } : {})}
-          {...(update ? { update } : {})}
-          {...(deps.home === undefined ? {} : { home: deps.home })}
-        />,
+        await skillsSection(cwd, {
+          updates,
+          ...(pkg === "" ? {} : { selected: path }),
+          ...(pkg === "" || update === undefined ? {} : { update }),
+        }),
       );
     });
   });
@@ -376,16 +371,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
       } catch (error) {
         message = errorText(error);
       }
-      const listed = await deps.workspace.skills(cwd);
-      const skill = listed.skills.find((entry) => entry.filePath === path);
-      return c.html(
-        <SkillDetail
-          cwd={cwd}
-          {...(skill ? { skill } : {})}
-          message={message}
-          {...(deps.home === undefined ? {} : { home: deps.home })}
-        />,
-      );
+      return c.html(await skillsSection(cwd, { selected: path, message }));
     });
   });
 
@@ -414,6 +400,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
   app.get("/settings/plugins", async (c) => {
     const cwd = c.req.query("cwd") ?? "";
     const selected = c.req.query("selected");
+    const add = c.req.query("add") !== undefined;
     return guard(c, async () => {
       const view = await deps.workspace.plugins(cwd);
       return c.html(
@@ -421,6 +408,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
           cwd={cwd}
           view={view}
           {...(selected === undefined ? {} : { selected })}
+          {...(add ? { add: true } : {})}
           {...(deps.home === undefined ? {} : { home: deps.home })}
         />,
       );

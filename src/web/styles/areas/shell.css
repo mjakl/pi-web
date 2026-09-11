@@ -1,5 +1,55 @@
 /* Shell area.
 
    pi-web's stylesheets in ../ are the pixel spec; this file is the only
-   CSS this area may edit. Empty on purpose: add a rule only when pi-web's
-   own CSS cannot express it, and say why. */
+   CSS this area may edit. Add a rule only when pi-web's own CSS cannot
+   express it, and say why. */
+
+/* Settings is a page in web-pi and a React modal in pi-web, so its surface
+   takes the initial focus: without that, `showModal()` focuses the first
+   section tab and rings it, which pi-web never shows. The surface is only a
+   focus holder, never a control, so it draws no ring of its own. */
+.settings-dialog-surface:focus {
+  outline: none;
+}
+
+/* pi-web builds the phone top bar from JS: the three panel tabs become 36px
+   icon squares without a label, the cache-read and gauge groups drop out of
+   the stats cluster, and the cluster takes the free space
+   (AppShell.tsx, `mobile ? 36 : undefined`). The server cannot see the
+   viewport, so the same shape comes from a media query here. */
+/* Both warnings carry pi-web's own inline styles, so the variant this
+   viewport does not use has to be hidden with more weight than they have. */
+[data-mobile-trust-banner] {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  [data-trust-warning]:not([data-mobile-trust-banner]) {
+    display: none !important;
+  }
+
+  [data-mobile-trust-banner] {
+    display: flex !important;
+  }
+
+  #top-bar [data-cache-read],
+  #top-bar .mobile-session-context > svg {
+    display: none;
+  }
+
+  #top-bar [data-top-bar-tab] {
+    width: 36px;
+    padding: 0;
+  }
+
+  #top-bar [data-top-bar-tab] > span {
+    display: none;
+  }
+
+  #stats-trigger {
+    flex: 1;
+    gap: 7px;
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+}

@@ -1,5 +1,10 @@
-import { formatContextUsage } from "@core/context-usage";
+import {
+  formatCompactCount,
+  formatContextTooltip,
+  formatContextUsage,
+} from "@core/context-usage";
 import type { ContextUsage } from "@core/context-usage";
+import type { SessionStats } from "@core/session-entries";
 import type { NewSessionView, SessionView, SidebarView } from "@core/workspace";
 import { Composer } from "./Composer.tsx";
 import { FilePanelBody } from "./Files.tsx";
@@ -7,6 +12,7 @@ import { Rail } from "./Rail.tsx";
 import { CustomPanel, ExtensionDialog } from "./Extensions.tsx";
 import { Shelf } from "./Shelf.tsx";
 import {
+  CacheReadIcon,
   CompactIcon,
   ContextGaugeIcon,
   HamburgerIcon,
@@ -16,6 +22,7 @@ import {
   RefreshIcon,
   StopCompactionIcon,
   SystemPromptIcon,
+  TokenArrowIcon,
   WrenchIcon,
 } from "./icons.tsx";
 import {
@@ -32,6 +39,9 @@ import { DialogHost, MissingFolderNotice, TrustBadge } from "./Dialogs.tsx";
 // bar, the chat window with its rail, and the right-hand file panel. The
 // inline styles are pi-web's own (components/AppShell.tsx), kebab-cased;
 // everything with a class name is styled by src/web/styles/globals.css.
+
+/** The cumulative token totals the stats button reads. */
+type SessionTokens = SessionStats["tokens"];
 
 /** pi-web's top bar and both panel headers are exactly this tall. */
 const BAR_HEIGHT = "calc(36px + env(safe-area-inset-top))";
@@ -64,12 +74,15 @@ function TopPanelHost() {
 function TopBar({
   sessionId,
   usage,
+  tokens,
   files,
   cwd,
   trust,
 }: {
   sessionId?: string;
   usage?: ContextUsage;
+  /** Cumulative totals of the session, for the in / out / cache groups. */
+  tokens?: SessionTokens;
   /** False when this session has no folder to show files from. */
   files?: boolean;
   cwd?: string;
@@ -86,8 +99,8 @@ function TopBar({
           style={`${ICON_BUTTON_36}; border-right:1px solid var(--border)`}
           aria-controls="session-sidebar"
           aria-expanded="true"
-          title="Toggle the sidebar"
-          aria-label="Toggle the sidebar"
+          title="Hide sidebar"
+          aria-label="Hide sidebar"
         >
           <span data-sidebar-open-icon>
             <PanelLeftIcon />
@@ -103,69 +116,68 @@ function TopBar({
           <div style="display:flex; align-items:stretch; height:100%">
             <a
               style={TOP_BAR_BUTTON}
+              data-top-bar-tab
               href={`/sessions/${sessionId}/export`}
               target="_blank"
               rel="noreferrer"
-              title="The whole conversation as one page"
+              title="Full history"
+              aria-label="Full history"
             >
               <HistoryIcon />
-              Full history
+              <span>Full history</span>
             </a>
             <button
               type="button"
               style={TOP_BAR_BUTTON}
+              data-top-bar-tab
               data-top-panel="system"
-              aria-expanded="false"
-              title="The prompt this session runs with"
+              aria-pressed="false"
+              title="System prompt"
+              aria-label="System prompt"
               hx-get={`/sessions/${sessionId}/system-prompt`}
               hx-target="#top-panel"
               hx-swap="innerHTML"
             >
               <SystemPromptIcon />
-              System
+              <span>System</span>
             </button>
             <button
               type="button"
               style={TOP_BAR_BUTTON}
+              data-top-bar-tab
               data-top-panel="tools"
-              aria-expanded="false"
-              title="The tools this session may call"
+              aria-pressed="false"
+              title="Tool definitions"
+              aria-label="Tool definitions"
               hx-get={`/sessions/${sessionId}/tools`}
               hx-target="#top-panel"
               hx-swap="innerHTML"
             >
               <WrenchIcon />
-              Tools
+              <span>Tools</span>
             </button>
           </div>
         )}
         {sessionId === undefined ? (
           <span style="margin-left:auto" />
         ) : (
-          <button
-            type="button"
-            id="stats-trigger"
-            data-top-panel="stats"
-            aria-expanded="false"
-            style={`margin-left:auto; display:flex; align-items:center; justify-content:flex-end; min-width:0; gap:10px; padding:0 12px; height:100%; overflow:hidden; background:none; border:none; border-top:2px solid transparent; color:var(--text-muted); cursor:pointer; font-size:11px; white-space:nowrap; font-variant-numeric:tabular-nums; transition:color 0.1s, background 0.1s`}
-            title="Session info"
-            hx-get={`/sessions/${sessionId}/stats`}
-            hx-target="#top-panel"
-            hx-swap="innerHTML"
-          >
-            {/* TODO(shell): pi-web also shows ↑ input, ↓ output and ⟳ cache
-                read here. SessionView carries no token totals yet; adding them
-                to the view is what this row is waiting for. */}
-            <ContextReadout usage={usage} />
-          </button>
+          <SessionStatsButton
+            sessionId={sessionId}
+            {...(usage === undefined ? {} : { usage })}
+            {...(tokens === undefined ? {} : { tokens })}
+          />
         )}
         {sessionId === undefined ? null : (
           <>
             <button
               type="button"
               class="context-compact-button"
-              title="Compact the conversation"
-              aria-label="Compact the conversation"
+              {...(usage !== undefined &&
+              (usage.level === "warn" || usage.level === "critical")
+                ? { "data-warning": "true" }
+                : {})}
+              title="Compact context"
+              aria-label="Compact context"
               hx-post={`/sessions/${sessionId}/compact`}
               hx-swap="none"
             >
@@ -174,9 +186,9 @@ function TopBar({
             <button
               type="button"
               class="context-compact-button"
-              data-compacting
-              title="Stop compacting"
-              aria-label="Stop compacting"
+              data-compacting="true"
+              title="Stop compaction"
+              aria-label="Stop compaction"
               hx-post={`/sessions/${sessionId}/compact/abort`}
               hx-swap="none"
               hidden
@@ -189,8 +201,8 @@ function TopBar({
           type="button"
           class="page-refresh-button"
           id="page-refresh"
-          title="Reload the page"
-          aria-label="Reload the page"
+          title="Refresh page and reconnect"
+          aria-label="Refresh page"
         >
           <RefreshIcon />
         </button>
@@ -201,23 +213,114 @@ function TopBar({
             style={`${ICON_BUTTON_36}; border-left:1px solid var(--border)`}
             aria-controls="file-panel"
             aria-expanded="false"
-            title="Files"
-            aria-label="Files"
+            title="Show file panel"
+            aria-label="Show file panel"
           >
             <PanelRightIcon />
           </button>
         )}
         <TopPanelHost />
       </div>
+      {/* pi-web gives the phone its own full-width warning row under the bar
+          (AppShell.tsx); only one of the two is ever visible. */}
+      {trust === undefined || cwd === undefined ? null : (
+        <TrustBadge cwd={cwd} status={trust} banner />
+      )}
     </div>
   );
 }
 
+/**
+ * The stats cluster on the right of the bar: cumulative tokens, then the
+ * context gauge. pi-web drops a group whose count is zero and puts the exact
+ * numbers in the hover text (ui-map 2.3).
+ */
+function SessionStatsButton({
+  sessionId,
+  usage,
+  tokens,
+}: {
+  sessionId: string;
+  usage?: ContextUsage;
+  tokens?: SessionTokens;
+}) {
+  const parts: string[] = [];
+  if (tokens) {
+    parts.push(
+      `in: ${tokens.input.toLocaleString("en")}`,
+      `out: ${tokens.output.toLocaleString("en")}`,
+      `cache read: ${tokens.cacheRead.toLocaleString("en")}`,
+      `cache write: ${tokens.cacheWrite.toLocaleString("en")}`,
+    );
+  }
+  const context = usage === undefined ? "" : formatContextTooltip(usage);
+  if (context !== "") parts.push(context);
+  const readout = usage === undefined ? "" : formatContextUsage(usage);
+  const empty = readout === "" && (tokens === undefined || tokens.input === 0);
+  return (
+    <button
+      type="button"
+      id="stats-trigger"
+      class="mobile-session-stats"
+      data-top-panel="stats"
+      aria-pressed="false"
+      style="margin-left:auto; display:flex; align-items:center; justify-content:flex-end; min-width:0; gap:10px; padding-left:12px; padding-right:12px; height:100%; overflow:hidden; background:none; border:none; border-top:2px solid transparent; color:var(--text-muted); cursor:pointer; font-size:11px; white-space:nowrap; font-variant-numeric:tabular-nums; transition:color 0.1s, background 0.1s"
+      title={parts.length === 0 ? "Session info" : parts.join("  |  ")}
+      aria-label="Session info"
+      hx-get={`/sessions/${sessionId}/stats`}
+      hx-target="#top-panel"
+      hx-swap="innerHTML"
+    >
+      {tokens !== undefined && tokens.input > 0 ? (
+        <span
+          class="mobile-session-stat-io"
+          style="display:flex; align-items:center; gap:4px"
+        >
+          <TokenArrowIcon direction="in" />
+          {formatCompactCount(tokens.input)}
+        </span>
+      ) : null}
+      {tokens !== undefined && tokens.output > 0 ? (
+        <span
+          class="mobile-session-stat-io"
+          style="display:flex; align-items:center; gap:4px"
+        >
+          <TokenArrowIcon direction="out" />
+          {formatCompactCount(tokens.output)}
+        </span>
+      ) : null}
+      {tokens !== undefined && tokens.cacheRead > 0 ? (
+        <span data-cache-read style="display:flex; align-items:center; gap:4px">
+          <CacheReadIcon />
+          {formatCompactCount(tokens.cacheRead)}
+        </span>
+      ) : null}
+      <ContextReadout
+        {...(usage === undefined ? {} : { usage })}
+        empty={empty}
+      />
+    </button>
+  );
+}
+
 /** The context gauge in the top bar; red, amber or plain by threshold. */
-function ContextReadout({ usage }: { usage?: ContextUsage }) {
+function ContextReadout({
+  usage,
+  empty,
+}: {
+  usage?: ContextUsage;
+  /** Nothing else in the button has a value: name what it opens instead. */
+  empty: boolean;
+}) {
   const text = usage ? formatContextUsage(usage) : "";
   if (!usage || text === "") {
-    return <span style="color:var(--text-dim)">Session info</span>;
+    return empty ? (
+      <span style="overflow:hidden; text-overflow:ellipsis; color:var(--text-dim)">
+        Session info
+      </span>
+    ) : (
+      <></>
+    );
   }
   const colour =
     usage.level === "critical"
@@ -227,6 +330,7 @@ function ContextReadout({ usage }: { usage?: ContextUsage }) {
         : "var(--text-muted)";
   return (
     <span
+      class="mobile-session-context"
       style={`display:flex; align-items:center; gap:4px; color:${colour}`}
       data-context-readout
     >
@@ -236,12 +340,13 @@ function ContextReadout({ usage }: { usage?: ContextUsage }) {
   );
 }
 
-function Shell({
+export function Shell({
   sidebar,
   activeId,
   cwd,
   home,
   usage,
+  tokens,
   trust,
   children,
   panel,
@@ -253,6 +358,7 @@ function Shell({
   /** The reader's home folder: the workspace pill shortens paths with it. */
   home?: string;
   usage?: ContextUsage;
+  tokens?: SessionTokens;
   trust?: { requiresTrust: boolean; trusted: boolean };
   children?: unknown;
   /** The right-hand file panel, on a session page. */
@@ -292,6 +398,7 @@ function Shell({
         <TopBar
           {...(activeId === undefined ? {} : { sessionId: activeId })}
           {...(usage === undefined ? {} : { usage })}
+          {...(tokens === undefined ? {} : { tokens })}
           {...(cwd === undefined ? {} : { cwd })}
           {...(trust === undefined ? {} : { trust })}
           files={panel !== undefined}
@@ -481,6 +588,7 @@ export function SessionPage({
       cwd={summary.cwd}
       usage={view.usage}
       {...(home === undefined ? {} : { home })}
+      tokens={view.tokens}
       {...(trust === undefined ? {} : { trust })}
       {...(missingFolder
         ? {}
