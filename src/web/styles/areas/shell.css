@@ -12,6 +12,25 @@
   outline: none;
 }
 
+/* pi-web puts `mobile-session-stats` and its two children's classes on the
+   stats cluster only on the phone (AppShell.tsx L1468); web-pi serves one
+   button to both viewports, so above the phone breakpoint the mobile rules in
+   embedded.css have to be taken back off. `container-type: inline-size` is the
+   one that matters: it contains the button's inline size, collapsing it to its
+   own padding and then hiding the token groups through its own container
+   query. */
+@media (min-width: 641px) {
+  #stats-trigger.mobile-session-stats {
+    container-type: normal;
+  }
+
+  #top-bar .mobile-session-context {
+    white-space: nowrap;
+    line-height: inherit;
+    text-align: inherit;
+  }
+}
+
 /* pi-web builds the phone top bar from JS: the three panel tabs become 36px
    icon squares without a label, the cache-read and gauge groups drop out of
    the stats cluster, and the cluster takes the free space
