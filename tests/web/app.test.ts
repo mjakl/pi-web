@@ -62,7 +62,7 @@ describe("web app", () => {
     expect(html).toContain("<strong>bold</strong>");
     expect(html).not.toContain("<script>x</script>");
     expect(html).toContain("40k / 100k (40%)");
-    expect(html).toContain("not running");
+    expect(html).toContain('class="composer-surface"');
   });
 
   it("ships the shell: theme before paint, pi-web's containers, hashed assets", async () => {
@@ -943,6 +943,131 @@ describe("the sidebar", () => {
   });
 });
 
+describe("the composer, as pi-web draws it", () => {
+  /** The order of one region's controls, by the marker each one carries. */
+  function order(html: string, markers: string[]): void {
+    let at = 0;
+    for (const marker of markers) {
+      const found = html.indexOf(marker, at);
+      expect([marker, found > -1]).toStrictEqual([marker, true]);
+      at = found;
+    }
+  }
+
+  it("renders ChatInput's skeleton: surface, textarea, toolbar", async () => {
+    const { app } = testApp();
+    const page = await (await app.request("/sessions/s1")).text();
+    const composer = page.slice(page.indexOf('id="composer"'));
+    order(composer, [
+      'class="chat-input"',
+      'id="image-input"',
+      "max-width:820px; margin:0 auto",
+      'id="status"',
+      'id="slash-menu" class="menu-surface menu-panel"',
+      'id="at-menu" class="menu-surface menu-panel"',
+      'class="composer-surface"',
+      'id="image-previews"',
+      'class="composer-textarea"',
+      'placeholder="Message…"',
+      'class="composer-toolbar"',
+      'class="composer-attach"',
+      'class="anchor-composer-controls composer-more"',
+      'class="model-selector is-composer"',
+      'class="composer-action-primary"',
+      'class="composer-shell-mode" id="shell-hint"',
+    ]);
+    // The surface's own metrics come from globals.css, so the markup only has
+    // to carry the classes; the strips, though, are pi-web's inline styles.
+    expect(composer).toContain("bottom:calc(100% + 8px)");
+    expect(composer).toContain("max-height:min(48vh, 400px)");
+    // The stream swaps into the status div, not into the form's toast target.
+    expect(composer).toContain(
+      'id="status" sse-swap="status" hx-target="this"',
+    );
+  });
+
+  it("groups the slash menu the way pi-web does", async () => {
+    const { app } = testApp();
+    const menu = await (await app.request("/sessions/s1/commands")).text();
+    order(menu, [
+      "Slash commands · ",
+      " matches",
+      "Tab / Enter",
+      'class="menu-section-label"',
+      "Built-in",
+      'class="menu-item"',
+      "/clone",
+      "Clone the current branch into a new session",
+    ]);
+    expect(menu).toContain("font-size:12.5px");
+    expect(menu).toContain('data-index="0"');
+  });
+
+  it("offers every model, grouped by provider, with a filter above eight", async () => {
+    const many = Array.from({ length: 9 }, (_, index) => ({
+      provider: index < 5 ? "fake" : "other",
+      id: `m${String(index)}`,
+      name: `Model ${String(index)}`,
+      contextWindow: 100_000,
+      reasoning: false,
+    }));
+    const { app } = testApp({ models: many });
+    const page = await (await app.request("/sessions/s1")).text();
+    const selector = page.slice(page.indexOf('id="model-selector"'));
+    expect(selector).toContain('id="model-menu" popover="auto"');
+    expect(selector).toContain(
+      "anchored-menu menu-surface opens-up menu-model-selector",
+    );
+    expect(selector).toContain('class="menu-filter"');
+    expect(selector).toContain('placeholder="Filter models…"');
+    // Showing a popover focuses the first autofocus element inside it.
+    expect(selector).toContain("autofocus");
+    order(selector, ['data-provider="fake"', 'data-provider="other"']);
+    // A pick is a request of its own: none of the composer's fields ride along.
+    expect(selector).toContain('hx-params="none"');
+    expect(selector).toContain("/sessions/s1/model?model=fake%2Fm0");
+    expect(selector).toContain('hx-target="closest .model-selector"');
+  });
+
+  it("applies a model pick and answers with the new selector", async () => {
+    const { app } = testApp();
+    const res = await app.request("/sessions/s1/model?model=fake%2Ffake-1", {
+      method: "POST",
+    });
+    const html = await res.text();
+    expect(res.status).toBe(200);
+    expect(html).toContain('id="model-selector"');
+    expect(html).toContain('aria-selected="true"');
+    // The reasoning control travels with it, as a child of the popover.
+    expect(html).toContain('class="composer-thinking-field"');
+    expect(html).toContain("Change reasoning level");
+  });
+
+  it("renders the queue panel and the compaction strip pi-web shows", async () => {
+    const { app } = testApp({ delayMs: 200 });
+    const first = new FormData();
+    first.set("text", "go");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: first });
+    const queued = new FormData();
+    queued.set("text", "and then this");
+    queued.set("behavior", "followUp");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: queued });
+    const page = await (await app.request("/sessions/s1")).text();
+    const status = page.slice(page.indexOf('id="status"'));
+    order(status, [
+      "text-transform:uppercase",
+      "Queued · 1",
+      "Remove all queued messages",
+      "Recall to input",
+      "border-radius:999px",
+      "follow-up",
+      "and then this",
+    ]);
+    // The recall must not post the draft and its attachments with it.
+    expect(status).toContain('hx-params="none"');
+  });
+});
+
 describe("conversation rail, shelf, and written files", () => {
   it("renders a mark per prompt, star, and branch, with previews", async () => {
     const { app, world } = testApp();
@@ -1027,8 +1152,15 @@ describe("conversation rail, shelf, and written files", () => {
     expect(received).toContain("event: shelf");
     expect(received).toContain('<span style="color:#13703a">main</span>');
     expect(received).toContain('<span style="font-weight:600">Open</span>');
-    // Three lines is small enough to open unasked.
-    expect(received).toContain("widget-panel");
+    // pi-web's shelf: the trigger row, the status line, and the panel of the
+    // one widget short enough to open unasked (§4.11).
+    expect(received).toContain(
+      'class="extension-status-shelf has-widgets has-status"',
+    );
+    expect(received).toContain('class="extension-widget-triggers"');
+    expect(received).toContain('class="extension-widget-trigger is-expanded"');
+    expect(received).toContain('class="extension-widget-panel-heading"');
+    expect(received).toContain('class="extension-status-text"');
     expect(received).not.toContain("\u001B[");
   });
 
@@ -1068,8 +1200,9 @@ describe("conversation rail, shelf, and written files", () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
     const page = await (await app.request("/sessions/s1")).text();
     expect(page).not.toContain("xxxxx");
-    // The whole page stays smaller than the one result it left out.
-    expect(page.length).toBeLessThan(output.length + 10_000);
+    // The whole page stays smaller than the one result it left out. The
+    // slack is the shell's own markup, which the pixel port roughly doubled.
+    expect(page.length).toBeLessThan(output.length + 15_000);
 
     const url = deferredUrl(page);
     const opened = await (await app.request(url)).text();
@@ -1289,8 +1422,9 @@ describe("phase 8 fixes", () => {
     const { app } = testApp();
     const page = await (await app.request("/sessions/s1")).text();
     // htmx appends a submitter's own name and value after the form's fields,
-    // so a named Queue button would always lose to the hidden `steer`.
-    expect(page).toContain('data-behavior="followUp"');
+    // so a named button would always lose to the hidden field. The primary
+    // button carries the mode as data, and the browser copies it across.
+    expect(page).toContain('data-behavior="steer"');
     expect(page).not.toMatch(/name="behavior"\s+value="followUp"/);
     expect(page.match(/name="behavior"/g)).toHaveLength(1);
   });

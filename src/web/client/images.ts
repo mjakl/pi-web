@@ -49,7 +49,7 @@ export type Attachments = {
   count(): number;
 };
 
-export function setUpImages(): Attachments {
+export function setUpImages(changed: () => void): Attachments {
   const input = document.querySelector<HTMLInputElement>("#image-input");
   const previews = document.querySelector<HTMLElement>("#image-previews");
   const attached: File[] = [];
@@ -63,20 +63,24 @@ export function setUpImages(): Attachments {
       URL.revokeObjectURL(url.src);
     }
     previews.replaceChildren();
+    previews.hidden = attached.length === 0;
     for (const file of attached) {
       const wrapper = document.createElement("div");
-      wrapper.className = "relative";
+      wrapper.style.cssText = "position:relative; flex-shrink:0";
       const image = document.createElement("img");
       image.src = URL.createObjectURL(file);
-      image.alt = file.name;
+      image.alt = "";
       image.style.cssText =
         "width:56px; height:56px; object-fit:cover; border-radius:6px; border:1px solid var(--border); display:block";
       const remove = document.createElement("button");
       remove.type = "button";
       remove.style.cssText =
-        "position:absolute; top:-4px; right:-4px; width:16px; height:16px; border-radius:50%; background:var(--bg-panel); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; padding:0; color:var(--text-muted)";
-      remove.textContent = "×";
-      remove.setAttribute("aria-label", `Remove ${file.name}`);
+        "position:absolute; top:-4px; right:-4px; width:16px; height:16px; border-radius:50%; background:var(--bg-panel); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; color:var(--text-muted)";
+      // views/icons.tsx #49, drawn here because the strip is built in the
+      // browser: the files never reach the server before they are sent.
+      remove.innerHTML =
+        '<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="1" y1="1" x2="7" y2="7"></line><line x1="7" y1="1" x2="1" y2="7"></line></svg>';
+      remove.setAttribute("aria-label", "Remove image");
       // By identity, never by the index this closure was built with: a
       // downscale finishing in the meantime renumbers the list.
       remove.addEventListener("click", () => {
@@ -91,6 +95,8 @@ export function setUpImages(): Attachments {
     document
       .querySelector("#composer")
       ?.toggleAttribute("data-has-images", attached.length > 0);
+    // An attachment turns the send button on, and turns `!` shell mode off.
+    changed();
   }
 
   function add(files: readonly File[]): void {
@@ -135,22 +141,15 @@ export function setUpImages(): Attachments {
     event.preventDefault();
     add(items.map((item) => item.getAsFile()).filter((file) => file !== null));
   });
-  const main = document.querySelector("main");
-  main?.addEventListener("dragover", (event) => {
-    if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
-  });
-  main?.addEventListener("drop", (event) => {
-    const files = [...(event.dataTransfer?.files ?? [])];
-    if (files.length === 0) return;
-    event.preventDefault();
-    add(files);
-  });
-
   // Images a recall took back out of the queue arrive as base64 in a hidden
-  // element; they become Files again so the next send carries them.
-  document.body.addEventListener("htmx:afterSwap", (event) => {
-    const target = event.target;
-    if (!(target instanceof Element) || target.id !== "recalled-images") return;
+  // element; they become Files again so the next send carries them. The
+  // fragment rides out of band, and htmx announces those with their own
+  // event, not with htmx:afterSwap.
+  // htmx names the elements it settled, not the out-of-band target, so this
+  // asks the holder itself whether a recall just filled it.
+  const drainRecalled = (): void => {
+    const target = document.getElementById("recalled-images");
+    if (!target?.firstElementChild) return;
     const recalled: File[] = [];
     for (const item of target.querySelectorAll<HTMLElement>("[data-image]")) {
       const data = item.dataset["image"] ?? "";
@@ -169,7 +168,9 @@ export function setUpImages(): Attachments {
     }
     target.replaceChildren();
     if (recalled.length > 0) add(recalled);
-  });
+  };
+  document.body.addEventListener("htmx:oobAfterSwap", drainRecalled);
+  document.body.addEventListener("htmx:afterSwap", drainRecalled);
 
   return {
     add,

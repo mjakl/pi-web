@@ -10,6 +10,8 @@ import { ForbiddenPath } from "@core/workspace";
 import {
   CommandMenu,
   ComposerText,
+  ModelSelector,
+  modelPick,
   RecalledImages,
   Toasts,
 } from "@web/views/Composer";
@@ -189,13 +191,6 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
     );
   });
 
-  app.post("/sessions/:id/queue/clear", (c) => {
-    const id = c.req.param("id");
-    if (!isSessionId(id)) return c.notFound();
-    deps.workspace.clearQueue(id);
-    return c.body(null, 204);
-  });
-
   /** The two JSON endpoints of this phase: a menu cannot be a round trip. */
   app.get("/sessions/:id/file-index", async (c) => {
     const id = c.req.param("id");
@@ -270,13 +265,22 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
     return c.body(null, 204);
   });
 
+  /**
+   * The composer's model menu. The pick rides in the query so the request
+   * carries none of the composer form it was clicked inside, and the answer
+   * is the re-rendered selector, which is what closes the popover and shows
+   * the new name.
+   */
   app.post("/sessions/:id/model", async (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
-    const form = await c.req.formData();
-    const [provider, ...rest] = field(form, "model").split("/");
+    const [provider, ...rest] = (c.req.query("model") ?? "").split("/");
     const modelId = rest.join("/");
-    const thinking = field(form, "thinking");
+    // Only the reasoning select posts a body; the option buttons send none.
+    const thinking = await c.req
+      .formData()
+      .then((form) => field(form, "thinking"))
+      .catch(() => "");
     if (!provider || !modelId) return c.text("model is required", 400);
     try {
       await deps.workspace.setModel(id, {
@@ -284,10 +288,39 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
         modelId,
         ...(thinking ? { thinkingLevel: thinking as ThinkingLevel } : {}),
       });
-      return c.body(null, 204);
     } catch (error) {
       return c.text(errorText(error), 400);
     }
+    const view = await deps.workspace.viewSession(id, warnTokens(c));
+    if (!view) return c.notFound();
+    return c.html(<ModelSelector pick={modelPick(view)} />);
+  });
+
+  /**
+   * The same menu before a session exists: nothing is applied, the pick is
+   * only recorded in the hidden field the first prompt posts.
+   */
+  app.get("/workspaces/model-selector", async (c) => {
+    const cwd = c.req.query("cwd") ?? "";
+    const picked = c.req.query("model") ?? "";
+    return guard(c, async () => {
+      const view = await deps.workspace.newSession(cwd);
+      const chosen = view.models.find(
+        (model) => `${model.provider}/${model.id}` === picked,
+      );
+      return c.html(
+        <ModelSelector
+          pick={{
+            models: view.models,
+            current: chosen ?? view.model ?? null,
+            levels: chosen?.thinkingLevels ?? view.model?.thinkingLevels ?? [],
+            ...(chosen ? {} : { level: view.thinkingLevel }),
+            auto: true,
+            cwd: view.cwd,
+          }}
+        />,
+      );
+    });
   });
 
   // --- Composer menus before a session exists ------------------------------
@@ -328,6 +361,9 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
       // The shelf holds open panels, so it is only re-sent when an extension
       // actually changed a status or a widget.
       let shelf = "";
+      // The model selector is a whole subtree with an open popover in it, and
+      // a turn renders ten times a second: send it only when the pick moved.
+      let model = "";
       // Same for the dialog and the custom-UI shell: re-sending either would
       // wipe what the reader typed, or take focus out of the panel.
       let dialog = "";
@@ -367,9 +403,18 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
             ),
           });
         }
+        const pick = modelPick(view);
+        const nextModel = JSON.stringify([
+          pick.current,
+          pick.level,
+          pick.levels,
+          pick.models.length,
+        ]);
+        const modelChanged = nextModel !== model;
+        model = nextModel;
         await stream.writeSSE({
           event: "status",
-          data: await html(<Status view={view} />),
+          data: await html(<Status view={view} model={modelChanged} oob />),
         });
         const signature = shelfSignature(view.status);
         if (signature !== shelf) {

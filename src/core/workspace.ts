@@ -141,6 +141,11 @@ export type SessionView = {
   /** Cumulative token totals of the whole session, for the top-bar readout. */
   tokens: SessionStats["tokens"];
   models: ModelOption[];
+  /**
+   * The model this session last answered with, for the composer's selector
+   * before a runtime exists. A live session reports its own in `status`.
+   */
+  model?: ModelOption;
   /** `enabledModels` patterns that matched nothing, shown once per page. */
   modelWarnings: string[];
   /** Entry ids of starred answers. */
@@ -496,6 +501,7 @@ export function createWorkspace(deps: {
           : { warnTokens: options.warnTokens }),
       }),
       models: listing.models,
+      ...(model === undefined ? {} : { model }),
       modelWarnings: listing.warnings,
       starred,
       leaves: branchLeaves(stored.entries, leafId),
@@ -962,10 +968,6 @@ export function createWorkspace(deps: {
           .join("\n\n"),
         images: queued.flatMap((message) => message.images ?? []),
       };
-    },
-
-    clearQueue(id: string): void {
-      deps.runtime.get(id)?.clearQueue();
     },
 
     async runBash(
