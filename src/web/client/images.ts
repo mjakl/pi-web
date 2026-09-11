@@ -207,7 +207,8 @@ function openPreview(trigger: HTMLElement, source: string): void {
   const image = document.createElement("img");
   image.className = "image-preview-image";
   image.src = source;
-  image.alt = "";
+  // pi-web hands the modal the thumbnail's own alt (ImagePreview.tsx).
+  image.alt = trigger.querySelector("img")?.alt ?? "";
   const close = document.createElement("button");
   close.type = "button";
   close.className = "image-preview-close";

@@ -66,11 +66,13 @@
     display: none;
   }
 
+  /* pi-web's phone values (AppShell.tsx L1471-L1479); gap and padding are
+     inline there, so the rule needs the weight to take them back. */
   #stats-trigger {
     flex: 1;
-    gap: 7px;
-    padding-right: 6px;
-    padding-left: 6px;
+    gap: 7px !important;
+    padding-right: 6px !important;
+    padding-left: 6px !important;
   }
 }
 
@@ -98,6 +100,9 @@
 @media (max-width: 480px) {
   #mobile-toolbar-more {
     display: flex !important;
+    /* pi-web's phone bar stretches its row, so this 36px button starts at the
+       top of the 35px row instead of straddling it half a pixel high. */
+    align-self: flex-start;
   }
 
   #mobile-toolbar-more[aria-expanded="true"] {
