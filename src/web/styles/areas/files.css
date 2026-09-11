@@ -85,6 +85,14 @@
   --toolbar-button-background: var(--bg-selected);
 }
 
+/* pi-web's top-bar toggle wears the selected pill while the panel is open
+   (AppShell.tsx L1706-L1709). Both colours sit on the button's inline style,
+   so the open state needs the weight to take them back. */
+#file-panel-toggle[aria-expanded="true"] {
+  background: var(--bg-selected) !important;
+  color: var(--text) !important;
+}
+
 /* The slot the media toolbar keeps for a measurement only the browser has
    (an image's pixels, an audio file's length). pi-web renders no element at
    all until it knows one, and an empty box here would spend a 12px gap. */

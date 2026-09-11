@@ -75,9 +75,15 @@ function setOpen(open: boolean): void {
   element.classList.toggle("right-panel-open", open);
   element.classList.toggle("right-panel-closed", !open);
   document.body.dataset["filePanel"] = open ? "open" : "closed";
-  document
-    .getElementById("file-panel-toggle")
-    ?.setAttribute("aria-expanded", open ? "true" : "false");
+  const toggle = document.getElementById("file-panel-toggle");
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    // pi-web names the button for what the click does next (files.showPanel /
+    // files.hidePanel), so the label flips with the panel.
+    const label = open ? "Hide file panel" : "Show file panel";
+    toggle.title = label;
+    toggle.setAttribute("aria-label", label);
+  }
   if (open) connectWatch();
   else disconnectWatch();
 }

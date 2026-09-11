@@ -110,14 +110,19 @@
 }
 .hljs-keyword,
 .hljs-selector-tag,
-.hljs-literal,
 .hljs-type,
 .hljs-doctag,
 .hljs-meta .hljs-keyword {
   color: #0000ff;
 }
+/* `literal` is Prism's `boolean`, which `vs` paints with the numbers, not with
+   the keywords (its `.language-json .token.boolean` override is a descendant
+   selector react-syntax-highlighter never matches). highlight.js nests the
+   word itself in a `keyword` span, so the inner span needs the colour too. */
 .hljs-number,
 .hljs-symbol,
+.hljs-literal,
+.hljs-literal .hljs-keyword,
 .hljs-bullet,
 .hljs-link {
   color: #36acaa;
@@ -155,6 +160,17 @@
 }
 .hljs-strong {
   font-weight: 700;
+}
+
+/* The theme's own base colour: react-syntax-highlighter writes it onto the
+   `code[class*="language-"]` element it renders, so every token Prism does not
+   classify takes it. highlight.js leaves those spans bare, which would inherit
+   the page's foreground instead, so the coloured surfaces carry it. A block in
+   the running turn is not tokenised yet, and pi-web's plain `<pre>` for that
+   frame inherits the message colour, so it is left out. */
+.markdown-code-body code[data-highlighted="1"],
+.file-source-view {
+  color: #393a34;
 }
 
 html.dark .hljs-comment,
@@ -207,6 +223,10 @@ html.dark .hljs-deletion {
 }
 html.dark .hljs-meta {
   color: #9b9b9b;
+}
+html.dark .markdown-code-body code[data-highlighted="1"],
+html.dark .file-source-view {
+  color: #d4d4d4;
 }
 
 /* ── Conversation rail ──────────────────────────────────────────────────

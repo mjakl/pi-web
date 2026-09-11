@@ -113,10 +113,15 @@ describe("web app", () => {
     expect(html).toContain('class="chat-transcript"');
     expect(html).toContain('class="chat-minimap"');
     expect(html).toContain('class="chat-composer"');
-    // Right panel.
+    // Right panel. Both buttons name what the click does next, as pi-web's
+    // files.showPanel / files.hidePanel do.
     expect(html).toContain('id="file-panel"');
     expect(html).toContain("right-panel-container right-panel-closed");
     expect(html).toContain("panel-resize-handle right-panel-resize-handle");
+    expect(html).toContain('id="file-panel-toggle"');
+    expect(html).toContain('title="Show file panel"');
+    expect(html).toContain('id="file-panel-close"');
+    expect(html).toContain('title="Hide file panel"');
   });
 
   it("reads the session out in the top bar, as pi-web does", async () => {

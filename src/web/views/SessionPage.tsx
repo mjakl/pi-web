@@ -475,8 +475,8 @@ function FilePanel({ sessionId, cwd }: { sessionId?: string; cwd?: string }) {
           type="button"
           id="file-panel-close"
           style={`${ICON_BUTTON_36}; background:var(--bg-selected); border-left:1px solid var(--border); color:var(--text)`}
-          title="Hide the file panel"
-          aria-label="Hide the file panel"
+          title="Hide file panel"
+          aria-label="Hide file panel"
         >
           <PanelRightIcon />
         </button>
