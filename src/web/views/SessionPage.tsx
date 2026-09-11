@@ -65,11 +65,15 @@ function TopBar({
   sessionId,
   usage,
   files,
+  cwd,
+  trust,
 }: {
   sessionId?: string;
   usage?: ContextUsage;
   /** False when this session has no folder to show files from. */
   files?: boolean;
+  cwd?: string;
+  trust?: { requiresTrust: boolean; trusted: boolean };
 }) {
   return (
     <div id="top-bar" style="flex-shrink:0; background:var(--bg-panel)">
@@ -92,6 +96,9 @@ function TopBar({
             <HamburgerIcon />
           </span>
         </button>
+        {trust === undefined || cwd === undefined ? null : (
+          <TrustBadge cwd={cwd} status={trust} />
+        )}
         {sessionId === undefined ? null : (
           <div style="display:flex; align-items:stretch; height:100%">
             <a
@@ -234,6 +241,7 @@ function Shell({
   activeId,
   cwd,
   usage,
+  trust,
   children,
   panel,
 }: {
@@ -242,6 +250,7 @@ function Shell({
   /** The folder on screen: the document title is built from it. */
   cwd?: string;
   usage?: ContextUsage;
+  trust?: { requiresTrust: boolean; trusted: boolean };
   children?: unknown;
   /** The right-hand file panel, on a session page. */
   panel?: unknown;
@@ -279,6 +288,8 @@ function Shell({
         <TopBar
           {...(activeId === undefined ? {} : { sessionId: activeId })}
           {...(usage === undefined ? {} : { usage })}
+          {...(cwd === undefined ? {} : { cwd })}
+          {...(trust === undefined ? {} : { trust })}
           files={panel !== undefined}
         />
         <main
@@ -371,7 +382,7 @@ export function NewSessionPage({
   draft?: string;
 }) {
   return (
-    <Shell sidebar={sidebar} cwd={view.cwd}>
+    <Shell sidebar={sidebar} cwd={view.cwd} trust={view.trust}>
       <section class="chat-window is-empty" aria-label="Messages">
         <div class="chat-body">
           <div class="chat-scroll">
@@ -401,7 +412,6 @@ export function NewSessionPage({
           )}
         </footer>
       </section>
-      <TrustBadge cwd={view.cwd} status={view.trust} />
     </Shell>
   );
 }
@@ -445,6 +455,7 @@ export function SessionPage({
       activeId={summary.id}
       cwd={summary.cwd}
       usage={view.usage}
+      {...(trust === undefined ? {} : { trust })}
       {...(missingFolder
         ? {}
         : { panel: <FilePanel sessionId={summary.id} /> })}
@@ -535,7 +546,6 @@ export function SessionPage({
           <Shelf status={view.status} />
         </footer>
       </section>
-      {trust ? <TrustBadge cwd={summary.cwd} status={trust} /> : null}
       <CustomPanel sessionId={summary.id} frame={view.status?.custom ?? null} />
       <ExtensionDialog
         sessionId={summary.id}

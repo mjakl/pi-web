@@ -1,3 +1,5 @@
+import { TrustShieldIcon } from "./icons.tsx";
+
 // The dialogs the shell owns: the modal shell every one of them is built from,
 // the host they are swapped into, and the trust flow. The workspace picker
 // lives with the sidebar (Workspace.tsx) and reuses `Dialog` from here.
@@ -64,7 +66,10 @@ export function TrustDialog({ cwd }: { cwd: string }) {
   );
 }
 
-/** The toolbar badge that opens the dialog while a folder stays untrusted. */
+/**
+ * The top bar's trust warning (§2.3). pi-web keeps it beside the tabs, in
+ * `--warning`, and it opens the dialog.
+ */
 export function TrustBadge({
   cwd,
   status,
@@ -76,13 +81,14 @@ export function TrustBadge({
   return (
     <button
       type="button"
-
+      style="display:flex; align-items:center; justify-content:center; gap:6px; height:100%; padding:0 12px; background:none; border:none; border-right:1px solid var(--border); color:var(--warning); cursor:pointer; flex-shrink:0; font-size:11px; line-height:1.35; text-align:left"
       title="Project resources are not loaded because this project is not trusted"
       hx-get={`/workspaces/trust?cwd=${encodeURIComponent(cwd)}`}
       hx-target="#dialogs"
       hx-swap="innerHTML"
     >
-      🛡 Restricted mode
+      <TrustShieldIcon />
+      Project resources are not loaded
     </button>
   );
 }

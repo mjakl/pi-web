@@ -295,7 +295,8 @@ describe("project trust", () => {
   it("badges an untrusted folder and offers the dialog", async () => {
     const { app } = testApp({ trustRequired: [repo] });
     const page = await (await app.request("/sessions/s1")).text();
-    expect(page).toContain("Restricted mode");
+    // pi-web puts the warning in the top bar, next to the tabs.
+    expect(page).toContain("Project resources are not loaded");
     const dialog = await (
       await app.request(`/workspaces/trust?cwd=${encodeURIComponent(repo)}`)
     ).text();
