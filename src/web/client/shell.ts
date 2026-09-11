@@ -98,15 +98,28 @@ function setUpSidebar(): void {
  */
 function setUpTopPanels(): void {
   const host = document.getElementById("top-panel");
-  if (!host) return;
+  const bar = document.getElementById("top-bar");
+  if (!host || !bar) return;
   const buttons = [
     ...document.querySelectorAll<HTMLElement>("[data-top-panel]"),
   ];
+  // The host is fixed, so it has to be told where the bar is: it spans the
+  // bar exactly, which is the centre column, never the sidebar.
+  const place = (): void => {
+    const box = bar.getBoundingClientRect();
+    host.style.top = `${String(box.bottom)}px`;
+    host.style.left = `${String(box.left)}px`;
+    host.style.width = `${String(box.width)}px`;
+    host.style.maxHeight = `calc(100dvh - ${String(box.bottom)}px)`;
+  };
+  new ResizeObserver(place).observe(bar);
+  addEventListener("scroll", place, true);
   const paint = (open: string): void => {
     host.hidden = open === "";
+    if (open !== "") place();
     for (const button of buttons) {
       const active = button.dataset["topPanel"] === open;
-      button.setAttribute("aria-expanded", String(active));
+      button.setAttribute("aria-pressed", String(active));
       button.style.background = active ? "var(--bg-selected)" : "none";
       button.style.borderTopColor = active ? "var(--accent)" : "transparent";
       button.style.color = active ? "var(--text)" : "var(--text-muted)";
@@ -127,7 +140,7 @@ function setUpTopPanels(): void {
         if (!host.hidden && !host.contains(target)) close();
         return;
       }
-      if (button.getAttribute("aria-expanded") === "true") {
+      if (button.getAttribute("aria-pressed") === "true") {
         event.preventDefault();
         event.stopPropagation();
         close();
@@ -183,6 +196,86 @@ function setUpShortcuts(): void {
   });
 }
 
+/** How long pi-web leaves a copy button showing its check mark. */
+const COPIED_MS = 1400;
+
+/**
+ * The copy buttons of the session info panel. They hold both icons, so the
+ * swap is a `hidden` flip rather than a text replacement.
+ */
+function setUpSessionCopy(): void {
+  document.body.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest<HTMLElement>("[data-session-copy]");
+    const value = button?.dataset["sessionCopy"];
+    if (!button || value === undefined) return;
+    const idle = button.querySelector<HTMLElement>("[data-copy-idle]");
+    const done = button.querySelector<HTMLElement>("[data-copy-done]");
+    void navigator.clipboard.writeText(value).then(() => {
+      if (idle) idle.hidden = true;
+      if (done) done.hidden = false;
+      button.style.color = "var(--accent)";
+      setTimeout(() => {
+        if (idle) idle.hidden = false;
+        if (done) done.hidden = true;
+        button.style.color = "var(--text-dim)";
+      }, COPIED_MS);
+    }, noop);
+  });
+}
+
+function noop(): void {
+  // A browser that refuses the clipboard leaves the value on screen to select.
+}
+
+/**
+ * pi-web's global/project segmented control. The pressed button writes the
+ * hidden field its form posts, and the install path beside it follows.
+ */
+function setUpScopePickers(): void {
+  document.body.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const option = target.closest<HTMLElement>("[data-scope]");
+    const picker = option?.closest<HTMLElement>("[data-scope-picker]");
+    const scope = option?.dataset["scope"];
+    if (!picker || scope === undefined) return;
+    for (const button of picker.querySelectorAll<HTMLElement>("[data-scope]")) {
+      button.setAttribute(
+        "aria-pressed",
+        String(button.dataset["scope"] === scope),
+      );
+    }
+    const field =
+      picker.parentElement?.querySelector<HTMLInputElement>(
+        "[data-scope-value]",
+      );
+    if (field) field.value = scope;
+    const path = picker
+      .closest("form, .config-detail-stack")
+      ?.querySelector<HTMLElement>("[data-scope-path]");
+    const shown =
+      path?.dataset[
+        scope === "project" ? "scopePathProject" : "scopePathGlobal"
+      ];
+    if (path && shown !== undefined) path.textContent = shown;
+  });
+}
+
+/** The three example sources under the Add plugin form fill the field. */
+function setUpPluginExamples(): void {
+  document.body.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const example = target.closest<HTMLElement>("[data-plugin-example]")
+      ?.dataset["pluginExample"];
+    if (example === undefined) return;
+    const field = document.querySelector<HTMLInputElement>("#plugin-source");
+    if (field) field.value = example;
+  });
+}
+
 export function setUpShell(): void {
   setUpTheme();
   setUpTitle();
@@ -193,6 +286,9 @@ export function setUpShell(): void {
   setUpShortcuts();
   setUpToasts();
   setUpViewport();
+  setUpSessionCopy();
+  setUpScopePickers();
+  setUpPluginExamples();
   setUpExtensions();
   setUpNotifications();
   setUpPush();

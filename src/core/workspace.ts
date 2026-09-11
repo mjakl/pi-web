@@ -138,6 +138,8 @@ export type SessionView = {
   settledTurn: TranscriptItem[];
   status: LiveStatus | null;
   usage: ContextUsage;
+  /** Cumulative token totals of the whole session, for the top-bar readout. */
+  tokens: SessionStats["tokens"];
   models: ModelOption[];
   /** `enabledModels` patterns that matched nothing, shown once per page. */
   modelWarnings: string[];
@@ -424,6 +426,7 @@ export function createWorkspace(deps: {
       turn: turn.items,
       settledTurn,
       status,
+      tokens: sessionStats(snapshot.entries).tokens,
       usage: contextUsage({
         tokens: reported ?? fallback,
         contextWindow: status.model?.contextWindow,
@@ -484,6 +487,7 @@ export function createWorkspace(deps: {
       turn: [],
       settledTurn: [],
       status: null,
+      tokens: sessionStats(stored.entries).tokens,
       usage: contextUsage({
         tokens: transcript.lastContextTokens,
         contextWindow: model?.contextWindow,

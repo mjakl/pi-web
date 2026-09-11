@@ -296,7 +296,7 @@ describe("project trust", () => {
     const { app } = testApp({ trustRequired: [repo] });
     const page = await (await app.request("/sessions/s1")).text();
     // pi-web puts the warning in the top bar, next to the tabs.
-    expect(page).toContain("Project resources are not loaded");
+    expect(page).toContain("Restricted mode");
     const dialog = await (
       await app.request(`/workspaces/trust?cwd=${encodeURIComponent(repo)}`)
     ).text();
@@ -387,7 +387,7 @@ describe("the settings page", () => {
     const html = await (await app.request("/settings?section=skills")).text();
     expect(html).toContain("testing");
     expect(html).toContain("Manual");
-    expect(html).toContain("Global · skills.sh");
+    expect(html).toContain("global / skills.sh");
     const detail = await (
       await app.request(
         `/settings/skills/detail?cwd=${encodeURIComponent(repo)}&path=${encodeURIComponent("/agent/skills/changelog/SKILL.md")}`,
@@ -436,7 +436,7 @@ describe("the settings page", () => {
     const { app } = testApp();
     const html = await (await app.request("/settings?section=plugins")).text();
     expect(html).toContain("npm:@acme/pi-plugin@1.2.0");
-    expect(html).toContain("Global");
+    expect(html).toContain("global");
     expect(html).toContain("review");
     const disabled = await (
       await app.request(
@@ -484,6 +484,104 @@ describe("the settings page", () => {
       await app.request(`/settings?section=plugins&cwd=${repo}`)
     ).text();
     expect(plugins).toContain("Project plugins are not loaded");
+  });
+});
+
+describe("pi-web's settings and trust chrome", () => {
+  it("opens settings as a modal over the shell, with tabs and a mobile picker", async () => {
+    const { app } = testApp();
+    const html = await (await app.request("/settings")).text();
+    // The shell renders behind the modal, as pi-web's overlay does.
+    expect(html).toContain('id="session-sidebar"');
+    expect(html).toContain('class="settings-dialog"');
+    expect(html).toContain("settings-dialog-surface");
+    expect(html).toContain("settings-dialog-header");
+    expect(html).toContain("settings-dialog-title");
+    expect(html).toContain("settings-mobile-section-picker");
+    expect(html).toContain('class="settings-section-tabs"');
+    expect(html).toContain("config-close-button settings-dialog-close");
+    expect(html).toContain('data-close-href="/"');
+    expect(html).toContain('id="settings-body" class="settings-section-host"');
+    // The open tab is marked and a section that needs a folder is a
+    // disabled button rather than a link.
+    expect(html).toContain('aria-current="page"');
+    const gone = testApp({ missingFolders: [repo] }).app;
+    const noProject = await (await gone.request("/settings")).text();
+    expect(noProject).toContain(
+      '<button type="button" class="settings-section-tab" disabled',
+    );
+  });
+
+  it("draws the general section with pi-web's switches and radio group", async () => {
+    const { app } = testApp();
+    const html = await (await app.request("/settings?section=general")).text();
+    expect(html).toContain('class="settings-general"');
+    expect(html).toContain("settings-theme-options");
+    expect(html).toContain('data-theme-option="light"');
+    expect(html).toContain("settings-general-option");
+    expect(html).toContain("settings-number-input");
+    // pi-web draws a preference toggle as a switch button, not a checkbox.
+    expect(html).toContain(
+      '<button type="button" id="sound-toggle" class="config-switch" role="switch"',
+    );
+    expect(html).toContain('id="push-toggle"');
+    expect(html).toContain("config-switch-knob");
+  });
+
+  it("draws skills and plugins as pi-web's split view", async () => {
+    const { app } = testApp();
+    const skills = await (await app.request("/settings?section=skills")).text();
+    expect(skills).toContain("config-panel-root");
+    expect(skills).toContain("config-split-view");
+    expect(skills).toContain('<aside class="config-sidebar">');
+    expect(skills).toContain("config-sidebar-group-label");
+    expect(skills).toContain("config-sidebar-text is-grow");
+    expect(skills).toContain("skill-mode-badge");
+    expect(skills).toContain("config-list-action-button");
+    expect(skills).toContain('<footer class="config-footer">');
+    expect(skills).toContain("config-detail-path");
+    expect(skills).toContain("config-scope-tag");
+    // Picking a skill swaps the whole section, so the row highlight follows.
+    const picked = await (
+      await app.request(
+        `/settings/skills/detail?cwd=${encodeURIComponent(repo)}&path=${encodeURIComponent("/agent/skills/changelog/SKILL.md")}`,
+      )
+    ).text();
+    expect(picked).toContain("config-split-view");
+    expect(picked).toContain('aria-current="page"');
+    expect(picked).toContain("skill-source-link");
+    const add = await (
+      await app.request(
+        `/settings/skills/detail?cwd=${encodeURIComponent(repo)}&add=1`,
+      )
+    ).text();
+    expect(add).toContain("config-scope-picker");
+    expect(add).toContain("e.g. react, testing, deploy");
+    const plugins = await (
+      await app.request("/settings?section=plugins")
+    ).text();
+    expect(plugins).toContain("config-status-dot");
+    expect(plugins).toContain("config-detail-header is-top-aligned");
+    expect(plugins).toContain("config-button-danger");
+    expect(plugins).toContain("Resolved Resources");
+    expect(plugins).toContain("installed 1.2.0");
+    expect(plugins).toContain("1 ext");
+  });
+
+  it("warns about an untrusted project twice, and dresses the dialog", async () => {
+    const { app } = testApp({ trustRequired: [repo] });
+    const page = await (await app.request("/sessions/s1")).text();
+    // One warning for the bar, one full-width banner for the phone.
+    expect(page.split('data-trust-warning="true"').length - 1).toBe(2);
+    expect(page).toContain('data-mobile-trust-banner="true"');
+    const dialog = await (
+      await app.request(`/workspaces/trust?cwd=${encodeURIComponent(repo)}`)
+    ).text();
+    expect(dialog).toContain('class="project-trust-dialog"');
+    expect(dialog).toContain('class="project-trust-panel"');
+    expect(dialog).toContain('id="project-trust-title"');
+    expect(dialog).toContain("data-backdrop-close");
+    expect(dialog).toContain("Trust project");
   });
 });
 

@@ -2,6 +2,8 @@
 // run reaches a reader whose tab is closed; everything else here already
 // assumes a page is open.
 
+import { setSwitch, switchOn } from "./preferences.ts";
+
 const PUSH_KEY = "web-pi:push";
 
 function wanted(): boolean {
@@ -96,7 +98,7 @@ export function subscribePush(): Promise<boolean> {
 
 /** The settings toggle: asking for permission needs a real click. */
 function setUpToggle(): void {
-  const toggle = document.querySelector<HTMLInputElement>("#push-toggle");
+  const toggle = document.querySelector<HTMLButtonElement>("#push-toggle");
   if (!toggle) return;
   const supported =
     "serviceWorker" in navigator &&
@@ -107,11 +109,12 @@ function setUpToggle(): void {
     toggle.title = "This browser cannot receive push notifications";
     return;
   }
-  toggle.checked = wanted() && Notification.permission === "granted";
-  toggle.addEventListener("change", () => {
-    if (!toggle.checked) {
+  setSwitch(toggle, wanted() && Notification.permission === "granted");
+  toggle.addEventListener("click", () => {
+    if (switchOn(toggle)) {
       // There is no unsubscribe route, as in pi-web: the server drops a
       // subscription when the push service says it is gone.
+      setSwitch(toggle, false);
       remember(false);
       return;
     }
@@ -121,7 +124,7 @@ function setUpToggle(): void {
           ? await Notification.requestPermission()
           : Notification.permission;
       const ok = permission === "granted" && (await subscribePush());
-      toggle.checked = ok;
+      setSwitch(toggle, ok);
       remember(ok);
     })();
   });

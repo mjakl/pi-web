@@ -2,81 +2,90 @@ import type { ToolView } from "@core/ports";
 
 // What the session is actually running with: the tools it may call and the
 // prompt it was given. Both come from the live session and nothing is started
-// to fetch them — a stopped session simply says so.
-
-function Panel({ title, children }: { title: string; children?: unknown }) {
-  return (
-    <dialog data-modal open>
-      <div>
-        <div>
-          <h2>{title}</h2>
-          <form method="dialog">
-            <button aria-label="Close">✕</button>
-          </form>
-        </div>
-        {children}
-      </div>
-      <form method="dialog">
-        <button aria-label="Close">close</button>
-      </form>
-    </dialog>
-  );
-}
+// to fetch them — a stopped session simply says so. pi-web draws them as menu
+// panels under the top bar (components/SystemPromptPanel.tsx,
+// components/ToolDefinitionsPanel.tsx); the class names are its own.
 
 export function SystemPromptPanel({ prompt }: { prompt: string | undefined }) {
   return (
-    <Panel title="System prompt">
-      {prompt === undefined ? (
-        <p>System prompt has not loaded yet. Start the session to see it.</p>
-      ) : prompt === "" ? (
-        <p>System prompt is empty (tools are disabled).</p>
-      ) : (
-        <pre>{prompt}</pre>
-      )}
-    </Panel>
+    <section
+      class="system-prompt-panel menu-surface menu-panel"
+      aria-label="System prompt"
+    >
+      <div class="system-prompt-scroll">
+        {prompt === undefined ? (
+          <div class="system-prompt-empty">
+            System prompt has not loaded yet
+          </div>
+        ) : prompt === "" ? (
+          <div class="system-prompt-empty">
+            System prompt is empty (tools are disabled)
+          </div>
+        ) : (
+          <div class="system-prompt-text">{prompt}</div>
+        )}
+      </div>
+    </section>
   );
 }
 
 function ToolDetail({ tool }: { tool: ToolView }) {
   return (
-    <div>
-      <div>
-        <h3>Description</h3>
-        <p>{tool.description}</p>
-      </div>
-      <div>
-        <h3>Parameters ({String(tool.parameters.length)})</h3>
+    <div class="tool-definition-scroll">
+      {tool.description === "" ? null : (
+        <section class="tool-definition-section">
+          <div class="tool-definition-section-label">Description</div>
+          <div class="tool-definition-description">{tool.description}</div>
+        </section>
+      )}
+      <section class="tool-definition-section">
+        <div class="tool-definition-section-label">
+          <span>Parameters</span>
+          <span>{String(tool.parameters.length)} parameters</span>
+        </div>
         {tool.parameters.length === 0 ? (
-          <p>None</p>
+          <div class="tool-definition-no-parameters">No parameters</div>
         ) : (
-          <ul>
+          <div class="tool-definition-fields">
             {tool.parameters.map((parameter) => (
-              <li>
-                <span>{parameter.name}</span> <span>{parameter.type}</span>{" "}
-                <span>{parameter.required ? "Required" : "Optional"}</span>
-                {parameter.description === undefined ? null : (
-                  <p>{parameter.description}</p>
-                )}
-                {parameter.enum === undefined ? null : (
-                  <p>Allowed: {parameter.enum.join(", ")}</p>
-                )}
-                {parameter.default === undefined ? null : (
-                  <p>Default: {parameter.default}</p>
-                )}
-              </li>
+              <div class="tool-definition-field">
+                <div class="tool-definition-field-name">
+                  <code>{parameter.name}</code>
+                  <span class={parameter.required ? "required" : undefined}>
+                    {parameter.required ? "Required" : "Optional"}
+                  </span>
+                </div>
+                <div class="tool-definition-field-value">
+                  <code class="tool-definition-type">{parameter.type}</code>
+                  {parameter.description === undefined ? null : (
+                    <div>{parameter.description}</div>
+                  )}
+                  {parameter.enum === undefined ? null : (
+                    <div class="tool-definition-meta">
+                      Allowed: <code>{parameter.enum.join(", ")}</code>
+                    </div>
+                  )}
+                  {parameter.default === undefined ? null : (
+                    <div class="tool-definition-meta">
+                      Default: <code>{parameter.default}</code>
+                    </div>
+                  )}
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
-      </div>
-      {tool.promptGuidelines === undefined ? null : (
-        <div>
-          <h3>Prompt guidelines</h3>
-          <ul>
+      </section>
+      {tool.promptGuidelines === undefined ||
+      tool.promptGuidelines.length === 0 ? null : (
+        <section class="tool-definition-section">
+          <div class="tool-definition-section-label">Prompt guidelines</div>
+          <ul class="tool-definition-guidelines">
             {tool.promptGuidelines.map((line) => (
               <li>{line}</li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
     </div>
   );
@@ -92,42 +101,51 @@ export function ToolsPanel({
   tools: ToolView[] | undefined;
   selected?: string;
 }) {
-  if (tools === undefined) {
-    return (
-      <Panel title="Tools">
-        <p>
-          Tool definitions have not loaded yet. Start the session to see them.
-        </p>
-      </Panel>
-    );
-  }
-  const active = tools.filter((tool) => tool.active);
-  const shown = active.find((tool) => tool.name === selected) ?? active[0];
+  const active = tools?.filter((tool) => tool.active);
+  const shown =
+    active === undefined
+      ? undefined
+      : (active.find((tool) => tool.name === selected) ?? active[0]);
+  const empty =
+    active === undefined
+      ? "Tool definitions have not loaded yet"
+      : "No active tools";
   return (
-    <Panel title={`Tools (${String(active.length)})`}>
-      {active.length === 0 ? (
-        <p>No active tools</p>
-      ) : (
-        <div>
-          <ul>
-            {active.map((tool) => (
-              <li>
-                <button
-                  type="button"
-                  class="menu-item"
-                  aria-current={tool.name === shown?.name ? "true" : "false"}
-                  hx-get={`/sessions/${sessionId}/tools?tool=${encodeURIComponent(tool.name)}`}
-                  hx-target="#dialogs"
-                  hx-swap="innerHTML"
-                >
-                  <span>{tool.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div>{shown ? <ToolDetail tool={shown} /> : null}</div>
+    <div class="tool-definitions-panel menu-surface menu-panel">
+      <nav class="tool-definitions-sidebar" aria-label="Tool definitions">
+        <div class="tool-definitions-list">
+          {active === undefined || active.length === 0 ? (
+            <div class="tool-definitions-empty">{empty}</div>
+          ) : (
+            active.map((tool) => (
+              <button
+                type="button"
+                class={
+                  tool.name === shown?.name
+                    ? "tool-definitions-item selected"
+                    : "tool-definitions-item"
+                }
+                aria-pressed={tool.name === shown?.name ? "true" : "false"}
+                hx-get={`/sessions/${sessionId}/tools?tool=${encodeURIComponent(tool.name)}`}
+                hx-target="#top-panel"
+                hx-swap="innerHTML"
+              >
+                <code>{tool.name}</code>
+              </button>
+            ))
+          )}
         </div>
-      )}
-    </Panel>
+      </nav>
+      <section
+        class="tool-definition-detail"
+        aria-label="Tool definition details"
+      >
+        {shown ? (
+          <ToolDetail tool={shown} />
+        ) : (
+          <div class="tool-definitions-empty">{empty}</div>
+        )}
+      </section>
+    </div>
   );
 }

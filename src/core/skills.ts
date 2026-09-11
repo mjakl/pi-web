@@ -265,11 +265,11 @@ export function installMessage(output: string, limit = 300): string {
 
 /** Grouped exactly as pi-web's skill sidebar groups them. */
 export const SKILL_GROUPS = [
-  { key: "project-registry", label: "Project · skills.sh" },
-  { key: "project", label: "Project" },
-  { key: "global-registry", label: "Global · skills.sh" },
-  { key: "global", label: "Global" },
-  { key: "path", label: "Path" },
+  { key: "project-registry", label: "project / skills.sh" },
+  { key: "project", label: "project" },
+  { key: "global-registry", label: "global / skills.sh" },
+  { key: "global", label: "global" },
+  { key: "path", label: "path" },
 ] as const;
 
 export type SkillGroupKey = (typeof SKILL_GROUPS)[number]["key"];

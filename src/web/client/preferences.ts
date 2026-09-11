@@ -27,12 +27,26 @@ export function soundEnabled(): boolean {
   return read(SOUND_KEY) !== "false";
 }
 
+/**
+ * pi-web draws a preference toggle as `button[role=switch]`, not a checkbox,
+ * so its state is an attribute rather than `checked`.
+ */
+export function switchOn(element: Element): boolean {
+  return element.getAttribute("aria-checked") === "true";
+}
+
+export function setSwitch(element: Element, on: boolean): void {
+  element.setAttribute("aria-checked", String(on));
+}
+
 export function setUpPreferences(): void {
-  const sound = document.querySelector<HTMLInputElement>("#sound-toggle");
+  const sound = document.querySelector<HTMLButtonElement>("#sound-toggle");
   if (sound) {
-    sound.checked = soundEnabled();
-    sound.addEventListener("change", () => {
-      write(SOUND_KEY, sound.checked ? "true" : "false");
+    setSwitch(sound, soundEnabled());
+    sound.addEventListener("click", () => {
+      const on = !switchOn(sound);
+      setSwitch(sound, on);
+      write(SOUND_KEY, on ? "true" : "false");
     });
   }
   // The context-warning threshold is the one browser preference the server

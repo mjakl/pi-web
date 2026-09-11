@@ -120,6 +120,88 @@ describe("web app", () => {
     expect(html).toContain("panel-resize-handle right-panel-resize-handle");
   });
 
+  it("reads the session out in the top bar, as pi-web does", async () => {
+    const { app } = testApp();
+    const bar = (await (await app.request("/sessions/s1")).text()).slice(
+      0,
+      undefined,
+    );
+    const stats = bar.slice(bar.indexOf('id="stats-trigger"'));
+    // Cumulative totals first, then the context gauge, both compacted.
+    expect(stats).toContain("40k");
+    expect(stats).toContain("40k / 100k (40%)");
+    // The exact numbers live in the hover text.
+    expect(bar).toContain("in: 39,990");
+    expect(bar).toContain("cache write: 0");
+    expect(bar).toContain("Context: 40,000 / 100,000 tokens (40%)");
+    // Compact carries the dumb-zone marker only above the threshold.
+    expect(bar).not.toContain("data-warning");
+    const warned = await (
+      await app.request("/sessions/s1", {
+        headers: { cookie: "web-pi-warn-tokens=1000" },
+      })
+    ).text();
+    expect(warned).toContain("data-warning");
+    expect(warned).toContain("rgba(234,179,8,0.95)");
+  });
+
+  it("renders the top panels with pi-web's menu-panel classes", async () => {
+    const { app } = testApp();
+    const prompt = await (
+      await app.request("/sessions/s1/system-prompt")
+    ).text();
+    expect(prompt).toContain("system-prompt-panel menu-surface menu-panel");
+    expect(prompt).toContain("system-prompt-empty");
+    const tools = await (await app.request("/sessions/s1/tools")).text();
+    expect(tools).toContain("tool-definitions-panel menu-surface menu-panel");
+    expect(tools).toContain("tool-definitions-sidebar");
+    expect(tools).toContain("tool-definitions-empty");
+    await app.request("/sessions/s1/activate", { method: "POST" });
+    const live = await (await app.request("/sessions/s1/tools")).text();
+    expect(live).toContain("tool-definitions-item selected");
+    expect(live).toContain("tool-definition-field-name");
+    expect(live).toContain('hx-target="#top-panel"');
+  });
+
+  it("draws the session info panel as pi-web's three-column popover", async () => {
+    const { app } = testApp();
+    const stats = await (await app.request("/sessions/s1/stats")).text();
+    expect(stats).toContain('class="session-info-popover menu-surface"');
+    for (const title of [
+      "Session Info",
+      "Project Info",
+      "Messages",
+      "Tokens",
+    ]) {
+      expect([title, stats.includes(title)]).toStrictEqual([title, true]);
+    }
+    expect(stats).toContain("minmax(360px, 1.7fr)");
+    expect(stats).toContain('data-session-copy="s1"');
+    expect(stats).toContain("Copy session ID");
+  });
+
+  it("dresses an extension dialog in pi-web's panel", async () => {
+    const { app } = testApp({
+      script: () =>
+        [
+          {
+            dialog: { method: "confirm", title: "Push it?", message: "Sure?" },
+          },
+        ] as ScriptedStep[],
+    });
+    const body = new FormData();
+    body.set("text", "go");
+    await app.request("/sessions/s1/prompt", { method: "POST", body });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const page = await (await app.request("/sessions/s1")).text();
+    const dialog = page.slice(page.indexOf('class="extension-dialog"'));
+    expect(dialog).toContain("extension request");
+    expect(dialog).toContain("width:min(560px, 100%)");
+    expect(dialog).toContain("Push it?");
+    expect(dialog).toContain("Confirm");
+    expect(dialog).toContain("data-dialog-cancel");
+  });
+
   it("returns a fragment for HTMX requests and 404 for unknown ids", async () => {
     const { app } = testApp();
     const fragment = await (
@@ -296,8 +378,9 @@ describe("web app", () => {
   it("serves session statistics and the exported transcript", async () => {
     const { app } = testApp();
     const stats = await (await app.request("/sessions/s1/stats")).text();
-    expect(stats).toContain("User messages");
-    expect(stats).toContain("Total tokens");
+    expect(stats).toContain("session-info-popover");
+    expect(stats).toContain("Tool Results");
+    expect(stats).toContain("Tokens");
 
     const exported = await app.request("/sessions/s1/export");
     expect(exported.headers.get("content-disposition")).toBe(
@@ -1003,10 +1086,10 @@ describe("phase 8 fixes", () => {
   it("shows the name, the session file, and the context window in stats", async () => {
     const { app } = testApp();
     const stats = await (await app.request("/sessions/s1/stats")).text();
-    expect(stats).toContain("Session file");
+    expect(stats).toContain("Session File");
     expect(stats).toContain("/agent/sessions/s1.jsonl");
     expect(stats).toContain("Context window");
-    expect(stats).toContain("data-copy");
+    expect(stats).toContain("data-session-copy");
   });
 
   it("offers the sidebar resize handle and a manual refresh", async () => {
@@ -1052,7 +1135,7 @@ describe("phase 8 fixes", () => {
       })
     ).text();
     // The remembered skill is the one whose detail pane is open.
-    const detailPane = page.slice(page.indexOf('id="skill-detail"'));
+    const detailPane = page.slice(page.indexOf('class="config-detail"'));
     expect(detailPane).toContain("changelog");
   });
 });
