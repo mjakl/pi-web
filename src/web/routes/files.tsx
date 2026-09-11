@@ -8,6 +8,7 @@ import { isSessionId } from "@core/sessions";
 import { type FileScope, type Workspace } from "@core/workspace";
 import {
   Explorer,
+  ExplorerError,
   SearchResults,
   type TreeContext,
   TreeNodes,
@@ -104,6 +105,11 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
         />,
       );
     } catch (error) {
+      // The explorer is a fragment htmx swaps in, and it swaps nothing on an
+      // error status, so the reason has to arrive as content.
+      if (error instanceof FileAccessError) {
+        return await c.html(<ExplorerError message={error.message} />);
+      }
       return fileFailure(c, error);
     }
   });

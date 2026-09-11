@@ -79,6 +79,17 @@ function Node({
       </button>
     );
   }
+  // On the branch and structural: pi-web draws the bare square, with no row
+  // of its own, because the transcript has nothing to scroll to here.
+  if (mark.kind === "junction") {
+    return (
+      <span
+        class="minimap-junction"
+        data-rail-entry-id={mark.id}
+        style={`left:${left}; top:${top}`}
+      />
+    );
+  }
   // On the branch, but not an anchor the transcript scrolls to.
   if (mark.kind === "compaction") {
     return (

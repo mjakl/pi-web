@@ -80,18 +80,43 @@ describe("conversation rail", () => {
     expect(byId.get("u2b")?.active).toBe(true);
     expect(byId.get("u2")?.lane).toBe(1);
     expect(byId.get("u2")?.active).toBe(false);
-    expect(byId.get("u2")?.row).toBe(1);
-    expect(byId.get("u2b")?.row).toBe(1);
-    expect(byId.get("u2")?.parentId).toBe("u1");
+    // The fork sits between them, so the two prompts share row 2, not row 1
+    // (pi-web's buildConversationRail over the same shape agrees).
+    expect(byId.get("a1")?.kind).toBe("junction");
+    expect(byId.get("u2")?.row).toBe(2);
+    expect(byId.get("u2b")?.row).toBe(2);
+    expect(byId.get("u2")?.parentId).toBe("a1");
+  });
+
+  it("keeps the root, every fork, and every tip of a branched session", () => {
+    const marks = conversationRail(branched, "a2b");
+    expect(
+      marks.filter((mark) => mark.kind === "junction").map((mark) => mark.id),
+    ).toEqual(["a1", "a2b", "a2"]);
+    // Without them the graph has nowhere to put a second lane.
+    expect(Math.max(...marks.map((mark) => mark.lane))).toBe(1);
+  });
+
+  it("leaves a session with no fork to its anchors alone", () => {
+    const linear: SessionEntry[] = [
+      userEntry("u1", null, "one"),
+      assistantEntry("a1", "u1", "answer", 100),
+      userEntry("u2", "a1", "two"),
+      assistantEntry("a2", "u2", "answer", 200),
+    ];
+    expect(conversationRail(linear, "a2").map((mark) => mark.id)).toEqual([
+      "u1",
+      "u2",
+    ]);
   });
 
   it("points every mark at the deepest mark of its own lane", () => {
     const marks = conversationRail(branched, "a2");
     const byId = new Map(marks.map((mark) => [mark.id, mark]));
-    expect(byId.get("u2")?.targetLeafId).toBe("u2");
-    expect(byId.get("u2b")?.targetLeafId).toBe("u2b");
+    expect(byId.get("u2")?.targetLeafId).toBe("a2");
+    expect(byId.get("u2b")?.targetLeafId).toBe("a2b");
     // The root's lane continues into the branch on screen.
-    expect(byId.get("u1")?.targetLeafId).toBe("u2");
+    expect(byId.get("u1")?.targetLeafId).toBe("a2");
   });
 
   it("re-parents marks across the entries between them", () => {

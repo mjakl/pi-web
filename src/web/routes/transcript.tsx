@@ -81,7 +81,9 @@ export function transcriptRoutes(app: WebApp, ctx: RouteContext): void {
     // No cwd here: reading the session again to resolve relative file links
     // would cost a full pass over the file for one collapsed block.
     return c.html(
-      <div class="markdown-body">{raw(renderMarkdown(thinking))}</div>,
+      <div class="markdown-body markdown-assistant-message">
+        {raw(renderMarkdown(thinking))}
+      </div>,
     );
   });
 

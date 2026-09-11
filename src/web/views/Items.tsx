@@ -493,7 +493,11 @@ function ThinkingBlock({
       </summary>
       <div style="padding:8px 10px; color:var(--text-muted); font-size:12px; line-height:1.6; background:var(--bg-panel); border-top:1px solid var(--border)">
         {fetchUrl === undefined ? (
-          <Markdown source={block.text} actions={actions} />
+          <Markdown
+            source={block.text}
+            actions={actions}
+            variant="markdown-assistant-message"
+          />
         ) : (
           <div
             hx-get={fetchUrl}

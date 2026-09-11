@@ -283,6 +283,24 @@ describe("missing-folder read-only mode", () => {
     expect(html).toContain('id="file-panel-toggle"');
     expect(html).toContain("Full history");
     expect(html).toContain("an answer");
+    // pi-web puts the sentence alone in the composer's place, in the class
+    // its stylesheet indents and dims (ChatWindow.tsx `chatInputElement`).
+    expect(html).toContain(
+      '<div role="status" class="project-folder-message">Working folder is unavailable. This session is read-only.</div>',
+    );
+    expect(html).not.toContain("Read only");
+  });
+
+  it("says why the explorer is empty, the way pi-web does", async () => {
+    const { app } = testApp({ missingFolders: [repo] });
+    const res = await app.request(
+      `/files/explorer?cwd=${encodeURIComponent(join(repo, "gone"))}`,
+    );
+    // htmx swaps nothing on an error status, so the reason is the content.
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(
+      '<div style="padding:2px 4px"><div style="padding:8px 12px; font-size:11px; color:var(--danger)">Not found</div></div>',
+    );
   });
 
   it("refuses every mutating route with the same message", async () => {

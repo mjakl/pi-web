@@ -342,6 +342,23 @@ function ChangeRow({
  * search results take the same place while a query is open. All three keep the
  * id so the next swap lands in the same spot.
  */
+/**
+ * What pi-web shows in the explorer body when the folder cannot be read
+ * (FileExplorer.tsx `error`): the reason, in the danger colour. A session
+ * whose working folder is gone is the usual one.
+ */
+export function ExplorerError({ message }: { message: string }) {
+  // The 2px/4px box is the tree's own; pi-web keeps it around every state of
+  // the explorer body, so the text lands where the first row would.
+  return (
+    <div style="padding:2px 4px">
+      <div style="padding:8px 12px; font-size:11px; color:var(--danger)">
+        {message}
+      </div>
+    </div>
+  );
+}
+
 export function Explorer({
   context,
   status,

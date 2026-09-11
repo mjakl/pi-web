@@ -697,7 +697,7 @@ export function SessionPage({
         </div>
         <footer class="chat-composer">
           {missingFolder ? (
-            <MissingFolderNotice cwd={summary.cwd} />
+            <MissingFolderNotice />
           ) : view.otherBranch ? null : (
             <Composer
               sessionId={summary.id}

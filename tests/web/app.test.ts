@@ -1196,6 +1196,10 @@ describe("conversation rail, shelf, and written files", () => {
     expect(page).toContain('data-branch="true"');
     expect(page).toContain('hx-post="/sessions/s1/navigate"');
     expect(page).toContain("minimap-graph");
+    // pi-web keeps the root, the fork and each tip as bare graph nodes, which
+    // is what gives the other branch a lane of its own (§5).
+    expect(page).toContain('class="minimap-junction"');
+    expect(page).toContain('data-graph-width="72"');
   });
 
   it("places marks on pi-web's rail geometry without measuring", async () => {
@@ -1227,6 +1231,9 @@ describe("conversation rail, shelf, and written files", () => {
     const page = await (await app.request("/sessions/s1")).text();
     expect(page).toContain('data-branched="false"');
     expect(page).toContain("minimap-graph");
+    // No fork, so no structural nodes: pi-web draws the anchors alone.
+    expect(page).not.toContain("minimap-junction");
+    expect(page).toContain('data-graph-width="36"');
     // pi-web keeps 5px clear of each node and drops an edge shorter than
     // that, which `max(0px, ...)` says here.
     expect(page).toContain("top:calc(17px + 0 * min(50px, (100% - 54px) / 1))");
@@ -1459,6 +1466,7 @@ describe("transcript rendering", () => {
     const page = await (await app.request("/sessions/s1")).text();
     expect(page).toContain("Process details · 1 message · 1 tool call");
     expect(page).toContain("checking the file");
+    expect(page).toContain('class="markdown-body markdown-assistant-message"');
     expect(page).toContain("/repo/one/a.ts");
     expect(page).toContain("all done");
   });
@@ -1541,6 +1549,9 @@ describe("transcript rendering", () => {
     expect(url).toBeDefined();
     const block = await (await app.request(url ?? "")).text();
     expect(block).toContain("zzz");
+    // pi-web reads thinking through the same TextBlock as an answer, so its
+    // markdown is the 15px assistant type, not the 14px base.
+    expect(block).toContain('class="markdown-body markdown-assistant-message"');
     const missing = await app.request("/sessions/s1/entries/nope/thinking/0");
     expect(await missing.text()).toContain("unavailable");
   });

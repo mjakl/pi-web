@@ -133,13 +133,15 @@ export function TrustBadge({
   );
 }
 
-/** Shown wherever a session's folder is gone; every mutating route agrees. */
-export function MissingFolderNotice({ cwd }: { cwd: string }) {
+/**
+ * What pi-web puts in the composer's place when the session's folder is gone
+ * (ChatWindow.tsx `chatInputElement`): one sentence, in the class its own
+ * stylesheet indents and dims.
+ */
+export function MissingFolderNotice() {
   return (
-    <div role="status">
-      <span>Read only</span>
-      <span>Working folder is unavailable. This session is read-only.</span>
-      <code>{cwd}</code>
+    <div role="status" class="project-folder-message">
+      Working folder is unavailable. This session is read-only.
     </div>
   );
 }

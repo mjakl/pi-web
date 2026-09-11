@@ -13,7 +13,13 @@ const MAX_MARKS = 400;
 export type RailMark = {
   /** Entry this mark stands for; also the element it scrolls to. */
   id: string;
-  kind: "prompt" | "star" | "compaction";
+  /**
+   * `junction` is pi-web's structural node: the root, a fork and a branch
+   * tip carry a mark even when nothing there is a prompt, which is what puts
+   * an inactive branch on the rail and gives it a lane of its own
+   * (lib/project-tree.ts keeps exactly those nodes).
+   */
+  kind: "prompt" | "star" | "compaction" | "junction";
   /** Nearest kept ancestor, for the connector drawn to it. */
   parentId: string | null;
   /** Branch tip to move the session to when this mark is on another branch. */
@@ -45,10 +51,24 @@ export function hasBranches(entries: readonly SessionEntry[]): boolean {
 function markKind(
   entry: SessionEntry,
   starred: ReadonlySet<string>,
+  active: ReadonlySet<string>,
 ): RailMark["kind"] | undefined {
-  if (entry.type === "compaction") return "compaction";
+  // A compaction or a summary is an anchor of the branch being read
+  // (lib/session-reader.ts builds them from that branch alone). Off it, both
+  // are only nodes when the graph needs one, which the structural test in
+  // `conversationRail` decides: pi-web keeps prompts and stars everywhere,
+  // and nothing else.
+  const anchor = active.has(entry.id);
+  if (anchor && entry.type === "compaction") return "compaction";
   if (starred.has(entry.id)) return "star";
   if (entry.type === "message" && entry.message.role === "user") {
+    return "prompt";
+  }
+  if (
+    anchor &&
+    entry.type === "branch_summary" &&
+    entry.summary.trim() !== ""
+  ) {
     return "prompt";
   }
   return undefined;
@@ -77,10 +97,30 @@ export function conversationRail(
     active.add(current);
   }
 
+  const branched = hasBranches(entries);
+  const childCount = new Map<string, number>();
+  for (const entry of entries) {
+    const parentId = entry.parentId;
+    if (parentId === null || !parents.has(parentId)) continue;
+    childCount.set(parentId, (childCount.get(parentId) ?? 0) + 1);
+  }
+
   const kinds = new Map<string, RailMark["kind"]>();
   for (const entry of entries) {
-    const kind = markKind(entry, starred);
-    if (kind !== undefined) kinds.set(entry.id, kind);
+    const kind = markKind(entry, starred, active);
+    if (kind !== undefined) {
+      kinds.set(entry.id, kind);
+      continue;
+    }
+    // Everything a linear run passes through is dropped; a root, a fork and
+    // a tip stay, so the graph has somewhere to put a branch. A session with
+    // no fork gets none of them: pi-web builds its graph from an empty tree
+    // there and draws the anchors alone (ChatMinimap.tsx `branched && tree`).
+    if (!branched) continue;
+    const root = entry.parentId === null || !parents.has(entry.parentId);
+    if (root || (childCount.get(entry.id) ?? 0) !== 1) {
+      kinds.set(entry.id, "junction");
+    }
   }
   // A very long session would otherwise draw thousands of marks into a rail
   // a few hundred pixels tall. The newest ones are the ones worth keeping.
