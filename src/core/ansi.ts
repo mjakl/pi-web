@@ -148,3 +148,83 @@ export function statusLine(statuses: Record<string, string>): string {
     .filter(Boolean)
     .join(" ");
 }
+
+/** A sticky copy, for walking a line escape by escape. */
+const AT_ESCAPE = new RegExp(ESCAPE.source, "gy");
+
+/** Every visible character of a line, with where its escape-free slice sits. */
+function visibleChars(
+  text: string,
+): { start: number; end: number; char: string }[] {
+  const chars: { start: number; end: number; char: string }[] = [];
+  let index = 0;
+  while (index < text.length) {
+    // Its own instance: `ESCAPE` is shared and this walk moves `lastIndex`.
+    AT_ESCAPE.lastIndex = index;
+    const match = AT_ESCAPE.exec(text);
+    if (match) {
+      index += match[0].length;
+      continue;
+    }
+    const point = text.codePointAt(index);
+    if (point === undefined) break;
+    const char = String.fromCodePoint(point);
+    chars.push({ start: index, end: index + char.length, char });
+    index += char.length;
+  }
+  return chars;
+}
+
+function cut(text: string, char: { start: number; end: number }): string {
+  return text.slice(0, char.start) + text.slice(char.end);
+}
+
+/** pi-tui marks where the hardware cursor would go; nothing draws it here. */
+// eslint-disable-next-line no-control-regex -- this module exists to match them
+const CURSOR_MARKER = /\u001B_pi:c\u0007/g;
+
+const FRAME_LINE = /^[┌├└╭╰][─┬┴┼]+[┐┤┘╮╯]$/;
+const BORDER = new Set(["│", "┃"]);
+
+/**
+ * A pi-tui frame as borderless content. Terminal components draw their own box
+ * because a terminal has none; the browser panel does, so the box is unwrapped:
+ * horizontal rules drop out, one vertical border is trimmed from each side
+ * along with the space next to it, and blank lines at either end go. A frame
+ * that does not look like a box is returned untouched.
+ */
+export function normalizeFrame(lines: readonly string[]): string[] {
+  const normalized: string[] = [];
+  for (const line of lines) {
+    if (FRAME_LINE.test(stripAnsi(line).trimEnd())) continue;
+    let text = line.replaceAll(CURSOR_MARKER, "");
+    let chars = visibleChars(text);
+    const first = chars[0];
+    if (first && BORDER.has(first.char)) {
+      text = cut(text, first);
+      chars = visibleChars(text);
+      const space = chars[0];
+      if (space?.char === " ") {
+        text = cut(text, space);
+        chars = visibleChars(text);
+      }
+    }
+    const lastVisible = chars.findLastIndex((char) => char.char.trim() !== "");
+    const right = chars[lastVisible];
+    if (right && BORDER.has(right.char)) {
+      text = cut(text, right);
+      chars = visibleChars(text);
+    }
+    while (chars.length > 0) {
+      const last = chars.at(-1);
+      if (!last || last.char.trim() !== "") break;
+      text = cut(text, last);
+      chars = visibleChars(text);
+    }
+    normalized.push(text);
+  }
+  const content = (line: string) => stripAnsi(line).trim() !== "";
+  const first = normalized.findIndex(content);
+  if (first === -1) return [...lines];
+  return normalized.slice(first, normalized.findLastIndex(content) + 1);
+}

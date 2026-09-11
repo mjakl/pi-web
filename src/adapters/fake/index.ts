@@ -4,6 +4,13 @@ import { createWatcher } from "@adapters/fs/watch";
 import { createGit } from "@adapters/git/git";
 import type { SlashCommand } from "@core/composer";
 import {
+  createCustomUiHost,
+  createDialogHost,
+  type DialogAnswer,
+  type DialogSpec,
+  type FrameComponent,
+} from "@core/extension-ui";
+import {
   type PackageInfo,
   packageStatus,
   resourceTotals,
@@ -27,6 +34,9 @@ import type {
   ProjectTrust,
   ProjectResources,
   PromptInput,
+  PushMessage,
+  PushNotifier,
+  PushSubscription,
   QueuedMessage,
   RunningTool,
   RuntimeEvent,
@@ -75,6 +85,14 @@ export type ScriptedStep =
       lines?: string[];
       placement?: ExtensionWidget["placement"];
     }
+  /** An extension dialog; the script waits for the answer. */
+  | { dialog: DialogSpec }
+  /** A title an extension set for the page. */
+  | { title: string }
+  /** Text an extension pushed into the composer. */
+  | { insert: string }
+  /** A custom extension UI; the script waits for the component to finish. */
+  | { custom: FrameComponent }
   | {
       tool: string;
       arguments?: unknown;
@@ -332,9 +350,20 @@ class FakeLiveSession implements LiveSession {
   private notices: LiveStatus["notices"] = [];
   private statuses = new Map<string, string>();
   private widgets = new Map<string, ExtensionWidget>();
+  private title: string | null = null;
+  private editorText: string[] = [];
+  private readonly dialogs = createDialogHost(() => {
+    this.emit({ type: "activity" });
+  });
+  private readonly custom = createCustomUiHost(() => {
+    this.emit({ type: "activity" });
+  });
   private thinkingLevel: ThinkingLevel = "medium";
   private readonly listeners = new Set<(event: LiveEvent) => void>();
   private counter = 0;
+  /** Set while a scripted custom UI is on screen, cleared when it finishes. */
+  private customResolve: (() => void) | undefined;
+  private customDone: (() => void) | undefined;
 
   private readonly stored: FakeStoredSession;
   private readonly script: (prompt: string) => ScriptedStep[];
@@ -370,20 +399,22 @@ class FakeLiveSession implements LiveSession {
     touch(this.stored);
   }
 
-  snapshot(): LiveSnapshot {
-    const branch = branchOf(this.stored);
-    const last = [...branch]
+  /** What Pi would report as the tokens in context: the last answer's total. */
+  private contextTokens(): number | null {
+    const last = [...branchOf(this.stored)]
       .reverse()
       .find(
         (entry) =>
           entry.type === "message" && entry.message.role === "assistant",
       );
-    const contextTokens =
-      last?.type === "message" && last.message.role === "assistant"
-        ? last.message.usage.totalTokens
-        : null;
-    const notices = this.notices;
-    this.notices = [];
+    return last?.type === "message" && last.message.role === "assistant"
+      ? last.message.usage.totalTokens
+      : null;
+  }
+
+  snapshot(): LiveSnapshot {
+    const branch = branchOf(this.stored);
+    const contextTokens = this.contextTokens();
     return {
       summary: { ...this.stored.summary, live: true },
       branch,
@@ -410,7 +441,11 @@ class FakeLiveSession implements LiveSession {
         retry: this.retry,
         statuses: Object.fromEntries(this.statuses),
         widgets: [...this.widgets.values()],
-        notices,
+        dialog: this.dialogs.pending(),
+        custom: this.custom.frame(),
+        title: this.title,
+        editorText: [...this.editorText],
+        notices: [...this.notices],
       },
     };
   }
@@ -443,7 +478,7 @@ class FakeLiveSession implements LiveSession {
   /** Store the message the partial has become, and start the next one. */
   private settle(parentId: string | null, content: Part[]): string {
     const id = this.nextId();
-    const previous = this.snapshot().status.contextTokens ?? 1000;
+    const previous = this.contextTokens() ?? 1000;
     this.partial = undefined;
     this.stored.entries.push({
       type: "message",
@@ -498,6 +533,40 @@ class FakeLiveSession implements LiveSession {
         }
         this.emit({ type: "activity" });
         await this.wait();
+        continue;
+      }
+      if ("title" in step) {
+        this.title = step.title;
+        this.emit({ type: "activity" });
+        await this.wait();
+        continue;
+      }
+      if ("insert" in step) {
+        this.editorText.push(step.insert);
+        this.emit({ type: "activity" });
+        await this.wait();
+        continue;
+      }
+      if ("dialog" in step) {
+        const answer = await this.dialogs.ask(step.dialog);
+        this.notices.push({
+          level: "info",
+          message: `Dialog answered: ${JSON.stringify(answer)}`,
+        });
+        this.emit({ type: "activity" });
+        await this.wait();
+        continue;
+      }
+      if ("custom" in step) {
+        const id = this.custom.open(step.custom, 92);
+        this.customDone = () => {
+          this.custom.close(id);
+        };
+        await new Promise<void>((resolve) => {
+          this.customResolve = resolve;
+        });
+        this.customResolve = undefined;
+        this.customDone = undefined;
         continue;
       }
       if ("thinking" in step) {
@@ -562,6 +631,7 @@ class FakeLiveSession implements LiveSession {
     this.tools = [];
     this.running = false;
     this.emit({ type: "turn_done" });
+    this.emit({ type: "completed" });
   }
 
   prompt(text: string, input: PromptInput = {}): Promise<void> {
@@ -651,6 +721,24 @@ class FakeLiveSession implements LiveSession {
     return Promise.resolve();
   }
 
+  takePending(): void {
+    this.notices = [];
+    this.editorText = [];
+  }
+
+  answerDialog(requestId: string, answer: DialogAnswer): boolean {
+    return this.dialogs.answer(requestId, answer);
+  }
+
+  /** The scripted component finishes on Enter; anything else redraws it. */
+  customInput(requestId: string, data: string): void {
+    this.custom.input(requestId, data);
+    if (data === "\r" || data === "\n") {
+      this.customDone?.();
+      this.customResolve?.();
+    }
+  }
+
   clearQueue(): QueuedMessage[] {
     const cleared = this.queue;
     this.queue = [];
@@ -715,6 +803,9 @@ class FakeLiveSession implements LiveSession {
   }
 
   stop(): Promise<void> {
+    this.dialogs.cancelAll();
+    this.custom.closeAll();
+    this.customResolve?.();
     this.onStop();
     this.emit({ type: "stopped" });
     this.listeners.clear();
@@ -735,6 +826,7 @@ export type FakeWorld = {
   files: Files;
   git: Git;
   watcher: Watcher;
+  push: PushNotifier & { sent: PushMessage[] };
   tmpdir: string;
   store: Map<string, FakeStoredSession>;
 };
@@ -776,6 +868,8 @@ export function createFakeWorld(
   const plugins = (options.packages ?? FAKE_PACKAGES).map((entry) => ({
     ...entry,
   }));
+  const subscriptions: PushSubscription[] = [];
+  const sent: PushMessage[] = [];
   let created = 0;
 
   function announce(event: RuntimeEvent): void {
@@ -790,6 +884,9 @@ export function createFakeWorld(
     session.subscribe((event) => {
       if (event.type === "turn_done") {
         announce({ type: "finished", sessionId: stored.summary.id });
+      }
+      if (event.type === "completed") {
+        announce({ type: "completed", sessionId: stored.summary.id });
       }
     });
     live.set(stored.summary.id, session);
@@ -1095,6 +1192,17 @@ export function createFakeWorld(
     },
     git: createGit(),
     watcher: createWatcher(),
+    push: {
+      sent,
+      publicKey: () => "fake-vapid-public-key",
+      subscribe: (subscription) => {
+        subscriptions.push(subscription);
+      },
+      send: (message) => {
+        if (subscriptions.length > 0) sent.push(message);
+        return Promise.resolve();
+      },
+    },
     tmpdir: options.tmpdir ?? "/tmp",
   };
 }

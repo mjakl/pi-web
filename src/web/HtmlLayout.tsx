@@ -1,3 +1,4 @@
+import { ICONS, THEME_COLOUR } from "@web/pwa";
 import { DARK_THEME, LIGHT_THEME, THEME_KEY } from "@web/client/theme";
 import type { AppEnvironment } from "@web/hono";
 import type { Context } from "hono";
@@ -26,6 +27,10 @@ export function HtmlLayout(
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Pi</title>
+        <meta name="theme-color" content={THEME_COLOUR} />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="icon" href={ICONS.small} />
+        <link rel="apple-touch-icon" href={ICONS.apple} />
         <script>{raw(THEME_SCRIPT)}</script>
         <link rel="stylesheet" href={assets.css} />
         <script src={HTMX_SRC} defer></script>
@@ -35,6 +40,10 @@ export function HtmlLayout(
       <body
         class="h-dvh overflow-hidden bg-base-100 text-base-content"
         data-mermaid-src={assets.mermaid}
+        // The service worker is registered with this build's asset hash, so a
+        // new build replaces the worker and its cache instead of being served
+        // stale assets from the old one.
+        data-sw-src={`/sw.js?v=${assets.js.split("=").at(-1) ?? "dev"}`}
       >
         {children}
       </body>

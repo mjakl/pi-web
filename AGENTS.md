@@ -38,10 +38,12 @@ src/core       rules and ports: transcript projection, session derivations
                Git status parsing, patches, frontmatter, worktree identity,
                the skill frontmatter toggle, skill install metadata, package
                list semantics, startup model preferences, tool schemas,
-               workspace
+               pending extension dialogs and custom-UI frames, terminal key
+               encoding, the run-completion rule, workspace
 src/adapters   Pi SDK, filesystem, Git, and in-memory implementations of the
                ports
-src/web        Hono routes, JSX views, HTMX/SSE delivery, client bundle
+src/web        Hono routes, JSX views, HTMX/SSE delivery, client bundle, the
+               generated service worker and manifest
 src/container.ts  the only file that wires adapters into the core
 src/main.ts    process entrypoint
 tests/         vitest, mirrors src/ and scripts/
@@ -64,6 +66,10 @@ Rules enforced by `.oxlintrc.json`:
 - Anything a page can do without script does: the workspace selector, the
   subagent fold, and the extension widget panel are `<details>` elements the
   server fills on demand.
+- Web Push keys and subscriptions live in the agent directory (`web-push.json`).
+  Never let a test or an unattended check reach the real one:
+  `createWebPushNotifier` takes the directory, and its `send` is injectable so
+  nothing has to talk to a push service.
 
 Read `docs/architecture.md` before changing a port, the SSE contract, or context
 accounting. Shell commands run with a sanitised environment; read

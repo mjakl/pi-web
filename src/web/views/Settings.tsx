@@ -120,6 +120,17 @@ function GeneralSettings() {
         </label>
       </fieldset>
       <fieldset>
+        <legend class="pb-1 text-sm font-semibold">Notifications</legend>
+        <label class="flex items-center gap-2 text-sm">
+          <input id="push-toggle" type="checkbox" class="toggle toggle-sm" />
+          <span>Notify this browser when a run finishes</span>
+        </label>
+        <p class="pt-1 text-xs text-base-content/50">
+          Needs permission from the browser, and reaches you with the tab
+          closed.
+        </p>
+      </fieldset>
+      <fieldset>
         <legend class="pb-1 text-sm font-semibold">Dumb zone</legend>
         <label class="flex items-center gap-2 text-sm">
           <input
@@ -136,7 +147,7 @@ function GeneralSettings() {
         </label>
       </fieldset>
       <p class="text-xs text-base-content/50">
-        These three are kept in this browser. Models, skills and plugins live in
+        These are kept in this browser. Models, skills and plugins live in
         Pi&apos;s own configuration.
       </p>
     </div>

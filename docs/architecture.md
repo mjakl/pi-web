@@ -27,6 +27,7 @@ Internal interfaces, all consumers in this repository. Defined in
 | `Files`            | The `@` completion index, directory listings, file bytes and text, `.docx` conversion, shell-output captures                 | `src/adapters/fs/file-tree.ts`       |
 | `Git`              | `git status` of a folder and the patch for one file                                                                          | `src/adapters/git/git.ts`            |
 | `Watcher`          | One file's changes on disk, deduplicated                                                                                     | `src/adapters/fs/watch.ts`           |
+| `PushNotifier`     | VAPID keys and browser subscriptions in the agent directory; one encrypted message per finished run                          | `src/adapters/pi/web-push.ts`        |
 
 `LiveSession` is the deep module: SDK event choreography (partial messages,
 compaction, retries, queue, extension notices) stays inside; callers only read a
@@ -49,7 +50,14 @@ Page load, HTMX responses, and SSE events all render the same three views:
 - `#status` receives model, state, queue, compaction, and the context badge;
 - `#shelf` receives the extension status line and widgets (`sse-swap="shelf"`),
   and only when one of them actually changed, because it holds an open panel;
-- `#toasts` receives notices (`sse-swap="notice"`, `beforeend`).
+- `#extension-dialog` receives the modal an extension is waiting on, and
+  `#custom-ui` the panel around a terminal component — both only when the
+  request itself changed, or a re-render would wipe what the reader typed;
+  `#custom-frame` inside the panel takes every new frame, so the keyboard stays
+  where it is;
+- `#toasts` receives notices (`sse-swap="notice"`, `beforeend`),
+  `#editor-insert` text an extension put in the composer, and `#session-done`
+  the id of a run that just finished.
 
 The SSE endpoint coalesces activity into one re-render per 100 ms. Because the
 turn is re-rendered from the snapshot rather than patched from deltas, a missed
@@ -137,13 +145,49 @@ composition root and the only importer of Pi adapters.
   active mark, the hover preview, and press-and-drag; a mark whose entry the
   page has not loaded is reached through the "load earlier" sentinel with
   `through=`.
+- **An extension dialog is a pending request, not a message.**
+  `src/core/extension-ui.ts` holds both state machines: unanswered dialogs with
+  their timeouts and abort signals, and the custom UIs whose frames the panel
+  shows. Several of each may be open — the SDK keys them by id and an extension
+  may ask twice — and only the newest is on screen; an older one waits for its
+  own timeout or for the session to stop, because answering an invisible dialog
+  is worse than leaving it. `POST /sessions/:id/ui/:requestId` resolves the
+  SDK's promise, so the first tab to answer wins and the others watch the dialog
+  disappear on the next render. A cancel carries no value at all, which is
+  exactly how the SDK spells its default (`undefined`, or `false` for
+  `confirm`): an extension cannot tell a cancel from an empty answer.
+- **A custom UI is a pi-tui component with no terminal under it.**
+  `src/adapters/pi/extension-ui.ts` hands the factory a `TUI` that is a size and
+  a `requestRender` callback, and a theme that applies no colour.
+  `render(width)` returns lines; the panel unwraps the box the component drew
+  for a terminal (`normalizeFrame` in `src/core/ansi.ts`) because the browser
+  supplies its own, and converts what is left through the same ANSI converter as
+  the shelf. Keystrokes go back as terminal bytes (`src/core/terminal-input.ts`,
+  shared by the client bundle), percent-encoded rather than multipart, because a
+  lone carriage return — which is what Enter sends — does not survive a
+  multipart parser. Closing is Ctrl+C: a pi-tui component has no close command
+  to receive.
+- **Notifications key off the agent's own idle, not off the turn ending.**
+  `src/core/turn-completion.ts` is pi-web's rule: a run has to have started, and
+  the session has to be idle when it settles. A stop, an aborted turn or a shell
+  command on its own never notifies. The adapter turns that into a `completed`
+  runtime event; the server sends one Web Push from it, and the session stream
+  sends `done` to the page, which plays the tone and — only when nobody is
+  looking at the tab — shows a notification. The service worker shows its own
+  only when no window is visible, so a reader never gets both.
+- **The service worker is generated, not shipped.** Its precache list has to
+  name this build's hashed asset URLs, so `src/web/pwa.ts` writes the script and
+  `/sw.js` serves it uncached with the asset hash as its version. It caches
+  `/static/*` and the offline page and nothing else: every session page, stream
+  and command goes to the network, because a cached answer from this server is
+  always the wrong one.
 - **Extension output is converted server-side.** Extensions write status lines
   and widgets for a terminal. `src/core/ansi.ts` turns SGR colour and bold into
   `<span style>` and escapes everything else, so extension text can never become
   markup; every other escape sequence is dropped. The shelf below the composer
   holds the one status line and a chip per widget, with at most one panel open
-  (`<details name>`, no script). Widgets whose content is a terminal component
-  keep an inert chip until a headless pi-tui renders them in Phase 6.
+  (`<details name>`, no script). A widget whose content is a component is
+  rendered through the same headless pi-tui as a custom UI.
 - **Session edits go through Pi's `SessionManager`.** Renames, stars, forks and
   clones are appends the SDK writes, so the CLI and web-pi never disagree about
   the format; stars are `pi-web:star` custom entries, the same ones pi-web
@@ -282,18 +326,38 @@ composition root and the only importer of Pi adapters.
 
 pi-web features absent from this slice, roughly in order of value:
 
-1. Extension dialogs (`select`, `confirm`, `input`, `editor`, custom UI) are
-   auto-cancelled; footers and headers are ignored, and a widget whose content
-   is a terminal component shows as an empty chip. Tool output is preformatted
-   text: ANSI is converted in the extension shelf, not in the transcript.
+1. Tool output in the transcript is preformatted text: ANSI is converted in the
+   extension shelf and the custom-UI panel, not in a tool card.
 2. The rail's branch marks move the session's leaf through `/navigate`, which
    offers the prompt there for editing, rather than opening that branch
    read-only. The explorer has no create, rename, delete or upload, and its
    expanded state is not remembered across a reload.
-3. PWA, push notifications, completion sound. The sound _preference_ exists
-   (settings, `web-pi:sound`); Phase 6 plays the tone.
-4. A running-session cap. Idle shutdown exists only for drafts Pi never wrote to
+3. A running-session cap. Idle shutdown exists only for drafts Pi never wrote to
    disk (10 minutes), as in pi-web.
-5. Workspace memory (`pi-web:last-open-by-workspace`): switching project does
-   not reopen the session last read there.
-6. Drafts persist text, not attachments.
+4. Packaging: the `web-pi` bin, prebuilt assets, the LAN warning, proxy support
+   and the runtime smoke test are Phase 7.
+
+## Deliberately not carried over
+
+Decisions, not gaps:
+
+- **Drafts persist text, not attachments.** An image lives in the browser as
+  bytes; keeping it across a reload would mean a second store for something the
+  reader can drop in again in a second.
+- **No message layer.** pi-web's 477 English keys are one locale behind an
+  indirection; web-pi is English only and the strings live where they are read,
+  in the views.
+- **`addAutocompleteProvider` is a no-op**, as in pi-web. The `@` and `/` menus
+  are server-rendered from the workspace, and an extension cannot reach into
+  them. `getEditorText` returns the empty string for the same reason: the
+  composer is the browser's, not the session's.
+- **An extension cannot replace the session it runs in.** `newSession`, `fork`
+  and `switchSession` on the command context answer `{cancelled: true}`; only
+  `navigateTree`, `waitForIdle` and `reload` do anything. The page follows one
+  session, and swapping it underneath the reader is not something HTMX could
+  follow. A `shutdownHandler` request is honoured — a notice, then the session
+  stops — because here that is a real operation.
+- **Themes and the terminal chrome stay stubbed.** `setTheme` refuses,
+  `getAllThemes` is empty, and the footer, header, working indicator and
+  `setToolsExpanded` do nothing: they describe a terminal's furniture, and this
+  one has none.

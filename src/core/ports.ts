@@ -4,6 +4,11 @@ import type {
 } from "@earendil-works/pi-agent-core";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { FileEntry, SlashCommand } from "./composer.ts";
+import type {
+  CustomFrame,
+  DialogAnswer,
+  DialogRequest,
+} from "./extension-ui.ts";
 import type { GitFileStatus } from "./git-status.ts";
 import type { PackagesView, PackageScope } from "./packages.ts";
 import type { SessionRowMetadata, SessionSummary } from "./sessions.ts";
@@ -185,7 +190,6 @@ export type RetryState = {
 /** A panel an extension keeps up to date, as lines of terminal output. */
 export type ExtensionWidget = {
   key: string;
-  /** Empty for a widget whose content is a terminal component (Phase 6). */
   lines: string[];
   placement: "aboveEditor" | "belowEditor";
 };
@@ -210,7 +214,15 @@ export type LiveStatus = {
   statuses: Record<string, string>;
   /** Extension widgets, in the order the extensions registered them. */
   widgets: ExtensionWidget[];
-  /** Notices raised by extensions or failures since the last snapshot. */
+  /** The extension dialog waiting for an answer; only the newest is shown. */
+  dialog: DialogRequest | null;
+  /** The frame of the extension's custom terminal UI, while one is open. */
+  custom: CustomFrame | null;
+  /** A title an extension set for this session's page. */
+  title: string | null;
+  /** Text extensions asked to put in the composer, since the last take. */
+  editorText: string[];
+  /** Notices raised by extensions or failures since the last take. */
   notices: Notice[];
 };
 
@@ -232,6 +244,8 @@ export type LiveSnapshot = {
 export type LiveEvent =
   | { type: "activity" }
   | { type: "turn_done" }
+  /** The agent finished a run and the session is idle: worth notifying about. */
+  | { type: "completed" }
   | { type: "stopped" };
 
 export type PromptInput = {
@@ -262,6 +276,16 @@ export type LiveSession = {
   compact(instructions?: string): Promise<void>;
   abortCompaction(): void;
   reload(): Promise<void>;
+  /**
+   * Forgets the notices and composer text the last snapshot reported. Only
+   * the render that delivers them calls this: a sidebar row reading the same
+   * snapshot for one boolean must not swallow a toast.
+   */
+  takePending(): void;
+  /** Answers a pending extension dialog. False when it is already gone. */
+  answerDialog(requestId: string, answer: DialogAnswer): boolean;
+  /** One keystroke or paste for the open custom extension UI. */
+  customInput(requestId: string, data: string): void;
   /** Empties the queue and hands the messages back for the composer. */
   clearQueue(): QueuedMessage[];
   runBash(command: string, excludeFromContext: boolean): Promise<void>;
@@ -270,9 +294,13 @@ export type LiveSession = {
   stop(): Promise<void>;
 };
 
-/** Lifecycle of every live session in this process, for the sidebar. */
+/**
+ * Lifecycle of every live session in this process. `finished` drives the
+ * sidebar; `completed` is the narrower "the agent finished a run and is idle"
+ * that notifications key off, and never fires for a stop or a shell command.
+ */
 export type RuntimeEvent = {
-  type: "opened" | "finished" | "stopped";
+  type: "opened" | "finished" | "completed" | "stopped";
   sessionId: string;
 };
 
@@ -390,4 +418,32 @@ export type Watcher = {
       error(): void;
     },
   ): () => void;
+};
+
+/** One browser that asked to be told when a session finishes. */
+export type PushSubscription = {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+};
+
+export type PushMessage = {
+  title: string;
+  body: string;
+  /** Where clicking the notification goes, relative to the server root. */
+  url: string;
+  tag: string;
+};
+
+/**
+ * Web Push, so a closed tab still hears about a finished turn. Keys and
+ * subscriptions live in Pi's agent directory; nothing leaves this machine
+ * except the encrypted payload the browser's own push service delivers.
+ */
+export type PushNotifier = {
+  /** The VAPID public key, generated and stored on first use. */
+  publicKey(): string;
+  /** Upsert by endpoint: a browser re-subscribing replaces its old record. */
+  subscribe(subscription: PushSubscription): void;
+  /** Sends to every subscription, dropping the ones the service rejects. */
+  send(message: PushMessage): Promise<void>;
 };

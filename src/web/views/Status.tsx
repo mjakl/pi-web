@@ -187,6 +187,17 @@ export function Status({ view }: { view: SessionView }) {
         <span class="text-base-content/60">not running</span>
       )}
       <ContextBadge usage={view.usage} />
+      {status?.title ? (
+        // An extension named this session's page; the client copies it into
+        // the browser tab, where `setTitle` puts it in a terminal.
+        <span
+          id="extension-title"
+          class="badge badge-ghost badge-sm"
+          data-title={status.title}
+        >
+          {status.title}
+        </span>
+      ) : null}
       {status ? (
         <CompactButton
           sessionId={summary.id}

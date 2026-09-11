@@ -1,4 +1,4 @@
-import { ansiToHtml, statusLine, stripAnsi } from "@core/ansi";
+import { ansiToHtml, normalizeFrame, statusLine, stripAnsi } from "@core/ansi";
 import { describe, expect, it } from "vitest";
 
 const ESC = "\u001B";
@@ -50,5 +50,42 @@ describe("status line", () => {
 
   it("keeps the escapes for the converter", () => {
     expect(statusLine({ git: `${ESC}[32mmain${ESC}[0m` })).toContain(ESC);
+  });
+});
+
+describe("normalizeFrame", () => {
+  it("unwraps a bordered pi-tui panel", () => {
+    expect(
+      normalizeFrame([
+        "\u250C\u2500\u2500\u2510",
+        "\u2502 hi   \u2502",
+        "\u2502 there\u2502",
+        "\u2514\u2500\u2500\u2518",
+      ]),
+    ).toEqual(["hi", "there"]);
+  });
+
+  it("keeps colours while trimming the border around them", () => {
+    expect(normalizeFrame(["\u2502 \u001B[31mred\u001B[0m \u2502"])).toEqual([
+      "\u001B[31mred\u001B[0m",
+    ]);
+  });
+
+  it("drops blank lines at either end but keeps the ones between", () => {
+    expect(
+      normalizeFrame(["", "\u2502 a\u2502", "", "\u2502 b\u2502", ""]),
+    ).toEqual(["a", "", "b"]);
+  });
+
+  it("strips Pi's cursor marker with every other escape", () => {
+    expect(normalizeFrame(["\u2502 a\u001B_pi:c\u0007\u2502"])).toEqual(["a"]);
+  });
+
+  it("leaves a frame that is not a box alone", () => {
+    expect(normalizeFrame(["plain", "lines"])).toEqual(["plain", "lines"]);
+  });
+
+  it("returns the input when nothing is left after trimming", () => {
+    expect(normalizeFrame(["   ", ""])).toEqual(["   ", ""]);
   });
 });

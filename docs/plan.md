@@ -77,7 +77,8 @@ panel, settings panel.
 Extension dialogs (select, confirm, input, editor) answered from the browser,
 custom extension UI where feasible, PWA manifest and service worker, Web Push
 with VAPID keys in the agent directory, in-page notifications and completion
-sound, idle shutdown of live sessions, project command environment isolation.
+sound, workspace memory, idle shutdown of live sessions, project command
+environment isolation.
 
 ## Phase 7: packaging
 

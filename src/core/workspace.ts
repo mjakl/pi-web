@@ -12,6 +12,7 @@ import {
   type RailMark,
 } from "./conversation-rail.ts";
 import { contextUsage, type ContextUsage } from "./context-usage.ts";
+import type { DialogAnswer } from "./extension-ui.ts";
 import { type FileKind, fileKind, languageOf } from "./file-types.ts";
 import type { GitFileStatus } from "./git-status.ts";
 import {
@@ -58,6 +59,8 @@ import type {
   ProjectResources,
   ProjectTrust,
   PromptInput,
+  PushNotifier,
+  PushSubscription,
   RuntimeEvent,
   SessionCatalog,
   SessionRead,
@@ -204,6 +207,12 @@ export type Workspace = ReturnType<typeof createWorkspace>;
 /** Where a file request may point: the session's own working folder. */
 export class ForbiddenPath extends Error {}
 
+/** A name worth showing: a blank one is the same as none. */
+function nonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed === "" ? undefined : trimmed;
+}
+
 export function createWorkspace(deps: {
   sessions: SessionCatalog;
   runtime: AgentRuntime;
@@ -217,12 +226,34 @@ export function createWorkspace(deps: {
   files: Files;
   git: Git;
   watcher: Watcher;
+  push: PushNotifier;
   /** os.tmpdir(); shell captures may live nowhere else. */
   tmpdir: string;
 }) {
   // Folders a reader explicitly validated, as pi-web does: in memory, gone on
   // restart, never written to Pi's store.
   const validatedRoots = new Set<string>();
+
+  /**
+   * A finished run reaches every subscribed browser, open tab or not. The
+   * service worker decides whether to show it: a visible window already heard
+   * about it through the session stream.
+   */
+  deps.runtime.subscribeAll((event) => {
+    if (event.type !== "completed") return;
+    void summaryOf(event.sessionId)
+      .then((summary) =>
+        deps.push.send({
+          title: nonEmpty(summary?.name) ?? "Session complete",
+          body: "Task finished.",
+          url: `/sessions/${event.sessionId}`,
+          tag: `web-pi:session-complete:${event.sessionId}`,
+        }),
+      )
+      .catch(() => {
+        // Push is best effort: a failing subscription must not break a turn.
+      });
+  });
 
   async function modelsFor(cwd: string): Promise<ModelListing> {
     try {
@@ -344,6 +375,9 @@ export function createWorkspace(deps: {
       });
     }
     const { status } = snapshot;
+    // This view is what delivers notices and extension composer text; nothing
+    // else may consume them.
+    live.takePending();
     const starred = readStars(snapshot.entries);
     const leafId = snapshot.branch.at(-1)?.id ?? null;
     const reported = status.contextTokens;
@@ -798,6 +832,28 @@ export function createWorkspace(deps: {
     async reload(id: string): Promise<void> {
       await requireFolder(id);
       await (await liveOrOpen(id)).reload();
+    },
+
+    /**
+     * Answers an extension dialog. Only the tab that gets here resolves it;
+     * the others see the dialog disappear on the next render.
+     */
+    answerDialog(id: string, requestId: string, answer: DialogAnswer): boolean {
+      return deps.runtime.get(id)?.answerDialog(requestId, answer) ?? false;
+    },
+
+    /** One keystroke or paste for an extension's open custom UI. */
+    customInput(id: string, requestId: string, data: string): void {
+      deps.runtime.get(id)?.customInput(requestId, data);
+    },
+
+    /** The VAPID public key a browser needs to subscribe to push. */
+    pushKey(): string {
+      return deps.push.publicKey();
+    },
+
+    subscribePush(subscription: PushSubscription): void {
+      deps.push.subscribe(subscription);
     },
 
     /** Empties the queue and hands its texts back as one composer draft. */

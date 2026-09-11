@@ -3,6 +3,7 @@ import type { NewSessionView, SessionView, SidebarView } from "@core/workspace";
 import { Composer } from "./Composer.tsx";
 import { FilePanel } from "./Files.tsx";
 import { Rail } from "./Rail.tsx";
+import { CustomPanel, ExtensionDialog } from "./Extensions.tsx";
 import { Shelf } from "./Shelf.tsx";
 import {
   type ItemActions,
@@ -178,7 +179,9 @@ export function SessionPage({
     <Shell sidebar={sidebar} activeId={summary.id}>
       <header class="flex flex-col gap-1 border-b border-base-300 px-4 py-2">
         <div class="flex items-baseline gap-2">
-          <h1 class="truncate font-semibold">{pageTitle(view)}</h1>
+          <h1 class="truncate font-semibold" data-page-title>
+            {pageTitle(view)}
+          </h1>
           <span class="truncate text-xs text-base-content/60">
             {summary.cwd}
           </span>
@@ -313,6 +316,15 @@ export function SessionPage({
         <Composer sessionId={summary.id} cwd={summary.cwd} draft={draft} />
       )}
       <Shelf status={view.status} />
+      <CustomPanel sessionId={summary.id} frame={view.status?.custom ?? null} />
+      <ExtensionDialog
+        sessionId={summary.id}
+        dialog={view.status?.dialog ?? null}
+      />
+      {/* Text an extension asked to put in the composer arrives here. */}
+      <div id="editor-insert" sse-swap="editor" hx-swap="innerHTML" hidden />
+      {/* One line of JSON per finished run: the tone and notifications. */}
+      <div id="session-done" sse-swap="done" hx-swap="innerHTML" hidden />
     </Shell>
   );
 }

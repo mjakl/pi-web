@@ -1,3 +1,4 @@
+import type { FrameComponent } from "@core/extension-ui";
 import {
   assistantEntry,
   createFakeWorld,
@@ -17,6 +18,7 @@ import { createPiProjectTrust } from "@adapters/pi/project-trust";
 import { createPiProjectResources } from "@adapters/pi/resources";
 import { createPiSessionCatalog } from "@adapters/pi/session-catalog";
 import { createPiSkills } from "@adapters/pi/skills";
+import { createWebPushNotifier } from "@adapters/pi/web-push";
 import { createWorkspace, type Workspace } from "@core/workspace";
 import { tmpdir } from "node:os";
 import type { Config } from "./config.ts";
@@ -63,8 +65,74 @@ function demoSessions(cwd: string): FakeStoredSession[] {
  * a subagent, and prose with a code fence and a diagram. Everything the
  * transcript can render, without a model.
  */
+/**
+ * A counter component, for checking the custom-UI panel without an extension:
+ * the arrow keys change the number, Enter finishes, and every keystroke draws
+ * a fresh frame the way a real pi-tui component would.
+ */
+function demoCounter(): FrameComponent {
+  let count = 0;
+  return {
+    render(width: number) {
+      const bar = "\u2500".repeat(Math.max(0, width - 2));
+      return [
+        `\u250C${bar}\u2510`,
+        `\u2502 Count: \u001B[1m${String(count)}\u001B[0m`,
+        "\u2502 Up/Down to change, Enter to finish",
+        `\u2514${bar}\u2518`,
+      ];
+    },
+    handleInput(data: string) {
+      if (data === "\u001B[A") count += 1;
+      if (data === "\u001B[B") count -= 1;
+    },
+  };
+}
+
 function demoScript(cwd: string, prompt: string): ScriptedStep[] {
   const patch = `--- a/src/answer.ts\n+++ b/src/answer.ts\n@@ -1,3 +1,3 @@\n export function answer() {\n-  return 41;\n+  return 42;\n }\n`;
+  // Two scripted answers exist only for checking the extension bridge by hand.
+  if (prompt.includes("/dialog")) {
+    return [
+      {
+        dialog: {
+          method: "select",
+          title: "Which branch should I use?",
+          options: ["main", "release", "a new one"],
+        },
+      },
+      {
+        dialog: {
+          method: "confirm",
+          title: "Push it?",
+          message: "This rewrites the remote.",
+        },
+      },
+      {
+        dialog: {
+          method: "input",
+          title: "Name the branch",
+          placeholder: "feature/…",
+        },
+      },
+      {
+        dialog: {
+          method: "editor",
+          title: "Commit message",
+          prefill: "Fix the thing\n\n",
+        },
+      },
+      { text: "Dialogs answered." },
+    ];
+  }
+  if (prompt.includes("/custom")) {
+    return [
+      { title: "Counting" },
+      { custom: demoCounter() },
+      { insert: "counted to three" },
+      { text: "Custom UI closed." },
+    ];
+  }
   return [
     { status: "git", statusText: "\u001B[32mmain\u001B[0m ✓ clean" },
     {
@@ -172,6 +240,7 @@ export function createDeps(config: Config): { workspace: Workspace } {
       files: createFileTree(),
       git: createGit(),
       watcher: createWatcher(),
+      push: createWebPushNotifier({ agentDir: config.agentDir }),
       tmpdir: tmpdir(),
     }),
   };

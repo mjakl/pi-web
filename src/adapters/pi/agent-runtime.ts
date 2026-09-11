@@ -15,7 +15,9 @@ import type {
   ThinkingChoice,
   ThinkingLevel,
 } from "@core/ports";
+import type { DialogAnswer } from "@core/extension-ui";
 import { startupWrites } from "@core/models";
+import { createCompletionTracker } from "@core/turn-completion";
 import { toolParameters } from "@core/tools";
 import { toolProgress } from "@core/transcript";
 import { STAR_TYPE } from "@core/session-entries";
@@ -35,7 +37,7 @@ import {
   createProjectBashOperations,
   preferUserBashExtension,
 } from "./bash-env.ts";
-import { createHeadlessUi } from "./headless-ui.ts";
+import { createExtensionUi } from "./extension-ui.ts";
 import { projectTrustReloadOptions } from "./project-trust.ts";
 import type { PiSessionCatalog } from "./session-catalog.ts";
 
@@ -60,6 +62,10 @@ class PiLiveSession implements LiveSession {
   private readonly listeners = new Set<(event: LiveEvent) => void>();
   private readonly unsubscribe: () => void;
 
+  private readonly run = createCompletionTracker();
+  private title: string | null = null;
+  private editorText: string[] = [];
+
   private readonly inner: AgentSession;
   private readonly agentDir: string;
   private readonly shellPath: string | undefined;
@@ -81,7 +87,7 @@ class PiLiveSession implements LiveSession {
     });
   }
 
-  readonly ui = createHeadlessUi({
+  readonly ui = createExtensionUi({
     notify: (level, message) => {
       this.notices.push({ level, message });
       this.emit({ type: "activity" });
@@ -94,6 +100,17 @@ class PiLiveSession implements LiveSession {
     setWidget: (key, lines, placement) => {
       if (lines === undefined) this.widgets.delete(key);
       else this.widgets.set(key, { key, lines, placement });
+      this.emit({ type: "activity" });
+    },
+    setTitle: (title) => {
+      this.title = title;
+      this.emit({ type: "activity" });
+    },
+    insertEditorText: (text) => {
+      this.editorText.push(text);
+      this.emit({ type: "activity" });
+    },
+    changed: () => {
       this.emit({ type: "activity" });
     },
   });
@@ -177,8 +194,12 @@ class PiLiveSession implements LiveSession {
         this.tools.clear();
         this.retry = null;
         this.emit({ type: "turn_done" });
+        if (this.run.settled(this.busy)) this.emit({ type: "completed" });
         break;
       case "agent_start":
+        this.run.start();
+        this.emit({ type: "activity" });
+        break;
       case "agent_end":
       case "entry_appended":
       case "session_info_changed":
@@ -223,8 +244,6 @@ class PiLiveSession implements LiveSession {
 
   private status(): LiveStatus {
     const model = this.inner.model;
-    const notices = this.notices;
-    this.notices = [];
     const option: ModelOption | null = model
       ? {
           provider: model.provider,
@@ -254,7 +273,11 @@ class PiLiveSession implements LiveSession {
       retry: this.retry,
       statuses: Object.fromEntries(this.statuses),
       widgets: [...this.widgets.values()],
-      notices,
+      dialog: this.ui.dialog(),
+      custom: this.ui.frame(),
+      title: this.title,
+      editorText: [...this.editorText],
+      notices: [...this.notices],
     };
   }
 
@@ -338,10 +361,24 @@ class PiLiveSession implements LiveSession {
 
   /** Moves the leaf inside the same file; extensions see `session_before_tree`. */
   async navigateTree(targetId: string): Promise<string | undefined> {
-    const result = await this.inner.navigateTree(targetId);
+    const result = await this.navigate(targetId);
+    return result.cancelled ? undefined : result.editorText;
+  }
+
+  /**
+   * The same move, with the result an extension's command context expects.
+   * Both paths go through here so the turn boundary is never left behind.
+   */
+  async navigate(
+    targetId: string,
+    summarize?: boolean,
+  ): Promise<{ cancelled: boolean; editorText?: string }> {
+    const result = await this.inner.navigateTree(targetId, {
+      ...(summarize === undefined ? {} : { summarize }),
+    });
     this.turnStart = this.inner.sessionManager.getBranch().length;
     this.emit({ type: "activity" });
-    return result.cancelled ? undefined : result.editorText;
+    return result;
   }
 
   /**
@@ -402,9 +439,30 @@ class PiLiveSession implements LiveSession {
     this.emit({ type: "activity" });
   }
 
+  /** Rebuilds the extensions; their statuses and widgets go with them. */
   async reload(): Promise<void> {
-    await this.inner.reload();
+    this.ui.resetForReload();
+    this.statuses.clear();
+    this.widgets.clear();
+    await this.inner.reload({
+      beforeSessionStart: () => {
+        this.inner.extensionRunner.setUIContext(this.ui.context, "rpc");
+      },
+    });
     this.emit({ type: "activity" });
+  }
+
+  takePending(): void {
+    this.notices = [];
+    this.editorText = [];
+  }
+
+  answerDialog(requestId: string, answer: DialogAnswer): boolean {
+    return this.ui.answerDialog(requestId, answer);
+  }
+
+  customInput(requestId: string, data: string): void {
+    this.ui.customInput(requestId, data);
   }
 
   clearQueue(): QueuedMessage[] {
@@ -471,6 +529,8 @@ class PiLiveSession implements LiveSession {
 
   async stop(): Promise<void> {
     this.unsubscribe();
+    this.run.cancel();
+    this.ui.dispose();
     await this.inner.abort();
     this.inner.dispose();
     this.onStop();
@@ -596,16 +656,42 @@ export function createPiAgentRuntime(options: {
       if (event.type === "turn_done") {
         announce({ type: "finished", sessionId: id });
       }
+      if (event.type === "completed") {
+        announce({ type: "completed", sessionId: id });
+      }
       if (event.type === "stopped") {
         if (idle) clearTimeout(idle);
       } else resetIdle();
     });
     resetIdle();
     await session.bindExtensions({
-      uiContext: wrapper.ui,
+      uiContext: wrapper.ui.context,
       mode: "rpc",
+      // What an extension-registered command may do to the session it runs
+      // in. Everything that would replace the session is refused: web-pi owns
+      // navigation, and an extension swapping the page's session underneath
+      // the reader is not something the browser could follow.
+      commandContextActions: {
+        waitForIdle: () => session.agent.waitForIdle(),
+        newSession: () => Promise.resolve({ cancelled: true }),
+        fork: () => Promise.resolve({ cancelled: true }),
+        switchSession: () => Promise.resolve({ cancelled: true }),
+        navigateTree: (targetId, navigate) =>
+          wrapper.navigate(targetId, navigate?.summarize),
+        reload: () => wrapper.reload(),
+      },
+      shutdownHandler: () => {
+        wrapper.ui.context.notify(
+          "An extension asked to shut this session down.",
+          "warning",
+        );
+        void wrapper.stop();
+      },
       onError: (error) => {
-        wrapper.ui.notify(`${error.extensionPath}: ${error.error}`, "error");
+        wrapper.ui.context.notify(
+          `${error.extensionPath}: ${error.error}`,
+          "error",
+        );
       },
     });
     const file = manager.getSessionFile();

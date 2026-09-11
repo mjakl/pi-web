@@ -4,8 +4,10 @@ import { FileAccessError } from "@core/path-access";
 import type {
   GitChangeFile,
   ImageAttachment,
+  RuntimeEvent,
   ThinkingLevel,
 } from "@core/ports";
+import type { DialogAnswer } from "@core/extension-ui";
 import { isPackageAction, type PackageScope } from "@core/packages";
 import { isSessionId, projectKeyOf } from "@core/sessions";
 import { clampSearchLimit, type SkillScope } from "@core/skills";
@@ -38,6 +40,14 @@ import {
 } from "@web/views/Files";
 import { Rail } from "@web/views/Rail";
 import { changedWidgets, ShelfBody, shelfSignature } from "@web/views/Shelf";
+import {
+  CustomFrameBody,
+  CustomPanelBody,
+  customSignature,
+  dialogSignature,
+  ExtensionDialogBody,
+} from "@web/views/Extensions";
+import { manifest, offlinePage, OFFLINE_URL, serviceWorker } from "@web/pwa";
 import { ToolsPanel, SystemPromptPanel } from "@web/views/Panels";
 import { IndexPage, NewSessionPage, SessionPage } from "@web/views/SessionPage";
 import {
@@ -118,6 +128,25 @@ function currentSessionId(c: Context): string | undefined {
   const url = c.req.header("HX-Current-URL") ?? c.req.header("Referer") ?? "";
   const id = /\/sessions\/([^/?#]+)/.exec(url)?.[1];
   return id !== undefined && isSessionId(id) ? id : undefined;
+}
+
+/** Only an https endpoint with both keys can receive an encrypted payload. */
+function isPushSubscription(
+  value: unknown,
+): value is { endpoint: string; keys: { p256dh: string; auth: string } } {
+  if (typeof value !== "object" || value === null) return false;
+  const { endpoint, keys } = value as { endpoint?: unknown; keys?: unknown };
+  if (typeof endpoint !== "string" || !endpoint.startsWith("https://")) {
+    return false;
+  }
+  if (typeof keys !== "object" || keys === null) return false;
+  const { p256dh, auth } = keys as { p256dh?: unknown; auth?: unknown };
+  return (
+    typeof p256dh === "string" &&
+    p256dh !== "" &&
+    typeof auth === "string" &&
+    auth !== ""
+  );
 }
 
 function field(form: FormData, name: string): string {
@@ -1622,6 +1651,87 @@ export function createWebApp(deps: WebDeps) {
   });
 
   /**
+   * An answer to an extension dialog. The first tab to get here resolves the
+   * extension's promise; a second one finds the request gone and says so,
+   * rather than pretending it answered.
+   */
+  app.post("/sessions/:id/ui/:requestId", async (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    const form = await c.req.formData();
+    const answer: DialogAnswer =
+      field(form, "cancelled") !== ""
+        ? { cancelled: true }
+        : form.has("confirmed")
+          ? { confirmed: field(form, "confirmed") !== "" }
+          : form.has("value")
+            ? { value: field(form, "value") }
+            : { cancelled: true };
+    const answered = deps.workspace.answerDialog(
+      id,
+      c.req.param("requestId"),
+      answer,
+    );
+    if (!answered) toastHeader(c, "That dialog is already closed.", "info");
+    c.header("HX-Reswap", "none");
+    return c.body(null, 200);
+  });
+
+  /** One keystroke or paste for an extension's custom UI. */
+  app.post("/sessions/:id/ui/:requestId/input", async (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    const form = await c.req.formData();
+    const data = form.get("data");
+    if (typeof data !== "string" || data === "") return c.body(null, 204);
+    deps.workspace.customInput(id, c.req.param("requestId"), data);
+    return c.body(null, 204);
+  });
+
+  // --- Installable app --------------------------------------------------
+
+  app.get("/manifest.webmanifest", (c) => {
+    c.header("Content-Type", "application/manifest+json");
+    c.header("Cache-Control", "no-cache");
+    return c.body(JSON.stringify(manifest()));
+  });
+
+  /**
+   * Served from the root so its scope covers the whole app. Never cached by
+   * the browser itself: the registration asks for it fresh every time, and a
+   * stale worker would keep serving a stale build's assets.
+   */
+  app.get("/sw.js", (c) => {
+    c.header("Content-Type", "text/javascript; charset=utf-8");
+    c.header("Cache-Control", "no-cache");
+    c.header("Service-Worker-Allowed", "/");
+    return c.body(serviceWorker(assets));
+  });
+
+  app.get(OFFLINE_URL, (c) => c.html(offlinePage()));
+
+  /** The key a browser needs before it can subscribe; the private one stays. */
+  app.get("/push/config", (c) =>
+    c.json({ publicKey: deps.workspace.pushKey() }),
+  );
+
+  app.post("/push/subscribe", async (c) => {
+    const body: unknown = await c.req.json().catch(() => undefined);
+    const subscription =
+      typeof body === "object" && body !== null && "subscription" in body
+        ? (body as { subscription?: unknown }).subscription
+        : undefined;
+    if (!isPushSubscription(subscription)) {
+      return c.json({ error: "Invalid push subscription" }, 400);
+    }
+    deps.workspace.subscribePush({
+      endpoint: subscription.endpoint,
+      keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth },
+    });
+    return c.json({ ok: true });
+  });
+
+  /**
    * One stream for the sidebar: every session's lifecycle, re-rendered. Rows
    * are only sent for the project on screen — the other few thousand sessions
    * have no row to swap — while the selector's badges are re-sent whenever the
@@ -1638,10 +1748,10 @@ export function createWebApp(deps: WebDeps) {
           ...(remembered === undefined ? {} : { remembered }),
           ...(activeId === undefined ? {} : { activeId }),
         });
-      const send = (event: {
-        type: "opened" | "finished" | "stopped";
-        sessionId: string;
-      }) => {
+      const send = (event: RuntimeEvent) => {
+        // A completed run is the session stream's business; this one is the
+        // sidebar's, and a session that completed also emits `finished`.
+        if (event.type === "completed") return;
         queue = queue
           .then(async () => {
             const view = await sidebar();
@@ -1722,6 +1832,11 @@ export function createWebApp(deps: WebDeps) {
       // The shelf holds open panels, so it is only re-sent when an extension
       // actually changed a status or a widget.
       let shelf = "";
+      // Same for the dialog and the custom-UI shell: re-sending either would
+      // wipe what the reader typed, or take focus out of the panel.
+      let dialog = "";
+      let custom = "";
+      let frame = "";
       const widgetLines = new Map<string, string>();
       const render = async (kind: "activity" | "turn_done") => {
         const view = await deps.workspace.viewSession(id);
@@ -1773,6 +1888,43 @@ export function createWebApp(deps: WebDeps) {
             ),
           });
         }
+        const nextDialog = dialogSignature(view.status?.dialog ?? null);
+        if (nextDialog !== dialog) {
+          dialog = nextDialog;
+          await stream.writeSSE({
+            event: "dialog",
+            data: await html(
+              <ExtensionDialogBody
+                sessionId={id}
+                dialog={view.status?.dialog ?? null}
+              />,
+            ),
+          });
+        }
+        const panel = view.status?.custom ?? null;
+        if ((panel?.id ?? "") !== custom) {
+          custom = panel?.id ?? "";
+          frame = "";
+          await stream.writeSSE({
+            event: "custom",
+            data: await html(<CustomPanelBody sessionId={id} frame={panel} />),
+          });
+        }
+        const nextFrame = customSignature(panel);
+        if (nextFrame !== frame) {
+          frame = nextFrame;
+          await stream.writeSSE({
+            event: "custom-frame",
+            data: await html(<CustomFrameBody frame={panel} />),
+          });
+        }
+        // Text an extension asked to put in the composer, and a title it set.
+        for (const text of view.status?.editorText ?? []) {
+          await stream.writeSSE({
+            event: "editor",
+            data: await html(<span data-insert={text} />),
+          });
+        }
         // Notices are drained by the snapshot: send them once, as toasts.
         const notices = view.status?.notices ?? [];
         if (notices.length > 0) {
@@ -1794,6 +1946,20 @@ export function createWebApp(deps: WebDeps) {
             // A closed stream ends rendering; the abort handler cleans up.
           });
       };
+      /**
+       * The agent finished a run and went idle. The browser decides what to
+       * do with it — a tone, a notification, an unread dot — because only it
+       * knows whether anyone is looking.
+       */
+      const announceDone = () => {
+        queue = queue
+          .then(async () => {
+            await stream.writeSSE({ event: "done", data: id });
+          })
+          .catch(() => {
+            // A closed stream ends rendering; the abort handler cleans up.
+          });
+      };
       let aborted = false;
       stream.onAbort(() => {
         aborted = true;
@@ -1809,6 +1975,8 @@ export function createWebApp(deps: WebDeps) {
           if (timer) clearTimeout(timer);
           timer = undefined;
           enqueue("turn_done");
+        } else if (event.type === "completed") {
+          announceDone();
         } else {
           void stream.close();
         }

@@ -2,6 +2,9 @@
 
 import { abortTurn, setUpComposer } from "./composer.ts";
 import { dialogOpen, setUpDialogs } from "./dialogs.ts";
+import { setUpExtensions } from "./extensions.ts";
+import { setUpNotifications } from "./notify.ts";
+import { setUpPush } from "./push.ts";
 import { setUpFolderMemory, setUpPreferences } from "./preferences.ts";
 import { DARK_THEME, LIGHT_THEME, THEME_KEY } from "./theme.ts";
 import { setUpFilePanel } from "./panel.ts";
@@ -257,3 +260,6 @@ setUpUnread();
 setUpToasts();
 setUpComposer();
 setUpFilePanel();
+setUpExtensions();
+setUpNotifications();
+setUpPush();
