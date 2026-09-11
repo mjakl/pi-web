@@ -10,6 +10,8 @@
  * around them.
  */
 
+import { type CatppuccinIcon, catppuccinIcon } from "@core/file-types";
+
 type IconProps = { size?: number };
 
 /** The shape every stroked icon shares. */
@@ -1047,44 +1049,10 @@ export function TrustDialogShieldIcon({ size = 20 }: IconProps) {
 
 const CATPPUCCIN_ROOT = "/static/icons/catppuccin";
 
-type CatppuccinIconName =
-  | "_file"
-  | "_folder"
-  | "_folder_open"
-  | "bash"
-  | "bun-lock"
-  | "config"
-  | "css"
-  | "database"
-  | "docker"
-  | "env"
-  | "eslint"
-  | "git"
-  | "go"
-  | "graphql"
-  | "html"
-  | "javascript"
-  | "javascript-react"
-  | "json"
-  | "lock"
-  | "markdown"
-  | "ms-word"
-  | "next"
-  | "npm-lock"
-  | "pdf"
-  | "python"
-  | "rust"
-  | "sass"
-  | "terraform"
-  | "toml"
-  | "typescript"
-  | "typescript-react"
-  | "yaml";
-
 function CatppuccinIcon({
   name,
   size = 14,
-}: IconProps & { name: CatppuccinIconName }) {
+}: IconProps & { name: CatppuccinIcon }) {
   const box = `${String(size)}px`;
   return (
     <span
@@ -1104,89 +1072,7 @@ export function FolderIcon({
   );
 }
 
-export function GenericFileIcon({ size = 14 }: IconProps) {
-  return <CatppuccinIcon name="_file" size={size} />;
-}
-
-const EXTENSION_ICONS: Record<string, CatppuccinIconName> = {
-  ts: "typescript",
-  tsx: "typescript-react",
-  js: "javascript",
-  mjs: "javascript",
-  cjs: "javascript",
-  jsx: "javascript-react",
-  py: "python",
-  json: "json",
-  jsonl: "json",
-  css: "css",
-  less: "css",
-  scss: "sass",
-  html: "html",
-  htm: "html",
-  md: "markdown",
-  mdx: "markdown",
-  yaml: "yaml",
-  yml: "yaml",
-  toml: "toml",
-  sh: "bash",
-  bash: "bash",
-  zsh: "bash",
-  fish: "bash",
-  rs: "rust",
-  go: "go",
-  sql: "database",
-  graphql: "graphql",
-  gql: "graphql",
-  tf: "terraform",
-  hcl: "terraform",
-  docx: "ms-word",
-  pdf: "pdf",
-  lock: "lock",
-};
-
-const ESLINT_CONFIGS = [
-  ".eslintrc",
-  ".eslintrc.js",
-  ".eslintrc.json",
-  ".eslintrc.yml",
-  "eslint.config.mjs",
-  "eslint.config.js",
-];
-
-const NEXT_CONFIGS = [
-  "next.config.js",
-  "next.config.mjs",
-  "next.config.cjs",
-  "next.config.ts",
-];
-
-function specialFileIcon(name: string): CatppuccinIconName | undefined {
-  if (name === "dockerfile" || name.startsWith("dockerfile.")) return "docker";
-  if (name === ".env" || name.startsWith(".env.")) return "env";
-  if ([".gitignore", ".gitattributes", ".gitmodules"].includes(name)) {
-    return "git";
-  }
-  if (name === "package-lock.json") return "npm-lock";
-  if (name === "bun.lock") return "bun-lock";
-  if (NEXT_CONFIGS.includes(name)) return "next";
-  if (ESLINT_CONFIGS.includes(name)) return "eslint";
-  if (["yarn.lock", "pnpm-lock.yaml", "cargo.lock"].includes(name)) {
-    return "lock";
-  }
-  if (/\.config\.(ts|js|mjs|cjs)$/.test(name)) return "config";
-  return undefined;
-}
-
-/** The icon for a file name: a special name first, then the extension. */
+/** The icon for a file name; `catppuccinIcon` in the core picks which. */
 export function FileIcon({ name, size = 14 }: IconProps & { name: string }) {
-  const lower = name.toLowerCase();
-  const special = specialFileIcon(lower);
-  if (special) return <CatppuccinIcon name={special} size={size} />;
-  const extension = lower.split(".").pop() ?? "";
-  const icon = EXTENSION_ICONS[extension];
-  return icon ? (
-    <CatppuccinIcon name={icon} size={size} />
-  ) : (
-    <GenericFileIcon size={size} />
-  );
+  return <CatppuccinIcon name={catppuccinIcon(name)} size={size} />;
 }

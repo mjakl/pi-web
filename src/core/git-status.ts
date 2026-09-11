@@ -81,7 +81,7 @@ const STATUS_LABEL: Record<GitFileStatus, string> = {
   D: "Deleted",
   R: "Renamed",
   U: "Untracked",
-  C: "Conflicted",
+  C: "Conflict",
 };
 
 export function statusLabel(status: GitFileStatus): string {

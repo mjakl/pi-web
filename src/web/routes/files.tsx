@@ -61,15 +61,20 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
     try {
       const found = await treeContext(sessionId);
       if (!found) return await c.notFound();
-      const listing = await deps.workspace.listDirectory(
-        sessionId,
-        found.context.cwd,
-      );
+      // The sidebar's changed-files toggle asks for the same fragment with
+      // the changes list in place of the tree, as pi-web swaps the two. With
+      // nothing changed there is no list to show, so the tree stays.
+      const changes =
+        c.req.query("changes") === "1" && found.status.files.length > 0;
+      const listing = changes
+        ? { entries: [] }
+        : await deps.workspace.listDirectory(sessionId, found.context.cwd);
       return await c.html(
         <Explorer
           context={found.context}
           status={found.status}
           entries={listing.entries}
+          changes={changes}
         />,
       );
     } catch (error) {
@@ -115,14 +120,12 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
           found.context.cwd,
         );
         return await c.html(
-          <ul id="file-tree" role="tree" aria-label="Files" class="tree">
-            <TreeNodes
-              context={found.context}
-              directory={found.context.cwd}
-              entries={listing.entries}
-              depth={0}
-            />
-          </ul>,
+          <Explorer
+            context={found.context}
+            status={found.status}
+            entries={listing.entries}
+            changes={false}
+          />,
         );
       }
       const matches = await deps.workspace.searchFiles(sessionId, query);

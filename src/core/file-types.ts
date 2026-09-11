@@ -153,62 +153,123 @@ export function hasPreview(path: string): boolean {
   return language === "markdown" || language === "html";
 }
 
-const ICON_BY_LANGUAGE: Record<string, string> = {
-  bash: "code",
-  c: "code",
-  cpp: "code",
-  csharp: "code",
-  css: "code",
-  dart: "code",
-  diff: "code",
-  dockerfile: "config",
-  elixir: "code",
-  go: "code",
-  graphql: "code",
-  haskell: "code",
-  hcl: "config",
-  html: "code",
-  ini: "config",
-  java: "code",
-  javascript: "code",
-  json: "config",
-  jsx: "code",
-  kotlin: "code",
-  less: "code",
-  lua: "code",
-  makefile: "config",
-  markdown: "doc",
-  nginx: "config",
-  objectivec: "code",
-  perl: "code",
-  php: "code",
-  powershell: "code",
-  protobuf: "code",
-  python: "code",
-  r: "code",
-  ruby: "code",
-  rust: "code",
-  scala: "code",
-  scss: "code",
-  sql: "config",
-  swift: "code",
-  toml: "config",
-  tsx: "code",
-  typescript: "code",
-  word: "doc",
-  xml: "code",
-  yaml: "config",
+/**
+ * The Catppuccin icon a file name maps to, exactly as pi-web's `FileIcons.tsx`
+ * picks it. It lives here rather than beside the SVGs because two renderers
+ * need the same answer: the JSX views, and the client bundle that draws the
+ * file tab strip in the browser.
+ */
+export type CatppuccinIcon =
+  | "_file"
+  | "_folder"
+  | "_folder_open"
+  | "bash"
+  | "bun-lock"
+  | "config"
+  | "css"
+  | "database"
+  | "docker"
+  | "env"
+  | "eslint"
+  | "git"
+  | "go"
+  | "graphql"
+  | "html"
+  | "javascript"
+  | "javascript-react"
+  | "json"
+  | "lock"
+  | "markdown"
+  | "ms-word"
+  | "next"
+  | "npm-lock"
+  | "pdf"
+  | "python"
+  | "rust"
+  | "sass"
+  | "terraform"
+  | "toml"
+  | "typescript"
+  | "typescript-react"
+  | "yaml";
+
+const EXTENSION_ICONS: Record<string, CatppuccinIcon> = {
+  ts: "typescript",
+  tsx: "typescript-react",
+  js: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  jsx: "javascript-react",
+  py: "python",
+  json: "json",
+  jsonl: "json",
+  css: "css",
+  less: "css",
+  scss: "sass",
+  html: "html",
+  htm: "html",
+  md: "markdown",
+  mdx: "markdown",
+  yaml: "yaml",
+  yml: "yaml",
+  toml: "toml",
+  sh: "bash",
+  bash: "bash",
+  zsh: "bash",
+  fish: "bash",
+  rs: "rust",
+  go: "go",
+  sql: "database",
+  graphql: "graphql",
+  gql: "graphql",
+  tf: "terraform",
+  hcl: "terraform",
+  docx: "ms-word",
+  pdf: "pdf",
+  lock: "lock",
 };
 
-/**
- * One of a handful of symbols the panel defines inline. A per-language icon
- * set would be prettier; it would also be a few hundred vendored SVGs.
- */
-export function iconOf(path: string, isDir: boolean): string {
-  if (isDir) return "folder";
-  const kind = fileKind(path);
-  if (kind !== "text") return kind === "docx" ? "doc" : kind;
-  return ICON_BY_LANGUAGE[languageOf(path)] ?? "file";
+const ESLINT_CONFIGS = [
+  ".eslintrc",
+  ".eslintrc.js",
+  ".eslintrc.json",
+  ".eslintrc.yml",
+  "eslint.config.mjs",
+  "eslint.config.js",
+];
+
+const NEXT_CONFIGS = [
+  "next.config.js",
+  "next.config.mjs",
+  "next.config.cjs",
+  "next.config.ts",
+];
+
+function specialIcon(name: string): CatppuccinIcon | undefined {
+  if (name === "dockerfile" || name.startsWith("dockerfile.")) return "docker";
+  if (name === ".env" || name.startsWith(".env.")) return "env";
+  if ([".gitignore", ".gitattributes", ".gitmodules"].includes(name)) {
+    return "git";
+  }
+  if (name === "package-lock.json") return "npm-lock";
+  if (name === "bun.lock") return "bun-lock";
+  if (NEXT_CONFIGS.includes(name)) return "next";
+  if (ESLINT_CONFIGS.includes(name)) return "eslint";
+  if (["yarn.lock", "pnpm-lock.yaml", "cargo.lock"].includes(name)) {
+    return "lock";
+  }
+  if (/\.config\.(ts|js|mjs|cjs)$/.test(name)) return "config";
+  return undefined;
+}
+
+/** A special name first, then the extension, then the generic file icon. */
+export function catppuccinIcon(name: string): CatppuccinIcon {
+  const lower = baseName(name).toLowerCase();
+  return (
+    specialIcon(lower) ??
+    EXTENSION_ICONS[lower.split(".").pop() ?? ""] ??
+    "_file"
+  );
 }
 
 export function formatBytes(bytes: number): string {
