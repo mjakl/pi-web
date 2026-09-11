@@ -43,9 +43,18 @@ const SOURCE_LABEL: Record<SlashSource, string> = {
 /** pi-web groups the list in this order, whatever order the commands arrive in. */
 const SOURCE_ORDER: SlashSource[] = ["builtin", "extension", "prompt", "skill"];
 
-/** "1 match" / "N matches", as pi-web labels both composer menus. */
+/** "1 match" / "N matches", as pi-web labels the `@` file menu. */
 export function matchLabel(count: number): string {
   return count === 1 ? "1 match" : `${String(count)} matches`;
+}
+
+/**
+ * The slash menu counts commands until something is typed after the slash,
+ * and only then counts matches (ChatInput.tsx L1116-L1121).
+ */
+export function commandLabel(count: number, query: string): string {
+  if (query !== "") return matchLabel(count);
+  return count === 1 ? "1 command" : `${String(count)} commands`;
 }
 
 /**
@@ -53,7 +62,14 @@ export function matchLabel(count: number): string {
  * then one section per source. The flat `data-index` is what the arrow keys
  * walk; `data-active` is the highlight pi-web's `.menu-item` CSS keys on.
  */
-export function CommandMenu({ commands }: { commands: SlashCommand[] }) {
+export function CommandMenu({
+  commands,
+  query = "",
+}: {
+  commands: SlashCommand[];
+  /** What was typed after the slash: it picks the header's noun. */
+  query?: string;
+}) {
   const groups = SOURCE_ORDER.map((source) => ({
     source,
     items: commands.filter((command) => command.source === source),
@@ -62,7 +78,7 @@ export function CommandMenu({ commands }: { commands: SlashCommand[] }) {
   return (
     <>
       <div style={MENU_HEADER}>
-        <span>Slash commands · {matchLabel(commands.length)}</span>
+        <span>Slash commands · {commandLabel(commands.length, query)}</span>
         <span style="font-family:var(--font-mono)">Tab / Enter</span>
       </div>
       <div style="flex:1 1 auto; min-height:0; overflow-y:auto; padding:4px">
@@ -233,8 +249,6 @@ export type ModelPick = {
   current: ModelOption | null;
   levels: ThinkingChoice[];
   level?: ThinkingLevel;
-  /** Before a session exists, leaving the level unset means "Pi decides". */
-  auto?: boolean;
   /** A live session applies a pick at once; `/new` only records it. */
   sessionId?: string;
   cwd?: string;
@@ -313,9 +327,8 @@ function pickAttributes(pick: ModelPick, value: string) {
 /** pi-web's reasoning row: the label and the level select (§6.1). */
 function ReasoningField({ pick }: { pick: ModelPick }) {
   const current = pick.current;
-  if (current?.reasoning !== true || pick.levels.length === 0) return <></>;
   const value =
-    pick.sessionId === undefined
+    pick.sessionId === undefined || current === null
       ? {}
       : {
           "hx-post": `/sessions/${pick.sessionId}/model?model=${encodeURIComponent(modelValue(current))}`,
@@ -328,7 +341,11 @@ function ReasoningField({ pick }: { pick: ModelPick }) {
     <label class="composer-thinking-field">
       <span>Change reasoning level</span>
       <select name="thinking" disabled={pick.disabled === true} {...value}>
-        {pick.auto === true ? <option value="">auto</option> : null}
+        {/* pi-web keeps "auto" in the list whatever the model offers, and
+            selects it while nothing is pinned (ChatInput.tsx L1759-L1768). */}
+        <option value="auto" selected={pick.level === undefined}>
+          auto
+        </option>
         {pick.levels.map((choice) => (
           <option value={choice.level} selected={choice.level === pick.level}>
             {choice.label}
@@ -336,6 +353,20 @@ function ReasoningField({ pick }: { pick: ModelPick }) {
         ))}
       </select>
     </label>
+  );
+}
+
+/** pi-web sorts the whole list by display name, never by which is current. */
+const MODEL_COLLATOR = new Intl.Collator("en", {
+  numeric: true,
+  sensitivity: "base",
+});
+
+function compareModels(a: ModelOption, b: ModelOption): number {
+  return (
+    MODEL_COLLATOR.compare(a.name || a.id, b.name || b.id) ||
+    MODEL_COLLATOR.compare(a.provider, b.provider) ||
+    MODEL_COLLATOR.compare(a.id, b.id)
   );
 }
 
@@ -353,12 +384,12 @@ export function ModelSelector({
   /** The session stream re-renders the whole selector in place. */
   oob?: boolean;
 }) {
-  const { models, current, disabled } = pick;
+  const { current, disabled } = pick;
+  const models = [...pick.models].sort(compareModels);
   const name =
     current?.name ?? (models.length === 0 ? "No models" : "Select model");
   const detail = levelLabel(pick);
   const providers = [...new Set(models.map((model) => model.provider))];
-  const reasoning = current?.reasoning === true && pick.levels.length > 0;
   return (
     <div
       id="model-selector"
@@ -379,7 +410,7 @@ export function ModelSelector({
         id="model-trigger"
         class="anchor-model-selector"
         popovertarget="model-menu"
-        aria-haspopup={reasoning ? "dialog" : "listbox"}
+        aria-haspopup="dialog"
         aria-expanded="false"
         aria-label="Model and reasoning"
         disabled={disabled === true}
@@ -401,7 +432,7 @@ export function ModelSelector({
         id="model-menu"
         popover="auto"
         class="anchored-menu menu-surface opens-up menu-model-selector"
-        role={reasoning ? "dialog" : "listbox"}
+        role="dialog"
         aria-label="Model and reasoning"
       >
         <ReasoningField pick={pick} />
@@ -422,9 +453,8 @@ export function ModelSelector({
           </div>
         ) : null}
         <div
-          {...(reasoning
-            ? { role: "listbox", "aria-label": "Select model" }
-            : {})}
+          role="listbox"
+          aria-label="Select model"
           style="min-height:0; overflow-y:auto"
         >
           {models.length === 0 ? (
@@ -587,7 +617,6 @@ export function Composer({
           ...(start.thinkingLevel === undefined
             ? {}
             : { level: start.thinkingLevel }),
-          auto: true,
           cwd: start.cwd,
         }
       : undefined;

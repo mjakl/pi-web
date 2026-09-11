@@ -658,7 +658,7 @@ describe("the new-session model picker", () => {
   it("offers the model's own reasoning levels, plus auto", async () => {
     const { app } = testApp();
     const page = await (await app.request("/new")).text();
-    expect(page).toContain('<option value="">auto</option>');
+    expect(page).toContain('<option value="auto" selected="">auto</option>');
     // From the catalog's own list for this model, not a hard-coded one.
     expect(page).toContain("balanced");
     expect(page).not.toContain('value="xhigh"');

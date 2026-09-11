@@ -39,3 +39,12 @@
 .htmx-indicator.htmx-request {
   display: block;
 }
+
+/* pi-web mounts the model panel only while it is open, so the `display: flex`
+   globals.css gives it never met a closed popover. web-pi renders the popover
+   with the page and leaves it there, and an author `display` beats the UA's
+   `[popover]:not(:popover-open){display:none}` — which left an invisible,
+   full-width panel over the composer, swallowing taps on a phone. */
+.anchored-menu.opens-up.menu-model-selector:not(:popover-open) {
+  display: none;
+}

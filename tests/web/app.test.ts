@@ -412,8 +412,8 @@ describe("web app", () => {
     expect(all).toContain("/compact");
     expect(all).toContain("/skill:testing");
     expect(all).toContain("Manual");
-    // A stopped session lists prompts and skills but no extension commands.
-    expect(all).not.toContain("/review");
+    // A stopped session lists extension commands too, as pi-web's does.
+    expect(all).toContain("/review");
 
     const filtered = await (
       await app.request("/sessions/s1/commands?q=comp")
@@ -1012,16 +1012,33 @@ describe("the composer, as pi-web draws it", () => {
     const menu = await (await app.request("/sessions/s1/commands")).text();
     order(menu, [
       "Slash commands · ",
-      " matches",
+      " commands",
       "Tab / Enter",
       'class="menu-section-label"',
       "Built-in",
       'class="menu-item"',
       "/clone",
       "Clone the current branch into a new session",
+      // pi-web's group order: built-in, extension, prompt, skill.
+      "Extensions",
+      "/review",
+      "Prompts",
+      "/changelog",
+      "Skills",
+      "/skill:testing",
     ]);
     expect(menu).toContain("font-size:12.5px");
     expect(menu).toContain('data-index="0"');
+  });
+
+  it("counts commands until the slash is filtered, then matches", async () => {
+    const { app } = testApp();
+    const all = await (await app.request("/sessions/s1/commands?q=")).text();
+    expect(all).toContain("Slash commands · 9 commands");
+    const one = await (
+      await app.request("/sessions/s1/commands?q=clone")
+    ).text();
+    expect(one).toContain("Slash commands · 1 match");
   });
 
   it("offers every model, grouped by provider, with a filter above eight", async () => {
@@ -1048,6 +1065,37 @@ describe("the composer, as pi-web draws it", () => {
     expect(selector).toContain('hx-params="none"');
     expect(selector).toContain("/sessions/s1/model?model=fake%2Fm0");
     expect(selector).toContain('hx-target="closest .model-selector"');
+  });
+
+  it("lists models by name and keeps the reasoning row above them", async () => {
+    const { app } = testApp({
+      models: [
+        {
+          provider: "fake",
+          id: "zulu",
+          name: "zulu",
+          contextWindow: 100_000,
+          reasoning: false,
+        },
+        {
+          provider: "fake",
+          id: "alpha",
+          name: "Alpha via OpenRouter",
+          contextWindow: 100_000,
+          reasoning: false,
+        },
+      ],
+    });
+    const page = await (await app.request("/sessions/s1")).text();
+    const selector = page.slice(page.indexOf('id="model-selector"'));
+    // pi-web sorts by display name and never hoists the current model.
+    order(selector, [
+      'class="composer-thinking-field"',
+      "Change reasoning level",
+      'role="listbox"',
+      "Alpha via OpenRouter",
+      ">zulu<",
+    ]);
   });
 
   it("applies a model pick and answers with the new selector", async () => {

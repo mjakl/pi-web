@@ -1258,10 +1258,9 @@ export function createFakeWorld(
       },
     },
     resources: {
-      commands: () =>
-        Promise.resolve(
-          FAKE_COMMANDS.filter((command) => command.source !== "extension"),
-        ),
+      // A stopped session lists extension commands too: the real loader reads
+      // them off disk, gated by project trust, rather than resuming an agent.
+      commands: () => Promise.resolve(FAKE_COMMANDS),
     },
     files: {
       index: () =>

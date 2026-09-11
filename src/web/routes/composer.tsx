@@ -3,8 +3,8 @@
 // composer area owns this module.
 
 import { bashCommand } from "@core/composer";
+import { isThinkingLevel } from "@core/models";
 import { FileAccessError } from "@core/path-access";
-import { type ThinkingLevel } from "@core/ports";
 import { isSessionId } from "@core/sessions";
 import { ForbiddenPath } from "@core/workspace";
 import {
@@ -57,6 +57,10 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
     }
     const [provider, ...rest] = field(form, "model").split("/");
     const modelId = rest.join("/");
+    // "auto" is pi-web's word for leaving the level to Pi, and is not one of
+    // the levels the SDK takes.
+    // ponytail: picking "auto" again on a session that has a level set keeps
+    // the level; wire a real clear through the runtime if anyone asks.
     const thinking = field(form, "thinking");
     return guard(c, async () => {
       const id = await deps.workspace.startSession(
@@ -65,7 +69,7 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
         { images: submission.images },
         {
           ...(provider && modelId ? { model: { provider, modelId } } : {}),
-          ...(thinking ? { thinkingLevel: thinking as ThinkingLevel } : {}),
+          ...(isThinkingLevel(thinking) ? { thinkingLevel: thinking } : {}),
         },
       );
       if (c.req.header("HX-Request") !== "true") {
@@ -154,8 +158,9 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
   app.get("/sessions/:id/commands", async (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
-    const commands = await deps.workspace.commands(id, c.req.query("q") ?? "");
-    return c.html(<CommandMenu commands={commands} />);
+    const query = c.req.query("q") ?? "";
+    const commands = await deps.workspace.commands(id, query);
+    return c.html(<CommandMenu commands={commands} query={query} />);
   });
 
   app.post("/sessions/:id/compact", async (c) => {
@@ -286,7 +291,7 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
       await deps.workspace.setModel(id, {
         provider,
         modelId,
-        ...(thinking ? { thinkingLevel: thinking as ThinkingLevel } : {}),
+        ...(isThinkingLevel(thinking) ? { thinkingLevel: thinking } : {}),
       });
     } catch (error) {
       return c.text(errorText(error), 400);
@@ -317,7 +322,6 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
             ...(chosen || view.thinkingLevel === undefined
               ? {}
               : { level: view.thinkingLevel }),
-            auto: true,
             cwd: view.cwd,
           }}
         />,
@@ -330,11 +334,9 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
   app.get("/workspaces/commands", async (c) => {
     const cwd = c.req.query("cwd") ?? "";
     return guard(c, async () => {
-      const commands = await deps.workspace.folderCommands(
-        cwd,
-        c.req.query("q") ?? "",
-      );
-      return c.html(<CommandMenu commands={commands} />);
+      const query = c.req.query("q") ?? "";
+      const commands = await deps.workspace.folderCommands(cwd, query);
+      return c.html(<CommandMenu commands={commands} query={query} />);
     });
   });
 

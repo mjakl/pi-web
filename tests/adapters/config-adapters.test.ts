@@ -1,6 +1,7 @@
 import { createDirectoryBrowser } from "@adapters/fs/browse";
 import { createPiPackages } from "@adapters/pi/packages";
 import { createPiProjectTrust } from "@adapters/pi/project-trust";
+import { createPiProjectResources } from "@adapters/pi/resources";
 import { createPiSkills } from "@adapters/pi/skills";
 import {
   mkdir,
@@ -97,6 +98,30 @@ describe("project trust", () => {
       await readFile(join(agentDir, "trust.json"), "utf8"),
     );
     expect(Object.values(stored as Record<string, boolean>)).toContain(true);
+  });
+});
+
+describe("folder commands", () => {
+  it("offers extension commands, and only once the project is trusted", async () => {
+    const extensions = join(project, ".pi", "extensions");
+    await mkdir(extensions, { recursive: true });
+    await writeFile(
+      join(extensions, "probe.js"),
+      'export default (pi) => { pi.registerCommand("probe",' +
+        ' { description: "Project probe", handler: async () => {} }); };\n',
+    );
+    const extensionCommands = async () =>
+      // A fresh adapter each time: the answer is cached per folder.
+      (await createPiProjectResources({ agentDir }).commands(project)).filter(
+        (command) => command.source === "extension",
+      );
+
+    expect(await extensionCommands()).toEqual([]);
+
+    await createPiProjectTrust({ agentDir }).trust(project);
+    expect(await extensionCommands()).toEqual([
+      { name: "probe", description: "Project probe", source: "extension" },
+    ]);
   });
 });
 
