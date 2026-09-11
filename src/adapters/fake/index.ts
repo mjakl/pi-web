@@ -886,6 +886,8 @@ export function createFakeWorld(
     models?: ModelOption[];
     /** Sibling worktrees the picker offers for a folder. */
     worktrees?: (cwd: string) => WorktreeInfo[];
+    /** Which repository a folder belongs to: how sessions group by project. */
+    projects?: (cwd: string) => ProjectInfo;
     /** Folders whose project resources are gated behind trust. */
     trustRequired?: string[];
     /** Folders that are no longer on disk: their sessions are read-only. */
@@ -1134,11 +1136,12 @@ export function createFakeWorld(
       invalidate: () => undefined,
     },
     projects: {
-      resolve: (cwd) => Promise.resolve(fakeProject(cwd)),
+      resolve: (cwd) =>
+        Promise.resolve(options.projects?.(cwd) ?? fakeProject(cwd)),
       available: (cwd) => Promise.resolve(!missing.has(cwd)),
       worktrees: (cwd) =>
         Promise.resolve({
-          project: fakeProject(cwd),
+          project: options.projects?.(cwd) ?? fakeProject(cwd),
           isGit: true,
           worktrees: options.worktrees?.(cwd) ?? [
             { path: cwd, branch: "main" },

@@ -43,6 +43,13 @@ export type ProjectEntry = {
    * checkout that still exists more often than the repository root is.
    */
   entryPath: string;
+  /**
+   * The working folders of this project, newest first. Taken from the
+   * sessions themselves rather than from `git worktree list`: the selector
+   * opens with every project expanded at once, and a git call per project is
+   * hundreds of processes for a list the store already knows.
+   */
+  folders: { path: string; branch: string | null }[];
 };
 
 function projectLabel(root: string): string {
@@ -88,13 +95,23 @@ export function recentProjects(
       modifiedAt: session.modifiedAt,
       running: 0,
       entryPath: session.cwd,
+      folders: [],
     };
     if (session.modifiedAt >= entry.modifiedAt) {
       entry.modifiedAt = session.modifiedAt;
       entry.entryPath = session.cwd;
     }
     if (session.running) entry.running += 1;
+    if (!entry.folders.some((folder) => folder.path === session.cwd)) {
+      entry.folders.push({
+        path: session.cwd,
+        branch: session.worktreeBranch ?? null,
+      });
+    }
     byKey.set(key, entry);
+  }
+  for (const entry of byKey.values()) {
+    entry.folders.sort((a, b) => a.path.localeCompare(b.path));
   }
   return [...byKey.values()].sort((a, b) =>
     b.modifiedAt.localeCompare(a.modifiedAt),
@@ -139,24 +156,28 @@ export function sessionTitle(
   return summary.id.slice(0, 12);
 }
 
-const MINUTE = 60_000;
-const UNITS: [limit: number, size: number, suffix: string][] = [
-  [60 * MINUTE, MINUTE, "m"],
-  [24 * 60 * MINUTE, 60 * MINUTE, "h"],
-  [30 * 24 * 60 * MINUTE, 24 * 60 * MINUTE, "d"],
-];
-
-/** Compact age for sidebar rows: "now", "12m", "3h", "5d", else a date. */
+/**
+ * Age of a sidebar row, in pi-web's long form ("8 hours ago", "3 days ago").
+ * `lib/i18n/format.ts:formatRelativeTime` is what this mirrors, down to the
+ * rounding and the unit thresholds.
+ */
 export function relativeTime(iso: string, now = Date.now()): string {
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return "";
-  const elapsed = Math.max(0, now - then);
-  if (elapsed < MINUTE) return "now";
-  for (const [limit, size, suffix] of UNITS) {
-    if (elapsed < limit)
-      return `${String(Math.floor(elapsed / size))}${suffix}`;
-  }
-  return new Date(then).toISOString().slice(0, 10);
+  const elapsed = then - now;
+  const absolute = Math.abs(elapsed);
+  const [size, unit]: [number, Intl.RelativeTimeFormatUnit] =
+    absolute < 60_000
+      ? [1_000, "second"]
+      : absolute < 3_600_000
+        ? [60_000, "minute"]
+        : absolute < 86_400_000
+          ? [3_600_000, "hour"]
+          : [86_400_000, "day"];
+  return new Intl.RelativeTimeFormat("en", { numeric: "always" }).format(
+    Math.round(elapsed / size),
+    unit,
+  );
 }
 
 const SESSION_ID = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;

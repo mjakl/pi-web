@@ -206,12 +206,14 @@ describe("web app", () => {
     ).text();
     expect(starred).toContain('aria-pressed="true"');
     expect(starred).toContain('hx-swap-oob="true"');
-    expect(starred).toContain("★ 1");
+    // pi-web's row counts stars with a filled star icon beside the number.
+    expect(starred).toContain('class="session-star-count"');
+    expect(starred).toContain("1 starred answers");
 
     const cleared = await (
       await app.request("/sessions/s1/stars/clear", { method: "POST" })
     ).text();
-    expect(cleared).not.toContain("★ 1");
+    expect(cleared).not.toContain('class="session-star-count"');
     const page = await (await app.request("/sessions/s1")).text();
     expect(page).toContain('aria-label="Star answer"');
   });
@@ -605,6 +607,248 @@ function longApp(answers = 60) {
     ],
   });
 }
+
+/** A store with several projects, a worktree and enough projects to filter. */
+function sidebarApp() {
+  const sessions = [
+    {
+      summary: {
+        id: "s1",
+        cwd: "/repo/one",
+        name: "Stored one",
+        createdAt: "2026-09-01T00:00:00.000Z",
+        modifiedAt: "2026-09-02T00:00:00.000Z",
+        fileSize: 10,
+        projectRoot: "/repo/one",
+      },
+      entries: [
+        userEntry("u1", null, "first question"),
+        assistantEntry("a1", "u1", "an answer", 40_000),
+      ],
+    },
+    {
+      summary: {
+        id: "s2",
+        cwd: "/repo/one.wt",
+        name: "In a worktree",
+        createdAt: "2026-09-03T00:00:00.000Z",
+        modifiedAt: "2026-09-03T00:00:00.000Z",
+        fileSize: 4,
+        projectRoot: "/repo/one",
+        worktreeBranch: "feature/x",
+      },
+      entries: [userEntry("u2", null, "worktree question")],
+    },
+  ];
+  // Nine more projects, which is what turns the menu's filter box on.
+  for (let index = 0; index < 9; index += 1) {
+    sessions.push({
+      summary: {
+        id: `p${String(index)}`,
+        cwd: `/repo/other${String(index)}`,
+        name: `Other ${String(index)}`,
+        createdAt: "2026-08-01T00:00:00.000Z",
+        modifiedAt: `2026-08-0${String(index + 1)}T00:00:00.000Z`,
+        fileSize: 1,
+        projectRoot: `/repo/other${String(index)}`,
+      },
+      entries: [userEntry(`o${String(index)}`, null, "question")],
+    });
+  }
+  const world = createFakeWorld({
+    delayMs: 2,
+    sessions,
+    // /repo/one.wt is a worktree of /repo/one, so the two group together.
+    projects: (cwd) =>
+      cwd.startsWith("/repo/one")
+        ? {
+            root: "/repo/one",
+            branch: cwd === "/repo/one.wt" ? "feature/x" : "main",
+            isWorktree: cwd !== "/repo/one",
+            isTopLevel: cwd === "/repo/one",
+          }
+        : { root: cwd, branch: null, isWorktree: false, isTopLevel: true },
+  });
+  const app = createWebApp({
+    workspace: createWorkspace(world),
+    staticRoot: "/nonexistent",
+    defaultCwd: "/repo/one",
+    home: "/repo",
+    renderIntervalMs: 1,
+  });
+  return { app, world };
+}
+
+describe("the sidebar", () => {
+  it("renders pi-web's header block above the workspace pill", async () => {
+    const { app } = sidebarApp();
+    const html = await (await app.request("/sessions/s1")).text();
+    const header = html.slice(html.indexOf('id="sidebar"'));
+    const order = [
+      ">Pi Web<",
+      'aria-label="New session"',
+      'id="sidebar-refresh"',
+      'aria-label="Settings"',
+      'id="project-select"',
+      'id="sidebar-project-menu"',
+      'id="session-list"',
+    ];
+    let at = 0;
+    for (const marker of order) {
+      const found = header.indexOf(marker, at);
+      expect([marker, found > -1]).toStrictEqual([marker, true]);
+      at = found;
+    }
+    expect(header).toContain('class="anchor-sidebar-project"');
+    // The pill names the working folder, shortened against the reader's home.
+    expect(header).toContain(">~/one<");
+    expect(header).toContain("direction:rtl");
+  });
+
+  it("renders a 54px session row with pi-web's three columns", async () => {
+    const { app } = sidebarApp();
+    const html = await (await app.request("/sessions/s2")).text();
+    const row = html.slice(html.indexOf('id="row-s2"'));
+    expect(row).toContain('class="session-row"');
+    expect(row).toContain("height:54px");
+    // Selected: pi-web tints the row and puts an accent bar down its left.
+    expect(row).toContain("background:var(--bg-selected)");
+    expect(row).toContain("border-left:2px solid var(--accent)");
+    const inOrder = (text: string, markers: string[]) => {
+      let at = 0;
+      for (const marker of markers) {
+        const found = text.indexOf(marker, at);
+        expect([marker, found > -1]).toStrictEqual([marker, true]);
+        at = found;
+      }
+    };
+    inOrder(row, [
+      "In a worktree",
+      'class="session-indicator"',
+      "Session stopped",
+      " ago",
+      "feature/x",
+      'class="session-shortcut"',
+    ]);
+    // An unselected row keeps the transparent bar and no tint.
+    const start = html.indexOf('id="row-s1"');
+    // s1 is the last row of this project, so the list's end bounds the slice.
+    const other = html.slice(start, html.indexOf('id="session-finished"'));
+    expect(other).toContain("border-left:2px solid transparent");
+    expect(other).not.toContain("background:var(--bg-selected)");
+
+    // The right column arrives with the row's own metadata.
+    const loaded = await (await app.request("/sessions/s2/row")).text();
+    inOrder(loaded, [
+      'class="session-shortcut"',
+      'class="session-menu-trigger"',
+      'class="session-counts"',
+      "1 msgs",
+    ]);
+    expect(loaded).toContain("min-width:64px");
+  });
+
+  it("hangs pi-web's 144px action menu off a row that knows its counts", async () => {
+    const { app } = sidebarApp();
+    // The list renders placeholders; a row fetches its own metadata, and only
+    // then can it say whether Stop or Activate belongs in the menu.
+    const html = await (await app.request("/sessions/s1/row")).text();
+    expect(html).toContain('id="row-menu-s1"');
+    const menu = html.slice(html.indexOf('id="row-menu-s1"'));
+    expect(menu).toContain('popover="auto"');
+    expect(menu).toContain('role="group"');
+    expect(menu).toContain("width:min(144px, calc(100vw - 16px))");
+    expect(menu).toContain("position:fixed");
+    const items = [...menu.matchAll(/class="menu-item[^"]*"[^>]*>([^<]+)</g)]
+      .map((match) => match[1])
+      .slice(0, 3);
+    expect(items).toStrictEqual(["Activate", "Rename", "Delete"]);
+    expect(menu).toContain("menu-item menu-item-danger");
+  });
+
+  it("offers Clear all stars only while a session has stars", async () => {
+    const { app } = sidebarApp();
+    const before = await (await app.request("/sessions/s1/row")).text();
+    expect(before).not.toContain("Clear all stars");
+    const form = new FormData();
+    form.set("entryId", "a1");
+    form.set("starred", "true");
+    await app.request("/sessions/s1/star", { method: "POST", body: form });
+    const row = await (await app.request("/sessions/s1/row")).text();
+    expect(row).toContain("Clear all stars");
+    expect(row).toContain('class="session-star-count"');
+  });
+
+  it("swaps the row for an input when Rename is chosen, and back again", async () => {
+    const { app } = sidebarApp();
+    const renaming = await (await app.request("/sessions/s1/rename")).text();
+    expect(renaming).toContain('<form id="row-s1" class="session-row"');
+    expect(renaming).toContain("border:1px solid var(--accent)");
+    expect(renaming).toContain('value="Stored one"');
+    // Escape asks for the row back.
+    expect(renaming).toContain('hx-get="/sessions/s1/row"');
+
+    const posted = new FormData();
+    posted.set("name", "Renamed");
+    const row = await (
+      await app.request("/sessions/s1/rename", {
+        method: "POST",
+        body: posted,
+      })
+    ).text();
+    expect(row).toContain("Renamed");
+    expect(row).toContain('class="session-row"');
+  });
+
+  it("groups the workspace menu by project, with worktrees under it", async () => {
+    const { app } = sidebarApp();
+    const menu = await (
+      await app.request("/sidebar/projects", {
+        headers: { "HX-Current-URL": "http://x/sessions/s2" },
+      })
+    ).text();
+    // Eleven projects, so the filter box is there (pi-web shows it above 8).
+    expect(menu).toContain('class="menu-filter"');
+    expect(menu).toContain("Filter projects…");
+    // The project with two folders expands; the others select directly.
+    const group = menu.slice(menu.indexOf('data-project-key="/repo/one"'));
+    expect(group).toContain('aria-expanded="true"');
+    expect(group).toContain('class="menu-item project-folder-row"');
+    expect(group).toContain("project-folder-child");
+    expect(group).toContain('class="project-folder-path"');
+    expect(group).toContain(">~/one.wt<");
+    // Exactly one row carries the tick, on the folder the sidebar is showing.
+    expect([...menu.matchAll(/aria-current="true"/g)]).toHaveLength(1);
+    expect(menu).toContain("/sidebar?project=%2Frepo%2Fone&amp;cwd=");
+    // "Custom path…" sits outside the scrolling list, as pi-web has it.
+    expect(menu.indexOf("Custom path…")).toBeGreaterThan(
+      menu.indexOf("project-folder-child"),
+    );
+  });
+
+  it("drops the filter box when there are few projects", async () => {
+    const { app } = testApp();
+    const menu = await (await app.request("/sidebar/projects")).text();
+    expect(menu).not.toContain('class="menu-filter"');
+    expect(menu).toContain("Custom path…");
+  });
+
+  it("switches folder and project together, and re-titles the pill", async () => {
+    const { app } = sidebarApp();
+    const res = await app.request(
+      "/sidebar?project=%2Frepo%2Fone&cwd=%2Frepo%2Fone.wt",
+    );
+    const html = await res.text();
+    expect(html).toContain('id="project-nav"');
+    // The pill rides along out of band so it names the folder just chosen.
+    expect(html).toContain('id="project-picker"');
+    expect(html).toContain('hx-swap-oob="true"');
+    expect(html).toContain(">~/one.wt<");
+    const cookies = res.headers.getSetCookie().join(" ");
+    expect(cookies).toContain("web-pi-project=");
+    expect(cookies).toContain("web-pi-cwd=");
+  });
+});
 
 describe("conversation rail, shelf, and written files", () => {
   it("renders a mark per prompt, star, and branch, with previews", async () => {

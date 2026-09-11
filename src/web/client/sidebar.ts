@@ -1,5 +1,7 @@
-// The sidebar's browser half: which sessions finished while the reader was
-// elsewhere, the project menu's filter, and the refresh button's check mark.
+// The sidebar's browser half: the state pi-web keeps in React and web-pi
+// cannot render from the server — which sessions finished while the reader
+// was elsewhere, where a row's fixed-position menu lands, whether a modifier
+// is held, and which project group is open.
 
 import { setUpFolderMemory } from "./preferences.ts";
 
@@ -34,14 +36,25 @@ function currentSessionId(): string {
   return document.querySelector("main")?.getAttribute("data-session-id") ?? "";
 }
 
+/**
+ * The unread halo (§3.4): pi-web renders the indicator in `--info` with
+ * `.session-indicator-unread`, and titles it "<status> · New activity".
+ */
 function paintUnread(): void {
   const ids = unreadIds();
   for (const row of document.querySelectorAll<HTMLElement>(
-    "[data-session-id]",
+    ".session-row[data-session-id]",
   )) {
     const unread = ids.has(row.dataset["sessionId"] ?? "");
-    const dot = row.querySelector<HTMLElement>(".unread-dot");
-    if (dot) dot.hidden = !unread;
+    const indicator = row.querySelector<HTMLElement>(".session-indicator");
+    if (!indicator) continue;
+    indicator.classList.toggle("session-indicator-unread", unread);
+    const status = indicator.dataset["status"] ?? "";
+    const label = unread ? `${status} · New activity` : status;
+    indicator.title = label;
+    indicator.setAttribute("aria-label", label);
+    if (unread) indicator.style.color = "var(--info)";
+    else indicator.style.removeProperty("color");
   }
   const shown =
     document.getElementById("project-select")?.dataset["projectKey"] ?? "";
@@ -51,16 +64,27 @@ function paintUnread(): void {
   if (dot && [...ids.values()].some((key) => key !== "" && key !== shown)) {
     dot.hidden = false;
   }
-  for (const row of document.querySelectorAll<HTMLElement>(
-    "li[data-project-key]",
+  for (const group of document.querySelectorAll<HTMLElement>(
+    ".project-folder-group[data-project-key]",
   )) {
-    const key = row.dataset["projectKey"] ?? "";
+    const key = group.dataset["projectKey"] ?? "";
     const count = [...ids.values()].filter((project) => project === key).length;
-    const badge = row.querySelector<HTMLElement>(".project-unread");
-    if (badge) {
-      badge.textContent = String(count);
-      badge.hidden = count === 0;
+    const wrapper = group.querySelector<HTMLElement>(".project-activity");
+    const badge = group.querySelector<HTMLElement>(".project-unread");
+    const number = group.querySelector<HTMLElement>(".project-unread-count");
+    if (!wrapper || !badge || !number) continue;
+    // The wrapper is what the label's flex space is measured against, so it
+    // stays out of the layout entirely while a project is quiet.
+    const running = group.querySelector(".project-running") !== null;
+    wrapper.style.display = running || count > 0 ? "inline-flex" : "none";
+    badge.style.display = count === 0 ? "none" : "inline-flex";
+    if (count === 0) {
+      number.textContent = "";
+      badge.removeAttribute("aria-label");
+      continue;
     }
+    number.textContent = String(count);
+    badge.setAttribute("aria-label", `New session activity (${String(count)})`);
   }
 }
 
@@ -101,15 +125,15 @@ function applyProjectFilter(): void {
   if (!input) return;
   const needle = input.value.trim().toLowerCase();
   let matches = 0;
-  for (const row of document.querySelectorAll<HTMLElement>(
-    "#sidebar-project-menu li[data-project-key]",
+  for (const group of document.querySelectorAll<HTMLElement>(
+    "#sidebar-project-menu .project-folder-group[data-project-key]",
   )) {
-    const key = (row.dataset["projectKey"] ?? "").toLowerCase();
-    row.hidden = needle !== "" && !key.includes(needle);
-    if (!row.hidden) matches += 1;
+    const key = (group.dataset["projectKey"] ?? "").toLowerCase();
+    group.hidden = needle !== "" && !key.includes(needle);
+    if (!group.hidden) matches += 1;
   }
   const empty = document.getElementById("project-empty");
-  if (empty) empty.hidden = matches > 0;
+  if (empty) empty.hidden = matches > 0 || needle === "";
 }
 
 function setUpProjectFilter(): void {
@@ -133,15 +157,178 @@ function setUpProjectFilter(): void {
   });
 }
 
-/** The refresh button says it worked: a check for two seconds. */
+/**
+ * A project with more than one working folder opens and closes in place
+ * (§3.3). The folders are already in the page, so this only flips the
+ * disclosure; `areas/sidebar.css` turns aria-expanded into the chevron.
+ */
+function setUpFolderGroups(): void {
+  document.body.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const row = target.closest<HTMLElement>(
+      ".project-folder-row[aria-expanded]",
+    );
+    if (!row) return;
+    const open = row.getAttribute("aria-expanded") !== "true";
+    row.setAttribute("aria-expanded", open ? "true" : "false");
+    const folders = document.getElementById(
+      row.getAttribute("aria-controls") ?? "",
+    );
+    if (folders) folders.hidden = !open;
+  });
+}
+
+/** The refresh button says it worked: a check for two seconds (§3.1). */
 function setUpSidebarRefresh(): void {
   const button = document.getElementById("sidebar-refresh");
   if (!button) return;
   button.addEventListener("htmx:afterRequest", () => {
-    button.classList.add("is-hover-locked");
+    button.setAttribute("data-done", "");
     setTimeout(() => {
-      button.classList.remove("is-hover-locked");
+      button.removeAttribute("data-done");
     }, 2000);
+  });
+}
+
+/**
+ * Where a row's action menu lands (SessionItem.tsx `menuPositionFor`): a
+ * fixed box under the trigger, 144px wide, clamped to the viewport and
+ * flipped above the row when it would not fit below. Popover toggle events
+ * do not bubble, so this listens in the capture phase.
+ */
+function placeRowMenu(menu: HTMLElement): void {
+  const trigger = menu
+    .closest(".session-row")
+    ?.querySelector<HTMLElement>(".session-menu-trigger");
+  if (!trigger) return;
+  const rect = trigger.getBoundingClientRect();
+  const width = 144;
+  const rowHeight = matchMedia("(pointer: coarse)").matches ? 44 : 34;
+  const height = menu.querySelectorAll(".menu-item").length * rowHeight + 10;
+  menu.style.left = `${String(
+    Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
+  )}px`;
+  menu.style.top = `${String(
+    rect.bottom + 4 + height <= window.innerHeight
+      ? rect.bottom + 4
+      : Math.max(8, rect.top - height - 4),
+  )}px`;
+}
+
+function setUpRowMenus(): void {
+  document.addEventListener(
+    "beforetoggle",
+    (event) => {
+      const menu = event.target;
+      if (
+        !(menu instanceof HTMLElement) ||
+        !menu.matches(".session-row > .menu-surface") ||
+        event.newState !== "open"
+      ) {
+        return;
+      }
+      placeRowMenu(menu);
+    },
+    true,
+  );
+}
+
+/**
+ * pi-web puts a ⌘1…⌘0 badge where a row's menu trigger is while a modifier
+ * is held, and jumps to that session on the matching digit (§3.4). The
+ * modifier decides the label, so it is written here rather than server-side.
+ */
+function setUpShortcuts(): void {
+  let modifier: "ctrl" | "meta" | null = null;
+
+  const swap = (
+    badge: HTMLElement,
+    other: HTMLElement | null,
+    text: string,
+  ) => {
+    const shown = modifier !== null && text !== "";
+    badge.textContent = text;
+    badge.style.display = shown ? "flex" : "none";
+    if (other) other.style.display = shown ? "none" : "flex";
+  };
+
+  const paint = () => {
+    const label = modifier === "meta" ? "⌘" : "Ctrl+";
+    const newSession = document.querySelector<HTMLElement>(
+      ".new-session-shortcut",
+    );
+    if (newSession) {
+      swap(
+        newSession,
+        document.querySelector<HTMLElement>(".new-session-plus"),
+        `${label}K`,
+      );
+    }
+    const rows = document.querySelectorAll<HTMLElement>(
+      "#session-list .session-row",
+    );
+    rows.forEach((row, index) => {
+      const badge = row.querySelector<HTMLElement>(".session-shortcut");
+      if (!badge) return;
+      swap(
+        badge,
+        row.querySelector<HTMLElement>(".session-menu-trigger"),
+        index < 10 ? `${label}${index === 9 ? "0" : String(index + 1)}` : "",
+      );
+    });
+  };
+
+  const update = (event: KeyboardEvent) => {
+    const next = event.metaKey ? "meta" : event.ctrlKey ? "ctrl" : null;
+    if (next === modifier) return;
+    modifier = next;
+    paint();
+  };
+
+  window.addEventListener("keydown", (event) => {
+    update(event);
+    if (
+      event.repeat ||
+      event.altKey ||
+      event.shiftKey ||
+      (!event.ctrlKey && !event.metaKey) ||
+      !/^[0-9]$/.test(event.key)
+    ) {
+      return;
+    }
+    const index = event.key === "0" ? 9 : Number(event.key) - 1;
+    const row = document.querySelectorAll<HTMLElement>(
+      "#session-list .session-row",
+    )[index];
+    const link = row?.querySelector<HTMLAnchorElement>("a[href]");
+    if (!link) return;
+    event.preventDefault();
+    link.click();
+  });
+  window.addEventListener("keyup", update);
+  window.addEventListener("blur", () => {
+    if (modifier === null) return;
+    modifier = null;
+    paint();
+  });
+  // A row swapped in while the modifier is held arrives with its badge
+  // hidden and unnumbered, and the rows after it have all moved down one.
+  document.body.addEventListener("htmx:afterSwap", (event) => {
+    const target = event.target;
+    if (modifier === null || !(target instanceof Element)) return;
+    if (target.closest("#sidebar")) paint();
+  });
+}
+
+/** pi-web's whole row is the click target, not just its title (§3.4). */
+function setUpRowSelection(): void {
+  document.body.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const row = target.closest<HTMLElement>(".session-row");
+    if (!row || target.closest("a, button, input, .menu-surface")) return;
+    row.querySelector<HTMLAnchorElement>("a[href]")?.click();
   });
 }
 
@@ -149,5 +336,9 @@ export function setUpSidebar(): void {
   setUpFolderMemory();
   setUpUnread();
   setUpProjectFilter();
+  setUpFolderGroups();
   setUpSidebarRefresh();
+  setUpRowMenus();
+  setUpShortcuts();
+  setUpRowSelection();
 }

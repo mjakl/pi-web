@@ -6,6 +6,7 @@ import { HtmlLayout } from "@web/HtmlLayout";
 import { composerRoutes } from "@web/routes/composer";
 import { filesRoutes } from "@web/routes/files";
 import {
+  currentSessionId,
   CWD_COOKIE,
   errorText,
   PROJECT_COOKIE,
@@ -88,14 +89,26 @@ export function createWebApp(deps: WebDeps) {
     rememberProject(c, sidebar);
     c.header("HX-Push-Url", `/sessions/${id}`);
     return c.render(
-      <SessionPage sidebar={sidebar} view={view} draft={draft} />,
+      <SessionPage
+        sidebar={sidebar}
+        view={view}
+        draft={draft}
+        {...(deps.home === undefined ? {} : { home: deps.home })}
+      />,
     );
   }
 
   async function row(c: Context, id: string): Promise<Response> {
     const found = await deps.workspace.row(id);
     if (!found) return c.notFound();
-    return c.html(<SessionRow {...found} />);
+    // The open session's row keeps its selected background through a swap.
+    const activeId = currentSessionId(c);
+    return c.html(
+      <SessionRow
+        {...found}
+        {...(activeId === undefined ? {} : { activeId })}
+      />,
+    );
   }
 
   /** Reports the failure as a toast instead of breaking the page. */

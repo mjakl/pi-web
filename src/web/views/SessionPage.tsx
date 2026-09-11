@@ -240,6 +240,7 @@ function Shell({
   sidebar,
   activeId,
   cwd,
+  home,
   usage,
   trust,
   children,
@@ -249,6 +250,8 @@ function Shell({
   activeId?: string;
   /** The folder on screen: the document title is built from it. */
   cwd?: string;
+  /** The reader's home folder: the workspace pill shortens paths with it. */
+  home?: string;
   usage?: ContextUsage;
   trust?: { requiresTrust: boolean; trusted: boolean };
   children?: unknown;
@@ -270,6 +273,7 @@ function Shell({
           view={sidebar}
           {...(activeId === undefined ? {} : { activeId })}
           {...(cwd === undefined ? {} : { cwd })}
+          {...(home === undefined ? {} : { home })}
         />
       </div>
       <div
@@ -361,9 +365,21 @@ function FilePanel({ sessionId }: { sessionId: string }) {
   );
 }
 
-export function IndexPage({ sidebar }: { sidebar: SidebarView }) {
+export function IndexPage({
+  sidebar,
+  cwd,
+  home,
+}: {
+  sidebar: SidebarView;
+  cwd?: string;
+  home?: string;
+}) {
   return (
-    <Shell sidebar={sidebar}>
+    <Shell
+      sidebar={sidebar}
+      {...(cwd === undefined ? {} : { cwd })}
+      {...(home === undefined ? {} : { home })}
+    >
       {/* §2.5: nothing selected yet — the arrow points at the sidebar. */}
       <div style="height:100%; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:15px">
         Select a session to view the conversation
@@ -376,13 +392,20 @@ export function NewSessionPage({
   sidebar,
   view,
   draft,
+  home,
 }: {
   sidebar: SidebarView;
   view: NewSessionView;
   draft?: string;
+  home?: string;
 }) {
   return (
-    <Shell sidebar={sidebar} cwd={view.cwd} trust={view.trust}>
+    <Shell
+      sidebar={sidebar}
+      cwd={view.cwd}
+      trust={view.trust}
+      {...(home === undefined ? {} : { home })}
+    >
       <section class="chat-window is-empty" aria-label="Messages">
         <div class="chat-body">
           <div class="chat-scroll">
@@ -432,11 +455,13 @@ export function SessionPage({
   view,
   draft,
   trust,
+  home,
 }: {
   sidebar: SidebarView;
   view: SessionView;
   draft?: string;
   trust?: { requiresTrust: boolean; trusted: boolean };
+  home?: string;
 }) {
   const { summary } = view;
   const leafId = view.leaves.find((leaf) => leaf.current)?.id;
@@ -455,6 +480,7 @@ export function SessionPage({
       activeId={summary.id}
       cwd={summary.cwd}
       usage={view.usage}
+      {...(home === undefined ? {} : { home })}
       {...(trust === undefined ? {} : { trust })}
       {...(missingFolder
         ? {}

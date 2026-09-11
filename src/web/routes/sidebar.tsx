@@ -9,12 +9,13 @@ import {
   ProjectNav,
   ProjectPicker,
   ProjectSelect,
+  RenameRow,
   SIDEBAR_PAGE,
   SessionList,
   SessionRow,
   SessionRows,
 } from "@web/views/Sidebar";
-import { BrowsePane, FolderList, WorkspacePicker } from "@web/views/Workspace";
+import { BrowsePane, DirectoryPicker, FolderList } from "@web/views/Workspace";
 import { getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
 import {
@@ -33,9 +34,15 @@ import {
 export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
   const { deps, sidebarOf, remember, currentCwd, row, guard } = ctx;
 
-  /** Switching project: remember the choice and re-render the whole nav. */
+  /**
+   * Switching project or working folder: remember both, re-render the nav,
+   * and send the pill along out of band so it names the new folder.
+   * Validating the folder is also what makes files in it readable, the same
+   * grant the picker's commit makes.
+   */
   app.get("/sidebar", async (c) => {
     const project = c.req.query("project");
+    const cwd = c.req.query("cwd");
     if (project !== undefined && project !== "") {
       setCookie(c, PROJECT_COOKIE, project, {
         path: "/",
@@ -43,22 +50,44 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
         maxAge: 60 * 60 * 24 * 365,
       });
     }
+    let folder = cwd;
+    if (cwd !== undefined && cwd !== "") {
+      const chosen = await deps.workspace
+        .validateFolder(cwd)
+        .catch(() => undefined);
+      folder = chosen?.cwd ?? cwd;
+      remember(c, CWD_COOKIE, folder);
+    }
     const sidebar = await deps.workspace.sidebar(
       project === undefined ? {} : { remembered: project },
     );
     const activeId = currentSessionId(c);
     return c.html(
-      <ProjectNav
-        view={sidebar}
-        {...(activeId === undefined ? {} : { activeId })}
-      />,
+      <>
+        <ProjectNav
+          view={sidebar}
+          {...(activeId === undefined ? {} : { activeId })}
+        />
+        {folder === undefined ? null : (
+          <ProjectSelect
+            view={sidebar}
+            cwd={folder}
+            oob
+            {...(deps.home === undefined ? {} : { home: deps.home })}
+          />
+        )}
+      </>,
     );
   });
 
   /** The projects to choose from; fetched when the selector opens. */
   app.get("/sidebar/projects", async (c) => {
     return c.html(
-      <ProjectPicker view={await sidebarOf(c, currentSessionId(c))} />,
+      <ProjectPicker
+        view={await sidebarOf(c, currentSessionId(c))}
+        cwd={currentCwd(c)}
+        {...(deps.home === undefined ? {} : { home: deps.home })}
+      />,
     );
   });
 
@@ -129,6 +158,15 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
     });
   }
 
+  /** The row turned into an input, which is how pi-web renames (§3.4). */
+  app.get("/sessions/:id/rename", async (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    const found = await deps.workspace.row(id);
+    if (!found) return c.notFound();
+    return c.html(<RenameRow {...found} />);
+  });
+
   app.post("/sessions/:id/rename", async (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
@@ -164,17 +202,10 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
   // --- Workspace selection ------------------------------------------------
 
   app.get("/workspaces/picker", async (c) => {
-    const [sidebar, browse] = await Promise.all([
-      sidebarOf(c, currentSessionId(c)),
-      deps.workspace.browse(currentCwd(c)).catch(() => deps.workspace.browse()),
-    ]);
-    return c.html(
-      <WorkspacePicker
-        sidebar={sidebar}
-        browse={browse}
-        {...(deps.home === undefined ? {} : { home: deps.home })}
-      />,
-    );
+    const browse = await deps.workspace
+      .browse(currentCwd(c))
+      .catch(() => deps.workspace.browse());
+    return c.html(<DirectoryPicker {...browse} />);
   });
 
   /** The worktrees of one project row, probed when it is opened. */
@@ -205,21 +236,10 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
       const listing = await deps.workspace.browse(
         path === undefined || path.trim() === "" ? undefined : path,
       );
-      return await c.html(
-        <BrowsePane
-          {...listing}
-          {...(deps.home === undefined ? {} : { home: deps.home })}
-        />,
-      );
+      return await c.html(<BrowsePane {...listing} />);
     } catch (error) {
       const listing = await deps.workspace.browse();
-      return c.html(
-        <BrowsePane
-          {...listing}
-          error={errorText(error)}
-          {...(deps.home === undefined ? {} : { home: deps.home })}
-        />,
-      );
+      return c.html(<BrowsePane {...listing} error={errorText(error)} />);
     }
   });
 
@@ -261,6 +281,7 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
   app.get("/events", (c) => {
     const remembered = getCookie(c, PROJECT_COOKIE);
     const activeId = currentSessionId(c);
+    const cwd = currentCwd(c);
     return streamSSE(c, async (stream) => {
       let badges = "";
       let queue: Promise<void> = Promise.resolve();
@@ -306,7 +327,14 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
               badges = signature;
               await stream.writeSSE({
                 event: "rows",
-                data: await html(<ProjectSelect view={view} oob />),
+                data: await html(
+                  <ProjectSelect
+                    view={view}
+                    cwd={cwd}
+                    oob
+                    {...(deps.home === undefined ? {} : { home: deps.home })}
+                  />,
+                ),
               });
             }
             if (event.type === "finished") {
