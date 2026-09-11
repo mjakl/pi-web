@@ -65,6 +65,9 @@ function Node({
         data-entry-id={mark.id}
         data-branch="true"
         aria-label={label}
+        /* pi-web previews the branch this mark leads to while the pointer
+           rests on it, anywhere in the expanded rail. */
+        data-preview={label}
         style={`left:${left}; top:${top}; height:max(1px, ${markHeight(rows)})`}
         hx-post={`/sessions/${sessionId}/navigate`}
         hx-vals={JSON.stringify({ entryId: mark.targetLeafId })}
@@ -125,40 +128,66 @@ function Node({
   );
 }
 
+/** pi-web's GRAPH_NODE_CLEARANCE: the space it keeps around every node. */
+const CLEARANCE = 5;
+
 /**
- * pi-web's bezier connectors. The layer spans exactly the rows, so one
- * viewBox unit is one row and `preserveAspectRatio="none"` stretches it to
- * the gap the browser computed: the curve is pi-web's control points scaled
- * on one axis, which is the same curve.
+ * One of pi-web's bezier connectors. The clearance is in pixels and the gap is
+ * only known to the browser, so each edge gets a box of its own and the curve
+ * is normalised into it: one viewBox unit is the whole edge, and
+ * `preserveAspectRatio="none"` stretches pi-web's control points on one axis,
+ * which is the same curve. An edge shorter than the clearance collapses to no
+ * height, which is pi-web dropping it — why a crowded rail shows no spine.
  */
+function Edge({
+  mark,
+  parent,
+  rows,
+  width,
+}: {
+  mark: RailMark;
+  parent: RailMark;
+  rows: number;
+  width: number;
+}) {
+  const x = WIDTH / 2 + mark.lane * LANE;
+  const px = WIDTH / 2 + parent.lane * LANE;
+  const span = mark.row - parent.row;
+  return (
+    <svg
+      class="minimap-graph"
+      aria-hidden="true"
+      viewBox={`0 0 ${String(width)} 1`}
+      preserveAspectRatio="none"
+      style={
+        `width:${String(width)}px;` +
+        ` top:calc(${String(PADDING + CLEARANCE)}px + ${String(parent.row)} * ${gap(rows)});` +
+        ` height:max(0px, calc(${String(span)} * ${gap(rows)} - ${String(CLEARANCE * 2)}px))`
+      }
+    >
+      <path
+        class={mark.active && parent.active ? "is-active" : ""}
+        d={`M ${String(px)} 0 C ${String(px)} 1, ${String(x)} 0, ${String(x)} 1`}
+        fill="none"
+        vector-effect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
 function Graph({ marks, rows }: { marks: RailMark[]; rows: number }) {
   const byId = new Map(marks.map((mark) => [mark.id, mark]));
   const lanes = Math.max(...marks.map((mark) => mark.lane), 0);
   const width = lanes * LANE + WIDTH;
   return (
-    <svg
-      class="minimap-graph"
-      aria-hidden="true"
-      viewBox={`0 0 ${String(width)} ${String(Math.max(rows, 1))}`}
-      preserveAspectRatio="none"
-      style={`width:${String(width)}px; top:${String(PADDING)}px; height:calc(${String(rows)} * ${gap(rows)})`}
-    >
+    <>
       {marks.map((mark) => {
         const parent =
           mark.parentId === null ? undefined : byId.get(mark.parentId);
         if (!parent) return null;
-        const x = WIDTH / 2 + mark.lane * LANE;
-        const px = WIDTH / 2 + parent.lane * LANE;
-        return (
-          <path
-            class={mark.active && parent.active ? "is-active" : ""}
-            d={`M ${String(px)} ${String(parent.row)} C ${String(px)} ${String(mark.row)}, ${String(x)} ${String(parent.row)}, ${String(x)} ${String(mark.row)}`}
-            fill="none"
-            vector-effect="non-scaling-stroke"
-          />
-        );
+        return <Edge mark={mark} parent={parent} rows={rows} width={width} />;
       })}
-    </svg>
+    </>
   );
 }
 
@@ -184,7 +213,9 @@ export function Rail({ view, oob }: { view: SessionView; oob?: boolean }) {
     >
       {marks.length < 2 ? null : (
         <>
-          {branched ? <Graph marks={marks} rows={rows} /> : null}
+          {/* pi-web chains the anchors into a parent/child path even with no
+              fork in the session, so a linear rail carries the spine too. */}
+          <Graph marks={marks} rows={rows} />
           {marks.map((mark) => (
             <Node mark={mark} rows={rows} sessionId={view.summary.id} />
           ))}

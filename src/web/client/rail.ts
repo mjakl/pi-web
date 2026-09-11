@@ -228,8 +228,13 @@ export function setUpRail(): void {
     preview(row);
   };
   rail.addEventListener("pointermove", (event) => {
-    if ((event.target as HTMLElement).closest(".minimap-branch")) {
-      hover(undefined);
+    // pi-web previews a branch mark from the mark itself, so the whole
+    // expanded rail is a hover target, not just the 36px strip.
+    const branch = (event.target as HTMLElement).closest<HTMLElement>(
+      ".minimap-branch",
+    );
+    if (branch) {
+      hover(branch);
       return;
     }
     if (!onStrip(event.clientX)) {
@@ -301,7 +306,10 @@ function setUpPreview(): (row: HTMLElement | undefined) => void {
     if (timer) clearTimeout(timer);
     timer = undefined;
     popover.hidden = true;
-    const mark = row?.querySelector<HTMLElement>("[data-preview]");
+    const mark =
+      row?.matches("[data-preview]") === true
+        ? row
+        : row?.querySelector<HTMLElement>("[data-preview]");
     const message = mark?.dataset["preview"];
     if (!mark || message === undefined || message === "") return;
     timer = setTimeout(() => {

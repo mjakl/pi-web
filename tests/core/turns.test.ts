@@ -232,8 +232,20 @@ describe("pageItems", () => {
     assistant("a3", [text("three")]),
   ];
 
-  it("takes the tail and pulls it back to a turn boundary", () => {
+  it("takes the plain tail, mid-turn or not", () => {
     const page = pageItems(items, { tail: 3 });
+    expect(page.items.map((item) => item.entryId)).toEqual(["a2", "u3", "a3"]);
+    expect(page.hasMore).toBe(true);
+    expect(page.oldestId).toBe("a2");
+  });
+
+  it("counts the tail in entries when the branch is given", () => {
+    // a1 stands for two entries, its call and the result, so five entries
+    // back is four cards where counting cards would have shown five.
+    const page = pageItems(items, {
+      tail: 5,
+      entryIds: ["u1", "a1", "a1r", "u2", "a2", "u3", "a3"],
+    });
     expect(page.items.map((item) => item.entryId)).toEqual([
       "u2",
       "a2",
@@ -241,7 +253,18 @@ describe("pageItems", () => {
       "a3",
     ]);
     expect(page.hasMore).toBe(true);
-    expect(page.oldestId).toBe("u2");
+  });
+
+  it("never widens a tail past its size on a session with one long turn", () => {
+    const long = [
+      user("u1"),
+      ...Array.from({ length: 40 }, (_, i) =>
+        assistant(`a${String(i)}`, [text(String(i))]),
+      ),
+    ];
+    const page = pageItems(long, { tail: 5 });
+    expect(page.items).toHaveLength(5);
+    expect(page.hasMore).toBe(true);
   });
 
   it("pages backwards from an entry already on screen", () => {
@@ -252,7 +275,7 @@ describe("pageItems", () => {
 
   it("widens the page until the requested entry is on it", () => {
     const page = pageItems(items, { tail: 1, through: "a1" });
-    expect(page.items[0]?.entryId).toBe("u1");
+    expect(page.items[0]?.entryId).toBe("a1");
   });
 
   it("refuses an entry that is not on this branch", () => {

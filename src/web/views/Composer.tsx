@@ -259,7 +259,15 @@ export function modelPick(view: SessionView): ModelPick {
     // A session nothing is running for still offers the levels its model
     // knows, as pi-web's picker does from the model list alone.
     levels: status?.thinkingLevels ?? current?.thinkingLevels ?? [],
-    ...(status === null ? {} : { level: status.thinkingLevel }),
+    // Nothing is running, so the level is the one the branch last switched to,
+    // else the one an `enabledModels` pattern pinned for this model. That is
+    // what pi-web puts beside the name before a turn (session-reader.ts
+    // `getSessionSettings`); neither reads "auto", as it does there.
+    ...(status === null
+      ? (view.thinking ?? current?.pin) === undefined
+        ? {}
+        : { level: view.thinking ?? current?.pin }
+      : { level: status.thinkingLevel }),
     sessionId: view.summary.id,
     disabled: status?.running === true || status?.compacting === true,
   };

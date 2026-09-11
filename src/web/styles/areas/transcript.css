@@ -240,7 +240,12 @@ html.dark .hljs-meta {
   opacity: 1;
   pointer-events: auto;
 }
-#rail-column.is-expanded #rail[data-branched="true"] .minimap-graph path {
+/* Expanding reveals the other branches; the path being read keeps pi-web's
+   0.8 (ChatMinimap.tsx: `opacity={node.active ? 0.8 : 0.55}`). */
+#rail-column.is-expanded
+  #rail[data-branched="true"]
+  .minimap-graph
+  path:not(.is-active) {
   opacity: 0.55;
 }
 .minimap-row {

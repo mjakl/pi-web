@@ -25,7 +25,7 @@ import {
   samePath,
   withinAny,
 } from "./path-access.ts";
-import { initialModel, initialThinking } from "./models.ts";
+import { initialModel, initialThinking, isThinkingLevel } from "./models.ts";
 import type { PackagesView, PackageScope } from "./packages.ts";
 import type {
   SkillInfo,
@@ -150,6 +150,11 @@ export type SessionView = {
    * before a runtime exists. A live session reports its own in `status`.
    */
   model?: ModelOption;
+  /**
+   * Reasoning level the branch last switched to, beside that model. A live
+   * session reports its own in `status`.
+   */
+  thinking?: ThinkingLevel;
   /** `enabledModels` patterns that matched nothing, shown once per page. */
   modelWarnings: string[];
   /** Entry ids of starred answers. */
@@ -373,10 +378,12 @@ export function createWorkspace(deps: {
     // `turnStart` moves to the end of the branch the moment the agent settles,
     // so a settled turn is part of the log and only the settled-turn render
     // still sees it.
-    const settled = projectTranscript(
-      snapshot.branch.slice(0, snapshot.turnStart),
-    );
-    const page = pageItems(settled.items, options);
+    const settledBranch = snapshot.branch.slice(0, snapshot.turnStart);
+    const settled = projectTranscript(settledBranch);
+    const page = pageItems(settled.items, {
+      ...options,
+      entryIds: settledBranch.map((entry) => entry.id),
+    });
     deferThinking(page.items);
     const turn = projectTranscript(snapshot.branch.slice(snapshot.turnStart));
     if (snapshot.partial) {
@@ -473,7 +480,10 @@ export function createWorkspace(deps: {
     const transcript = projectTranscript(stored.branch);
     const starred = readStars(stored.entries);
     const leafId = stored.branch.at(-1)?.id ?? null;
-    const page = pageItems(transcript.items, options);
+    const page = pageItems(transcript.items, {
+      ...options,
+      entryIds: stored.branch.map((entry) => entry.id),
+    });
     deferThinking(page.items);
     fillCompactions(stored.summary.id, stored.entries, page.items);
     const listing = await modelsFor(stored.summary.cwd);
@@ -494,15 +504,17 @@ export function createWorkspace(deps: {
       settledTurn: [],
       status: null,
       tokens: sessionStats(stored.entries).tokens,
-      usage: contextUsage({
-        tokens: transcript.lastContextTokens,
-        contextWindow: model?.contextWindow,
-        ...(options.warnTokens === undefined
-          ? {}
-          : { warnTokens: options.warnTokens }),
-      }),
+      // pi-web reads context usage off the running agent, so a session
+      // nothing is attached to shows no gauge, no warning tint on the
+      // compact button, and no context rows in the stats popover. Without a
+      // window there is nothing to measure against, which says exactly that.
+      usage: contextUsage({ tokens: null, contextWindow: null }),
       models: listing.models,
       ...(model === undefined ? {} : { model }),
+      ...(transcript.lastThinking !== null &&
+      isThinkingLevel(transcript.lastThinking)
+        ? { thinking: transcript.lastThinking }
+        : {}),
       modelWarnings: listing.warnings,
       starred,
       leaves: branchLeaves(stored.entries, leafId),

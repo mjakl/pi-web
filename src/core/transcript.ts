@@ -179,6 +179,13 @@ export type Transcript = {
   /** Tokens the last completed model call reported for its whole context. */
   lastContextTokens: number | null;
   lastModel: { provider: string; id: string } | null;
+  /**
+   * Reasoning level the branch last switched to, for the composer's selector
+   * before a runtime exists. pi-web reads the same entry (session-reader.ts
+   * `getSessionSettings`); null means Pi decides, which the picker calls
+   * "auto".
+   */
+  lastThinking: string | null;
 };
 
 export function contentParts(content: unknown): ContentPart[] {
@@ -593,6 +600,7 @@ export function projectTranscript(branch: readonly SessionEntry[]): Transcript {
   const requestedAt = new Map<string, number>();
   let lastContextTokens: number | null = null;
   let lastModel: Transcript["lastModel"] = null;
+  let lastThinking: string | null = null;
   let previousMs: number | undefined;
 
   for (const entry of branch) {
@@ -664,6 +672,9 @@ export function projectTranscript(branch: readonly SessionEntry[]): Transcript {
         });
         break;
       }
+      case "thinking_level_change":
+        lastThinking = entry.thinkingLevel;
+        break;
       case "branch_summary":
         if (entry.summary.trim() !== "") {
           items.push({
@@ -698,7 +709,7 @@ export function projectTranscript(branch: readonly SessionEntry[]): Transcript {
         break;
     }
   }
-  return { items, lastContextTokens, lastModel };
+  return { items, lastContextTokens, lastModel, lastThinking };
 }
 
 /**

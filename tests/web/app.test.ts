@@ -61,7 +61,6 @@ describe("web app", () => {
     expect(html).toContain("first &lt;b&gt;question&lt;/b&gt;");
     expect(html).toContain("<strong>bold</strong>");
     expect(html).not.toContain("<script>x</script>");
-    expect(html).toContain("40k / 100k (40%)");
     expect(html).toContain('class="composer-surface"');
   });
 
@@ -121,7 +120,9 @@ describe("web app", () => {
   });
 
   it("reads the session out in the top bar, as pi-web does", async () => {
-    const { app } = testApp();
+    const { app, world } = testApp();
+    // The gauge comes off the running agent, as pi-web's does.
+    await world.runtime.open({ sessionId: "s1" });
     const bar = (await (await app.request("/sessions/s1")).text()).slice(
       0,
       undefined,
@@ -1120,6 +1121,25 @@ describe("conversation rail, shelf, and written files", () => {
     expect(page).toContain("height:max(1px, min(32px, 100%))");
   });
 
+  it("draws the spine between marks on a linear session too", async () => {
+    const { app, world } = testApp();
+    const stored = world.store.get("s1");
+    if (!stored) throw new Error("no session");
+    stored.entries.push(userEntry("u2", "a1", "second question"));
+    stored.entries.push(assistantEntry("a2", "u2", "second answer", 41_000));
+
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain('data-branched="false"');
+    expect(page).toContain("minimap-graph");
+    // pi-web keeps 5px clear of each node and drops an edge shorter than
+    // that, which `max(0px, ...)` says here.
+    expect(page).toContain("top:calc(17px + 0 * min(50px, (100% - 54px) / 1))");
+    expect(page).toContain(
+      "height:max(0px, calc(1 * min(50px, (100% - 54px) / 1) - 10px))",
+    );
+    expect(page).toContain('class="is-active"');
+  });
+
   it("re-sends the rail out of band when a turn settles", async () => {
     const { app } = testApp({ reply: () => "done" });
     const form = new FormData();
@@ -1489,8 +1509,14 @@ describe("phase 8 fixes", () => {
   });
 
   it("colours the context badge from the reader's own threshold", async () => {
-    const { app } = testApp();
+    const { app, world } = testApp();
+    // pi-web reads context usage off the running agent, so the badge belongs
+    // to an attached session and a stored one shows none.
+    const stored = await (await app.request("/sessions/s1")).text();
+    expect(stored).not.toContain("data-context-readout");
+    await world.runtime.open({ sessionId: "s1" });
     const plain = await (await app.request("/sessions/s1")).text();
+    expect(plain).toContain("data-context-readout");
     expect(plain).toContain("color:var(--text-muted)");
     // 40 000 tokens of a 100 000 window is 40 %: below every percent rule,
     // above a threshold the reader set at 30 000.
@@ -1577,12 +1603,16 @@ describe("phase 8 fixes", () => {
   });
 
   it("shows the name, the session file, and the context window in stats", async () => {
-    const { app } = testApp();
-    const stats = await (await app.request("/sessions/s1/stats")).text();
-    expect(stats).toContain("Session File");
-    expect(stats).toContain("/agent/sessions/s1.jsonl");
-    expect(stats).toContain("Context window");
-    expect(stats).toContain("data-session-copy");
+    const { app, world } = testApp();
+    const stored = await (await app.request("/sessions/s1/stats")).text();
+    expect(stored).toContain("Session File");
+    expect(stored).toContain("/agent/sessions/s1.jsonl");
+    expect(stored).toContain("data-session-copy");
+    // Only a running agent knows what is in context, as in pi-web.
+    expect(stored).not.toContain("Context window");
+    await world.runtime.open({ sessionId: "s1" });
+    const live = await (await app.request("/sessions/s1/stats")).text();
+    expect(live).toContain("Context window");
   });
 
   it("offers the sidebar resize handle and a manual refresh", async () => {
@@ -1728,6 +1758,26 @@ describe("the shell chrome, on every route", () => {
     const html = await (await app.request("/new")).text();
     const chip = html.slice(html.indexOf('id="model-trigger"'));
     expect(chip).toContain('<span class="composer-model-detail">auto</span>');
+  });
+
+  it("reads a stored session's reasoning level off its own branch", async () => {
+    const { app, world } = testApp();
+    const stored = world.store.get("s1");
+    if (!stored) throw new Error("no session");
+    stored.entries.push({
+      type: "thinking_level_change",
+      id: "t1",
+      parentId: "a1",
+      timestamp: new Date().toISOString(),
+      thinkingLevel: "high",
+    });
+    stored.leafId = "t1";
+    const html = await (await app.request("/sessions/s1")).text();
+    const chip = html.slice(html.indexOf('id="model-trigger"'));
+    // The fake model names its levels the way a provider would.
+    expect(chip).toContain(
+      '<span class="composer-model-detail">thorough</span>',
+    );
   });
 
   it("opens a transcript image in a dialog instead of a new tab", async () => {

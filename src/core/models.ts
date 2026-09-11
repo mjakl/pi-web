@@ -14,6 +14,11 @@ const THINKING_LEVELS: ThinkingLevel[] = [
   "max",
 ];
 
+/** Pi writes the level as a plain string; only these seven are levels. */
+export function isThinkingLevel(value: string): value is ThinkingLevel {
+  return (THINKING_LEVELS as string[]).includes(value);
+}
+
 /**
  * The reasoning levels a model actually offers. Pi's `thinkingLevelMap` marks
  * an unsupported level with `null` and gives the others the name the provider

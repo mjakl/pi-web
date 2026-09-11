@@ -268,12 +268,22 @@ export function timestampedEntries(
 /**
  * The window of a branch a page shows. `before` pages backwards from an entry
  * already on screen, `through` widens the page until a target entry is in it.
- * Both ends are pulled back to a turn boundary so a page never opens in the
- * middle of a turn.
+ * The page is the plain tail pi-web asks for (`SESSION_TAIL_DEFAULT`), counted
+ * in session entries: one card can stand for several of them (a tool call and
+ * its result), so counting cards would put twice pi-web's history on screen.
+ * `groupTurns` renders a page that opens mid-turn, so nothing is snapped back
+ * to a turn boundary — a session whose last question is thousands of entries
+ * back is one turn, and snapping put the whole of it on screen.
  */
 export function pageItems(
   items: readonly TranscriptItem[],
-  options: { tail?: number; before?: string; through?: string } = {},
+  options: {
+    tail?: number;
+    before?: string;
+    through?: string;
+    /** The branch's entry ids, root first, for counting the tail in entries. */
+    entryIds?: readonly string[];
+  } = {},
 ): { items: TranscriptItem[]; hasMore: boolean; oldestId: string | undefined } {
   const tail = Math.min(Math.max(options.tail ?? PAGE_SIZE, 1), PAGE_MAX);
   let end = items.length;
@@ -283,17 +293,26 @@ export function pageItems(
     end = index;
   }
   let start = Math.max(0, end - tail);
+  if (options.entryIds !== undefined && end > 0) {
+    const rank = new Map(options.entryIds.map((id, index) => [id, index]));
+    const last = rank.get(items[end - 1]?.entryId ?? "");
+    if (last !== undefined) {
+      const floor = last - tail + 1;
+      start = end;
+      while (
+        start > 0 &&
+        (rank.get(items[start - 1]?.entryId ?? "") ?? 0) >= floor
+      ) {
+        start -= 1;
+      }
+    }
+  }
   if (options.through !== undefined) {
     const index = items.findIndex((item) => item.entryId === options.through);
     if (index === -1 || index >= end) {
       throw new RangeError("Unknown entry for this branch");
     }
     start = Math.min(start, index);
-  }
-  while (start > 0) {
-    const first = items[start];
-    if (first && isTurnBoundary(first)) break;
-    start -= 1;
   }
   const page = items.slice(start, end);
   return {
