@@ -57,6 +57,19 @@
     display: none !important;
   }
 
+  /* The phone's token pair is tighter and its arrows smaller than the
+     desktop's (AppShell.tsx L1510-L1523 against L1585-L1592); the gap is
+     inline, the arrow only a presentation attribute. */
+  #top-bar .mobile-session-stat-io {
+    gap: 2px !important;
+    flex-shrink: 0;
+  }
+
+  #top-bar .mobile-session-stat-io > svg {
+    width: 10px;
+    height: 10px;
+  }
+
   #top-bar [data-top-bar-tab] {
     width: 36px !important;
     padding: 0 !important;
