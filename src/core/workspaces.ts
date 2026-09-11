@@ -5,6 +5,13 @@ import { pathKey, samePath } from "./path-access.ts";
 // reports are also remembered in a map the adapter persists: without it a
 // session whose worktree is gone would fall out of its project.
 
+/** `/home/me/x` reads shorter as `~/x`, and the reader knows their own home. */
+export function shortPath(path: string, home?: string): string {
+  if (home === undefined || home === "" || !path.startsWith(home)) return path;
+  const rest = path.slice(home.length);
+  return rest === "" ? "~" : rest.startsWith("/") ? `~${rest}` : path;
+}
+
 export type ProjectInfo = {
   /** The folder sessions of this checkout group under. */
   root: string;

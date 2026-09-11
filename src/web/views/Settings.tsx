@@ -11,7 +11,7 @@ import {
   type SkillUpdate,
 } from "@core/skills";
 import { DEFAULT_WARN_TOKENS } from "@core/context-usage";
-import { shortPath } from "./Workspace.tsx";
+import { shortPath } from "@core/workspaces";
 import { ThemeIcon } from "./icons.tsx";
 
 /** pi-web's order: light, dark, then system (§8.2). */

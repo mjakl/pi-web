@@ -18,7 +18,7 @@ import {
   resolveSection,
 } from "@web/views/Settings";
 import { StatsPanel } from "@web/views/Stats";
-import { TrustDialog } from "@web/views/Workspace";
+import { TrustDialog } from "@web/views/Dialogs";
 import { type Context } from "hono";
 import { getCookie } from "hono/cookie";
 import {

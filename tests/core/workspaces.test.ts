@@ -6,6 +6,7 @@ import {
   rememberProjects,
   removedProject,
   selectableWorktrees,
+  shortPath,
 } from "@core/workspaces";
 import { describe, expect, it } from "vitest";
 
@@ -191,5 +192,16 @@ describe("current worktree", () => {
     ];
     expect(currentWorktree(trees, "/repo/wt/")).toBe("/repo/wt");
     expect(currentWorktree(trees, "/elsewhere")).toBe(null);
+  });
+});
+
+describe("shortPath", () => {
+  it("writes the home folder as a tilde, and leaves everything else", () => {
+    expect(shortPath("/home/me/code/app", "/home/me")).toBe("~/code/app");
+    expect(shortPath("/home/me", "/home/me")).toBe("~");
+    expect(shortPath("/srv/app", "/home/me")).toBe("/srv/app");
+    // A sibling folder that merely starts with the same characters is not in it.
+    expect(shortPath("/home/meade/app", "/home/me")).toBe("/home/meade/app");
+    expect(shortPath("/home/me/app")).toBe("/home/me/app");
   });
 });

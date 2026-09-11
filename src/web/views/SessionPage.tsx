@@ -26,7 +26,7 @@ import {
 } from "./Items.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { Status } from "./Status.tsx";
-import { DialogHost, MissingFolderNotice, TrustBadge } from "./Workspace.tsx";
+import { DialogHost, MissingFolderNotice, TrustBadge } from "./Dialogs.tsx";
 
 // The application shell, with pi-web's DOM: the sidebar column, the 36px top
 // bar, the chat window with its rail, and the right-hand file panel. The

@@ -1,48 +1,11 @@
 import type { ProjectEntry } from "@core/sessions";
+import { shortPath } from "@core/workspaces";
 import type { FolderChoice, SidebarView } from "@core/workspace";
+import { Dialog } from "./Dialogs.tsx";
 
 // Choosing the folder a new session starts in. The picker is one server-
 // rendered `<dialog>`: the projects the store already knows, each expanding
 // to the worktrees of its checkout, and a browse pane for anything else.
-
-/** `/home/me/x` reads shorter as `~/x`, and the reader knows their own home. */
-export function shortPath(path: string, home?: string): string {
-  if (home === undefined || home === "" || !path.startsWith(home)) return path;
-  const rest = path.slice(home.length);
-  return rest === "" ? "~" : rest.startsWith("/") ? `~${rest}` : path;
-}
-
-/** Everything modal renders here; the client turns it into a real modal. */
-export function DialogHost() {
-  return <div id="dialogs" />;
-}
-
-function Dialog({
-  id,
-  title,
-  children,
-}: {
-  id: string;
-  title: string;
-  children?: unknown;
-}) {
-  return (
-    <dialog id={id} data-modal open>
-      <div>
-        <div>
-          <h2>{title}</h2>
-          <form method="dialog">
-            <button aria-label="Close">✕</button>
-          </form>
-        </div>
-        {children}
-      </div>
-      <form method="dialog">
-        <button aria-label="Close">close</button>
-      </form>
-    </dialog>
-  );
-}
 
 /** The button that commits a folder: validating it is what grants access. */
 function SelectFolder({
@@ -251,69 +214,5 @@ export function WorkspacePicker({
         </section>
       </div>
     </Dialog>
-  );
-}
-
-/**
- * Trust. Project resources are code Pi runs, so a repository nobody vouched
- * for stays dormant until someone says otherwise, here or in the terminal.
- */
-export function TrustDialog({ cwd }: { cwd: string }) {
-  return (
-    <Dialog id="trust-dialog" title="Trust this project?">
-      <p>
-        Project resources can run local code. Trust only projects whose contents
-        you know.
-      </p>
-      <code>{cwd}</code>
-      <div>
-        <form method="dialog">
-          <button>Cancel</button>
-        </form>
-        <button
-          type="button"
-
-          hx-post="/workspaces/trust"
-          hx-vals={JSON.stringify({ cwd })}
-          hx-swap="none"
-        >
-          Trust project
-        </button>
-      </div>
-    </Dialog>
-  );
-}
-
-/** The toolbar badge that opens the dialog while a folder stays untrusted. */
-export function TrustBadge({
-  cwd,
-  status,
-}: {
-  cwd: string;
-  status: { requiresTrust: boolean; trusted: boolean };
-}) {
-  if (!status.requiresTrust || status.trusted) return <></>;
-  return (
-    <button
-      type="button"
-
-      title="Project resources are not loaded because this project is not trusted"
-      hx-get={`/workspaces/trust?cwd=${encodeURIComponent(cwd)}`}
-      hx-target="#dialogs"
-      hx-swap="innerHTML"
-    >
-      🛡 Restricted mode
-    </button>
-  );
-}
-
-/** Shown wherever a session's folder is gone; every mutating route agrees. */
-export function MissingFolderNotice({ cwd }: { cwd: string }) {
-  return (
-    <div role="status">
-      <span>Read only</span>
-      <span>Working folder is unavailable. This session is read-only.</span>
-      <code>{cwd}</code>
-    </div>
   );
 }
