@@ -146,3 +146,20 @@
     display: flex !important;
   }
 }
+
+/* pi-web hovers the top bar's controls from JS (AppShell.tsx onMouseEnter):
+   the icon squares and the three tabs go muted -> text, and Full history
+   also takes the hover background. Those colours are inline there, and the
+   panel buttons get an inline colour again whenever a panel opens
+   (client/shell.ts), so the rules need the weight. pi-web gives the
+   narrow-phone "more" button and the disabled history tab no hover at all. */
+#top-bar #sidebar-toggle:hover,
+#top-bar #file-panel-toggle:hover,
+#top-bar #stats-trigger:hover,
+#top-bar [data-top-bar-tab]:not([disabled]):hover {
+  color: var(--text) !important;
+}
+
+#top-bar a[data-top-bar-tab]:hover {
+  background: var(--bg-hover) !important;
+}
