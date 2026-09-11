@@ -1,4 +1,5 @@
 import { upgradeDialogs } from "./dialogs.ts";
+import { codeText } from "./highlight.ts";
 
 type Mermaid = {
   initialize(config: Record<string, unknown>): void;
@@ -82,8 +83,8 @@ function zoomDialog(svg: string): void {
 }
 
 async function preview(block: HTMLElement): Promise<void> {
-  const code = block.querySelector("code")?.textContent ?? "";
-  const target = block.querySelector<HTMLElement>(".mermaid-preview");
+  const code = codeText(block);
+  const target = block.querySelector<HTMLElement>(".mermaid-block");
   const source = block.querySelector<HTMLElement>("pre");
   const button = block.querySelector<HTMLButtonElement>(
     "[data-mermaid-toggle]",
@@ -93,24 +94,31 @@ async function preview(block: HTMLElement): Promise<void> {
     target.hidden = true;
     source.hidden = false;
     button.textContent = "Preview";
+    button.classList.remove("is-active");
     return;
   }
   source.hidden = true;
   target.hidden = false;
   button.textContent = "Source";
+  button.classList.add("is-active");
   if (block.dataset["rendered"] === code) return;
+  target.classList.add("mermaid-block-loading");
   target.textContent = "Rendering diagram...";
   try {
     const mermaid = await library();
     await mermaid.parse(code);
     counter += 1;
     const { svg } = await mermaid.render(`mermaid-${String(counter)}`, code);
+    target.classList.remove("mermaid-block-loading", "mermaid-block-error");
     target.innerHTML = svg;
+    target.style.cursor = "zoom-in";
     block.dataset["rendered"] = code;
     target.addEventListener("click", () => {
       zoomDialog(target.innerHTML);
     });
   } catch {
+    target.classList.remove("mermaid-block-loading");
+    target.classList.add("mermaid-block-error");
     target.textContent = "Invalid Mermaid diagram";
   }
 }

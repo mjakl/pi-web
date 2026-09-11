@@ -11,6 +11,7 @@ import {
   ContextGaugeIcon,
   HamburgerIcon,
   HistoryIcon,
+  JumpToLatestIcon,
   PanelLeftIcon,
   PanelRightIcon,
   RefreshIcon,
@@ -513,11 +514,11 @@ export function SessionPage({
             type="button"
             id="jump-to-latest"
             class="chat-jump-to-latest"
-            aria-label="Jump to the latest message"
-            title="Jump to the latest message"
+            aria-label="Jump to latest"
+            title="Jump to latest"
             hidden
           >
-            ↓
+            <JumpToLatestIcon />
           </button>
           {/* The rail column of pi-web's two-column chat body. pi-web puts
               the surface on the element itself (§5), not in a class. */}
@@ -525,7 +526,7 @@ export function SessionPage({
             id="rail-column"
             class="chat-minimap"
             role="navigation"
-            aria-label="Conversation map"
+            aria-label="Conversation paths"
             style="width:36px; flex-shrink:0; position:relative; cursor:pointer; user-select:none; border-left:1px solid var(--border); background:var(--bg-panel)"
           >
             <Rail view={view} />

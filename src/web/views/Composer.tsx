@@ -56,13 +56,29 @@ export function CommandMenu({ commands }: { commands: SlashCommand[] }) {
   );
 }
 
-/* TODO(composer): pi-web's notices are `.notice-shelf-item` cards with a
-   coloured type dot (§4.8); this is the colour alone until that lands. */
+/** pi-web's notice dot colours (§4.8). */
 const TOAST_COLOUR = {
-  info: "var(--info)",
+  info: "var(--accent)",
   warning: "var(--warning)",
   error: "var(--danger)",
 } as const;
+
+/** pi-web's `NoticeShelf` card, floating over the transcript (§4.8). */
+const NOTICE_ITEM_STYLE =
+  "display:flex; align-items:flex-start; gap:10px; min-height:60px;" +
+  " height:auto; max-height:500px; pointer-events:auto; overflow:hidden;" +
+  " border-radius:14px;" +
+  " border:1px solid color-mix(in srgb, var(--border) 70%, transparent);" +
+  " background:var(--bg); color:var(--text-muted); width:fit-content;" +
+  " max-width:min(100%, 620px);" +
+  " box-shadow:0 1px 2px rgba(15,23,42,0.05), 0 10px 28px -14px rgba(15,23,42,0.24);" +
+  " font-size:14px; line-height:1.5; transform-origin:top right;" +
+  " animation:notice-shelf-in 0.18s ease-out backwards; padding:0 12px";
+
+const NOTICE_TEXT_STYLE =
+  "padding:14px 0; min-width:0; max-width:100%; max-height:470px;" +
+  " overflow-y:auto; scrollbar-width:thin; white-space:pre-line;" +
+  " word-break:break-word";
 
 /** One batch of notices, appended to the shelf by the session's SSE stream. */
 export function Toasts({ notices }: { notices: Notice[] }) {
@@ -71,9 +87,15 @@ export function Toasts({ notices }: { notices: Notice[] }) {
       {notices.map((notice) => (
         <div
           class="notice-shelf-item"
-          style={`color:${TOAST_COLOUR[notice.level]}`}
+          role={notice.level === "error" ? "alert" : "status"}
+          style={NOTICE_ITEM_STYLE}
         >
-          <span>{notice.message}</span>
+          <span
+            style={`width:7px; height:7px; border-radius:50%; background:${TOAST_COLOUR[notice.level]}; flex-shrink:0; margin-top:21px`}
+          />
+          <span tabindex={0} style={NOTICE_TEXT_STYLE}>
+            {notice.message}
+          </span>
         </div>
       ))}
     </>

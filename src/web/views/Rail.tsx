@@ -1,24 +1,44 @@
 import type { RailMark } from "@core/conversation-rail";
 import type { SessionView } from "@core/workspace";
+import { StarIcon } from "./icons.tsx";
 
-// The conversation rail: a fixed column right of the transcript with one mark
-// per prompt, star, and compaction. Positions are percentages of the rail's
-// own height, so the server needs no measurement of the browser's viewport;
-// src/web/client/rail.ts only tracks the scroll position and the popover.
+// pi-web's ChatMinimap (§5), rendered on the server. pi-web measures the
+// rail's pixel height and places row `r` at `12 + r * gap` with
+// `gap = min(50, (height - 30 - 24) / rows)`; the same value falls out of a
+// calc() against the rail's own height, so nothing here needs a measurement.
+// src/web/client/rail.ts only tracks the reading position and the popover.
 
-/** Horizontal distance between two branch lanes, in pixels. */
-const LANE = 18;
-/** Room kept free at the top, and at the bottom for the jump button. */
-const TOP = 12;
-const BOTTOM = 30;
+/** pi-web's MINIMAP_WIDTH and BRANCH_LANE_GAP. */
+const WIDTH = 36;
+const LANE = 36;
+/** MINIMAP_PADDING, MINIMAP_FOOTER (room for the jump-to-latest button). */
+const PADDING = 12;
+const FOOTER = 30;
+/** MAX_NODE_GAP, and the cap on a mark's own height. */
+const MAX_GAP = 50;
+const MAX_MARK = 32;
 
-/** Where a row sits: the same expression the connector layer is sized with. */
-function offset(row: number, rows: number): string {
-  const fraction = rows === 0 ? 0 : row / rows;
-  return `calc(${String(TOP)}px + (100% - ${String(TOP + BOTTOM)}px) * ${String(fraction)})`;
+/** `gap` as CSS: the rail's height is only known to the browser. */
+function gap(rows: number): string {
+  return `min(${String(MAX_GAP)}px, (100% - ${String(FOOTER + PADDING * 2)}px) / ${String(Math.max(1, rows))})`;
 }
 
-function Mark({
+/** pi-web's `graphY(row)`, as a length against the rail's own height. */
+function rowTop(row: number, rows: number): string {
+  return `calc(${String(PADDING)}px + ${String(row)} * ${gap(rows)})`;
+}
+
+function markHeight(rows: number): string {
+  return `min(${String(MAX_MARK)}px, ${gap(rows)})`;
+}
+
+/**
+ * The same cap for a mark inside a row: the row is already one gap tall, so
+ * its own height is the gap and the percentage resolves against it.
+ */
+const ROW_MARK_HEIGHT = `min(${String(MAX_MARK)}px, 100%)`;
+
+function Node({
   mark,
   rows,
   sessionId,
@@ -27,60 +47,112 @@ function Mark({
   rows: number;
   sessionId: string;
 }) {
-  const label =
-    mark.kind === "compaction"
-      ? "Conversation compacted"
-      : mark.kind === "star"
-        ? "Jump to starred answer"
-        : (mark.preview ?? "Jump to this message");
+  const top = rowTop(mark.row, rows);
+  const left = `${String(WIDTH / 2 + mark.lane * LANE)}px`;
+  // Off the branch being read: a button that moves the session to its tip.
+  if (!mark.active) {
+    const label =
+      mark.kind === "star"
+        ? "Switch branch to starred answer"
+        : mark.preview === undefined
+          ? "Switch branch"
+          : `Switch branch: ${mark.preview}`;
+    return (
+      <button
+        type="button"
+        class={`minimap-branch${mark.kind === "star" ? " minimap-star" : ""}`}
+        data-rail-entry-id={mark.id}
+        data-entry-id={mark.id}
+        data-branch="true"
+        aria-label={label}
+        style={`left:${left}; top:${top}; height:max(1px, ${markHeight(rows)})`}
+        hx-post={`/sessions/${sessionId}/navigate`}
+        hx-vals={JSON.stringify({ entryId: mark.targetLeafId })}
+        hx-target="body"
+        hx-swap="innerHTML"
+        hx-indicator="#branch-sync"
+      >
+        {mark.kind === "star" ? <StarIcon filled /> : <span />}
+      </button>
+    );
+  }
+  // On the branch, but not an anchor the transcript scrolls to.
+  if (mark.kind === "compaction") {
+    return (
+      <div
+        class="minimap-row"
+        data-minimap-entry-id={mark.id}
+        style={`top:${top}; height:max(1px, ${gap(rows)})`}
+      >
+        <div
+          role="separator"
+          aria-label="Conversation compacted"
+          class="minimap-compaction"
+          style="width:18px; height:2px; border-radius:1px; background:var(--text-muted); box-shadow:0 0 0 2px var(--bg-panel)"
+        />
+      </div>
+    );
+  }
   return (
-    <button
-      type="button"
-      class={`rail-mark${mark.kind}${mark.active ? " is-active" : ""}`}
-      style={`top:${offset(mark.row, rows)};left:${String(mark.lane * LANE)}px`}
-      data-entry-id={mark.id}
-      data-leaf-id={mark.targetLeafId}
-      {...(mark.active ? {} : { "data-branch": "true" })}
-      {...(mark.preview === undefined ? {} : { "data-preview": mark.preview })}
-      aria-label={label}
-      {...(mark.active
-        ? {}
-        : {
-            "hx-post": `/sessions/${sessionId}/navigate`,
-            "hx-vals": JSON.stringify({ entryId: mark.targetLeafId }),
-            "hx-target": "body",
-            "hx-swap": "innerHTML",
-            "hx-indicator": "#branch-sync",
-          })}
-    />
+    <div
+      class="minimap-row"
+      data-minimap-entry-id={mark.id}
+      style={`top:${top}; height:max(1px, ${gap(rows)})`}
+    >
+      <button
+        type="button"
+        tabindex={-1}
+        class={mark.kind === "star" ? "minimap-star" : "minimap-message"}
+        data-entry-id={mark.id}
+        {...(mark.preview === undefined
+          ? {}
+          : { "data-preview": mark.preview })}
+        aria-label={
+          mark.kind === "star"
+            ? "Jump to starred answer"
+            : "Jump to human message"
+        }
+        title={mark.kind === "star" ? "Jump to starred answer" : undefined}
+        style={`height:max(1px, ${ROW_MARK_HEIGHT})`}
+      >
+        {mark.kind === "star" ? (
+          <StarIcon filled />
+        ) : (
+          <div class="minimap-dot" />
+        )}
+      </button>
+    </div>
   );
 }
 
-/** Cubic connectors between a mark and its nearest kept ancestor. */
-function Links({ marks, rows }: { marks: RailMark[]; rows: number }) {
+/**
+ * pi-web's bezier connectors. The layer spans exactly the rows, so one
+ * viewBox unit is one row and `preserveAspectRatio="none"` stretches it to
+ * the gap the browser computed: the curve is pi-web's control points scaled
+ * on one axis, which is the same curve.
+ */
+function Graph({ marks, rows }: { marks: RailMark[]; rows: number }) {
   const byId = new Map(marks.map((mark) => [mark.id, mark]));
   const lanes = Math.max(...marks.map((mark) => mark.lane), 0);
-  const width = lanes * LANE + LANE;
+  const width = lanes * LANE + WIDTH;
   return (
     <svg
-      class="rail-links"
+      class="minimap-graph"
+      aria-hidden="true"
       viewBox={`0 0 ${String(width)} ${String(Math.max(rows, 1))}`}
       preserveAspectRatio="none"
-      aria-hidden="true"
+      style={`width:${String(width)}px; top:${String(PADDING)}px; height:calc(${String(rows)} * ${gap(rows)})`}
     >
       {marks.map((mark) => {
         const parent =
           mark.parentId === null ? undefined : byId.get(mark.parentId);
         if (!parent) return null;
-        const x1 = parent.lane * LANE + LANE / 2;
-        const x2 = mark.lane * LANE + LANE / 2;
-        const y1 = parent.row;
-        const y2 = mark.row;
-        const mid = (y1 + y2) / 2;
+        const x = WIDTH / 2 + mark.lane * LANE;
+        const px = WIDTH / 2 + parent.lane * LANE;
         return (
           <path
             class={mark.active && parent.active ? "is-active" : ""}
-            d={`M${String(x1)},${String(y1)} C${String(x1)},${String(mid)} ${String(x2)},${String(mid)} ${String(x2)},${String(y2)}`}
+            d={`M ${String(px)} ${String(parent.row)} C ${String(px)} ${String(mark.row)}, ${String(x)} ${String(parent.row)}, ${String(x)} ${String(mark.row)}`}
             fill="none"
             vector-effect="non-scaling-stroke"
           />
@@ -99,20 +171,22 @@ export function Rail({ view, oob }: { view: SessionView; oob?: boolean }) {
   const marks = view.rail;
   const rows = Math.max(...marks.map((mark) => mark.row), 0);
   const lanes = Math.max(...marks.map((mark) => mark.lane), 0);
+  // pi-web's `hasSessionBranches`: a fork anywhere in the session widens the
+  // rail on hover, whether or not the marks themselves sit in two lanes.
+  const branched = view.branched;
   return (
     <div
       id="rail"
-      class="rail"
-      style={`--rail-lanes:${String(lanes + 1)}`}
-      data-branched={view.branched ? "true" : "false"}
-      aria-label="Conversation"
+      class="minimap-layer"
+      data-branched={branched ? "true" : "false"}
+      data-graph-width={String(lanes * LANE + WIDTH)}
       {...(oob ? { "hx-swap-oob": "true" } : {})}
     >
       {marks.length < 2 ? null : (
         <>
-          {view.branched ? <Links marks={marks} rows={rows} /> : null}
+          {branched ? <Graph marks={marks} rows={rows} /> : null}
           {marks.map((mark) => (
-            <Mark mark={mark} rows={rows} sessionId={view.summary.id} />
+            <Node mark={mark} rows={rows} sessionId={view.summary.id} />
           ))}
         </>
       )}

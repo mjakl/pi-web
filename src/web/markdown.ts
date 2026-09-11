@@ -47,17 +47,28 @@ function formatBytes(bytes: number): string {
 
 const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(\r?\n|$)/;
 
+/**
+ * pi-web's CodeBlock (§4.5): a header carrying the language and a copy
+ * button, then the code on a tinted body. A mermaid fence gets the extra
+ * Preview/Source action and the `.mermaid-block` the client renders into.
+ */
 function codeBlock(code: string, language: string, live: boolean): string {
   const label = language === "" ? "text" : language;
-  const body = `<pre class="code-body"><code class="language-${attribute(label)}">${escapeHtml(code)}</code></pre>`;
-  const copy = `<button type="button" class="code-copy" data-copy-code>Copy</button>`;
+  const body =
+    `<pre class="markdown-code-body" style="margin:0; padding:11px 13px; font-size:12.5px;` +
+    ` line-height:1.62; overflow-x:auto; background:color-mix(in srgb, var(--bg) 92%, var(--bg-panel))">` +
+    `<code class="language-${attribute(label)}" style="font-family:var(--font-mono)">${escapeHtml(code)}</code></pre>`;
+  const copy = `<button type="button" class="markdown-code-action" data-copy-code>Copy</button>`;
+  const header = (actions: string) =>
+    `<div class="markdown-code-header"><span class="markdown-code-lang">${escapeHtml(label)}</span>` +
+    `<div class="markdown-code-actions">${actions}</div></div>`;
   if (label !== "mermaid") {
-    return `<div class="code-block"><div class="code-header"><span class="code-lang">${escapeHtml(label)}</span>${copy}</div>${body}</div>`;
+    return `<div class="markdown-code-block">${header(copy)}${body}</div>`;
   }
-  const toggle = `<button type="button" class="code-copy" data-mermaid-toggle${
-    live ? ' disabled title="Preview after streaming"' : ""
+  const toggle = `<button type="button" class="markdown-code-action" data-mermaid-toggle${
+    live ? ' disabled title="Preview available after streaming"' : ""
   }>Preview</button>`;
-  return `<div class="code-block" data-mermaid><div class="code-header"><span class="code-lang">mermaid</span>${toggle}${copy}</div>${body}<div class="mermaid-preview" hidden></div></div>`;
+  return `<div class="markdown-code-block" data-mermaid>${header(`${toggle}${copy}`)}${body}<div class="mermaid-block" hidden></div></div>`;
 }
 
 /**
@@ -167,7 +178,16 @@ export function renderMarkdown(
   options: MarkdownOptions = {},
 ): string {
   if (source.length > MAX_MARKDOWN_CHARS) {
-    return `<details class="markdown-oversized"><summary>⚠ ${escapeHtml(formatBytes(source.length))} of Markdown, click to show the source</summary><pre class="code-body">${escapeHtml(source)}</pre></details>`;
+    // pi-web's SafeMarkdownBody reveal (§4.4.2), as a disclosure.
+    const size = escapeHtml(formatBytes(source.length));
+    return (
+      `<details class="markdown-oversized"><summary style="display:block; width:100%; margin:4px 0; padding:7px 10px;` +
+      ` border:1px solid var(--border); border-radius:6px; background:var(--bg-panel); color:var(--text-muted);` +
+      ` cursor:pointer; font-size:12px; text-align:left">⚠ Message content is very large (${size}).` +
+      ` Click to view as plain text — markdown rendering is disabled to keep the page responsive.</summary>` +
+      `<div style="max-height:420px; overflow:auto; font-size:12px; line-height:1.5"><pre style="margin:0; padding:8px 10px;` +
+      ` white-space:pre-wrap; word-break:break-word; font-family:var(--font-mono); color:var(--text-muted)">${escapeHtml(source)}</pre></div></details>`
+    );
   }
   const text = source.replace(FRONTMATTER, "");
   return markedFor(options).parse(text, { async: false });

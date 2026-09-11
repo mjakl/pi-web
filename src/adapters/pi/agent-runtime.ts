@@ -20,7 +20,7 @@ import type { DialogAnswer } from "@core/extension-ui";
 import { startupWrites } from "@core/models";
 import { createCompletionTracker } from "@core/turn-completion";
 import { toolParameters } from "@core/tools";
-import { toolProgress } from "@core/transcript";
+import { estimateTokens, streamedText, toolProgress } from "@core/transcript";
 import { STAR_TYPE } from "@core/session-entries";
 import type { SessionSummary } from "@core/sessions";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
@@ -50,9 +50,14 @@ const RENDER_NOTE =
 
 type Partial = Extract<AgentMessage, { role: "assistant" }>;
 
+/** Below this much of a message, a rate says more about the first chunk. */
+const MIN_RATE_SECONDS = 0.5;
+
 class PiLiveSession implements LiveSession {
   readonly id: string;
   private partial: Partial | undefined;
+  /** When the message now streaming started, for its tokens-per-second. */
+  private partialStart: number | null = null;
   private readonly partialArguments = new Map<string, string>();
   /** Attachments of messages waiting in the SDK's queue, keyed by their text. */
   private readonly queuedImages = new Map<string, ImageAttachment[]>();
@@ -128,6 +133,7 @@ class PiLiveSession implements LiveSession {
     switch (event.type) {
       case "message_start":
         this.partialArguments.clear();
+        this.partialStart = Date.now();
         if (event.message.role === "assistant") this.partial = event.message;
         this.emit({ type: "activity" });
         break;
@@ -138,6 +144,7 @@ class PiLiveSession implements LiveSession {
         break;
       case "message_end":
         this.partial = undefined;
+        this.partialStart = null;
         this.partialArguments.clear();
         this.emit({ type: "activity" });
         break;
@@ -311,6 +318,24 @@ class PiLiveSession implements LiveSession {
     };
   }
 
+  /**
+   * What the message being streamed has produced. pi-web runs a 300 ms timer
+   * in the browser for this; here the turn's own re-render is the timer, so
+   * the numbers are simply read off the partial message when it is rendered.
+   */
+  private streamingRate(): LiveStatus["streaming"] {
+    if (!this.partial || this.partialStart === null) return null;
+    const tokens = Math.round(
+      estimateTokens(streamedText(this.partial.content)),
+    );
+    const elapsed = (Date.now() - this.partialStart) / 1000;
+    return {
+      tokens,
+      tokensPerSecond:
+        elapsed > MIN_RATE_SECONDS && tokens > 0 ? tokens / elapsed : null,
+    };
+  }
+
   private status(): LiveStatus {
     const model = this.inner.model;
     const option: ModelOption | null = model
@@ -327,6 +352,7 @@ class PiLiveSession implements LiveSession {
       running: this.inner.isStreaming,
       compacting: this.compacting,
       bashRunning: this.inner.isBashRunning,
+      streaming: this.streamingRate(),
       model: option,
       thinkingLevel: this.inner.thinkingLevel,
       thinkingLevels: this.inner
