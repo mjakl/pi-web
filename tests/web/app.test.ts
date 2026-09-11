@@ -1332,6 +1332,48 @@ describe("conversation rail, shelf, and written files", () => {
     expect(received).not.toContain("\u001B[");
   });
 
+  it("keeps the shelf under the composer on the page itself", async () => {
+    // The strip is the last row of the chat column, so the composer sits 36px
+    // higher whenever an extension has something to say. A page that dropped
+    // it moved every row below the top bar (ui-gaps r2, composer).
+    const { app } = testApp({
+      script: () => [{ status: "prune", statusText: "on" }, { text: "done" }],
+    });
+    const form = new FormData();
+    form.set("text", "go");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+    const res = await app.request("/sessions/s1/events");
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("no body");
+    let received = "";
+    const decoder = new TextDecoder();
+    // The first shelf event is the empty strip the stream opens with; wait
+    // for the one the extension's status filled.
+    while (!received.includes("extension-status-text")) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      received += decoder.decode(chunk.value);
+    }
+    // The page is asked for while the stream is still open: web-pi lets go of
+    // a live session once its last reader does.
+    const page = await (await app.request("/sessions/s1")).text();
+    await reader.cancel();
+    const surface = page.indexOf('class="composer-surface"');
+    // The composer's own "more" popover carries a second copy for phones, so
+    // the strip itself is the one the stream swaps, by id.
+    const shelf = page.indexOf('id="shelf"');
+    const footerEnd = page.indexOf("</footer>", surface);
+    expect(surface).toBeGreaterThan(-1);
+    expect(shelf).toBeGreaterThan(surface);
+    expect(shelf).toBeLessThan(footerEnd);
+    expect(page.slice(shelf, footerEnd)).toContain(
+      'class="extension-status-shelf has-status"',
+    );
+    expect(page.slice(shelf, footerEnd)).toContain(
+      'class="extension-status-text"',
+    );
+  });
+
   it("chips the files a turn wrote and offers them as mentions", async () => {
     const { app } = testApp({
       script: () => [
