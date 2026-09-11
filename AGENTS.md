@@ -48,7 +48,11 @@ src/core       rules and ports: transcript projection, session derivations
 src/adapters   Pi SDK, filesystem, Git, and in-memory implementations of the
                ports
 src/web        Hono routes, JSX views, HTMX/SSE delivery, client bundle, the
-               generated service worker and manifest
+               generated service worker and manifest. routes/, views/ and
+               client/ are split one module per area of the screen — sidebar,
+               shell, transcript, composer, files — so five ports can run at
+               once; routes/shared.ts holds what they all need
+src/web/styles pi-web's stylesheets, verbatim, plus areas/<area>.css
 src/container.ts  the only file that wires adapters into the core
 src/server.ts  process entrypoint; src/cli.ts the flags and startup behind the
                bin, src/host-pi.ts the SDK resolution both of them use,
@@ -76,13 +80,35 @@ Rules enforced by `.oxlintrc.json`:
 - `src/web/client/*` is bundled by esbuild and may import `@core/*`; anything it
   imports must run in a browser (no Node, no SDK). `main.ts` and
   `mermaid-lib.ts` are the two bundle entry points.
-- Anything a page can do without script does: the workspace selector, the
-  subagent fold, and the extension widget panel are `<details>` elements the
-  server fills on demand.
+- Anything a page can do without script does: the workspace menu is a native
+  `popover` anchored in CSS, and the subagent fold and the extension widget
+  panel are `<details>` elements the server fills on demand.
 - Web Push keys and subscriptions live in the agent directory (`web-push.json`).
   Never let a test or an unattended check reach the real one:
   `createWebPushNotifier` takes the directory, and its `send` is injectable so
   nothing has to talk to a push service.
+
+## Styling
+
+web-pi is a pixel port of pi-web, so pi-web's CSS is the specification, not an
+inspiration:
+
+- `src/web/styles/base.css`, `globals.css`, `settings.css` and `embedded.css`
+  are pi-web's own files. **Never edit them.** They are re-copied when pi-web
+  changes.
+- Markup carries pi-web's class names and pi-web's inline styles (camelCase to
+  kebab, numbers to px), so those stylesheets apply unchanged. The UI map in the
+  porting notes names the class of every region; when it names one, use it.
+- There is no utility framework. A `class="flex gap-2 text-sm"` is a bug: reach
+  for the pi-web class, or an inline style with the values pi-web uses.
+- New rules go in `src/web/styles/areas/<area>.css`, the one stylesheet an area
+  may edit, or in `web-pi.css` for something pi-web gets from Next.js — with a
+  comment saying why. `index.css` fixes the cascade order.
+- Icons come from `src/web/views/icons.tsx`, which holds every SVG pi-web draws.
+  Add one there, copied from pi-web, rather than inline in a view.
+- An HTMX swap has to replace a whole owner subtree (`.chat-transcript`,
+  `.session-row`, `#file-panel`): pi-web's CSS keys on container relationships,
+  and a partial swap breaks them silently.
 
 Read `docs/architecture.md` before changing a port, the SSE contract, or context
 accounting. Shell commands run with a sanitised environment; read

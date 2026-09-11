@@ -45,16 +45,16 @@ function zoomDialog(svg: string): void {
   // zoom instead of aborting the turn behind it.
   dialog.setAttribute("data-modal", "");
   let zoom = 1;
-  dialog.innerHTML = `<div class="modal-box max-w-[95vw]">
-    <div class="mb-2 flex items-center gap-2">
-      <button type="button" class="btn btn-xs" data-zoom="out">−</button>
+  dialog.innerHTML = `<div>
+    <div>
+      <button type="button" data-zoom="out">−</button>
       <span data-zoom-readout>100%</span>
-      <button type="button" class="btn btn-xs" data-zoom="in">+</button>
-      <button type="button" class="btn btn-xs" data-zoom="fit">Fit</button>
-      <span class="flex-1"></span>
-      <button type="button" class="btn btn-xs" data-zoom="close">Close</button>
+      <button type="button" data-zoom="in">+</button>
+      <button type="button" data-zoom="fit">Fit</button>
+      <span></span>
+      <button type="button" data-zoom="close">Close</button>
     </div>
-    <div class="overflow-auto" data-zoom-canvas></div>
+    <div data-zoom-canvas></div>
   </div>`;
   const canvas = dialog.querySelector<HTMLElement>("[data-zoom-canvas]");
   const readout = dialog.querySelector<HTMLElement>("[data-zoom-readout]");

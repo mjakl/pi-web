@@ -25,9 +25,5 @@
         "proseWrap": "always"
       }
     }
-  ],
-  "sortTailwindcss": {
-    "stylesheet": "./src/web/app.css",
-    "functions": ["cn"]
-  }
+  ]
 }

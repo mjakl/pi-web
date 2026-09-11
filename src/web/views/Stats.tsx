@@ -26,19 +26,17 @@ function Line({
   copy?: boolean;
 }) {
   return (
-    <div class="flex items-center justify-between gap-2">
-      <span class="shrink-0 text-base-content/60">{label}</span>
-      <span class="truncate text-right" title={value}>
-        {value}
-      </span>
+    <div>
+      <span>{label}</span>
+      <span title={value}>{value}</span>
       {copy === true && value !== "" ? (
-        <span class="inline-flex shrink-0">
+        <span>
           <span hidden data-copy-source>
             {value}
           </span>
           <button
             type="button"
-            class="btn btn-ghost btn-xs"
+
             data-copy
             aria-label={`Copy ${label.toLowerCase()}`}
           >
@@ -63,7 +61,7 @@ export function StatsPanel({
   const count = (value: number) => value.toLocaleString("en");
   const { tokens } = stats;
   return (
-    <div class="flex flex-col gap-1">
+    <div>
       {summary.name ? <Line label="Name" value={summary.name} /> : null}
       <Line label="Session" value={summary.id} copy />
       {summary.filePath === undefined ? null : (
@@ -76,13 +74,13 @@ export function StatsPanel({
       {summary.worktreeBranch ? (
         <Line label="Branch" value={summary.worktreeBranch} />
       ) : null}
-      <div class="divider my-1" />
+      <div />
       <Line label="User messages" value={count(stats.userMessages)} />
       <Line label="Answers" value={count(stats.assistantMessages)} />
       <Line label="Tool calls" value={count(stats.toolCalls)} />
       <Line label="Tool results" value={count(stats.toolResults)} />
       <Line label="Total messages" value={count(stats.totalMessages)} />
-      <div class="divider my-1" />
+      <div />
       <Line label="Input" value={formatTokens(tokens.input)} />
       <Line label="Output" value={formatTokens(tokens.output)} />
       {tokens.cacheRead > 0 ? (
@@ -104,8 +102,8 @@ export function StatsPanel({
           value={`${formatTokens(usage.contextWindow)} tokens`}
         />
       )}
-      <div class="mt-1 flex justify-between gap-4">
-        <span class="text-base-content/60">Context</span>
+      <div>
+        <span>Context</span>
         <ContextBadge usage={usage} />
       </div>
     </div>

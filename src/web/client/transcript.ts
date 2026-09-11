@@ -1,5 +1,6 @@
 import { highlightIn } from "./highlight.ts";
 import { setUpMermaid } from "./mermaid.ts";
+import { setUpRail } from "./rail.ts";
 
 // Everything the transcript needs from the browser: staying at the tail while
 // a turn streams, keeping the reading position when an older page is
@@ -47,6 +48,7 @@ function setUpCopy(): void {
 }
 
 export function setUpTranscript(): void {
+  setUpRail();
   const view = document.getElementById("log");
   if (!view) {
     setUpCopy();

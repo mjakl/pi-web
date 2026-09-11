@@ -2,9 +2,9 @@
 
 A server-rendered web interface for the
 [Pi coding agent](https://github.com/earendil-works/pi), built with Hono, Hono
-JSX, HTMX, Tailwind, and daisyUI. It reads the session files Pi already keeps
-under `~/.pi/agent` and runs live turns in-process through Pi's SDK, so the
-terminal and the browser are two views of the same sessions.
+JSX and HTMX, styled by pi-web's own stylesheets. It reads the session files Pi
+already keeps under `~/.pi/agent` and runs live turns in-process through Pi's
+SDK, so the terminal and the browser are two views of the same sessions.
 
 The server owns all UI state: pages and fragments are rendered on the server and
 swapped by HTMX, and one SSE stream per open session pushes re-rendered

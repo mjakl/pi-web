@@ -1,0 +1,5 @@
+/* Sidebar area.
+
+   pi-web's stylesheets in ../ are the pixel spec; this file is the only
+   CSS this area may edit. Empty on purpose: add a rule only when pi-web's
+   own CSS cannot express it, and say why. */

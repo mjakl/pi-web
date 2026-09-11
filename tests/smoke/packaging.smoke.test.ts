@@ -161,7 +161,16 @@ it("serves the index and the stored session", async () => {
 it("serves the built assets and the manifest", async () => {
   const css = await fetch(`${origin}/static/app.css`);
   expect(css.status).toBe(200);
-  expect(await css.text()).toContain("--color-base-100");
+  const stylesheet = await css.text();
+  // pi-web's tokens and the self-hosted font the mono stack names.
+  expect(stylesheet).toContain("--bg-panel");
+  expect(stylesheet).toContain("noto-sans-mono-latin-wght-normal.woff2");
+  const font = await fetch(
+    `${origin}/static/fonts/noto-sans-mono-latin-wght-normal.woff2`,
+  );
+  expect(font.status).toBe(200);
+  const icon = await fetch(`${origin}/static/icons/catppuccin/latte/rust.svg`);
+  expect(icon.status).toBe(200);
   const manifest = await fetch(`${origin}/manifest.webmanifest`);
   expect(manifest.status).toBe(200);
   const described = (await manifest.json()) as { name?: string };

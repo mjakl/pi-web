@@ -14,7 +14,7 @@ function remaining(expiresAt: number): string {
 }
 
 function Actions({ children }: { children?: unknown }) {
-  return <div class="mt-4 flex flex-wrap justify-end gap-2">{children}</div>;
+  return <div>{children}</div>;
 }
 
 /**
@@ -28,7 +28,7 @@ function Cancel() {
       type="submit"
       name="cancelled"
       value="1"
-      class="btn order-1 btn-ghost btn-sm"
+
       data-dialog-cancel
     >
       Cancel
@@ -41,14 +41,9 @@ function Body({ dialog }: { dialog: DialogRequest }) {
     case "select":
       return (
         <>
-          <div class="flex flex-col gap-2">
+          <div>
             {(dialog.options ?? []).map((option) => (
-              <button
-                type="submit"
-                name="value"
-                value={option}
-                class="btn justify-start btn-outline btn-sm"
-              >
+              <button type="submit" name="value" value={option}>
                 {option}
               </button>
             ))}
@@ -61,14 +56,9 @@ function Body({ dialog }: { dialog: DialogRequest }) {
     case "confirm":
       return (
         <>
-          <p class="text-sm whitespace-pre-wrap">{dialog.message ?? ""}</p>
+          <p>{dialog.message ?? ""}</p>
           <Actions>
-            <button
-              type="submit"
-              name="confirmed"
-              value="1"
-              class="btn order-2 btn-primary btn-sm"
-            >
+            <button type="submit" name="confirmed" value="1">
               Confirm
             </button>
             <Cancel />
@@ -81,14 +71,12 @@ function Body({ dialog }: { dialog: DialogRequest }) {
           <input
             type="text"
             name="value"
-            class="input w-full input-sm"
+
             placeholder={dialog.placeholder ?? ""}
             autofocus
           />
           <Actions>
-            <button type="submit" class="btn order-2 btn-primary btn-sm">
-              Send
-            </button>
+            <button type="submit">Send</button>
             <Cancel />
           </Actions>
         </>
@@ -98,16 +86,14 @@ function Body({ dialog }: { dialog: DialogRequest }) {
         <>
           <textarea
             name="value"
-            class="textarea h-48 w-full font-mono text-xs"
+
             data-dialog-submit
             autofocus
           >
             {dialog.prefill ?? ""}
           </textarea>
           <Actions>
-            <button type="submit" class="btn order-2 btn-primary btn-sm">
-              Save
-            </button>
+            <button type="submit">Save</button>
             <Cancel />
           </Actions>
         </>
@@ -127,17 +113,11 @@ export function ExtensionDialogBody({
 }) {
   if (!dialog) return <></>;
   return (
-    <dialog class="modal" data-modal open>
-      <form
-        class="modal-box max-w-lg"
-        hx-post={`/sessions/${sessionId}/ui/${dialog.id}`}
-        hx-swap="none"
-      >
-        <h3 class="pb-2 font-semibold">{dialog.title}</h3>
+    <dialog data-modal open>
+      <form hx-post={`/sessions/${sessionId}/ui/${dialog.id}`} hx-swap="none">
+        <h3>{dialog.title}</h3>
         {dialog.expiresAt === undefined ? null : (
-          <p class="pb-2 text-xs text-base-content/60">
-            {remaining(dialog.expiresAt)}
-          </p>
+          <p>{remaining(dialog.expiresAt)}</p>
         )}
         <Body dialog={dialog} />
       </form>
@@ -179,16 +159,13 @@ export function CustomPanelBody({
 }) {
   if (!frame) return <></>;
   return (
-    <section
-      class="border-t border-base-300 px-3 py-2"
-      data-custom-ui={`/sessions/${sessionId}/ui/${frame.id}/input`}
-    >
-      <div class="flex items-center gap-2 pb-1 text-xs text-base-content/60">
+    <section data-custom-ui={`/sessions/${sessionId}/ui/${frame.id}/input`}>
+      <div>
         <span>Extension UI · click to type, Ctrl+C to close</span>
-        <span class="flex-1" />
+        <span />
         <button
           type="button"
-          class="btn btn-ghost btn-xs"
+
           data-custom-close
           title="Sends Ctrl+C, which is how a component is asked to finish"
         >
@@ -202,7 +179,6 @@ export function CustomPanelBody({
         tabindex={0}
         role="application"
         aria-label="Extension terminal UI"
-        class="custom-frame overflow-x-auto font-mono text-xs leading-tight whitespace-pre"
       >
         <CustomFrameBody frame={frame} />
       </pre>

@@ -6,10 +6,10 @@
 const VISIBLE = 5;
 const LIFETIME_MS = 5000;
 
-const LEVEL_CLASS: Record<string, string> = {
-  info: "alert-info",
-  warning: "alert-warning",
-  error: "alert-error",
+const LEVEL_COLOUR: Record<string, string> = {
+  info: "var(--info)",
+  warning: "var(--warning)",
+  error: "var(--danger)",
 };
 
 function shelf(): HTMLElement | null {
@@ -45,7 +45,8 @@ export function showToast(
   const list = shelf();
   if (!list) return;
   const toast = document.createElement("div");
-  toast.className = `alert py-2 text-sm ${LEVEL_CLASS[level] ?? "alert-error"}`;
+  toast.className = "notice-shelf-item";
+  toast.style.color = LEVEL_COLOUR[level] ?? "var(--danger)";
   toast.textContent = message;
   list.append(toast);
   schedule(toast);

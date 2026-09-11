@@ -69,11 +69,12 @@ export function setUpImages(): Attachments {
       const image = document.createElement("img");
       image.src = URL.createObjectURL(file);
       image.alt = file.name;
-      image.className = "h-14 w-14 rounded border border-base-300 object-cover";
+      image.style.cssText =
+        "width:56px; height:56px; object-fit:cover; border-radius:6px; border:1px solid var(--border); display:block";
       const remove = document.createElement("button");
       remove.type = "button";
-      remove.className =
-        "btn absolute -top-2 -right-2 btn-circle btn-xs btn-neutral";
+      remove.style.cssText =
+        "position:absolute; top:-4px; right:-4px; width:16px; height:16px; border-radius:50%; background:var(--bg-panel); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; padding:0; color:var(--text-muted)";
       remove.textContent = "×";
       remove.setAttribute("aria-label", `Remove ${file.name}`);
       // By identity, never by the index this closure was built with: a

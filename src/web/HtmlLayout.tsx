@@ -1,5 +1,5 @@
-import { ICONS, THEME_COLOUR } from "@web/pwa";
-import { DARK_THEME, LIGHT_THEME, THEME_KEY } from "@web/client/theme";
+import { ICONS } from "@web/pwa";
+import { THEME_KEY } from "@web/client/theme";
 import type { AppEnvironment } from "@web/hono";
 import type { Context } from "hono";
 import { raw } from "hono/html";
@@ -8,10 +8,11 @@ import type { PropsWithChildren } from "hono/jsx";
 export const HTMX_SRC = "/static/vendor/htmx.min-2.0.10.js";
 export const HTMX_SSE_SRC = "/static/vendor/htmx-ext-sse.min-2.2.4.js";
 
-// The stored theme has to reach <html> before the first paint, so this one
-// cannot wait for the module bundle. src/web/client/main.ts owns the rest.
-const THEME_SCRIPT = `try{var t=localStorage.getItem(${JSON.stringify(THEME_KEY)});
-document.documentElement.setAttribute("data-theme",t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches)?${JSON.stringify(DARK_THEME)}:${JSON.stringify(LIGHT_THEME)})}catch(e){}`;
+// pi-web's pre-paint script (app/layout.tsx:L79), verbatim except for the
+// storage key coming from the module both halves share. The class has to be on
+// <html> before the first paint, so this cannot wait for the bundle;
+// src/web/client/theme.ts owns every later change.
+const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem(${JSON.stringify(THEME_KEY)});var dark=t==="dark"||((t==null||t===""||t==="auto")&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(dark)document.documentElement.classList.add("dark")}catch(e){}})();`;
 
 export function HtmlLayout(
   { children }: PropsWithChildren,
@@ -22,15 +23,52 @@ export function HtmlLayout(
   }
   const assets = context.get("assets");
   return (
-    <html lang="en">
+    // `translate=no` on both elements: a page translation would rewrite the
+    // transcript under the reader.
+    <html lang="en" translate="no" class="notranslate">
       <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Pi</title>
-        <meta name="theme-color" content={THEME_COLOUR} />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+        />
+        <meta name="google" content="notranslate" />
+        {/* The real one is "<folder> - Pi Web", set by the shell module from
+            the folder on the page: only the browser knows which page won. */}
+        <title>Pi Web</title>
+        <meta
+          name="theme-color"
+          media="(prefers-color-scheme: light)"
+          content="#ffffff"
+        />
+        <meta
+          name="theme-color"
+          media="(prefers-color-scheme: dark)"
+          content="#1a1a1a"
+        />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta
+          name="apple-mobile-web-app-status-bar-style"
+          content="black-translucent"
+        />
+        <meta name="apple-mobile-web-app-title" content="Pi Web" />
+        <meta name="format-detection" content="telephone=no" />
         <link rel="manifest" href="/manifest.webmanifest" />
-        <link rel="icon" href={ICONS.small} />
-        <link rel="apple-touch-icon" href={ICONS.apple} />
+        <link
+          rel="icon"
+          href={ICONS.faviconLight}
+          media="(prefers-color-scheme: light)"
+          sizes="64x64"
+          type="image/png"
+        />
+        <link
+          rel="icon"
+          href={ICONS.faviconDark}
+          media="(prefers-color-scheme: dark)"
+          sizes="64x64"
+          type="image/png"
+        />
+        <link rel="apple-touch-icon" href={ICONS.apple} sizes="180x180" />
         <script>{raw(THEME_SCRIPT)}</script>
         <link rel="stylesheet" href={assets.css} />
         <script src={HTMX_SRC} defer></script>
@@ -38,7 +76,8 @@ export function HtmlLayout(
         <script type="module" src={assets.js}></script>
       </head>
       <body
-        class="h-full overflow-hidden bg-base-100 text-base-content"
+        translate="no"
+        class="notranslate"
         data-mermaid-src={assets.mermaid}
         // The service worker is registered with this build's asset hash, so a
         // new build replaces the worker and its cache instead of being served

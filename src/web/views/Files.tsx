@@ -52,13 +52,14 @@ function Icon({ name }: { name: string }) {
   );
 }
 
-const STATUS_CLASS: Record<string, string> = {
-  M: "text-warning",
-  A: "text-success",
-  D: "text-error",
-  R: "text-info",
-  U: "text-success",
-  C: "text-error",
+/** pi-web's Git badge colours (§3.5): the letter carries the state. */
+const STATUS_COLOUR: Record<string, string> = {
+  M: "var(--warning)",
+  A: "var(--success)",
+  D: "var(--danger)",
+  R: "#60a5fa",
+  U: "var(--success)",
+  C: "var(--danger)",
 };
 
 /** Hover actions: put the path into the composer, or download the file. */
@@ -173,7 +174,8 @@ export function TreeNodes({
               <span class="tree-name">{entry.name}</span>
               {change ? (
                 <span
-                  class={`tree-status ${STATUS_CLASS[change.status] ?? ""}`}
+                  class="tree-status"
+                  style={`color:${STATUS_COLOUR[change.status] ?? "var(--text-dim)"}`}
                   title={statusLabel(change.status)}
                 >
                   {change.status}
@@ -208,8 +210,8 @@ function Changes({
     <details class="changes">
       <summary class="changes-head">
         <span>{String(status.files.length)} changed</span>
-        <span class="text-success">+{String(status.additions)}</span>
-        <span class="text-error">-{String(status.deletions)}</span>
+        <span>+{String(status.additions)}</span>
+        <span>-{String(status.deletions)}</span>
       </summary>
       <ul class="changes-list">
         {status.files.map((file) => {
@@ -223,7 +225,10 @@ function Changes({
                 data-file-path={file.path}
                 data-file-mode="diff"
               >
-                <span class={`tree-status ${STATUS_CLASS[file.status] ?? ""}`}>
+                <span
+                  class="tree-status"
+                  style={`color:${STATUS_COLOUR[file.status] ?? "var(--text-dim)"}`}
+                >
                   {file.status}
                 </span>
                 <Icon name={iconOf(file.path, false)} />
@@ -479,7 +484,7 @@ function ViewerBody({
     return (
       <div class="viewer-preview">
         <Frontmatter source={text} />
-        <div class="prose max-w-none break-words">
+        <div class="markdown-body">
           {raw(
             renderMarkdown(parsed.body, {
               cwd: view.cwd,
@@ -540,9 +545,9 @@ export function Viewer({
         </span>
         <span class="viewer-meta">{meta}</span>
         <span class="viewer-live" title="Watching this file" hidden />
-        <span class="flex-1" />
+        <span />
         {modes.length < 2 ? null : (
-          <span class="viewer-modes" role="group" aria-label="View mode">
+          <span role="group" aria-label="View mode">
             {modes.map((option) => (
               <button
                 type="button"
@@ -592,73 +597,11 @@ export function Viewer({
 }
 
 /**
- * The panel itself. Its contents arrive on first open, so a session page that
- * never shows files pays nothing for it.
+ * What the right panel holds below its tab bar. The panel container, its tab
+ * bar and the hide button are pi-web's shell (src/web/views/SessionPage.tsx),
+ * and the file tree now lives in the sidebar's explorer section, so this is
+ * the viewer alone.
  */
-export function FilePanel({
-  sessionId,
-  cwd,
-}: {
-  sessionId: string;
-  cwd: string;
-}) {
-  const explorerUrl = `/files/explorer?session=${encodeURIComponent(sessionId)}`;
-  return (
-    <aside id="file-panel" class="file-panel" data-session={sessionId} hidden>
-      <div
-        class="panel-resize"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize the file panel"
-        tabindex={0}
-      />
-      <div class="panel-body">
-        <div class="panel-head">
-          <input
-            id="file-search"
-            type="search"
-            name="q"
-            class="input w-full input-xs"
-            placeholder="Search files"
-            aria-label="Search files"
-            autocomplete="off"
-            hx-get={`/files/search?session=${encodeURIComponent(sessionId)}`}
-            hx-trigger="input changed delay:150ms, search"
-            hx-target="#file-tree"
-            hx-swap="outerHTML"
-          />
-          <button
-            type="button"
-            class="viewer-action"
-            title="Refresh"
-            aria-label="Refresh the file list"
-            hx-get={explorerUrl}
-            hx-target="#file-explorer"
-            hx-swap="innerHTML"
-          >
-            ⟳
-          </button>
-          <button
-            type="button"
-            class="viewer-action"
-            id="file-panel-close"
-            title="Close the file panel"
-            aria-label="Close the file panel"
-          >
-            ✕
-          </button>
-        </div>
-        <div
-          id="file-explorer"
-          class="explorer"
-          data-cwd={cwd}
-          hx-get={explorerUrl}
-          hx-trigger="revealed, sse:settled"
-          hx-swap="innerHTML"
-        />
-        <div id="file-tabs" class="file-tabs" role="tablist" hidden />
-        <div id="file-view" class="file-view" />
-      </div>
-    </aside>
-  );
+export function FilePanelBody() {
+  return <div id="file-view" class="file-view" />;
 }

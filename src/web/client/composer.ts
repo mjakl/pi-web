@@ -40,7 +40,7 @@ function isSendShortcut(event: KeyboardEvent): boolean {
 
 function lastAnswer(): string {
   const answers = document.querySelectorAll<HTMLElement>(
-    '[data-role="assistant"] .prose',
+    '[data-role="assistant"] .markdown-body',
   );
   return answers[answers.length - 1]?.textContent?.trim() ?? "";
 }

@@ -6,6 +6,3 @@ allowBuilds:
   esbuild: true
   protobufjs: false
   unrs-resolver: true
-
-minimumReleaseAgeExclude:
-  - daisyui@5.7.33

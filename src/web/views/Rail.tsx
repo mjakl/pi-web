@@ -36,7 +36,7 @@ function Mark({
   return (
     <button
       type="button"
-      class={`rail-mark rail-${mark.kind}${mark.active ? " is-active" : ""}`}
+      class={`rail-mark${mark.kind}${mark.active ? " is-active" : ""}`}
       style={`top:${offset(mark.row, rows)};left:${String(mark.lane * LANE)}px`}
       data-entry-id={mark.id}
       data-leaf-id={mark.targetLeafId}

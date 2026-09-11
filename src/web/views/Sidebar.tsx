@@ -6,24 +6,30 @@ import {
   type SessionSummary,
 } from "@core/sessions";
 import type { SidebarView } from "@core/workspace";
+import {
+  PlusIcon,
+  RefreshIcon,
+  SearchIcon,
+  SettingsSectionIcon,
+  SmallChevronIcon,
+} from "./icons.tsx";
 
-// The session list of one project. Rows arrive as placeholders and fetch their
-// own counts when they scroll into view, so opening a store with thousands of
-// sessions costs one header read per file and nothing else. The project
-// selector above it is what keeps the page small: a real store holds hundreds
-// of projects, and a reader works in one.
+// The sidebar: pi-web's header block, workspace pill, session list and
+// explorer section (components/SessionSidebar.tsx §3.1). The rows inside the
+// list are still web-pi's own markup — the sidebar area rebuilds them on
+// pi-web's 54px SessionItem.
 
 export type Row = { summary: SessionSummary; metadata?: SessionRowMetadata };
 
 function Indicator({ summary }: { summary: SessionSummary }) {
-  const [label, klass] = summary.running
-    ? ["Agent running", "status-primary animate-pulse"]
+  const [label, colour] = summary.running
+    ? ["Agent running", "var(--accent)"]
     : summary.live
-      ? ["Session active", "status-success"]
-      : ["Session stopped", "status-neutral opacity-40"];
+      ? ["Session active", "var(--success)"]
+      : ["Session stopped", "var(--text-dim)"];
   return (
     <span
-      class={`status status-sm ${klass}`}
+      style={`width:6px; height:6px; border-radius:50%; flex-shrink:0; background:${colour}`}
       title={label}
       aria-label={label}
     />
@@ -38,7 +44,7 @@ function MenuItem(props: {
   confirm?: string;
   target: string;
 }) {
-  const klass = props.danger ? "text-error" : "";
+  const klass = props.danger ? "menu-item menu-item-danger" : "menu-item";
   if (props.href) {
     return (
       <li>
@@ -64,31 +70,28 @@ function MenuItem(props: {
   );
 }
 
+/* TODO(sidebar): pi-web's row menu is a native popover placed by JS, 144px
+   wide with 34px items (gap K2). */
 function RowMenu({ summary, metadata }: Row) {
   const id = summary.id;
   const target = `#row-${id}`;
   return (
-    <details class="dropdown dropdown-end">
-      <summary
-        class="btn btn-square btn-ghost btn-xs"
-        aria-label={`Actions for ${sessionTitle(summary, metadata)}`}
-      >
+    <details>
+      <summary aria-label={`Actions for ${sessionTitle(summary, metadata)}`}>
         ⋯
       </summary>
-      <ul class="menu dropdown-content z-10 w-52 rounded-box bg-base-100 p-1 text-sm shadow">
+      <ul class="menu-surface">
         <li>
           <form
             hx-post={`/sessions/${id}/rename`}
             hx-target={target}
             hx-swap="outerHTML"
-            class="p-1"
           >
             <input
               name="name"
               value={metadata?.name ?? summary.name ?? ""}
               placeholder="Rename…"
               aria-label={`Rename ${sessionTitle(summary, metadata)}`}
-              class="input w-full input-xs"
             />
           </form>
         </li>
@@ -144,9 +147,11 @@ export function SessionRow({
   const id = summary.id;
   const title = sessionTitle(summary, metadata);
   const pending = metadata === undefined;
+  const selected = id === activeId;
   return (
     <li
       id={`row-${id}`}
+      class="session-row"
       data-session-id={id}
       data-title={title.toLowerCase()}
       {...(oob ? { "hx-swap-oob": "true" } : {})}
@@ -157,22 +162,17 @@ export function SessionRow({
             "hx-swap": "outerHTML",
           }
         : {})}
-      class="flex items-center gap-1 px-1"
+      style={`display:flex; align-items:center; gap:6px; padding-left:14px; padding-right:8px; border-left:2px solid ${selected ? "var(--accent)" : "transparent"}; ${selected ? "background:var(--bg-selected);" : ""}`}
     >
       <a
         href={`/sessions/${id}`}
-        class={`flex min-w-0 flex-1 flex-col gap-0.5 rounded px-2 py-1 hover:bg-base-300 ${
-          id === activeId ? "bg-base-300 font-medium" : ""
-        }`}
+        style="display:flex; min-width:0; flex:1; flex-direction:column; gap:2px; padding:6px 0; color:inherit; text-decoration:none"
       >
-        <span class="flex min-w-0 items-center gap-1">
-          <span
-            class="unread-dot hidden size-1.5 shrink-0 rounded-full bg-info"
-            title="New activity"
-          />
-          <span class="truncate text-sm">{title}</span>
+        <span style="display:flex; min-width:0; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+          <span class="unread-dot" hidden title="New activity" />
+          {title}
         </span>
-        <span class="flex items-center gap-2 text-xs text-base-content/60">
+        <span style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-dim)">
           <Indicator summary={summary} />
           <span title={summary.modifiedAt}>
             {relativeTime(summary.modifiedAt)}
@@ -181,18 +181,21 @@ export function SessionRow({
             <span role="status">…</span>
           ) : (
             <>
-              <span>{String(metadata.messageCount)} msgs</span>
+              <span class="session-counts">
+                {String(metadata.messageCount)} msgs
+              </span>
               {metadata.starCount > 0 ? (
-                <span title={`${String(metadata.starCount)} starred answers`}>
+                <span
+                  class="session-star-count"
+                  title={`${String(metadata.starCount)} starred answers`}
+                >
                   ★ {String(metadata.starCount)}
                 </span>
               ) : null}
             </>
           )}
           {summary.worktreeBranch ? (
-            <span class="badge badge-ghost badge-xs">
-              {summary.worktreeBranch}
-            </span>
+            <span style="color:var(--accent)">{summary.worktreeBranch}</span>
           ) : null}
         </span>
       </a>
@@ -218,10 +221,9 @@ function SubagentRuns({
   const query = new URLSearchParams({ project });
   if (parentId !== undefined) query.set("parent", parentId);
   return (
-    <li class="px-1">
-      <details class="pl-6">
+    <li style="padding-left:14px; font-size:11px; color:var(--text-dim)">
+      <details>
         <summary
-          class="cursor-pointer py-1 text-xs text-base-content/50"
           hx-get={`/sidebar/subagents?${query.toString()}`}
           hx-trigger="click once"
           hx-target="next ul"
@@ -229,10 +231,8 @@ function SubagentRuns({
         >
           {String(count)} subagent run{count === 1 ? "" : "s"}
         </summary>
-        <ul class="flex flex-col">
-          <li class="px-2 py-1 text-xs text-base-content/40" role="status">
-            Loading…
-          </li>
+        <ul>
+          <li role="status">Loading…</li>
         </ul>
       </details>
     </li>
@@ -277,7 +277,7 @@ export function SessionRows({
       ))}
       {more ? (
         <li
-          class="px-3 py-2 text-xs text-base-content/50"
+          style="padding:8px 12px; font-size:11px; color:var(--text-dim)"
           hx-get={`/sidebar/rows?${query.toString()}`}
           hx-trigger="intersect once"
           hx-target="this"
@@ -302,11 +302,11 @@ export function SessionList({
   return (
     <ul
       id="session-list"
-      class="min-h-0 flex-1 overflow-y-auto"
+      style="flex:1 1 auto; overflow-y:auto; min-height:80px; margin:0; padding:0; list-style:none"
       {...(oob ? { "hx-swap-oob": "innerHTML" } : {})}
     >
       {view.sessions.length === 0 && view.orphans === 0 ? (
-        <li class="px-3 py-2 text-xs text-base-content/50">
+        <li style="padding:16px 14px; font-size:12px; color:var(--text-muted)">
           No sessions in this project yet.
         </li>
       ) : null}
@@ -326,6 +326,11 @@ export function SessionList({
 /** How many projects it takes before the selector needs a filter box. */
 const FILTER_FROM = 8;
 
+/**
+ * The workspace pill and the menu it anchors: a native popover positioned by
+ * CSS anchor positioning (§3.1, §1.9). The list is fetched when the popover
+ * opens — a real store holds hundreds of projects.
+ */
 export function ProjectSelect({
   view,
   oob,
@@ -336,77 +341,103 @@ export function ProjectSelect({
   const current = view.projects.find(
     (project) => project.key === view.selected,
   );
+  const cwd = view.selected ?? "";
   return (
-    <details
-      id="project-select"
-      class="dropdown w-full"
-      data-project-key={view.selected ?? ""}
-      {...(oob ? { "hx-swap-oob": "true" } : {})}
-    >
-      <summary
-        class="btn w-full justify-between btn-ghost btn-sm"
-        title={view.selected ?? "No project"}
+    <div style="position:relative" {...(oob ? { "hx-swap-oob": "true" } : {})}>
+      <button
+        type="button"
+        id="project-select"
+        class="anchor-sidebar-project"
+        popovertarget="sidebar-project-menu"
+        data-project-key={cwd}
+        title={cwd === "" ? "No project" : cwd}
+        style={`width:100%; display:flex; align-items:center; padding:6px 10px; background:${cwd === "" ? "rgba(37,99,235,0.06)" : "var(--bg-hover)"}; border:1px solid ${cwd === "" ? "rgba(37,99,235,0.4)" : "var(--border)"}; border-radius:7px; cursor:pointer; font-size:12px; color:var(--text); text-align:left; transition:border-color 0.15s, background 0.15s`}
       >
-        <span class="truncate">{current?.label ?? "No project"}</span>
+        <PathLabel
+          text={current?.label ?? "Select a project"}
+          dim={cwd === ""}
+        />
         <span
           id="project-activity"
-          class="size-1.5 shrink-0 rounded-full bg-info"
           title="Activity in another project"
+          style="width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-left:6px; background:var(--accent)"
           hidden={!view.activityElsewhere}
         />
-      </summary>
-      {/* A real store holds hundreds of projects: the list is fetched when the
-          selector opens rather than shipped with every page. */}
+      </button>
       <div
-        class="dropdown-content z-20 max-h-96 w-72 overflow-y-auto rounded-box bg-base-100 p-1 shadow"
+        id="sidebar-project-menu"
+        class="anchored-menu menu-surface opens-down menu-sidebar-project"
+        popover="auto"
+        style="z-index:100; overflow:hidden"
         hx-get="/sidebar/projects"
-        hx-trigger="toggle once from:closest details"
+        hx-trigger="toggle once"
         hx-swap="innerHTML"
       >
-        <p class="px-3 py-2 text-xs text-base-content/50" role="status">
+        <p
+          style="padding:8px 10px; font-size:11px; color:var(--text-dim)"
+          role="status"
+        >
           Loading projects…
         </p>
       </div>
-    </details>
+    </div>
   );
 }
 
-/** The selector's contents: every project, with a filter box once there are many. */
+/**
+ * pi-web's PathLabel: right-to-left text so a long path keeps its tail and
+ * loses its head to the ellipsis.
+ */
+function PathLabel({ text, dim }: { text: string; dim?: boolean }) {
+  return (
+    <span
+      style={`flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; min-width:0; line-height:1.35; direction:rtl; text-align:left; font-family:var(--font-mono); font-size:11px; color:var(${dim ? "--text-dim" : "--text"})`}
+    >
+      <span style="unicode-bidi:plaintext">{text}</span>
+    </span>
+  );
+}
+
+/** The menu's contents: every project, with a filter box once there are many. */
 export function ProjectPicker({ view }: { view: SidebarView }) {
   return (
     <>
       {view.projects.length > FILTER_FROM ? (
-        <input
-          id="project-filter"
-          type="search"
-          placeholder="Filter projects"
-          aria-label="Filter projects"
-          class="input mb-1 w-full input-xs"
-        />
-      ) : null}
-      <ul class="menu w-full flex-nowrap p-0 text-sm">
-        {view.projects.map((project) => (
-          <ProjectRow
-            project={project}
-            selected={project.key === view.selected}
+        <div style="padding:6px 8px; border-bottom:1px solid var(--border)">
+          <input
+            id="project-filter"
+            class="menu-filter"
+            type="search"
+            placeholder="Filter projects…"
+            aria-label="Filter projects"
           />
-        ))}
-      </ul>
-      <p
-        id="project-empty"
-        class="px-3 py-2 text-xs text-base-content/50"
-        hidden
-      >
-        No matching projects
-      </p>
+        </div>
+      ) : null}
+      <div style="max-height:min(50vh, 380px); overflow-y:auto">
+        <ul style="margin:0; padding:0; list-style:none">
+          {view.projects.map((project) => (
+            <ProjectRow
+              project={project}
+              selected={project.key === view.selected}
+            />
+          ))}
+        </ul>
+        <p
+          id="project-empty"
+          style="padding:8px 10px; font-size:11px; color:var(--text-dim)"
+          hidden
+        >
+          No matching projects
+        </p>
+      </div>
       <button
         type="button"
-        class="btn mt-1 w-full btn-ghost btn-xs"
+        class="menu-item"
         hx-get="/workspaces/picker"
         hx-target="#dialogs"
         hx-swap="innerHTML"
       >
-        Change folder…
+        Custom path…
       </button>
     </>
   );
@@ -423,24 +454,23 @@ function ProjectRow({
     <li data-project-key={project.key}>
       <button
         type="button"
-        class={selected ? "menu-active" : ""}
+        class="menu-item"
+        aria-current={selected ? "true" : "false"}
         title={project.key}
         hx-get={`/sidebar?project=${encodeURIComponent(project.key)}`}
         hx-target="#project-nav"
         hx-swap="outerHTML"
       >
-        <span class="min-w-0 flex-1 truncate">{project.label}</span>
+        <span class="project-folder-label">{project.label}</span>
         {project.running > 0 ? (
-          <span
-            class="badge badge-xs badge-primary"
-            title={`${String(project.running)} running`}
-          >
+          <span title={`${String(project.running)} running`}>
             {String(project.running)}
           </span>
         ) : null}
         <span
-          class="project-unread badge hidden badge-xs badge-info"
+          class="project-unread"
           title="Finished while you were elsewhere"
+          hidden
         />
       </button>
     </li>
@@ -462,18 +492,15 @@ export function ProjectNav({
   return (
     <div
       id="project-nav"
-      class="flex min-h-0 flex-1 flex-col"
+      style="display:flex; min-height:0; flex:1 1 auto; flex-direction:column"
       hx-ext="sse"
       sse-connect="/events"
       sse-swap="rows"
       hx-swap="none"
     >
-      <div class="px-2 pb-1">
-        <ProjectSelect view={view} />
-      </div>
       <SessionList view={view} activeId={activeId} />
       {/* Filled by the global stream with the session whose turn just
-          finished; src/web/client/main.ts turns that into an unread dot. */}
+          finished; src/web/client/sidebar.ts turns that into an unread dot. */}
       <div
         id="session-finished"
         sse-swap="finished"
@@ -484,20 +511,90 @@ export function ProjectNav({
   );
 }
 
-function Footer() {
+/**
+ * The explorer section at the foot of the sidebar (§3.5). The tree itself is
+ * fetched by the files area's routes and rendered into `#file-explorer`.
+ */
+function ExplorerSection({
+  sessionId,
+  cwd,
+}: {
+  sessionId: string;
+  cwd: string;
+}) {
+  const explorerUrl = `/files/explorer?session=${encodeURIComponent(sessionId)}`;
   return (
-    <div class="flex items-center gap-2 border-t border-base-300 px-3 py-2 text-xs">
-      <span class="text-base-content/60">Theme</span>
-      {/* Wired up by src/web/client/main.ts; without it the system theme wins. */}
-      <select id="theme-select" class="select select-xs" aria-label="Theme">
-        <option value="system">System</option>
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
-      <span class="flex-1" />
-      <a href="/settings" class="btn btn-ghost btn-xs" title="Settings">
-        ⚙
-      </a>
+    <div
+      id="explorer-section"
+      style="border-top:1px solid var(--border); display:flex; flex-direction:column; flex:1 1 0; min-height:0; overflow:hidden"
+    >
+      <div style="display:flex; align-items:center; flex-shrink:0">
+        <button
+          type="button"
+          id="explorer-toggle"
+          aria-expanded="true"
+          aria-controls="explorer-body"
+          style="display:flex; align-items:center; gap:6px; flex:1; padding:6px 10px; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:11px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; text-align:left"
+        >
+          <span
+            data-explorer-chevron
+            style="display:flex; transform:rotate(90deg); transition:transform 0.15s"
+          >
+            <SmallChevronIcon />
+          </span>
+          Explorer
+        </button>
+        {/* TODO(sidebar): pi-web toggles the search field from this button and
+            adds a changed-files toggle beside it (gap B8). */}
+        <button
+          type="button"
+          class="sidebar-toolbar-button"
+          id="explorer-search-toggle"
+          aria-pressed="false"
+          title="Search files"
+          aria-label="Search files"
+        >
+          <SearchIcon />
+        </button>
+        <button
+          type="button"
+          class="sidebar-toolbar-button"
+          style="margin-right:6px"
+          title="Refresh the file list"
+          aria-label="Refresh the file list"
+          hx-get={explorerUrl}
+          hx-target="#file-explorer"
+          hx-swap="innerHTML"
+        >
+          <RefreshIcon size={13} width={2} />
+        </button>
+      </div>
+      <div
+        id="explorer-body"
+        style="flex:1; overflow-y:auto; overflow-x:hidden"
+      >
+        <input
+          id="file-search"
+          type="search"
+          name="q"
+          placeholder="Search files"
+          aria-label="Search files"
+          autocomplete="off"
+          style="width:calc(100% - 20px); margin:0 10px 4px; padding:4px 8px; border:1px solid var(--border); border-radius:5px; background:var(--bg); color:var(--text); font-family:var(--font-mono); font-size:11px"
+          hx-get={`/files/search?session=${encodeURIComponent(sessionId)}`}
+          hx-trigger="input changed delay:150ms, search"
+          hx-target="#file-tree"
+          hx-swap="outerHTML"
+        />
+        <div
+          id="file-explorer"
+          class="explorer"
+          data-cwd={cwd}
+          hx-get={explorerUrl}
+          hx-trigger="revealed, sse:settled"
+          hx-swap="innerHTML"
+        />
+      </div>
     </div>
   );
 }
@@ -505,58 +602,62 @@ function Footer() {
 export function Sidebar({
   view,
   activeId,
+  cwd,
 }: {
   view: SidebarView;
   activeId?: string;
+  cwd?: string;
 }) {
   return (
-    <aside id="sidebar" class="sidebar flex h-full flex-col bg-base-200">
-      <div class="flex items-center justify-between gap-1 px-3 py-2">
-        <a href="/" class="font-semibold">
-          Pi
-        </a>
-        <span class="flex-1" />
-        {/* The list is pushed by the shared stream; this is for a session
-            started in the terminal, which nothing here can hear about. */}
-        <button
-          type="button"
-          id="sidebar-refresh"
-          class="btn btn-square btn-ghost btn-xs"
-          aria-label="Refresh the session list"
-          title="Refresh the session list"
-          hx-get="/sidebar"
-          hx-target="#project-nav"
-          hx-swap="outerHTML"
-        >
-          ↻
-        </button>
-        <a
-          href="/new"
-          class="btn btn-primary btn-xs"
-          title="New session (Ctrl+K)"
-        >
-          New
-        </a>
-      </div>
-      <div class="px-3 pb-2">
-        <input
-          id="session-filter"
-          type="search"
-          placeholder="Filter sessions"
-          aria-label="Filter sessions"
-          class="input w-full input-xs"
-        />
+    <div
+      id="sidebar"
+      style="display:flex; flex-direction:column; height:100%; overflow:hidden"
+    >
+      <div style="padding:12px 10px 10px; border-bottom:1px solid var(--border); flex-shrink:0">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px">
+          <span style="font-weight:700; font-size:15px; letter-spacing:-0.01em; color:var(--text); font-family:var(--font-mono); min-width:6ch">
+            Pi Web
+          </span>
+          <div style="display:flex; gap:6px">
+            <a
+              class="sidebar-icon-button"
+              href="/new"
+              title="New session (Ctrl+K)"
+              aria-label="New session"
+              aria-keyshortcuts="Meta+K Control+K"
+            >
+              <PlusIcon />
+            </a>
+            {/* The list is pushed by the shared stream; this is for a session
+                started in the terminal, which nothing here can hear about. */}
+            <button
+              type="button"
+              id="sidebar-refresh"
+              class="sidebar-icon-button"
+              title="Refresh the session list"
+              aria-label="Refresh the session list"
+              hx-get="/sidebar"
+              hx-target="#project-nav"
+              hx-swap="outerHTML"
+            >
+              <RefreshIcon size={15} width={2} />
+            </button>
+            <a
+              class="sidebar-icon-button"
+              href="/settings"
+              title="Settings"
+              aria-label="Settings"
+            >
+              <SettingsSectionIcon section="general" size={15} width={2} />
+            </a>
+          </div>
+        </div>
+        <ProjectSelect view={view} />
       </div>
       <ProjectNav view={view} activeId={activeId} />
-      <Footer />
-      {/* Dragged by src/web/client/panel.ts's shared resize handle. */}
-      <div
-        class="sidebar-resize"
-        role="separator"
-        aria-label="Resize the sidebar"
-        aria-orientation="vertical"
-        tabindex={0}
-      />
-    </aside>
+      {activeId !== undefined && cwd !== undefined ? (
+        <ExplorerSection sessionId={activeId} cwd={cwd} />
+      ) : null}
+    </div>
   );
 }

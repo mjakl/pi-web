@@ -21,19 +21,15 @@ const SOURCE_LABEL: Record<SlashSource, string> = {
 /** The slash menu list, grouped by source with a flat index for the arrows. */
 export function CommandMenu({ commands }: { commands: SlashCommand[] }) {
   if (commands.length === 0) {
-    return (
-      <div class="px-3 py-2 text-sm text-base-content/60">No commands</div>
-    );
+    return <div>No commands</div>;
   }
   const groups = [...new Set(commands.map((command) => command.source))];
   let index = -1;
   return (
-    <ul class="menu w-full flex-nowrap p-0 text-sm" role="listbox">
+    <ul role="listbox">
       {groups.map((source) => (
         <>
-          <li class="sticky top-0 bg-base-100 px-3 py-1 text-xs text-base-content/50">
-            {SOURCE_LABEL[source]}
-          </li>
+          <li>{SOURCE_LABEL[source]}</li>
           {commands
             .filter((command) => command.source === source)
             .map((command) => {
@@ -43,17 +39,13 @@ export function CommandMenu({ commands }: { commands: SlashCommand[] }) {
                   <button
                     type="button"
                     role="option"
-                    class="flex w-full items-baseline gap-2 rounded-none"
+
                     data-command={command.name}
                     data-index={String(index)}
                   >
-                    <span class="font-mono">/{command.name}</span>
-                    {command.manual ? (
-                      <span class="badge badge-ghost badge-xs">Manual</span>
-                    ) : null}
-                    <span class="truncate text-xs text-base-content/60">
-                      {command.description}
-                    </span>
+                    <span>/{command.name}</span>
+                    {command.manual ? <span>Manual</span> : null}
+                    <span>{command.description}</span>
                   </button>
                 </li>
               );
@@ -64,10 +56,12 @@ export function CommandMenu({ commands }: { commands: SlashCommand[] }) {
   );
 }
 
-const TOAST_CLASS = {
-  info: "alert-info",
-  warning: "alert-warning",
-  error: "alert-error",
+/* TODO(composer): pi-web's notices are `.notice-shelf-item` cards with a
+   coloured type dot (§4.8); this is the colour alone until that lands. */
+const TOAST_COLOUR = {
+  info: "var(--info)",
+  warning: "var(--warning)",
+  error: "var(--danger)",
 } as const;
 
 /** One batch of notices, appended to the shelf by the session's SSE stream. */
@@ -75,7 +69,10 @@ export function Toasts({ notices }: { notices: Notice[] }) {
   return (
     <>
       {notices.map((notice) => (
-        <div class={`alert py-2 text-sm ${TOAST_CLASS[notice.level]}`}>
+        <div
+          class="notice-shelf-item"
+          style={`color:${TOAST_COLOUR[notice.level]}`}
+        >
           <span>{notice.message}</span>
         </div>
       ))}
@@ -84,15 +81,7 @@ export function Toasts({ notices }: { notices: Notice[] }) {
 }
 
 function Menu({ id, label }: { id: string; label: string }) {
-  return (
-    <div
-      id={id}
-      role="presentation"
-      aria-label={label}
-      hidden
-      class="absolute right-0 bottom-full left-0 z-20 mb-2 max-h-[min(48vh,400px)] overflow-y-auto rounded-box border border-base-300 bg-base-100 shadow-lg"
-    />
-  );
+  return <div id={id} role="presentation" aria-label={label} hidden />;
 }
 
 /**
@@ -124,7 +113,7 @@ export function ComposerText({ draft }: { draft?: string }) {
     <textarea
       id="composer-text"
       name="text"
-      class="composer-textarea textarea-bordered textarea w-full"
+      class="composer-textarea"
       rows={1}
       placeholder="Ask Pi…  /command  @file  !shell"
       // The browser keyboard must not steal Enter from a phone user.
@@ -167,7 +156,7 @@ export function ModelPicker({
     <>
       <select
         name="model"
-        class="select max-w-48 select-xs"
+
         aria-label="Model"
         title={`${String(models.length)} models. Type to search.`}
       >
@@ -182,7 +171,7 @@ export function ModelPicker({
           : models.map(option)}
       </select>
       {current?.reasoning && levels.length > 0 ? (
-        <select name="thinking" class="select select-xs" aria-label="Reasoning">
+        <select name="thinking" aria-label="Reasoning">
           {auto ? <option value="">auto</option> : null}
           {levels.map((choice) => (
             <option value={choice.level} selected={choice.level === level}>
@@ -203,7 +192,7 @@ export function ModelPicker({
 function StartupModel({ view }: { view: NewSessionView }) {
   if (view.models.length === 0) return <></>;
   return (
-    <div class="flex flex-wrap items-center gap-1">
+    <div>
       <ModelPicker
         models={view.models}
         current={view.model ?? null}
@@ -212,9 +201,7 @@ function StartupModel({ view }: { view: NewSessionView }) {
         auto
       />
       {view.modelWarnings.length > 0 ? (
-        <span class="w-full text-xs text-warning" role="alert">
-          {view.modelWarnings.join("\n")}
-        </span>
+        <span role="alert">{view.modelWarnings.join("\n")}</span>
       ) : null}
     </div>
   );
@@ -240,7 +227,7 @@ export function Composer({
   return (
     <form
       id="composer"
-      class="flex flex-col gap-2 border-t border-base-300 p-3"
+
       hx-post={
         sessionId === undefined ? "/sessions" : `/sessions/${sessionId}/prompt`
       }
@@ -262,7 +249,7 @@ export function Composer({
         name="behavior"
         value="steer"
       />
-      <div id="image-previews" class="flex flex-wrap gap-2 empty:hidden" />
+      <div id="image-previews" />
       <RecalledImages images={[]} oob={false} />
       <input
         id="image-input"
@@ -272,24 +259,24 @@ export function Composer({
         multiple
         hidden
       />
-      <div class="relative">
+      <div>
         <Menu id="slash-menu" label="Commands" />
         <Menu id="at-menu" label="Files" />
         <ComposerText draft={draft} />
       </div>
-      <div class="flex flex-wrap items-center gap-2">
+      <div>
         {start ? <StartupModel view={start} /> : null}
         <button
           type="button"
           id="attach-image"
-          class="btn btn-ghost btn-sm"
+
           aria-label="Attach images"
           title="Attach images"
         >
           🖼
         </button>
-        <span id="shell-hint" class="text-xs text-base-content/60" hidden />
-        <span class="flex-1" />
+        <span id="shell-hint" hidden />
+        <span />
         {/* The delivery mode travels in the hidden field above, which the
             click handler sets: htmx appends a submitter's own name and value
             *after* the form's fields, so a named button here would lose to
@@ -297,7 +284,7 @@ export function Composer({
         <button
           type="submit"
           data-behavior="followUp"
-          class="composer-running-only btn btn-sm"
+          class="composer-running-only"
           title="Queue after the agent finishes (Alt+Enter)"
         >
           Queue
@@ -305,7 +292,7 @@ export function Composer({
         <button
           type="submit"
           data-behavior="steer"
-          class="btn btn-primary btn-sm"
+
           title="Ctrl+Enter to send"
         >
           <span class="composer-idle-label">Send</span>

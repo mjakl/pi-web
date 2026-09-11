@@ -21,7 +21,7 @@ function Chip({
       <span aria-hidden="true">
         {widget.placement === "aboveEditor" ? "▲" : "▼"}
       </span>
-      <span class="font-mono">{widget.key}</span>
+      <span>{widget.key}</span>
       {updated ? <span class="widget-pulse" aria-hidden="true" /> : null}
     </>
   );
@@ -44,10 +44,10 @@ export function ShelfBody({
       widget.lines.length >= 2 && widget.lines.length <= DEFAULT_EXPANDED_LINES,
   )?.key;
   return (
-    <div class="flex flex-col gap-1 border-t border-base-300 px-3 py-1 text-xs">
+    <div>
       {line === "" ? null : (
         <p
-          class="extension-status truncate font-mono"
+          class="extension-status"
           role="status"
           title={stripAnsi(line)}
           aria-label={stripAnsi(line)}
@@ -59,7 +59,7 @@ export function ShelfBody({
         <div class="shelf-chips">
           {widgets.map((widget) =>
             widget.lines.length === 0 ? (
-              <div class="badge gap-1 badge-ghost badge-sm">
+              <div>
                 <Chip widget={widget} updated={changed.has(widget.key)} />
               </div>
             ) : (
@@ -68,14 +68,12 @@ export function ShelfBody({
                 class="widget"
                 open={widget.key === expanded}
               >
-                <summary class="badge cursor-pointer gap-1 badge-sm">
+                <summary>
                   <Chip widget={widget} updated={changed.has(widget.key)} />
                 </summary>
                 <div class="widget-panel">
-                  <div class="mb-1 font-mono font-semibold">{widget.key}</div>
-                  <pre class="overflow-auto whitespace-pre-wrap">
-                    {raw(ansiToHtml(widget.lines.join("\n")))}
-                  </pre>
+                  <div>{widget.key}</div>
+                  <pre>{raw(ansiToHtml(widget.lines.join("\n")))}</pre>
                 </div>
               </details>
             ),

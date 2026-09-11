@@ -12,6 +12,14 @@ import {
 } from "@core/skills";
 import { DEFAULT_WARN_TOKENS } from "@core/context-usage";
 import { shortPath } from "./Workspace.tsx";
+import { ThemeIcon } from "./icons.tsx";
+
+/** pi-web's order: light, dark, then system (§8.2). */
+const THEME_OPTIONS = [
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" },
+  { id: "auto", label: "System" },
+] as const;
 
 // Settings are plain pages: one section at a time, swapped by HTMX. Nothing
 // here holds state the server does not already know, except the three browser
@@ -52,7 +60,7 @@ function SectionNav({ active, cwd }: { active: SettingsSection; cwd: string }) {
   return (
     <>
       <select
-        class="select mb-3 w-full select-sm md:hidden"
+        class="settings-mobile-section-picker"
         aria-label="Settings section"
         // A native select is the whole mobile navigation: no script, no menu.
         hx-get="/settings"
@@ -73,19 +81,16 @@ function SectionNav({ active, cwd }: { active: SettingsSection; cwd: string }) {
           </option>
         ))}
       </select>
-      <ul class="menu hidden w-48 shrink-0 p-0 text-sm md:block">
+      <ul class="settings-section-tabs">
         {SETTINGS_SECTIONS.map((section) => (
           <li>
             <a
               href={sectionHref(section.key, cwd)}
-              class={section.key === active ? "menu-active" : ""}
+              class="settings-section-tab"
               {...(section.key === active ? { "aria-current": "page" } : {})}
               {...(usable(section)
                 ? {}
-                : {
-                    title: "Open a project to configure this section",
-                    class: "pointer-events-none opacity-40",
-                  })}
+                : { title: "Open a project to configure this section" })}
             >
               {section.label}
             </a>
@@ -108,65 +113,87 @@ function GeneralSettings({
   warnTokens: number;
 }) {
   return (
-    <div class="flex max-w-md flex-col gap-5">
-      <fieldset>
-        <legend class="pb-1 text-sm font-semibold">Appearance</legend>
-        <select id="theme-select" class="select select-sm" aria-label="Theme">
-          <option value="system">System</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-      </fieldset>
-      <fieldset>
-        <legend class="pb-1 text-sm font-semibold">Completion sound</legend>
-        <label class="flex items-center gap-2 text-sm">
-          <input
-            id="sound-toggle"
-            type="checkbox"
-            class="toggle toggle-sm"
-            checked
-          />
-          <span>Play a tone when a turn finishes</span>
-        </label>
-      </fieldset>
-      <fieldset>
-        <legend class="pb-1 text-sm font-semibold">Notifications</legend>
-        <label class="flex items-center gap-2 text-sm">
-          <input id="push-toggle" type="checkbox" class="toggle toggle-sm" />
-          <span>Notify this browser when a run finishes</span>
-        </label>
-        <p class="pt-1 text-xs text-base-content/50">
-          Needs permission from the browser, and reaches you with the tab
-          closed.
+    <div class="settings-general">
+      <h2 class="settings-general-title">General</h2>
+      <section class="settings-general-section">
+        <h3 class="settings-general-heading">Appearance</h3>
+        <p class="settings-general-description">
+          Select a theme or follow your system preference.
         </p>
-      </fieldset>
-      <fieldset>
-        <legend class="pb-1 text-sm font-semibold">Dumb zone</legend>
-        <label class="flex items-center gap-2 text-sm">
+        {/* Which option is checked depends on localStorage, so the server
+            renders all three unchecked and src/web/client/theme.ts marks the
+            stored one as soon as the page is up. */}
+        <div
+          role="radiogroup"
+          aria-label="Appearance"
+          class="settings-theme-options"
+        >
+          {THEME_OPTIONS.map((option) => (
+            <button
+              type="button"
+              role="radio"
+              aria-checked="false"
+              data-theme-option={option.id}
+              class="settings-theme-option"
+            >
+              <ThemeIcon preference={option.id} />
+              <span class="settings-theme-option-label">{option.label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+      <section class="settings-general-section">
+        <h3 class="settings-general-heading">Dumb zone</h3>
+        <p class="settings-general-description">
+          Highlight context usage and Compact when the current context reaches
+          this many tokens.
+        </p>
+        <div class="settings-general-option">
+          <label for="dumb-zone-tokens">Token threshold</label>
           <input
             id="dumb-zone-tokens"
+            class="settings-number-input"
             type="number"
             min="1"
             step="1000"
             value={String(warnTokens)}
-            class="input w-32 input-sm"
           />
-          <span class="text-base-content/60">
-            Warn about context above this many tokens
-          </span>
-        </label>
-      </fieldset>
-      <p class="text-xs text-base-content/50">
-        These are kept in this browser. Models, skills and plugins live in
-        Pi&apos;s own configuration.
-      </p>
+        </div>
+      </section>
+      <section class="settings-general-section">
+        <h3 class="settings-general-heading">Completion sound</h3>
+        <p class="settings-general-description">
+          Play a tone when a task finishes.
+        </p>
+        <div class="settings-general-option">
+          <span>Completion sound</span>
+          <label>
+            <input id="sound-toggle" type="checkbox" checked />
+            <span>Play a tone when a turn finishes</span>
+          </label>
+        </div>
+      </section>
+      <section class="settings-general-section">
+        <h3 class="settings-general-heading">Notifications</h3>
+        <p class="settings-general-description">
+          Needs permission from the browser, and reaches you with the tab
+          closed.
+        </p>
+        <div class="settings-general-option">
+          <span>Run finished</span>
+          <label>
+            <input id="push-toggle" type="checkbox" />
+            <span>Notify this browser when a run finishes</span>
+          </label>
+        </div>
+      </section>
       {about === undefined ? null : (
-        <fieldset>
-          <legend class="pb-1 text-sm font-semibold">About</legend>
-          <p class="text-xs text-base-content/60">
+        <section class="settings-general-section">
+          <h3 class="settings-general-heading">About</h3>
+          <p class="settings-general-description">
             web-pi {about.webPi} · pi {about.pi}
           </p>
-        </fieldset>
+        </section>
       )}
     </div>
   );
@@ -174,7 +201,7 @@ function GeneralSettings({
 
 function TrustNotice({ what }: { what: string }) {
   return (
-    <div class="mb-2 alert py-2 text-xs alert-warning" role="status">
+    <div role="status">
       Project {what} are not loaded because this project is not trusted.
     </div>
   );
@@ -192,7 +219,7 @@ function ScopePicker({
   return (
     <select
       name={name}
-      class="select select-xs"
+
       aria-label="Install scope"
       title={
         trusted
@@ -221,12 +248,6 @@ export type SkillsView = {
   selected?: string;
 };
 
-function skillRowClass(active: boolean): string {
-  return `flex w-full items-center gap-2 rounded-none text-left ${
-    active ? "menu-active" : ""
-  }`;
-}
-
 export function SkillList({
   view,
   selected,
@@ -244,32 +265,25 @@ export function SkillList({
     skills: view.skills.filter((skill) => skillGroup(skill) === group.key),
   })).filter((group) => group.skills.length > 0);
   return (
-    <ul id="skill-list" class="menu w-full flex-nowrap p-0 text-sm">
-      {groups.length === 0 ? (
-        <li class="px-3 py-2 text-xs text-base-content/50">
-          No skills in this folder
-        </li>
-      ) : null}
+    <ul id="skill-list">
+      {groups.length === 0 ? <li>No skills in this folder</li> : null}
       {groups.map((group) => (
         <>
-          <li class="px-3 py-1 text-xs text-base-content/50">{group.label}</li>
+          <li>{group.label}</li>
           {group.skills.map((skill) => (
             <li>
               <button
                 type="button"
-                class={skillRowClass(skill.filePath === selected)}
+                class="menu-item"
+                aria-current={skill.filePath === selected ? "true" : "false"}
                 hx-get={`/settings/skills/detail?cwd=${encodeURIComponent(view.cwd)}&path=${encodeURIComponent(skill.filePath)}`}
                 hx-target="#skill-detail"
                 hx-swap="innerHTML"
               >
-                <span class="truncate">{skill.name}</span>
-                {skill.disableModelInvocation ? (
-                  <span class="badge badge-ghost badge-xs">Manual</span>
-                ) : null}
+                <span>{skill.name}</span>
+                {skill.disableModelInvocation ? <span>Manual</span> : null}
                 {updated.has(skill.install?.package ?? "") ? (
-                  <span class="text-warning" title="Update available">
-                    ↑
-                  </span>
+                  <span title="Update available">↑</span>
                 ) : null}
               </button>
             </li>
@@ -295,30 +309,23 @@ export function SkillDetail({
   home?: string;
 }) {
   if (!skill) {
-    return (
-      <p class="p-3 text-sm text-base-content/60">
-        Select a skill to see what it does.
-      </p>
-    );
+    return <p>Select a skill to see what it does.</p>;
   }
   const install = skill.install;
   const relative = skill.filePath.startsWith(`${cwd}/`)
     ? `./${skill.filePath.slice(cwd.length + 1)}`
     : shortPath(skill.filePath, home);
   return (
-    <div id="skill-detail-body" class="flex flex-col gap-3 p-3 text-sm">
-      <div class="flex items-center gap-2">
-        <span class="badge badge-ghost badge-sm">{skill.scope}</span>
-        <code class="truncate text-xs opacity-70" title={skill.filePath}>
-          {relative}
-        </code>
+    <div id="skill-detail-body">
+      <div>
+        <span>{skill.scope}</span>
+        <code title={skill.filePath}>{relative}</code>
       </div>
-      <div class="flex items-center gap-2">
+      <div>
         <button
           type="button"
           role="switch"
           aria-checked={skill.disableModelInvocation ? "false" : "true"}
-          class={`btn btn-xs ${skill.disableModelInvocation ? "" : "btn-primary"}`}
           hx-post="/settings/skills/toggle"
           hx-vals={JSON.stringify({
             cwd,
@@ -330,33 +337,28 @@ export function SkillDetail({
         >
           {skill.disableModelInvocation ? "Manual" : "Model-visible"}
         </button>
-        <span class="text-xs text-base-content/60">
+        <span>
           {skill.disableModelInvocation
             ? "Only you can invoke this skill."
             : "Pi may invoke this skill on its own."}
         </span>
       </div>
       {install?.skillsShUrl ? (
-        <p class="text-xs">
+        <p>
           Source:{" "}
-          <a
-            class="link"
-            href={install.skillsShUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a href={install.skillsShUrl} target="_blank" rel="noreferrer">
             {install.source}
           </a>
         </p>
       ) : null}
       {install ? (
-        <div class="flex flex-wrap items-center gap-2 text-xs">
+        <div>
           <span>Version</span>
           <code>{(install.versionHash ?? "unknown").slice(0, 8)}</code>
           {install.canCheckForUpdates ? (
             <button
               type="button"
-              class="btn btn-xs"
+
               hx-post="/settings/skills/check"
               hx-vals={JSON.stringify({
                 cwd,
@@ -375,7 +377,7 @@ export function SkillDetail({
               <code>{(update.latestVersion ?? "").slice(0, 8)}</code>
               <button
                 type="button"
-                class="btn btn-primary btn-xs"
+
                 hx-post="/settings/skills/update"
                 hx-vals={JSON.stringify({
                   cwd,
@@ -391,7 +393,7 @@ export function SkillDetail({
             </>
           ) : null}
           {update ? (
-            <span class="opacity-70">
+            <span>
               {update.state === "up-to-date"
                 ? "Up to date"
                 : update.state === "unsupported"
@@ -404,18 +406,14 @@ export function SkillDetail({
         </div>
       ) : null}
       <div>
-        <h4 class="text-xs text-base-content/50">Name</h4>
+        <h4>Name</h4>
         <p>{skill.name}</p>
       </div>
       <div>
-        <h4 class="text-xs text-base-content/50">Description</h4>
-        <p class="whitespace-pre-wrap">{skill.description}</p>
+        <h4>Description</h4>
+        <p>{skill.description}</p>
       </div>
-      {message === undefined ? null : (
-        <pre class="max-h-40 overflow-auto rounded bg-base-200 p-2 text-xs whitespace-pre-wrap">
-          {message}
-        </pre>
-      )}
+      {message === undefined ? null : <pre>{message}</pre>}
     </div>
   );
 }
@@ -432,21 +430,17 @@ export function SkillSearchResults({
   message?: string;
 }) {
   return (
-    <div id="skill-search-results" class="flex flex-col gap-1">
-      {message === undefined ? null : (
-        <p class="text-xs" role="status">
-          {message}
-        </p>
-      )}
+    <div id="skill-search-results">
+      {message === undefined ? null : <p role="status">{message}</p>}
       {hits.length === 0 && message === undefined ? (
-        <p class="text-xs text-base-content/50">No skills found</p>
+        <p>No skills found</p>
       ) : null}
       {hits.map((hit) => (
-        <div class="flex items-center gap-2 text-xs">
-          <span class="flex-1 truncate font-mono">{hit.package}</span>
-          <span class="opacity-60">{hit.installs}</span>
+        <div>
+          <span>{hit.package}</span>
+          <span>{hit.installs}</span>
           {hit.url === "" ? null : (
-            <a class="link" href={hit.url} target="_blank" rel="noreferrer">
+            <a href={hit.url} target="_blank" rel="noreferrer">
               skills.sh
             </a>
           )}
@@ -454,12 +448,11 @@ export function SkillSearchResults({
             hx-post="/settings/skills/install"
             hx-target="#skill-search-results"
             hx-swap="outerHTML"
-            class="flex items-center gap-1"
           >
             <input type="hidden" name="cwd" value={cwd} />
             <input type="hidden" name="package" value={hit.package} />
             <ScopePicker name="scope" trusted={trusted} target=".pi/skills" />
-            <button class="btn btn-xs">Install</button>
+            <button>Install</button>
           </form>
         </div>
       ))}
@@ -481,23 +474,19 @@ export function SkillsSection({
       (entry) => entry.filePath === (selected ?? view.selected),
     ) ?? view.skills[0];
   return (
-    <div class="flex min-h-0 flex-col gap-2">
+    <div>
       {view.projectResourcesLoaded ? null : <TrustNotice what="skills" />}
-      <div class="flex min-h-0 flex-col gap-3 md:flex-row">
-        <div class="max-h-72 w-full shrink-0 overflow-y-auto rounded-box border border-base-300 md:max-h-[60vh] md:w-64">
+      <div>
+        <div>
           <SkillList view={view} selected={skill?.filePath} />
         </div>
-        <div
-          id="skill-detail"
-          class="min-w-0 flex-1 rounded-box border border-base-300"
-        >
+        <div id="skill-detail">
           <SkillDetail cwd={view.cwd} skill={skill} home={home} />
         </div>
       </div>
-      <details class="rounded-box border border-base-300 p-2">
-        <summary class="cursor-pointer text-sm">Add skill</summary>
+      <details>
+        <summary>Add skill</summary>
         <form
-          class="mt-2 flex flex-wrap items-center gap-2"
           hx-post="/settings/skills/search"
           hx-target="#skill-search-results"
           hx-swap="outerHTML"
@@ -505,13 +494,13 @@ export function SkillsSection({
           <input type="hidden" name="cwd" value={view.cwd} />
           <input
             name="query"
-            class="input flex-1 input-sm"
+
             placeholder="Search skills.sh"
             aria-label="Search skills"
           />
-          <button class="btn btn-sm">Search</button>
+          <button>Search</button>
         </form>
-        <div class="mt-2">
+        <div>
           <SkillSearchResults
             hits={[]}
             cwd={view.cwd}
@@ -520,10 +509,10 @@ export function SkillsSection({
           />
         </div>
       </details>
-      <div class="flex items-center gap-2 text-xs text-base-content/60">
+      <div>
         <button
           type="button"
-          class="btn btn-ghost btn-xs"
+
           hx-post="/settings/skills/check"
           hx-vals={JSON.stringify({ cwd: view.cwd })}
           hx-target="#settings-body"
@@ -542,7 +531,7 @@ export function SkillsSection({
           </span>
         )}
         {view.diagnostics.map((message) => (
-          <span class="text-warning">{message}</span>
+          <span>{message}</span>
         ))}
       </div>
     </div>
@@ -551,11 +540,11 @@ export function SkillsSection({
 
 // --- Plugins ---------------------------------------------------------------
 
-const STATUS_CLASS = {
-  loaded: "status-primary",
-  installed: "status-warning",
-  disabled: "status-neutral opacity-40",
-  missing: "status-error",
+const STATUS_COLOUR = {
+  loaded: "var(--accent)",
+  installed: "var(--warning)",
+  disabled: "var(--text-dim)",
+  missing: "var(--danger)",
 } as const;
 
 function pluginKey(info: PackageInfo): string {
@@ -574,11 +563,7 @@ export function PluginDetail({
   home?: string;
 }) {
   if (!info) {
-    return (
-      <p class="p-3 text-sm text-base-content/60">
-        Select a plugin to see what it provides.
-      </p>
-    );
+    return <p>Select a plugin to see what it provides.</p>;
   }
   const act = (action: string) =>
     JSON.stringify({
@@ -589,23 +574,17 @@ export function PluginDetail({
       selected: pluginKey(info),
     });
   return (
-    <div class="flex flex-col gap-3 p-3 text-sm">
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="badge badge-ghost badge-sm">
-          {info.scope === "user" ? "global" : "project"}
-        </span>
-        {info.disabled ? (
-          <span class="badge badge-sm badge-neutral">Disabled</span>
-        ) : null}
-        {info.filtered ? (
-          <span class="badge badge-ghost badge-sm">filtered</span>
-        ) : null}
-        <code class="truncate text-xs">{info.source}</code>
+    <div>
+      <div>
+        <span>{info.scope === "user" ? "global" : "project"}</span>
+        {info.disabled ? <span>Disabled</span> : null}
+        {info.filtered ? <span>filtered</span> : null}
+        <code>{info.source}</code>
       </div>
-      <div class="flex flex-wrap gap-1">
+      <div>
         <button
           type="button"
-          class="btn btn-xs"
+
           hx-post="/settings/plugins"
           hx-vals={act("update")}
           hx-target="#settings-body"
@@ -615,7 +594,7 @@ export function PluginDetail({
         </button>
         <button
           type="button"
-          class="btn btn-xs"
+
           hx-post="/settings/plugins"
           hx-vals={act(info.disabled ? "enable" : "disable")}
           hx-target="#settings-body"
@@ -630,7 +609,7 @@ export function PluginDetail({
         </button>
         <button
           type="button"
-          class="btn text-error btn-xs"
+
           hx-post="/settings/plugins"
           hx-vals={act("remove")}
           hx-target="#settings-body"
@@ -640,39 +619,35 @@ export function PluginDetail({
           Remove
         </button>
       </div>
-      <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-        <dt class="text-base-content/50">Status</dt>
+      <dl>
+        <dt>Status</dt>
         <dd>{info.status}</dd>
-        <dt class="text-base-content/50">Version</dt>
+        <dt>Version</dt>
         <dd>
           {info.version ?? "unknown"}
           {info.configuredVersion === undefined
             ? ""
             : ` · configured ${info.configuredVersion}`}
         </dd>
-        <dt class="text-base-content/50">Package</dt>
+        <dt>Package</dt>
         <dd>{info.packageName ?? "unknown"}</dd>
-        <dt class="text-base-content/50">Installed path</dt>
-        <dd
-          class={info.installedPath === undefined ? "text-error" : "truncate"}
-        >
+        <dt>Installed path</dt>
+        <dd>
           {info.installedPath === undefined
             ? "Not found"
             : shortPath(info.installedPath, home)}
         </dd>
       </dl>
       <div>
-        <h4 class="text-xs text-base-content/50">Resolved resources</h4>
+        <h4>Resolved resources</h4>
         {info.resources.length === 0 ? (
-          <p class="text-xs opacity-60">
-            {info.disabled ? "Disabled" : "No resources"}
-          </p>
+          <p>{info.disabled ? "Disabled" : "No resources"}</p>
         ) : (
-          <ul class="text-xs">
+          <ul>
             {info.resources.map((resource) => (
               <li title={resource.path}>
-                <span class="font-medium">{resource.name}</span>{" "}
-                <span class="opacity-60">
+                <span>{resource.name}</span>{" "}
+                <span>
                   {resource.kind} · {resource.relativePath}
                 </span>
               </li>
@@ -680,11 +655,7 @@ export function PluginDetail({
           </ul>
         )}
       </div>
-      {message === undefined ? null : (
-        <p class="text-xs" role="status">
-          {message}
-        </p>
-      )}
+      {message === undefined ? null : <p role="status">{message}</p>}
     </div>
   );
 }
@@ -710,16 +681,12 @@ export function PluginsSection({
     { scope: "user" as PackageScope, label: "Global" },
   ];
   return (
-    <div class="flex min-h-0 flex-col gap-2">
+    <div>
       {view.projectResourcesLoaded ? null : <TrustNotice what="plugins" />}
-      <div class="flex min-h-0 flex-col gap-3 md:flex-row">
-        <div class="max-h-72 w-full shrink-0 overflow-y-auto rounded-box border border-base-300 md:max-h-[60vh] md:w-64">
-          <ul class="menu w-full flex-nowrap p-0 text-sm">
-            {view.packages.length === 0 ? (
-              <li class="px-3 py-2 text-xs text-base-content/50">
-                No plugins configured
-              </li>
-            ) : null}
+      <div>
+        <div>
+          <ul>
+            {view.packages.length === 0 ? <li>No plugins configured</li> : null}
             {scopes.map((group) => {
               const rows = view.packages.filter(
                 (entry) => entry.scope === group.scope,
@@ -727,31 +694,27 @@ export function PluginsSection({
               if (rows.length === 0) return <></>;
               return (
                 <>
-                  <li class="px-3 py-1 text-xs text-base-content/50">
-                    {group.label}
-                  </li>
+                  <li>{group.label}</li>
                   {rows.map((entry) => (
                     <li>
                       <button
                         type="button"
-                        class={`flex w-full items-center gap-2 rounded-none text-left ${
+                        class="menu-item"
+                        aria-current={
                           pluginKey(entry) === pluginKey(info ?? entry)
-                            ? "menu-active"
-                            : ""
-                        }`}
+                            ? "true"
+                            : "false"
+                        }
                         hx-get={`/settings/plugins?cwd=${encodeURIComponent(cwd)}&selected=${encodeURIComponent(pluginKey(entry))}`}
                         hx-target="#settings-body"
                         hx-swap="innerHTML"
                       >
                         <span
-                          class={`status status-sm ${STATUS_CLASS[entry.status]}`}
+                          class="config-status-dot"
+                          style={`background:${STATUS_COLOUR[entry.status]}`}
                           aria-label={entry.status}
                         />
-                        <span
-                          class={`truncate ${entry.disabled ? "opacity-50" : ""}`}
-                        >
-                          {entry.source}
-                        </span>
+                        <span>{entry.source}</span>
                       </button>
                     </li>
                   ))}
@@ -760,7 +723,7 @@ export function PluginsSection({
             })}
           </ul>
         </div>
-        <div class="min-w-0 flex-1 rounded-box border border-base-300">
+        <div>
           <PluginDetail
             cwd={cwd}
             {...(info ? { info } : {})}
@@ -769,13 +732,9 @@ export function PluginsSection({
           />
         </div>
       </div>
-      <details
-        class="rounded-box border border-base-300 p-2"
-        open={view.packages.length === 0}
-      >
-        <summary class="cursor-pointer text-sm">Add plugin</summary>
+      <details open={view.packages.length === 0}>
+        <summary>Add plugin</summary>
         <form
-          class="mt-2 flex flex-wrap items-center gap-2"
           hx-post="/settings/plugins"
           hx-target="#settings-body"
           hx-swap="innerHTML"
@@ -784,7 +743,7 @@ export function PluginsSection({
           <input type="hidden" name="action" value="install" />
           <input
             name="source"
-            class="input flex-1 font-mono input-sm"
+
             placeholder="npm:@scope/pi-plugin"
             aria-label="Plugin source"
           />
@@ -793,14 +752,14 @@ export function PluginsSection({
             trusted={view.projectResourcesLoaded}
             target=".pi"
           />
-          <button class="btn btn-sm">Install</button>
+          <button>Install</button>
         </form>
-        <p class="mt-1 text-xs text-base-content/50">
+        <p>
           npm:@scope/pi-plugin · git:https://github.com/user/repo ·
           /absolute/path/to/plugin
         </p>
       </details>
-      <div class="flex flex-wrap items-center gap-2 text-xs text-base-content/60">
+      <div>
         <span>
           {String(view.totals.extensions)} ext · {String(view.totals.skills)}{" "}
           skills · {String(view.totals.prompts)} prompts ·{" "}
@@ -808,7 +767,11 @@ export function PluginsSection({
         </span>
         {view.diagnostics.map((diagnostic) => (
           <span
-            class={diagnostic.type === "error" ? "text-error" : "text-warning"}
+            style={
+              diagnostic.type === "error"
+                ? "color:var(--danger)"
+                : "color:var(--warning)"
+            }
             title={diagnostic.source}
           >
             {diagnostic.message}
@@ -816,7 +779,7 @@ export function PluginsSection({
         ))}
         <button
           type="button"
-          class="btn btn-ghost btn-xs"
+
           hx-get={`/settings/plugins?cwd=${encodeURIComponent(cwd)}`}
           hx-target="#settings-body"
           hx-swap="innerHTML"
@@ -827,7 +790,7 @@ export function PluginsSection({
             every live session of this folder to reload its resources. */}
         <button
           type="button"
-          class="btn btn-ghost btn-xs"
+
           title="Reload extensions, skills, and prompts in the sessions of this folder"
           hx-post="/settings/plugins/reload"
           hx-vals={JSON.stringify({ cwd })}
@@ -866,7 +829,7 @@ export function SettingsBody({
 }) {
   if (error !== undefined) {
     return (
-      <div class="alert alert-error" role="alert">
+      <div role="alert">
         <span>{error}</span>
       </div>
     );
@@ -905,22 +868,18 @@ export function SettingsPage(props: {
   back: string;
 }) {
   return (
-    <div class="mx-auto flex min-h-0 w-full max-w-5xl flex-col gap-3 p-4">
-      <div class="flex items-center gap-2">
-        <h1 class="flex-1 text-xl font-semibold">Settings</h1>
+    <div>
+      <div>
+        <h1>Settings</h1>
         {props.cwd === "" ? null : (
-          <code class="truncate text-xs opacity-60">
-            {shortPath(props.cwd, props.home)}
-          </code>
+          <code>{shortPath(props.cwd, props.home)}</code>
         )}
-        <a class="btn btn-ghost btn-sm" href={props.back}>
-          Close
-        </a>
+        <a href={props.back}>Close</a>
       </div>
       <input id="settings-cwd" type="hidden" name="cwd" value={props.cwd} />
-      <div class="flex min-h-0 flex-col gap-4 md:flex-row">
+      <div>
         <SectionNav active={props.section} cwd={props.cwd} />
-        <div id="settings-body" class="min-w-0 flex-1">
+        <div id="settings-body">
           <SettingsBody {...props} />
         </div>
       </div>

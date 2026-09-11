@@ -1,6 +1,9 @@
 set quiet := true
 
-tailwind := "./node_modules/.bin/tailwindcss -i ./src/web/app.css -o ./static/app.css"
+# pi-web's stylesheets are the pixel spec (src/web/styles); esbuild only
+# inlines the @imports. Absolute /static/... urls are the browser's, not
+# esbuild's, so they stay external. Target = the browserslist floor.
+esbuild-css := "./node_modules/.bin/esbuild src/web/styles/index.css --bundle --target=chrome125,edge125,firefox147,safari26 '--external:/static/*' --outfile=static/app.css"
 esbuild := "./node_modules/.bin/esbuild src/web/client/main.ts --bundle --format=esm --target=es2022 --alias:@core=./src/core --outfile=static/client.js"
 esbuild-mermaid := "./node_modules/.bin/esbuild src/web/client/mermaid-lib.ts --bundle --format=esm --target=es2022 --outfile=static/mermaid.js"
 # The published server: everything bundled except the Pi SDK, which the bin
@@ -23,17 +26,17 @@ doctor:
 
 # DEV: Start the server with reload plus the CSS and client-script watchers
 dev: link-pi
-    {{ tailwind }}
+    {{ esbuild-css }}
     {{ esbuild-mermaid }}
     {{ esbuild }} --sourcemap
     node --watch --import tsx src/server.ts & \
     {{ esbuild }} --sourcemap --watch & \
-    {{ tailwind }} --watch; \
+    {{ esbuild-css }} --watch; \
     kill %1 %2
 
 # DEV: Build the stylesheet once
 build-css:
-    {{ tailwind }} --minify
+    {{ esbuild-css }} --minify
 
 # DEV: Build the client script bundles once
 build-js:

@@ -24,7 +24,7 @@ export function createMenu(
   const paint = (index: number): void => {
     for (const item of items()) {
       const active = item.dataset["index"] === String(index);
-      item.classList.toggle("menu-active", active);
+      item.toggleAttribute("data-active", active);
       item.setAttribute("aria-selected", active ? "true" : "false");
       if (active) item.scrollIntoView({ block: "nearest" });
     }

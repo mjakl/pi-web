@@ -110,6 +110,38 @@ composition root and the only importer of Pi adapters.
 
 ## Decisions
 
+- **pi-web's stylesheets are the pixel specification, copied verbatim.**
+  `src/web/styles/` holds pi-web's `base.css`, `globals.css` and `settings.css`
+  unchanged, plus `embedded.css` (the three `<style>` blocks pi-web keeps inside
+  components) and `web-pi.css` (only what pi-web gets from Next.js: the
+  self-hosted Noto Sans Mono faces behind `--font-noto-mono`, and htmx's
+  in-flight class). `index.css` imports them in pi-web's own order and esbuild
+  bundles that into `static/app.css`; there is no utility framework, because
+  Tailwind and daisyUI kept re-introducing their own metrics under every
+  component class and re-deriving 4,000 lines of hand-written CSS into utility
+  strings is a lossier copy of the same data. A view therefore carries pi-web's
+  class names and pi-web's inline styles, kebab-cased, and area agents add new
+  rules only to `src/web/styles/areas/<area>.css` — one file per area, so two of
+  them never edit the same stylesheet. The browserslist floor is pi-web's
+  (chrome/edge ≥125, firefox ≥147, safari ≥26): native popovers, CSS anchor
+  positioning, `@starting-style`, `:has()` and `field-sizing` are load-bearing,
+  not progressive enhancement.
+- **One module per area of the screen, on both sides.** `src/web/routes/` holds
+  `sidebar`, `shell`, `transcript`, `composer` and `files`; `createWebApp`
+  builds one `RouteContext` (the dependencies plus the request helpers that
+  answer in more than one area) and composes them, and Hono matches on the path,
+  so registration order carries no meaning. `src/web/client/main.ts` is an entry
+  and nothing else: it imports the same five modules. The split exists so five
+  agents can port five regions of pi-web at once without touching each other's
+  files.
+- **The theme is pi-web's, down to the storage key.** A pre-paint script in
+  `<head>` reads `pi-theme` (`light` / `dark` / `auto`) and adds `dark` to
+  `<html>` before the first paint; `src/web/client/theme.ts` keeps it in step
+  with the system scheme and animates a switch as a circular clip-path wipe
+  through the View Transitions API. The control lives in Settings → General, as
+  a radio group the client marks on arrival — the server cannot know what the
+  browser stored.
+
 - **Pi SDK resolved from the host `pi` on `PATH`**, never pinned. web-pi reads
   and writes the same session files as the installed CLI, so a pin would let the
   two drift apart silently. `src/host-pi.ts` walks `PATH` for the first `pi`
@@ -285,11 +317,11 @@ composition root and the only importer of Pi adapters.
 - **The file panel is server-rendered; the browser keeps only the tabs.** Each
   directory is fetched when it is opened (`hx-get` per node), the changes list
   and the tree re-render when a turn settles (`sse:settled`), and the viewer is
-  one fragment per mode. `src/web/client/panel.ts` owns what the server cannot
-  know: the panel width (`web-pi:panel-width`), which paths are open, each tab's
-  mode, wrap and scroll position, the `EventSource` on the active tab, and the
-  text selection a line-range mention comes from. Syntax colouring for a file
-  happens on the server (`src/web/syntax.ts`, shared with the transcript's
+  one fragment per mode. `src/web/client/files.ts` owns what the server cannot
+  know: the panel width (`pi-right-panel-width`), which paths are open, each
+  tab's mode, wrap and scroll position, the `EventSource` on the active tab, and
+  the text selection a line-range mention comes from. Syntax colouring for a
+  file happens on the server (`src/web/syntax.ts`, shared with the transcript's
   browser-side highlighter), because a whole file has to be split into numbered
   rows and highlight.js colours a block, not a line.
 - **A settled tool call's body is fetched when it is opened.** A card is

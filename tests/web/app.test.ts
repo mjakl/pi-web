@@ -65,18 +65,59 @@ describe("web app", () => {
     expect(html).toContain("not running");
   });
 
-  it("ships the shell: theme before paint, drawer, and hashed assets", async () => {
+  it("ships the shell: theme before paint, pi-web's containers, hashed assets", async () => {
     const { app } = testApp();
     const html = await (await app.request("/sessions/s1")).text();
-    expect(html).toContain("web-pi:theme");
+    expect(html).toContain('localStorage.getItem("pi-theme")');
+    expect(html).toContain('classList.add("dark")');
     expect(html).toContain('<script type="module" src="/static/client.js?v=');
     expect(html).toContain('<link rel="stylesheet" href="/static/app.css?v=');
-    expect(html).toContain("md:drawer-open");
-    expect(html).toContain('id="nav-drawer"');
-    expect(html).toContain('id="theme-select"');
     expect(html).toContain('data-session-id="s1"');
     expect(html).toContain('id="composer-text"');
     expect(html).toContain('id="toasts"');
+  });
+
+  it("renders pi-web's shell skeleton: the containers its CSS keys on", async () => {
+    const { app } = testApp();
+    const html = await (await app.request("/sessions/s1")).text();
+    // Sidebar column, its resize handle, and the header controls.
+    expect(html).toContain('id="session-sidebar"');
+    expect(html).toContain('class="sidebar-container sidebar-open');
+    expect(html).toContain("panel-resize-handle sidebar-resize-handle");
+    expect(html).toContain("sidebar-overlay-backdrop");
+    expect(html).toContain("Pi Web");
+    expect(html).toContain('class="anchor-sidebar-project"');
+    expect(html).toContain('id="session-list"');
+    expect(html).toContain('id="explorer-section"');
+    // Top bar: pi-web's order of controls.
+    const bar = html.slice(html.indexOf('id="top-bar"'));
+    const order = [
+      "sidebar-toggle",
+      "Full history",
+      "System",
+      "Tools",
+      "context-compact-button",
+      "page-refresh-button",
+      "file-panel-toggle",
+    ];
+    let at = 0;
+    for (const label of order) {
+      const found = bar.indexOf(label, at);
+      expect([label, found > -1]).toStrictEqual([label, true]);
+      at = found;
+    }
+    // Chat window, transcript column and rail.
+    expect(html).toContain('class="chat-window"');
+    expect(html).toContain('class="chat-body"');
+    expect(html).toContain('class="chat-scroll"');
+    expect(html).toContain('class="chat-scroll-content"');
+    expect(html).toContain('class="chat-transcript"');
+    expect(html).toContain('class="chat-minimap"');
+    expect(html).toContain('class="chat-composer"');
+    // Right panel.
+    expect(html).toContain('id="file-panel"');
+    expect(html).toContain("right-panel-container right-panel-closed");
+    expect(html).toContain("panel-resize-handle right-panel-resize-handle");
   });
 
   it("returns a fragment for HTMX requests and 404 for unknown ids", async () => {
@@ -200,7 +241,8 @@ describe("web app", () => {
     expect(other).toContain("other branch");
     expect(other).toContain("read only");
     expect(other).not.toContain('id="composer"');
-    expect(other).toContain("Branches (2)");
+    // pi-web has no branch menu in the header: branches are rail marks.
+    expect(other).toContain('data-branched="true"');
 
     const form = new FormData();
     form.set("entryId", "u2");
@@ -757,7 +799,7 @@ describe("transcript rendering", () => {
     const body = await (await app.request(deferredUrl(page))).text();
     expect(body).toContain("const a = 1;");
     expect(body).toContain("const a = 2;");
-    expect(body).toContain("grid-cols-2");
+    expect(body).toContain("grid-template-columns:1fr 1fr");
     // Edit tools show the diff instead of repeating their arguments.
     expect(body).not.toContain("&quot;file_path&quot;");
   });
@@ -873,7 +915,7 @@ describe("phase 8 fixes", () => {
   it("colours the context badge from the reader's own threshold", async () => {
     const { app } = testApp();
     const plain = await (await app.request("/sessions/s1")).text();
-    expect(plain).toContain("badge-ghost");
+    expect(plain).toContain("color:var(--text-muted)");
     // 40 000 tokens of a 100 000 window is 40 %: below every percent rule,
     // above a threshold the reader set at 30 000.
     const warned = await (
@@ -881,7 +923,7 @@ describe("phase 8 fixes", () => {
         headers: { cookie: "web-pi-warn-tokens=30000" },
       })
     ).text();
-    expect(warned).toContain("badge-warning");
+    expect(warned).toContain("rgba(234,179,8,0.95)");
   });
 
   it("lists what a subagent run was given, and its progress while it runs", async () => {

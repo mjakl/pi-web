@@ -54,7 +54,7 @@ function Markdown({
   actions?: ItemActions;
 }) {
   return (
-    <div class="prose max-w-none break-words">
+    <div class="markdown-body">
       {raw(
         renderMarkdown(source, {
           ...(actions
@@ -71,11 +71,11 @@ function Markdown({
 function Copy({ text, label = "Copy" }: { text: string; label?: string }) {
   if (text === "") return <></>;
   return (
-    <span class="inline-flex">
+    <span>
       <span hidden data-copy-source>
         {text}
       </span>
-      <button type="button" class="btn btn-ghost btn-xs" data-copy>
+      <button type="button" data-copy>
         {label}
       </button>
     </span>
@@ -86,7 +86,7 @@ function Time({ value }: { value: string }) {
   const at = new Date(value);
   if (Number.isNaN(at.getTime())) return <></>;
   return (
-    <time class="text-[10px] text-base-content/50" datetime={value}>
+    <time datetime={value}>
       {at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
     </time>
   );
@@ -113,14 +113,14 @@ function Images({
 }) {
   if (!actions || indices.length === 0) return <></>;
   return (
-    <div class="my-2 flex flex-wrap gap-2">
+    <div>
       {indices.map((index) => (
         <a href={imageUrl(actions, entryId, index)} target="_blank">
           <img
-            class={
+            style={
               size === "thumb"
-                ? "max-h-60 max-w-60 rounded border border-base-300 object-contain"
-                : "max-h-[520px] max-w-full rounded border border-base-300 object-contain"
+                ? "max-height:240px; max-width:240px; border-radius:6px; border:1px solid var(--border); object-fit:contain"
+                : "max-height:520px; max-width:100%; border-radius:6px; border:1px solid var(--border); object-fit:contain"
             }
             alt={`Image ${String(index + 1)}`}
             loading="lazy"
@@ -151,11 +151,11 @@ function HistoryActions({
     "hx-indicator": "#branch-sync",
   };
   return (
-    <div class="flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+    <div>
       {children}
       <button
         type="button"
-        class="btn btn-ghost btn-xs"
+
         title="Continue from this point within this session"
         hx-post={post("navigate")}
         {...swap}
@@ -164,7 +164,7 @@ function HistoryActions({
       </button>
       <button
         type="button"
-        class="btn btn-ghost btn-xs"
+
         title="Copy the history up to this point into a separate session"
         hx-post={post("fork")}
         {...swap}
@@ -186,7 +186,6 @@ export function StarButton({
   return (
     <button
       type="button"
-      class={`btn btn-ghost btn-xs ${starred ? "text-warning" : ""}`}
       aria-pressed={starred ? "true" : "false"}
       aria-label={starred ? "Unstar answer" : "Star answer"}
       hx-post={`/sessions/${actions.sessionId}/star`}
@@ -208,12 +207,8 @@ function UserMessage({
 }) {
   const editable = actions && !actions.readOnly && !actions.live;
   return (
-    <article
-      id={`entry-${item.entryId}`}
-      data-role="user"
-      class="group -mx-4 my-4 bg-primary/5 px-4 py-3"
-    >
-      <div class="ml-auto flex max-w-[85%] flex-col items-end gap-1">
+    <article id={`entry-${item.entryId}`} data-role="user">
+      <div>
         <Images
           entryId={item.entryId}
           indices={item.images}
@@ -222,27 +217,20 @@ function UserMessage({
         />
         {item.command === undefined ? (
           // `data-user-text` is what the composer's ArrowUp history reads.
-          <div
-            data-user-text
-            class="w-full rounded-box bg-base-200 px-3 py-2 whitespace-pre-wrap"
-          >
-            {item.text}
-          </div>
+          <div data-user-text>{item.text}</div>
         ) : (
-          <details class="w-full rounded-box bg-base-200 px-3 py-2">
-            <summary data-user-text class="cursor-pointer font-mono text-sm">
-              {item.command}
-            </summary>
+          <details>
+            <summary data-user-text>{item.command}</summary>
             <Markdown source={item.text} actions={actions} />
           </details>
         )}
-        <div class="flex items-center gap-1">
+        <div>
           <Copy text={item.command ?? item.text} />
           {editable && actions ? (
             <>
               <button
                 type="button"
-                class="btn btn-ghost text-error btn-xs"
+
                 title="Remove this message and everything after it, then edit it again"
                 hx-post={`/sessions/${actions.sessionId}/rewind`}
                 hx-vals={JSON.stringify({ entryId: item.entryId })}
@@ -278,16 +266,14 @@ function ThinkingBlock({
       ? `/sessions/${actions.sessionId}/entries/${item.entryId}/thinking/${String(block.index)}`
       : undefined;
   return (
-    <details class="my-2 rounded-box border border-base-300 text-sm">
-      <summary class="cursor-pointer px-3 py-1 text-base-content/70">
+    <details>
+      <summary>
         Thinking
         {block.seconds === undefined ? null : (
-          <span class="ml-2 text-xs text-base-content/50">
-            {String(block.seconds)}s
-          </span>
+          <span>{String(block.seconds)}s</span>
         )}
       </summary>
-      <div class="px-3 pb-2 text-base-content/70">
+      <div>
         {fetchUrl === undefined ? (
           <Markdown source={block.text} actions={actions} />
         ) : (
@@ -307,42 +293,52 @@ function ThinkingBlock({
 function DiffCellText({ cell }: { cell: DiffCell }) {
   return (
     <>
-      <span class="w-10 shrink-0 pr-1 text-right text-base-content/40 select-none">
-        {cell.lineNo === null ? "" : String(cell.lineNo)}
-      </span>
-      <span class="w-4 shrink-0 select-none">
+      <span>{cell.lineNo === null ? "" : String(cell.lineNo)}</span>
+      <span>
         {cell.type === "added" ? "+" : cell.type === "removed" ? "-" : " "}
       </span>
-      <span class="break-all whitespace-pre-wrap">{cell.text}</span>
+      <span>{cell.text}</span>
     </>
   );
 }
 
-const CELL_CLASS = {
-  added: "bg-success/15",
-  removed: "bg-error/15",
-  context: "",
-  empty: "bg-base-200",
+/** pi-web's split-diff tints (§4.4.5), which are literal rgba, not tokens. */
+/**
+ * pi-web tints a tool call, a subagent run and a shell run by its outcome
+ * (§4.4.4): green while it went well, red when it did not. The values are
+ * literal rgba in pi-web too, not tokens.
+ */
+function cardStyle(failed: boolean): string {
+  const line = failed ? "rgba(248,113,113,0.45)" : "rgba(34,197,94,0.25)";
+  const fill = failed ? "rgba(248,113,113,0.05)" : "rgba(34,197,94,0.04)";
+  return `border-radius:7px; overflow:hidden; font-size:12px; border:1px solid ${line}; background:${fill}`;
+}
+
+const CELL_BACKGROUND = {
+  added: "rgba(0,200,80,0.12)",
+  removed: "rgba(240,60,60,0.14)",
+  context: "transparent",
+  empty: "var(--bg-panel)",
 } as const;
 
 function SplitDiff({ files }: { files: DiffFile[] }) {
   return (
-    <div class="my-2 max-h-[560px] overflow-auto rounded-box border border-base-300 font-mono text-xs">
+    <div>
       {files.map((file) => (
         <div>
           {files.length > 1 ? (
-            <div class="sticky top-0 z-10 flex justify-between gap-2 bg-base-200 px-2 py-1 text-base-content/60">
-              <span class="truncate">{file.oldPath ?? "Before"}</span>
-              <span class="truncate">{file.newPath ?? "After"}</span>
+            <div>
+              <span>{file.oldPath ?? "Before"}</span>
+              <span>{file.newPath ?? "After"}</span>
             </div>
           ) : null}
           {file.rows.map((row) =>
             row.type === "hunk" ? null : (
-              <div class="grid grid-cols-2">
-                <div class={`flex ${CELL_CLASS[row.left.type]}`}>
+              <div style="display:grid; grid-template-columns:1fr 1fr">
+                <div style={`background:${CELL_BACKGROUND[row.left.type]}`}>
                   <DiffCellText cell={row.left} />
                 </div>
-                <div class={`flex ${CELL_CLASS[row.right.type]}`}>
+                <div style={`background:${CELL_BACKGROUND[row.right.type]}`}>
                   <DiffCellText cell={row.right} />
                 </div>
               </div>
@@ -354,23 +350,21 @@ function SplitDiff({ files }: { files: DiffFile[] }) {
   );
 }
 
-const PATCH_LINE_CLASS = {
-  added: "border-success bg-success/10",
-  removed: "border-error bg-error/10",
-  hunk: "border-info bg-info/10",
-  context: "border-transparent",
+const PATCH_LINE_STYLE = {
+  added: "border-left-color:var(--success); background:rgba(0,200,80,0.12)",
+  removed: "border-left-color:var(--danger); background:rgba(240,60,60,0.14)",
+  hunk: "border-left-color:var(--accent); background:rgba(96,165,250,0.12)",
+  context: "border-left-color:transparent",
 } as const;
 
 /** Fallback when the patch does not parse: the text, lightly classified. */
 function PatchText({ patch }: { patch: string }) {
   return (
-    <div class="my-2 max-h-[520px] overflow-auto rounded-box border border-base-300 font-mono text-xs">
+    <div>
       {patchLines(patch).map((line) => (
-        <div class={`flex border-l-[3px] ${PATCH_LINE_CLASS[line.type]}`}>
-          <span class="w-10 shrink-0 pr-1 text-right text-base-content/40 select-none">
-            {String(line.lineNo)}
-          </span>
-          <span class="break-all whitespace-pre-wrap">{line.text}</span>
+        <div style={`border-left:3px solid; ${PATCH_LINE_STYLE[line.type]}`}>
+          <span>{String(line.lineNo)}</span>
+          <span>{line.text}</span>
         </div>
       ))}
     </div>
@@ -385,7 +379,7 @@ function ShowAll({ url }: { url: string }) {
   return (
     <button
       type="button"
-      class="btn btn-ghost btn-xs"
+
       hx-get={url}
       hx-target="closest .tool-result"
       hx-swap="outerHTML"
@@ -457,13 +451,11 @@ function RunDetails({ call, run }: { call: SubagentCall; run?: SubagentRun }) {
   ].filter((row): row is [string, string] => (row[1] ?? "") !== "");
   if (rows.length === 0) return <></>;
   return (
-    <dl class="grid grid-cols-[auto_1fr] gap-x-3 text-xs text-base-content/60">
+    <dl>
       {rows.map(([label, value]) => (
         <>
           <dt>{label}</dt>
-          <dd class="truncate font-mono" title={value}>
-            {value}
-          </dd>
+          <dd title={value}>{value}</dd>
         </>
       ))}
     </dl>
@@ -480,12 +472,10 @@ function SubagentRunBody({
   actions?: ItemActions;
 }) {
   return (
-    <div class="flex flex-col gap-2">
-      {run.error === undefined ? null : (
-        <p class="text-sm text-error">{run.error}</p>
-      )}
+    <div>
+      {run.error === undefined ? null : <p>{run.error}</p>}
       {run.output === "" ? (
-        <p class="text-sm text-base-content/60 italic">
+        <p>
           {run.handledWithoutAgent
             ? "Prompt handled without an agent response."
             : "No output."}
@@ -493,12 +483,10 @@ function SubagentRunBody({
       ) : (
         <Markdown source={run.output} actions={actions} />
       )}
-      {run.captureTruncated ? (
-        <p class="text-xs text-warning">Output was truncated.</p>
-      ) : null}
-      <details class="text-sm">
-        <summary class="cursor-pointer text-base-content/60">Prompt</summary>
-        <pre class="overflow-auto text-xs whitespace-pre-wrap">{prompt}</pre>
+      {run.captureTruncated ? <p>Output was truncated.</p> : null}
+      <details>
+        <summary>Prompt</summary>
+        <pre>{prompt}</pre>
       </details>
     </div>
   );
@@ -526,47 +514,35 @@ function Subagent({
       ? `Subagent · ${calls[0]?.agent ?? ""}`
       : `Subagent · ${String(calls.length)} agents`;
   return (
-    <details
-      class={`my-2 rounded-box border text-sm ${
-        view.failed ? "border-error/50 bg-error/5" : "border-base-300"
-      }`}
-    >
-      <summary class="flex cursor-pointer flex-wrap items-center gap-2 px-3 py-1">
-        <span class="font-mono text-xs">{summary}</span>
+    <details style={cardStyle(view.failed)}>
+      <summary>
+        <span>{summary}</span>
         {running ? (
-          <span class="text-xs text-base-content/60">
-            ◌ running{progress === undefined ? "" : ` · ${progress}`}
-          </span>
+          <span>◌ running{progress === undefined ? "" : ` · ${progress}`}</span>
         ) : (
-          <span class="text-xs text-base-content/60">
+          <span>
             {[...counts.entries()]
               .map(([status, count]) => `${String(count)} ${status}`)
               .join(" · ")}
           </span>
         )}
         {call.result?.seconds === undefined ? null : (
-          <span class="text-xs text-base-content/50">
-            {String(call.result.seconds)}s
-          </span>
+          <span>{String(call.result.seconds)}s</span>
         )}
       </summary>
-      <div class="flex flex-col gap-2 px-3 pb-2">
+      <div>
         {calls.map((item, index) => {
           const run = runs?.[index];
           return (
             <details open={calls.length === 1}>
-              <summary class="cursor-pointer">
-                <span class="font-mono text-xs">{item.agent}</span>
-                <span class="ml-2 text-xs text-base-content/60">
+              <summary>
+                <span>{item.agent}</span>
+                <span>
                   {run ? `${STATUS_GLYPH[run.status]} ${run.status}` : "◌"}
                 </span>
               </summary>
               <RunDetails call={item} {...(run ? { run } : {})} />
-              {progress === undefined ? null : (
-                <p class="animate-pulse font-mono text-xs text-base-content/60">
-                  {progress}
-                </p>
-              )}
+              {progress === undefined ? null : <p>{progress}</p>}
               {run ? (
                 <SubagentRunBody
                   run={run}
@@ -574,33 +550,21 @@ function Subagent({
                   actions={actions}
                 />
               ) : (
-                <pre class="overflow-auto text-xs whitespace-pre-wrap">
-                  {item.prompt}
-                </pre>
+                <pre>{item.prompt}</pre>
               )}
             </details>
           );
         })}
         {runs === null && call.result ? (
           <div>
-            <div class="text-xs text-base-content/60">Result</div>
-            <pre class="max-h-96 overflow-auto text-xs whitespace-pre-wrap">
-              {call.result.text}
-            </pre>
+            <div>Result</div>
+            <pre>{call.result.text}</pre>
           </div>
         ) : null}
         <details>
-          <summary class="cursor-pointer text-xs text-base-content/60">
-            Raw input and output
-          </summary>
-          <pre class="max-h-96 overflow-auto text-xs whitespace-pre-wrap">
-            {JSON.stringify(call.arguments, null, 2)}
-          </pre>
-          {call.result ? (
-            <pre class="max-h-96 overflow-auto text-xs whitespace-pre-wrap">
-              {call.result.text}
-            </pre>
-          ) : null}
+          <summary>Raw input and output</summary>
+          <pre>{JSON.stringify(call.arguments, null, 2)}</pre>
+          {call.result ? <pre>{call.result.text}</pre> : null}
         </details>
       </div>
     </details>
@@ -646,11 +610,9 @@ export function ToolBody({
       ? null
       : trimmedDiff(result.patch, budgeted ? MAX_DIFF_ROWS : Infinity);
   return (
-    <div class="tool-result">
+    <div>
       {showInput ? (
-        <pre class="max-h-72 overflow-auto text-xs whitespace-pre-wrap">
-          {inputCut ? input.slice(0, MAX_RESULT_CHARS) : input}
-        </pre>
+        <pre>{inputCut ? input.slice(0, MAX_RESULT_CHARS) : input}</pre>
       ) : null}
       {result === undefined ? null : diff !== null ? (
         diff.node
@@ -664,13 +626,11 @@ export function ToolBody({
           />
           {empty ? (
             result.images.length > 0 ? null : (
-              <p class="text-xs text-base-content/50 italic">(no output)</p>
+              <p>(no output)</p>
             )
           ) : (
             <pre
-              class={`max-h-[400px] overflow-auto text-xs break-all whitespace-pre-wrap ${
-                result.isError ? "text-error" : ""
-              }`}
+              style={`padding:8px 10px; white-space:pre-wrap; word-break:break-all; max-height:400px; overflow:auto; color:var(${result.isError ? "--danger" : "--text-muted"})`}
             >
               {textCut ? text.slice(0, MAX_RESULT_CHARS) : text}
             </pre>
@@ -704,19 +664,10 @@ function ToolCard({
       ? `/sessions/${actions.sessionId}/entries/${call.result.entryId}/tool-result/${encodeURIComponent(call.id)}`
       : undefined;
   return (
-    <details
-      class={`my-2 rounded-box border text-sm ${
-        failed ? "border-error/50 bg-error/5" : "border-success/40 bg-success/5"
-      }`}
-      data-tool={call.name}
-    >
-      <summary class="flex cursor-pointer flex-wrap items-center gap-2 px-3 py-1">
-        <span
-          class={`font-mono text-xs ${failed ? "text-error" : "text-success"}`}
-        >
-          {call.name}
-        </span>
-        <span class="min-w-0 flex-1 truncate text-xs text-base-content/60">
+    <details style={cardStyle(failed)} data-tool={call.name}>
+      <summary>
+        <span>{call.name}</span>
+        <span>
           {call.partialArguments !== undefined ? (
             "Generating parameters..."
           ) : filePath === undefined ? (
@@ -733,22 +684,19 @@ function ToolCard({
           )}
         </span>
         {call.result?.seconds === undefined ? null : (
-          <span class="text-xs text-base-content/50">
-            {String(call.result.seconds)}s
-          </span>
+          <span>{String(call.result.seconds)}s</span>
         )}
       </summary>
-      <div class="px-3 pb-2">
+      <div>
         {deferred === undefined ? (
           <ToolBody call={call} actions={actions} />
         ) : (
           <div
-            class="tool-result"
             hx-get={deferred}
             hx-trigger="toggle once from:closest details"
             hx-swap="outerHTML"
           >
-            <p class="text-xs text-base-content/50">Loading output…</p>
+            <p>Loading output…</p>
           </div>
         )}
       </div>
@@ -764,7 +712,7 @@ function Blocks({
   actions?: ItemActions;
 }) {
   return (
-    <div class="flex flex-col gap-2">
+    <div>
       {item.blocks.map((block) => {
         switch (block.kind) {
           case "text":
@@ -830,35 +778,29 @@ function AssistantMessage({
   const editable = actions && !actions.readOnly && !actions.live;
   const usage = usageLine(item);
   return (
-    <article
-      id={`entry-${item.entryId}`}
-      data-role="assistant"
-      class="group my-3"
-    >
-      <div class="flex items-center gap-2 text-xs text-base-content/50">
+    <article id={`entry-${item.entryId}`} data-role="assistant">
+      <div>
         {editable &&
         actions &&
         (starrable || actions.starred.has(item.entryId)) ? (
           <StarButton entryId={item.entryId} actions={actions} />
         ) : null}
-        <span class="font-mono">{item.model}</span>
+        <span>{item.model}</span>
       </div>
       <Blocks item={item} actions={actions} />
       {item.errorMessage === undefined && item.stopReason !== "error" ? null : (
-        <div class="my-2 alert text-sm alert-error" role="alert">
+        <div role="alert">
           Error: {item.errorMessage ?? "Unknown provider error"}
         </div>
       )}
-      {item.stopReason === "aborted" ? (
-        <div class="text-xs text-base-content/60">Stopped</div>
-      ) : null}
-      <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-base-content/50">
+      {item.stopReason === "aborted" ? <div>Stopped</div> : null}
+      <div>
         {usage === "" ? null : <span>{usage}</span>}
         <Copy text={answerText(item)} />
         {actions && !actions.live ? (
           <HistoryActions entryId={item.entryId} actions={actions} />
         ) : null}
-        <span class="flex-1" />
+        <span />
         {actions?.timestamps?.has(item.entryId) ? (
           <Time value={item.timestamp} />
         ) : null}
@@ -871,12 +813,10 @@ function FileList({ title, files }: { title: string; files: string[] }) {
   if (files.length === 0) return <></>;
   return (
     <div>
-      <div class="text-xs font-semibold">{title}</div>
-      <ul class="list-inside list-disc font-mono text-xs">
+      <div>{title}</div>
+      <ul>
         {files.map((file) => (
-          <li class="truncate" title={file}>
-            {file}
-          </li>
+          <li title={file}>{file}</li>
         ))}
       </ul>
     </div>
@@ -898,14 +838,8 @@ function Compaction({
       ? `${formatTokens(item.tokensBefore)} tokens before`
       : `${formatTokens(item.tokensBefore)} → ~${formatTokens(item.tokensAfter)} tokens`;
   return (
-    <details
-      id={`entry-${item.entryId}`}
-      class="group my-4 rounded-box border border-dashed border-warning/50 px-4 py-2 text-sm"
-    >
-      <summary
-        class="cursor-pointer text-base-content/70"
-        aria-label={`Conversation compacted: ${numbers}`}
-      >
+    <details id={`entry-${item.entryId}`}>
+      <summary aria-label={`Conversation compacted: ${numbers}`}>
         Conversation compacted ·{" "}
         <span
           title={
@@ -917,21 +851,19 @@ function Compaction({
           {numbers}
         </span>
       </summary>
-      <p class="my-2 text-xs text-base-content/60">
-        Everything before this point was replaced by the summary below.
-      </p>
+      <p>Everything before this point was replaced by the summary below.</p>
       {item.summary === "" ? (
-        <p class="text-xs italic">No summary</p>
+        <p>No summary</p>
       ) : (
         <Markdown source={item.summary} actions={actions} />
       )}
       {files > 0 ? (
-        <details class="mt-2">
-          <summary class="cursor-pointer text-xs text-base-content/60">
+        <details>
+          <summary>
             File context ({String(item.readFiles.length)} read,{" "}
             {String(item.modifiedFiles.length)} modified)
           </summary>
-          <div class="flex flex-col gap-2 pt-1">
+          <div>
             <FileList title="Read" files={item.readFiles} />
             <FileList title="Modified" files={item.modifiedFiles} />
           </div>
@@ -943,13 +875,10 @@ function Compaction({
 
 function Note({ item, actions }: { item: NoteItem; actions?: ItemActions }) {
   return (
-    <details
-      id={`entry-${item.entryId}`}
-      class="group my-3 rounded-box border border-base-300 px-4 py-2 text-sm"
-    >
-      <summary class="flex cursor-pointer flex-wrap items-center gap-2">
-        <span class="font-mono text-xs">{item.customType || "extension"}</span>
-        <span class="min-w-0 flex-1 truncate text-xs text-base-content/60">
+    <details id={`entry-${item.entryId}`}>
+      <summary>
+        <span>{item.customType || "extension"}</span>
+        <span>
           {item.preview === "" ? "Show extension message" : item.preview}
         </span>
       </summary>
@@ -960,24 +889,20 @@ function Note({ item, actions }: { item: NoteItem; actions?: ItemActions }) {
         size="thumb"
       />
       {item.text === "" ? (
-        <p class="text-xs italic">No message</p>
+        <p>No message</p>
       ) : (
         <Markdown source={item.text} actions={actions} />
       )}
-      <div class="mt-1 flex items-center gap-1">
+      <div>
         <Copy text={item.text === "" ? (item.details ?? "") : item.text} />
         {actions ? (
           <HistoryActions entryId={item.entryId} actions={actions} />
         ) : null}
       </div>
       {item.details === undefined ? null : (
-        <details class="mt-1">
-          <summary class="cursor-pointer text-xs text-base-content/60">
-            Show details
-          </summary>
-          <pre class="max-h-[360px] overflow-auto text-xs whitespace-pre-wrap">
-            {item.details}
-          </pre>
+        <details>
+          <summary>Show details</summary>
+          <pre>{item.details}</pre>
         </details>
       )}
     </details>
@@ -989,37 +914,18 @@ function Bash({ item, actions }: { item: BashItem; actions?: ItemActions }) {
     item.cancelled || (item.exitCode !== null && item.exitCode !== 0);
   const name = item.excluded ? "bash (local)" : "bash";
   return (
-    <details
-      id={`entry-${item.entryId}`}
-      open
-      class={`group my-2 rounded-box border text-sm ${
-        failed ? "border-error/50 bg-error/5" : "border-success/40 bg-success/5"
-      }`}
-    >
-      <summary class="flex cursor-pointer flex-wrap items-center gap-2 px-3 py-1">
-        <span
-          class={`font-mono text-xs ${failed ? "text-error" : "text-success"}`}
-        >
-          {name}
-        </span>
-        <span class="min-w-0 flex-1 truncate font-mono text-xs text-base-content/60">
-          {item.command}
-        </span>
-        {item.pending ? (
-          <span class="loading loading-xs loading-dots" aria-label="Running" />
-        ) : null}
+    <details id={`entry-${item.entryId}`} open style={cardStyle(failed)}>
+      <summary>
+        <span>{name}</span>
+        <span>{item.command}</span>
+        {item.pending ? <span aria-label="Running" /> : null}
       </summary>
-      <div class="px-3 pb-2">
-        {item.pending && item.output === "" ? null : (
-          <pre class="max-h-[400px] overflow-auto text-xs break-all whitespace-pre-wrap">
-            {item.output}
-          </pre>
-        )}
-        <div class="flex items-center gap-2">
+      <div>
+        {item.pending && item.output === "" ? null : <pre>{item.output}</pre>}
+        <div>
           {item.truncated && item.outputPath !== undefined && actions ? (
             <>
               <a
-                class="link text-xs"
                 target="_blank"
                 rel="noreferrer"
                 href={`/sessions/${actions.sessionId}/bash-output?path=${encodeURIComponent(item.outputPath)}`}
@@ -1027,7 +933,6 @@ function Bash({ item, actions }: { item: BashItem; actions?: ItemActions }) {
                 View full output
               </a>
               <a
-                class="link text-xs"
                 href={`/sessions/${actions.sessionId}/bash-output?path=${encodeURIComponent(item.outputPath)}&download=1`}
               >
                 Download
@@ -1068,11 +973,8 @@ export function Item({
       return <Compaction item={item} actions={actions} />;
     case "branch_summary":
       return (
-        <div
-          id={`entry-${item.entryId}`}
-          class="my-4 rounded-box border border-dashed border-info/50 px-4 py-2 text-sm"
-        >
-          <p class="text-xs italic">
+        <div id={`entry-${item.entryId}`}>
+          <p>
             The conversation briefly explored another branch and returned with
             this summary:
           </p>
@@ -1096,11 +998,11 @@ function WrittenFiles({
 }) {
   if (files.length === 0 || actions?.live) return <></>;
   return (
-    <div class="my-2 flex flex-wrap gap-1" aria-label="Files changed">
+    <div aria-label="Files changed">
       {files.map((path) => (
         <button
           type="button"
-          class="btn btn-ghost font-mono btn-xs"
+
           data-file-path={path}
           title={path}
         >
@@ -1124,11 +1026,9 @@ function TurnView({ turn, actions }: { turn: Turn; actions?: ItemActions }) {
     <section class="turn">
       {turn.boundary ? <Item item={turn.boundary} actions={actions} /> : null}
       {turn.process.length > 0 ? (
-        <details class="my-2" open={turn.expanded}>
-          <summary class="cursor-pointer text-xs text-base-content/60">
-            Process details · {label}
-          </summary>
-          <div class="border-l border-base-300 pl-3">
+        <details open={turn.expanded}>
+          <summary>Process details · {label}</summary>
+          <div>
             {turn.process.map((item) => (
               <Item item={item} actions={actions} />
             ))}
@@ -1197,7 +1097,7 @@ export function LoadEarlier({
   if (leaf !== undefined) query.set("leaf", leaf);
   return (
     <div
-      class="load-earlier my-2 text-center text-xs text-base-content/50"
+      class="load-earlier"
       hx-get={`/sessions/${sessionId}/earlier?${query.toString()}`}
       hx-trigger="intersect once"
       hx-target="this"
@@ -1268,11 +1168,7 @@ export function TurnFragment({
           ...(Object.keys(progress).length > 0 ? { progress } : {}),
         }}
       />
-      {label === null ? null : (
-        <p class="my-2 animate-pulse font-mono text-xs text-base-content/60">
-          {label}
-        </p>
-      )}
+      {label === null ? null : <p>{label}</p>}
     </>
   );
 }

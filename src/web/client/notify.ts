@@ -64,13 +64,13 @@ function offerNotifications(): void {
   const shelf = document.getElementById("toasts");
   if (!shelf) return;
   const box = document.createElement("div");
-  box.className =
-    "alert pointer-events-auto flex-wrap gap-2 py-2 text-sm alert-info";
+  box.className = "notice-shelf-item";
+  box.style.color = "var(--info)";
   const text = document.createElement("span");
   text.textContent = "Notify you when a run finishes?";
   const yes = document.createElement("button");
   yes.type = "button";
-  yes.className = "btn btn-xs";
+  yes.className = "history-action";
   yes.textContent = "Allow";
   yes.addEventListener("click", () => {
     box.remove();
@@ -78,7 +78,7 @@ function offerNotifications(): void {
   });
   const no = document.createElement("button");
   no.type = "button";
-  no.className = "btn btn-ghost btn-xs";
+  no.className = "history-action";
   no.textContent = "No thanks";
   no.addEventListener("click", () => {
     box.remove();

@@ -67,6 +67,35 @@ export function contextUsage(input: {
   };
 }
 
+/**
+ * pi-web's `formatCompactCount`: one decimal from a million, whole thousands
+ * below that. Kept separate from `formatTokens` because the top bar reads
+ * "1.9M" where the stats panel reads the exact number.
+ */
+export function formatCompactCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${String(Math.round(value / 1_000))}k`;
+  return value.toLocaleString("en");
+}
+
+/**
+ * The top bar's context readout: "242k / 272k (88.8%)", with a leading "~" on
+ * an estimate. Empty when there is no window to measure against.
+ */
+export function formatContextUsage(usage: ContextUsage): string {
+  if (usage.contextWindow === null) return "";
+  const mark = (value: string) => (usage.estimated ? `~${value}` : value);
+  const used =
+    usage.tokens === null ? "?" : mark(formatCompactCount(usage.tokens));
+  const percent =
+    usage.percent === null
+      ? "?"
+      : mark(
+          `${usage.percent.toLocaleString("en", { maximumFractionDigits: 1 })}%`,
+        );
+  return `${used} / ${formatCompactCount(usage.contextWindow)} (${percent})`;
+}
+
 export function formatTokens(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
   if (tokens >= 10_000) return `${String(Math.round(tokens / 1000))}k`;

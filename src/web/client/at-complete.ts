@@ -20,15 +20,15 @@ const SEARCH_DEBOUNCE_MS = 150;
 
 function renderEntries(entries: FileEntry[]): string {
   if (entries.length === 0) {
-    return '<div class="px-3 py-2 text-sm text-base-content/60">No files</div>';
+    return "<div>No files</div>";
   }
   const rows = entries
     .map(
       (entry, index) =>
-        `<li><button type="button" role="option" class="rounded-none font-mono text-xs" data-index="${String(index)}" data-path="${escapeHtml(entry.path)}" data-dir="${entry.isDir ? "1" : ""}">${escapeHtml(entry.path)}${entry.isDir ? "/" : ""}</button></li>`,
+        `<li><button type="button" role="option" data-index="${String(index)}" data-path="${escapeHtml(entry.path)}" data-dir="${entry.isDir ? "1" : ""}">${escapeHtml(entry.path)}${entry.isDir ? "/" : ""}</button></li>`,
     )
     .join("");
-  return `<ul class="menu w-full flex-nowrap p-0" role="listbox">${rows}</ul>`;
+  return `<ul role="listbox">${rows}</ul>`;
 }
 
 export type AtMenu = {
@@ -104,9 +104,7 @@ export function setUpAtCompletion(endpoints: MenuEndpoints | null): AtMenu {
       const body = (await response.json()) as { matches?: FileEntry[] };
       if (token?.query !== query) return;
       if (!response.ok) {
-        menu.render(
-          '<div class="px-3 py-2 text-sm text-base-content/60">Cannot list this directory</div>',
-        );
+        menu.render("<div>Cannot list this directory</div>");
         return;
       }
       menu.render(renderEntries(body.matches ?? []));

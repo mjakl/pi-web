@@ -191,7 +191,8 @@ describe("the new-session page", () => {
     expect(html).toContain('name="model"');
     expect(html).toContain(FAKE_MODEL.name);
     expect(html).toContain('name="thinking"');
-    expect(html).toContain("Change folder…");
+    // The folder is changed from the sidebar's workspace pill now.
+    expect(html).toContain('class="anchor-sidebar-project"');
   });
 
   it("answers the folder's slash menu and file completion", async () => {
@@ -355,7 +356,8 @@ describe("the settings page", () => {
     const html = await (await app.request("/settings")).text();
     expect(html).toContain("Settings");
     // The mobile picker and the desktop tabs are the same list, one hidden.
-    expect(html).toContain("md:hidden");
+    expect(html).toContain("settings-mobile-section-picker");
+    expect(html).toContain("settings-section-tabs");
     expect(html).toContain('href="/settings?section=skills');
     const skills = await app.request("/settings?section=skills");
     expect(skills.headers.getSetCookie().join(" ")).toContain(
@@ -370,7 +372,8 @@ describe("the settings page", () => {
   it("keeps the browser preferences on the general section", async () => {
     const { app } = testApp();
     const html = await (await app.request("/settings?section=general")).text();
-    expect(html).toContain('id="theme-select"');
+    expect(html).toContain('data-theme-option="light"');
+    expect(html).toContain('data-theme-option="auto"');
     expect(html).toContain('id="sound-toggle"');
     expect(html).toContain('id="dumb-zone-tokens"');
     // The About line names this build and the Pi SDK it resolved.

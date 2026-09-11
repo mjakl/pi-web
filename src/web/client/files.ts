@@ -2,12 +2,13 @@ import { buildAtInsertText } from "@core/composer";
 import { replaceRange, textarea } from "./editor.ts";
 import { setUpResize } from "./resize.ts";
 
-// The file panel's browser half: how wide it is, which tabs are open, where
+// The files area's browser half: how wide it is, which tabs are open, where
 // each was scrolled, and the stream that tells the viewer its file moved.
 // Everything the panel shows is rendered by the server; this decides what to
 // ask for and keeps the reading position while it arrives.
 
-const WIDTH_KEY = "web-pi:panel-width";
+// pi-web remembers both panel widths under these keys; same key, same value.
+const WIDTH_KEY = "pi-right-panel-width";
 const MIN_WIDTH = 300;
 const MAX_WIDTH = 1200;
 
@@ -55,13 +56,14 @@ function maxWidth(): number {
 }
 
 function isOpen(): boolean {
-  return panel()?.hidden === false;
+  return panel()?.classList.contains("right-panel-open") ?? false;
 }
 
 function setOpen(open: boolean): void {
   const element = panel();
   if (!element) return;
-  element.hidden = !open;
+  element.classList.toggle("right-panel-open", open);
+  element.classList.toggle("right-panel-closed", !open);
   document.body.dataset["filePanel"] = open ? "open" : "closed";
   document
     .getElementById("file-panel-toggle")
@@ -357,12 +359,14 @@ function onTreeKey(event: KeyboardEvent): void {
 // --- Resizing ------------------------------------------------------------
 
 function setUpPanelResize(): void {
-  const handle = document.querySelector<HTMLElement>(".panel-resize");
+  const handle = document.querySelector<HTMLElement>(
+    ".right-panel-resize-handle",
+  );
   if (!handle) return;
   setUpResize({
     handle,
     storageKey: WIDTH_KEY,
-    property: "--file-panel-width",
+    property: "--right-panel-width",
     min: MIN_WIDTH,
     max: maxWidth,
     fallback: defaultWidth,
@@ -407,23 +411,7 @@ function describeMedia(root: ParentNode): void {
   }
 }
 
-/** The sidebar drags the same way the panel does, from the other side. */
-export function setUpSidebarResize(): void {
-  const handle = document.querySelector<HTMLElement>(".sidebar-resize");
-  if (!handle) return;
-  setUpResize({
-    handle,
-    storageKey: "web-pi:sidebar-width",
-    property: "--sidebar-width",
-    min: 180,
-    max: () => Math.min(480, Math.max(180, innerWidth - 320)),
-    fallback: () => 260,
-    // Anchored to the left edge: the width is the pointer's own x.
-    widthAt: (clientX) => clientX,
-  });
-}
-
-export function setUpFilePanel(): void {
+export function setUpFiles(): void {
   if (!panel()) return;
   setUpPanelResize();
   document.body.dataset["filePanel"] = "closed";

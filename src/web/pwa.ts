@@ -11,6 +11,10 @@ export const ICONS = {
   small: "/static/icons/icon-192.png",
   large: "/static/icons/icon-512.png",
   apple: "/static/icons/apple-touch-icon.png",
+  // pi-web switches the tab icon by the operating system's scheme, not by the
+  // app's own theme.
+  faviconLight: "/static/icons/favicon-light.png",
+  faviconDark: "/static/icons/favicon-dark.png",
 } as const;
 
 export function manifest(): Record<string, unknown> {

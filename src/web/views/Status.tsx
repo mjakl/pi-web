@@ -3,11 +3,12 @@ import type { LiveStatus } from "@core/ports";
 import type { SessionView } from "@core/workspace";
 import { ModelPicker } from "./Composer.tsx";
 
-const LEVEL_CLASS = {
-  unknown: "badge-ghost",
-  ok: "badge-ghost",
-  warn: "badge-warning",
-  critical: "badge-error",
+/** pi-web colours the context readout by threshold, not by badge (§C5). */
+const LEVEL_COLOUR = {
+  unknown: "var(--text-dim)",
+  ok: "var(--text-muted)",
+  warn: "rgba(234,179,8,0.95)",
+  critical: "var(--danger)",
 } as const;
 
 /** The one rendering of context usage. */
@@ -21,7 +22,7 @@ export function ContextBadge({ usage }: { usage: SessionView["usage"] }) {
         : `${formatTokens(tokens)} / ${formatTokens(contextWindow)} (${String(Math.round(percent ?? 0))}%)`;
   return (
     <span
-      class={`badge ${LEVEL_CLASS[level]} badge-sm`}
+      style={`color:${LEVEL_COLOUR[level]}`}
       title={
         estimated
           ? "Estimated from the last reported usage"
@@ -43,12 +44,11 @@ function QueuePanel({
 }) {
   if (queue.length === 0) return <></>;
   return (
-    <div class="flex w-full flex-col gap-1 rounded-box bg-base-200 p-2 text-xs">
-      <div class="flex items-center gap-2">
-        <span class="font-semibold">Queued · {String(queue.length)}</span>
-        <span class="flex-1" />
+    <div>
+      <div>
+        <span>Queued · {String(queue.length)}</span>
+        <span />
         <button
-          class="btn btn-ghost btn-xs"
           title="Take the queued messages back into the composer"
           hx-post={`/sessions/${sessionId}/queue/recall`}
           hx-target="#composer-text"
@@ -56,24 +56,18 @@ function QueuePanel({
         >
           Recall
         </button>
-        <button
-          class="btn btn-ghost btn-xs"
-          hx-post={`/sessions/${sessionId}/queue/clear`}
-          hx-swap="none"
-        >
+        <button hx-post={`/sessions/${sessionId}/queue/clear`} hx-swap="none">
           Clear
         </button>
       </div>
       {queue.map((message) => (
-        <div class="flex items-center gap-2">
+        <div>
           <span
-            class={`badge badge-xs ${message.behavior === "steer" ? "badge-accent" : "badge-ghost"}`}
+            style={`flex-shrink:0; font-size:10px; font-family:var(--font-mono); padding:1px 7px; border-radius:999px; border:1px solid ${message.behavior === "steer" ? "color-mix(in srgb, var(--accent) 45%, transparent)" : "var(--border)"}; color:var(${message.behavior === "steer" ? "--accent" : "--text-dim"})`}
           >
             {message.behavior === "steer" ? "steer" : "follow-up"}
           </span>
-          <span class="truncate" title={message.text}>
-            {message.text}
-          </span>
+          <span title={message.text}>{message.text}</span>
         </div>
       ))}
     </div>
@@ -92,7 +86,8 @@ function CompactButton({
   const warning = level === "warn" || level === "critical";
   return status.compacting ? (
     <button
-      class="btn btn-outline btn-xs"
+      class="context-compact-button"
+      data-compacting="true"
       aria-label="Stop compacting"
       hx-post={`/sessions/${sessionId}/compact/abort`}
       hx-swap="none"
@@ -101,7 +96,8 @@ function CompactButton({
     </button>
   ) : (
     <button
-      class={`btn btn-xs ${warning ? "btn-warning" : "btn-ghost"}`}
+      class="context-compact-button"
+      {...(warning ? { "data-warning": "true" } : {})}
       title="Summarise the conversation so far to free context"
       hx-post={`/sessions/${sessionId}/compact`}
       hx-swap="none"
@@ -118,7 +114,6 @@ export function Status({ view }: { view: SessionView }) {
   const current = status?.model ?? null;
   return (
     <div
-      class="flex flex-wrap items-center gap-2 text-sm"
       {...(status?.running ? { "data-running": "true" } : {})}
       {...(status?.bashRunning ? { "data-bash-running": "true" } : {})}
     >
@@ -127,7 +122,6 @@ export function Status({ view }: { view: SessionView }) {
           hx-post={`/sessions/${summary.id}/model`}
           hx-trigger="change"
           hx-swap="none"
-          class="flex items-center gap-1"
         >
           <ModelPicker
             models={view.models}
@@ -137,7 +131,7 @@ export function Status({ view }: { view: SessionView }) {
           />
         </form>
       ) : (
-        <span class="text-base-content/60">not running</span>
+        <span>not running</span>
       )}
       <ContextBadge usage={view.usage} />
       {status?.title ? (
@@ -145,7 +139,7 @@ export function Status({ view }: { view: SessionView }) {
         // the browser tab, where `setTitle` puts it in a terminal.
         <span
           id="extension-title"
-          class="badge badge-ghost badge-sm"
+
           data-title={status.title}
         >
           {status.title}
@@ -160,38 +154,27 @@ export function Status({ view }: { view: SessionView }) {
       ) : null}
       {status?.running || status?.bashRunning ? (
         <>
-          <span
-            class="loading loading-xs loading-dots"
-            aria-label="Working"
-          ></span>
-          <button
-            class="btn btn-outline btn-xs"
-            hx-post={`/sessions/${summary.id}/abort`}
-            hx-swap="none"
-          >
+          <span aria-label="Working"></span>
+          <button hx-post={`/sessions/${summary.id}/abort`} hx-swap="none">
             Stop
           </button>
         </>
       ) : null}
       {view.modelWarnings.length > 0 ? (
-        <div class="alert w-full py-1 text-xs alert-warning" role="alert">
-          {view.modelWarnings.join("\n")}
-        </div>
+        <div role="alert">{view.modelWarnings.join("\n")}</div>
       ) : null}
       {status?.retry ? (
-        <div class="alert w-full py-1 text-xs alert-warning" role="status">
+        <div role="status">
           Retrying ({String(status.retry.attempt)}/
           {String(status.retry.maxAttempts)})…
-          <span class="opacity-60">{status.retry.message}</span>
+          <span>{status.retry.message}</span>
         </div>
       ) : null}
       {status?.compactionError ? (
-        <div class="alert w-full py-1 text-xs alert-error" role="alert">
-          {status.compactionError}
-        </div>
+        <div role="alert">{status.compactionError}</div>
       ) : null}
       {status?.compaction ? (
-        <div class="alert w-full py-1 text-xs alert-success">
+        <div>
           {status.compaction.reason === "manual"
             ? "Compacted"
             : status.compaction.reason}{" "}

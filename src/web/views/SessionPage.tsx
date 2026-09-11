@@ -1,10 +1,23 @@
-import { relativeTime } from "@core/sessions";
+import { formatContextUsage } from "@core/context-usage";
+import type { ContextUsage } from "@core/context-usage";
 import type { NewSessionView, SessionView, SidebarView } from "@core/workspace";
 import { Composer } from "./Composer.tsx";
-import { FilePanel } from "./Files.tsx";
+import { FilePanelBody } from "./Files.tsx";
 import { Rail } from "./Rail.tsx";
 import { CustomPanel, ExtensionDialog } from "./Extensions.tsx";
 import { Shelf } from "./Shelf.tsx";
+import {
+  CompactIcon,
+  ContextGaugeIcon,
+  HamburgerIcon,
+  HistoryIcon,
+  PanelLeftIcon,
+  PanelRightIcon,
+  RefreshIcon,
+  StopCompactionIcon,
+  SystemPromptIcon,
+  WrenchIcon,
+} from "./icons.tsx";
 import {
   type ItemActions,
   Items,
@@ -15,54 +28,323 @@ import { Sidebar } from "./Sidebar.tsx";
 import { Status } from "./Status.tsx";
 import { DialogHost, MissingFolderNotice, TrustBadge } from "./Workspace.tsx";
 
+// The application shell, with pi-web's DOM: the sidebar column, the 36px top
+// bar, the chat window with its rail, and the right-hand file panel. The
+// inline styles are pi-web's own (components/AppShell.tsx), kebab-cased;
+// everything with a class name is styled by src/web/styles/globals.css.
+
+/** pi-web's top bar and both panel headers are exactly this tall. */
+const BAR_HEIGHT = "calc(36px + env(safe-area-inset-top))";
+
+const TOP_BAR_BUTTON =
+  "display:flex; align-items:center; justify-content:center; gap:6px;" +
+  " height:100%; padding:0 12px; background:none; border:none;" +
+  " border-top:2px solid transparent; border-right:1px solid var(--border);" +
+  " color:var(--text-muted); cursor:pointer; flex-shrink:0; font-size:11px;" +
+  " white-space:nowrap; text-decoration:none;" +
+  " transition:color 0.1s, background 0.1s";
+
+const ICON_BUTTON_36 =
+  "display:flex; align-items:center; justify-content:center; width:36px;" +
+  " height:36px; padding:0; background:none; border:none;" +
+  " color:var(--text-muted); cursor:pointer; flex-shrink:0;" +
+  " transition:color 0.12s, background 0.12s";
+
+/** The panel one of the top-bar buttons opens, one at a time. */
+function TopPanelHost() {
+  return (
+    <div
+      id="top-panel"
+      style={`position:fixed; left:0; top:${BAR_HEIGHT}; width:100%; max-height:calc(100dvh - 36px); overflow-y:auto; z-index:500`}
+      hidden
+    />
+  );
+}
+
+function TopBar({
+  sessionId,
+  usage,
+  files,
+}: {
+  sessionId?: string;
+  usage?: ContextUsage;
+  /** False when this session has no folder to show files from. */
+  files?: boolean;
+}) {
+  return (
+    <div id="top-bar" style="flex-shrink:0; background:var(--bg-panel)">
+      <div
+        style={`display:flex; align-items:center; position:relative; border-bottom:1px solid var(--border); height:${BAR_HEIGHT}; padding-top:env(safe-area-inset-top)`}
+      >
+        <button
+          type="button"
+          id="sidebar-toggle"
+          style={`${ICON_BUTTON_36}; border-right:1px solid var(--border)`}
+          aria-controls="session-sidebar"
+          aria-expanded="true"
+          title="Toggle the sidebar"
+          aria-label="Toggle the sidebar"
+        >
+          <span data-sidebar-open-icon>
+            <PanelLeftIcon />
+          </span>
+          <span data-sidebar-closed-icon hidden>
+            <HamburgerIcon />
+          </span>
+        </button>
+        {sessionId === undefined ? null : (
+          <div style="display:flex; align-items:stretch; height:100%">
+            <a
+              style={TOP_BAR_BUTTON}
+              href={`/sessions/${sessionId}/export`}
+              target="_blank"
+              rel="noreferrer"
+              title="The whole conversation as one page"
+            >
+              <HistoryIcon />
+              Full history
+            </a>
+            <button
+              type="button"
+              style={TOP_BAR_BUTTON}
+              data-top-panel="system"
+              aria-expanded="false"
+              title="The prompt this session runs with"
+              hx-get={`/sessions/${sessionId}/system-prompt`}
+              hx-target="#top-panel"
+              hx-swap="innerHTML"
+            >
+              <SystemPromptIcon />
+              System
+            </button>
+            <button
+              type="button"
+              style={TOP_BAR_BUTTON}
+              data-top-panel="tools"
+              aria-expanded="false"
+              title="The tools this session may call"
+              hx-get={`/sessions/${sessionId}/tools`}
+              hx-target="#top-panel"
+              hx-swap="innerHTML"
+            >
+              <WrenchIcon />
+              Tools
+            </button>
+          </div>
+        )}
+        {sessionId === undefined ? (
+          <span style="margin-left:auto" />
+        ) : (
+          <button
+            type="button"
+            id="stats-trigger"
+            data-top-panel="stats"
+            aria-expanded="false"
+            style={`margin-left:auto; display:flex; align-items:center; justify-content:flex-end; min-width:0; gap:10px; padding:0 12px; height:100%; overflow:hidden; background:none; border:none; border-top:2px solid transparent; color:var(--text-muted); cursor:pointer; font-size:11px; white-space:nowrap; font-variant-numeric:tabular-nums; transition:color 0.1s, background 0.1s`}
+            title="Session info"
+            hx-get={`/sessions/${sessionId}/stats`}
+            hx-target="#top-panel"
+            hx-swap="innerHTML"
+          >
+            {/* TODO(shell): pi-web also shows ↑ input, ↓ output and ⟳ cache
+                read here. SessionView carries no token totals yet; adding them
+                to the view is what this row is waiting for. */}
+            <ContextReadout usage={usage} />
+          </button>
+        )}
+        {sessionId === undefined ? null : (
+          <>
+            <button
+              type="button"
+              class="context-compact-button"
+              title="Compact the conversation"
+              aria-label="Compact the conversation"
+              hx-post={`/sessions/${sessionId}/compact`}
+              hx-swap="none"
+            >
+              <CompactIcon />
+            </button>
+            <button
+              type="button"
+              class="context-compact-button"
+              data-compacting
+              title="Stop compacting"
+              aria-label="Stop compacting"
+              hx-post={`/sessions/${sessionId}/compact/abort`}
+              hx-swap="none"
+              hidden
+            >
+              <StopCompactionIcon />
+            </button>
+          </>
+        )}
+        <button
+          type="button"
+          class="page-refresh-button"
+          id="page-refresh"
+          title="Reload the page"
+          aria-label="Reload the page"
+        >
+          <RefreshIcon />
+        </button>
+        {sessionId === undefined || files !== true ? null : (
+          <button
+            type="button"
+            id="file-panel-toggle"
+            style={`${ICON_BUTTON_36}; border-left:1px solid var(--border)`}
+            aria-controls="file-panel"
+            aria-expanded="false"
+            title="Files"
+            aria-label="Files"
+          >
+            <PanelRightIcon />
+          </button>
+        )}
+        <TopPanelHost />
+      </div>
+    </div>
+  );
+}
+
+/** The context gauge in the top bar; red, amber or plain by threshold. */
+function ContextReadout({ usage }: { usage?: ContextUsage }) {
+  const text = usage ? formatContextUsage(usage) : "";
+  if (!usage || text === "") {
+    return <span style="color:var(--text-dim)">Session info</span>;
+  }
+  const colour =
+    usage.level === "critical"
+      ? "var(--danger)"
+      : usage.level === "warn"
+        ? "rgba(234,179,8,0.95)"
+        : "var(--text-muted)";
+  return (
+    <span
+      style={`display:flex; align-items:center; gap:4px; color:${colour}`}
+      data-context-readout
+    >
+      <ContextGaugeIcon />
+      {text}
+    </span>
+  );
+}
+
 function Shell({
   sidebar,
   activeId,
+  cwd,
+  usage,
   children,
+  panel,
 }: {
   sidebar: SidebarView;
   activeId?: string;
+  /** The folder on screen: the document title is built from it. */
+  cwd?: string;
+  usage?: ContextUsage;
   children?: unknown;
+  /** The right-hand file panel, on a session page. */
+  panel?: unknown;
 }) {
   return (
-    <div class="drawer h-full md:drawer-open">
-      <input id="nav-drawer" type="checkbox" class="drawer-toggle" />
-      <div class="drawer-content flex min-h-0 flex-col">
-        <div class="flex items-center gap-2 border-b border-base-300 px-2 py-1 md:hidden">
-          <label
-            for="nav-drawer"
-            class="btn btn-ghost btn-sm"
-            aria-label="Show sessions"
-          >
-            ☰
-          </label>
-          <a href="/" class="font-semibold">
-            Pi
-          </a>
-        </div>
+    <div style="display:flex; width:100%; height:100%; padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); overflow:hidden; background:var(--bg)">
+      <div
+        class="sidebar-overlay-backdrop sidebar-mobile-pending"
+        style="position:fixed; inset:0; z-index:199; background:rgba(0,0,0,0.4); opacity:0; pointer-events:none; transition:opacity 0.25s ease"
+      />
+      <div
+        id="session-sidebar"
+        class="sidebar-container sidebar-open sidebar-mobile-pending"
+        style="background:var(--bg-panel); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); z-index:200"
+      >
+        <Sidebar
+          view={sidebar}
+          {...(activeId === undefined ? {} : { activeId })}
+          {...(cwd === undefined ? {} : { cwd })}
+        />
+      </div>
+      <div
+        class="panel-resize-handle sidebar-resize-handle"
+        role="separator"
+        tabindex={0}
+        aria-orientation="vertical"
+        aria-controls="session-sidebar"
+        aria-valuemin={180}
+        aria-valuemax={480}
+        data-resize-handle="sidebar"
+        title="Resize the sidebar"
+        aria-label="Resize the sidebar"
+      />
+      <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0">
+        <TopBar
+          {...(activeId === undefined ? {} : { sessionId: activeId })}
+          {...(usage === undefined ? {} : { usage })}
+          files={panel !== undefined}
+        />
         <main
-          class="relative flex min-h-0 flex-1 flex-col"
+          style="flex:1; overflow:hidden; position:relative"
           data-session-id={activeId}
+          data-cwd={cwd}
           hx-ext="sse"
           sse-connect={activeId ? `/sessions/${activeId}/events` : undefined}
         >
           {children}
-          <div
-            id="toasts"
-            class="pointer-events-none fixed right-4 bottom-24 z-50 flex w-80 flex-col gap-2"
-            sse-swap="notice"
-            hx-swap="beforeend"
-          />
+          {/* pi-web floats notices over the transcript, clear of the rail. */}
+          <div class="chat-notices">
+            <div id="toasts" sse-swap="notice" hx-swap="beforeend" />
+          </div>
           <DialogHost />
         </main>
       </div>
-      <div class="drawer-side">
-        <label
-          for="nav-drawer"
-          class="drawer-overlay"
-          aria-label="Hide sessions"
-        />
-        <Sidebar view={sidebar} activeId={activeId} />
+      <div class="right-panel-overlay-backdrop" aria-hidden="true" />
+      {panel === undefined ? null : (
+        <>
+          <div
+            class="panel-resize-handle right-panel-resize-handle"
+            role="separator"
+            tabindex={0}
+            aria-orientation="vertical"
+            aria-controls="file-panel"
+            aria-valuemin={300}
+            aria-valuemax={1200}
+            data-resize-handle="right-panel"
+            title="Resize the file panel"
+            aria-label="Resize the file panel"
+          />
+          {panel}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** The right panel: pi-web's container, with the files area's body inside. */
+function FilePanel({ sessionId }: { sessionId: string }) {
+  return (
+    <div
+      id="file-panel"
+      class="right-panel-container right-panel-closed"
+      data-session={sessionId}
+      style="display:flex; flex-direction:column; border-left:1px solid var(--border); background:var(--bg)"
+    >
+      <div
+        style={`display:flex; align-items:center; flex-shrink:0; height:${BAR_HEIGHT}; padding-top:env(safe-area-inset-top); background:var(--bg-panel); border-bottom:1px solid var(--border)`}
+      >
+        <div style="flex:1; overflow:hidden">
+          <div id="file-tabs" class="file-tabs" role="tablist" hidden />
+        </div>
+        <button
+          type="button"
+          id="file-panel-close"
+          style={`${ICON_BUTTON_36}; background:var(--bg-selected); border-left:1px solid var(--border); color:var(--text)`}
+          title="Hide the file panel"
+          aria-label="Hide the file panel"
+        >
+          <PanelRightIcon />
+        </button>
+      </div>
+      <div style="flex:1; overflow:hidden; padding-bottom:env(safe-area-inset-bottom)">
+        <FilePanelBody />
       </div>
     </div>
   );
@@ -71,8 +353,9 @@ function Shell({
 export function IndexPage({ sidebar }: { sidebar: SidebarView }) {
   return (
     <Shell sidebar={sidebar}>
-      <div class="m-auto text-base-content/60">
-        Pick a session or start a new one.
+      {/* §2.5: nothing selected yet — the arrow points at the sidebar. */}
+      <div style="height:100%; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:15px">
+        Select a session to view the conversation
       </div>
     </Shell>
   );
@@ -88,57 +371,38 @@ export function NewSessionPage({
   draft?: string;
 }) {
   return (
-    <Shell sidebar={sidebar}>
-      <header class="flex flex-wrap items-center gap-2 border-b border-base-300 px-4 py-2">
-        <span class="text-sm font-semibold">New session</span>
-        <code class="truncate text-xs text-base-content/60">{view.cwd}</code>
-        <button
-          type="button"
-          class="btn btn-ghost btn-xs"
-          hx-get="/workspaces/picker"
-          hx-target="#dialogs"
-          hx-swap="innerHTML"
-        >
-          Change folder…
-        </button>
-        <TrustBadge cwd={view.cwd} status={view.trust} />
-      </header>
-      <div class="m-auto px-4 text-center text-base-content/60">
-        {view.available
-          ? "Type the first request below."
-          : "That folder is gone. Pick another one to start a session."}
-      </div>
-      {view.available ? (
-        <Composer cwd={view.cwd} draft={draft} start={view} />
-      ) : null}
-    </Shell>
-  );
-}
-
-function BranchSwitcher({ view }: { view: SessionView }) {
-  const { leaves, summary } = view;
-  if (leaves.length < 2 || view.summary.cwdAvailable === false) return <></>;
-  return (
-    <details class="dropdown dropdown-end">
-      <summary class="btn btn-ghost btn-xs">
-        Branches ({String(leaves.length)})
-      </summary>
-      <ul class="menu dropdown-content z-10 max-h-96 w-80 flex-nowrap overflow-y-auto rounded-box bg-base-100 p-1 text-sm shadow">
-        {leaves.map((leaf) => (
-          <li>
-            <a
-              href={`/sessions/${summary.id}?leaf=${leaf.id}`}
-              class={leaf.current ? "menu-active" : ""}
+    <Shell sidebar={sidebar} cwd={view.cwd}>
+      <section class="chat-window is-empty" aria-label="Messages">
+        <div class="chat-body">
+          <div class="chat-scroll">
+            <div class="chat-scroll-content">
+              <div class="chat-transcript">
+                <header class="chat-empty">
+                  <h1>
+                    <span aria-hidden="true">π</span>
+                    <span>Pi Web</span>
+                  </h1>
+                </header>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="chat-composer">
+          {view.available ? (
+            <Composer cwd={view.cwd} draft={draft} start={view} />
+          ) : (
+            <div
+              class="project-folder-message"
+              role="status"
+              style="padding:12px 16px; color:var(--text-muted); font-size:12px"
             >
-              <span class="truncate">{leaf.label}</span>
-              <span class="text-xs text-base-content/50">
-                {relativeTime(leaf.timestamp)}
-              </span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </details>
+              That folder is gone. Pick another one to start a session.
+            </div>
+          )}
+        </footer>
+      </section>
+      <TrustBadge cwd={view.cwd} status={view.trust} />
+    </Shell>
   );
 }
 
@@ -176,146 +440,102 @@ export function SessionPage({
     ...(view.otherBranch || missingFolder ? { readOnly: true } : {}),
   };
   return (
-    <Shell sidebar={sidebar} activeId={summary.id}>
-      <header class="flex flex-col gap-1 border-b border-base-300 px-4 py-2">
-        <div class="flex items-baseline gap-2">
-          <h1 class="truncate font-semibold" data-page-title>
-            {pageTitle(view)}
-          </h1>
-          <span class="truncate text-xs text-base-content/60">
-            {summary.cwd}
-          </span>
-          <span class="flex-1" />
-          <BranchSwitcher view={view} />
-          <details class="dropdown dropdown-end">
-            <summary
-              id="stats-trigger"
-              class="btn btn-ghost btn-xs"
-              hx-get={`/sessions/${summary.id}/stats`}
-              hx-target="#session-stats"
-              hx-swap="innerHTML"
-            >
-              Stats
-            </summary>
-            <div
-              id="session-stats"
-              class="dropdown-content z-10 w-80 rounded-box bg-base-100 p-3 text-sm shadow"
-            />
-          </details>
-          <a
-            class="btn btn-ghost btn-xs"
-            href={`/sessions/${summary.id}/export`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Full history
-          </a>
+    <Shell
+      sidebar={sidebar}
+      activeId={summary.id}
+      cwd={summary.cwd}
+      usage={view.usage}
+      {...(missingFolder
+        ? {}
+        : { panel: <FilePanel sessionId={summary.id} /> })}
+    >
+      <section
+        class="chat-window"
+        aria-label="Messages"
+        style="--expanded-conversation-rail-width:36px"
+      >
+        <div class="chat-body">
+          <div id="log" class="chat-scroll">
+            <div class="chat-scroll-content">
+              <div class="chat-transcript">
+                <span hidden data-page-title>
+                  {pageTitle(view)}
+                </span>
+                {view.otherBranch ? (
+                  <div class="branch-sync-notice" role="status">
+                    <span>
+                      Viewing another branch of this session, read only.
+                    </span>
+                    <button
+                      type="button"
+                      class="history-action"
+                      hx-post={`/sessions/${summary.id}/navigate`}
+                      hx-vals={JSON.stringify({ entryId: leafId })}
+                      hx-target="body"
+                      hx-swap="innerHTML"
+                    >
+                      Continue from here
+                    </button>
+                  </div>
+                ) : null}
+                <div id="messages" sse-swap="settled" hx-swap="beforeend">
+                  {view.hasMore && view.oldestId !== undefined ? (
+                    <LoadEarlier
+                      sessionId={summary.id}
+                      before={view.oldestId}
+                      {...(view.leaf === undefined ? {} : { leaf: view.leaf })}
+                    />
+                  ) : null}
+                  <Items items={view.items} actions={actions} />
+                </div>
+                <div id="turn" sse-swap="turn" hx-swap="innerHTML">
+                  <TurnFragment
+                    items={view.turn}
+                    actions={actions}
+                    status={view.status}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
           <button
             type="button"
-            class="btn btn-ghost btn-xs"
-            title="The tools this session may call"
-            hx-get={`/sessions/${summary.id}/tools`}
-            hx-target="#dialogs"
-            hx-swap="innerHTML"
+            id="jump-to-latest"
+            class="chat-jump-to-latest"
+            aria-label="Jump to the latest message"
+            title="Jump to the latest message"
+            hidden
           >
-            Tools
+            ↓
           </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs"
-            title="The prompt this session runs with"
-            hx-get={`/sessions/${summary.id}/system-prompt`}
-            hx-target="#dialogs"
-            hx-swap="innerHTML"
+          {/* The rail column of pi-web's two-column chat body. pi-web puts
+              the surface on the element itself (§5), not in a class. */}
+          <div
+            id="rail-column"
+            class="chat-minimap"
+            role="navigation"
+            aria-label="Conversation map"
+            style="width:36px; flex-shrink:0; position:relative; cursor:pointer; user-select:none; border-left:1px solid var(--border); background:var(--bg-panel)"
           >
-            Prompt
-          </button>
-          {trust ? <TrustBadge cwd={summary.cwd} status={trust} /> : null}
-          {missingFolder ? null : (
-            <button
-              type="button"
-              id="file-panel-toggle"
-              class="btn btn-ghost btn-xs"
-              aria-controls="file-panel"
-              aria-expanded="false"
-            >
-              Files
-            </button>
+            <Rail view={view} />
+          </div>
+        </div>
+        <footer class="chat-composer">
+          {/* TODO(composer): pi-web has no status row — the readout moved into
+              the top bar (gap C10). It stays until the composer carries its
+              own token and t/s line. */}
+          <div id="status" sse-swap="status" hx-swap="innerHTML">
+            <Status view={view} />
+          </div>
+          {missingFolder ? (
+            <MissingFolderNotice cwd={summary.cwd} />
+          ) : view.otherBranch ? null : (
+            <Composer sessionId={summary.id} cwd={summary.cwd} draft={draft} />
           )}
-        </div>
-        {view.otherBranch ? (
-          <div class="alert flex items-center gap-2 py-1 text-sm alert-info">
-            <span>Viewing another branch of this session, read only.</span>
-            <button
-              class="btn btn-xs"
-              hx-post={`/sessions/${summary.id}/navigate`}
-              hx-vals={JSON.stringify({ entryId: leafId })}
-              hx-target="body"
-              hx-swap="innerHTML"
-            >
-              Continue from here
-            </button>
-          </div>
-        ) : null}
-      </header>
-      <div class="flex min-h-0 flex-1">
-        <div id="log" class="relative min-h-0 flex-1 overflow-y-auto px-4">
-          <div id="messages" sse-swap="settled" hx-swap="beforeend">
-            {view.hasMore && view.oldestId !== undefined ? (
-              <LoadEarlier
-                sessionId={summary.id}
-                before={view.oldestId}
-                {...(view.leaf === undefined ? {} : { leaf: view.leaf })}
-              />
-            ) : null}
-            <Items items={view.items} actions={actions} />
-          </div>
-          <div id="turn" sse-swap="turn" hx-swap="innerHTML">
-            <TurnFragment
-              items={view.turn}
-              actions={actions}
-              status={view.status}
-            />
-          </div>
-        </div>
-        <div id="rail-column" class="pr-2">
-          <Rail view={view} />
-        </div>
-        {missingFolder ? null : (
-          <FilePanel sessionId={summary.id} cwd={summary.cwd} />
-        )}
-      </div>
-      <button
-        type="button"
-        id="jump-to-latest"
-        class="btn absolute right-6 bottom-32 z-20 btn-circle shadow btn-sm"
-        aria-label="Jump to the latest message"
-        title="Jump to the latest message"
-        hidden
-      >
-        ↓
-      </button>
-      <div
-        id="status"
-        class="border-t border-base-300 px-4 py-2"
-        sse-swap="status"
-        hx-swap="innerHTML"
-      >
-        <Status view={view} />
-      </div>
-      <p
-        id="branch-sync"
-        class="htmx-indicator px-4 py-1 text-xs text-base-content/60"
-        role="status"
-      >
-        Loading branch history. Sending is paused.
-      </p>
-      {missingFolder ? (
-        <MissingFolderNotice cwd={summary.cwd} />
-      ) : view.otherBranch ? null : (
-        <Composer sessionId={summary.id} cwd={summary.cwd} draft={draft} />
-      )}
-      <Shelf status={view.status} />
+          <Shelf status={view.status} />
+        </footer>
+      </section>
+      {trust ? <TrustBadge cwd={summary.cwd} status={trust} /> : null}
       <CustomPanel sessionId={summary.id} frame={view.status?.custom ?? null} />
       <ExtensionDialog
         sessionId={summary.id}
