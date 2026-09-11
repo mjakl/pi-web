@@ -1105,7 +1105,11 @@ function ToolCard({
           hx-trigger="toggle once from:closest details"
           hx-swap="outerHTML"
         >
-          <pre style="margin:0; padding:8px 10px; color:var(--text-dim); font-size:12px; line-height:1.5; background:var(--bg-subtle); border-top:1px solid rgba(34,197,94,0.2)">
+          <pre
+            style={`margin:0; padding:8px 10px; color:var(--text-dim); font-size:12px; line-height:1.5; background:var(--bg-subtle); border-top:1px solid ${
+              failed ? "rgba(248,113,113,0.25)" : "rgba(34,197,94,0.2)"
+            }`}
+          >
             Loading output…
           </pre>
         </div>
@@ -1218,7 +1222,7 @@ function AssistantMessage({
   return (
     <div
       class="message-row"
-      id={`entry-${item.entryId}`}
+      {...(item.processHalf ? {} : { id: `entry-${item.entryId}` })}
       data-role="assistant"
       style="margin-bottom:16px"
     >
@@ -1280,7 +1284,9 @@ function AssistantMessage({
             class="message-actions message-copy"
           />
         )}
-        {streaming || actions?.timestamps?.has(item.entryId) !== true ? null : (
+        {streaming ||
+        item.processHalf === true ||
+        actions?.timestamps?.has(item.entryId) !== true ? null : (
           <Time
             value={item.timestamp}
             style="font-size:10px; color:var(--text-dim); margin-left:auto"

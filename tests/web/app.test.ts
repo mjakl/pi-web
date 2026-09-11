@@ -1267,10 +1267,11 @@ describe("conversation rail, shelf, and written files", () => {
     expect(page).not.toContain("minimap-junction");
     expect(page).toContain('data-graph-width="36"');
     // pi-web keeps 5px clear of each node and drops an edge shorter than
-    // that, which `max(0px, ...)` says here.
-    expect(page).toContain("top:calc(17px + 0 * min(50px, (100% - 54px) / 1))");
+    // that, which `max(0px, ...)` says here. The extra pixel at each end hides
+    // under a node pill so a fractional row pitch cannot break the spine.
+    expect(page).toContain("top:calc(16px + 0 * min(50px, (100% - 54px) / 1))");
     expect(page).toContain(
-      "height:max(0px, calc(1 * min(50px, (100% - 54px) / 1) - 10px))",
+      "height:max(0px, calc(1 * min(50px, (100% - 54px) / 1) - 8px))",
     );
     expect(page).toContain('class="is-active"');
   });
@@ -1476,6 +1477,39 @@ describe("transcript rendering", () => {
     expect(page).toContain("font-size:10px; color:var(--text-dim)");
   });
 
+  it("keeps the turn's usage, time and anchor on the answer alone", async () => {
+    // One assistant message that reasons and then answers: pi-web splits it
+    // around the answer and the process half carries none of the footer.
+    const reasoned = assistantEntry("a1", "u1", "the answer", 40_000);
+    if (reasoned.type === "message" && reasoned.message.role === "assistant") {
+      reasoned.message.content = [
+        { type: "thinking", thinking: "hm" },
+        { type: "text", text: "the answer" },
+      ] as never;
+    }
+    const { app } = testApp({
+      sessions: [
+        {
+          summary: {
+            id: "s1",
+            cwd: "/repo/one",
+            name: "Stored one",
+            createdAt: "2026-09-01T00:00:00.000Z",
+            modifiedAt: "2026-09-02T00:00:00.000Z",
+            fileSize: 10,
+          },
+          entries: [userEntry("u1", null, "ask"), reasoned],
+        },
+      ],
+    });
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain("39,990 in · 10 out");
+    expect(page.split("39,990 in · 10 out")).toHaveLength(2);
+    // Both halves render, but only the answer answers to the rail.
+    expect(page.split('data-role="assistant"')).toHaveLength(3);
+    expect(page.split('id="entry-a1"')).toHaveLength(2);
+  });
+
   it("renders a tool call as pi-web's tinted card", async () => {
     const { app } = testApp({
       script: (): ScriptedStep[] => [
@@ -1497,6 +1531,30 @@ describe("transcript rendering", () => {
     expect(page).toContain('class="card-chevron"');
     // The process disclosure keeps its own chevron and count line.
     expect(page).toContain('class="process-chevron"');
+  });
+
+  it("tints a failed card's loading placeholder like the card", async () => {
+    const { app } = testApp({
+      script: (): ScriptedStep[] => [
+        {
+          tool: "read",
+          arguments: { path: "/repo/one/a.ts" },
+          result: "no such file",
+          isError: true,
+        },
+        { text: "done" },
+      ],
+    });
+    const form = new FormData();
+    form.set("text", "look");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain("Loading output…");
+    // The rule under the header follows the card, never the green default.
+    expect(page).toContain(
+      "background:var(--bg-subtle); border-top:1px solid rgba(248,113,113,0.25)",
+    );
   });
 
   it("renders a notice as pi-web's shelf card", async () => {

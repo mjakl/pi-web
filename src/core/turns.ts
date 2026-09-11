@@ -205,7 +205,10 @@ function buildTurn(
     lastProcess === -1 ? [] : final.blocks.slice(0, lastProcess + 1);
 
   const process = [...items.slice(0, finalIndex)];
-  if (processBlocks.length > 0) process.push(withBlocks(final, processBlocks));
+  if (processBlocks.length > 0) {
+    const { usage: _usage, ...half } = withBlocks(final, processBlocks);
+    process.push({ ...half, processHalf: true });
+  }
   const answer =
     answerBlocks.length > 0 ? withBlocks(final, answerBlocks) : undefined;
 

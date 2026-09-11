@@ -110,6 +110,12 @@ export type AssistantItem = {
   stopReason: string;
   errorMessage?: string;
   timestamp: string;
+  /**
+   * The reasoning/tool half of a final message that was split around its
+   * answer. pi-web renders this half without the turn's usage line, timestamp
+   * or scroll anchor: all three belong to the answer under the disclosure.
+   */
+  processHalf?: true;
   usage?: {
     input: number;
     output: number;
@@ -590,6 +596,16 @@ function attachResult(
 }
 
 /**
+ * A non-message entry's own clock. Every entry pi-web turns into a chat
+ * message counts towards the reasoning duration, hidden ones included, so a
+ * note between two turns does not make the next one look minutes long.
+ */
+function entryMs(timestamp: string): number | undefined {
+  const parsed = Date.parse(timestamp);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+/**
  * Project the entries of one branch (root first) into transcript items.
  * Entries with no visible representation (model changes, labels, hidden
  * custom messages) are skipped.
@@ -660,6 +676,7 @@ export function projectTranscript(branch: readonly SessionEntry[]): Transcript {
         break;
       }
       case "compaction": {
+        previousMs = entryMs(entry.timestamp);
         const parsed = parseCompactionSummary(entry.summary);
         items.push({
           kind: "compaction",
@@ -677,6 +694,7 @@ export function projectTranscript(branch: readonly SessionEntry[]): Transcript {
         break;
       case "branch_summary":
         if (entry.summary.trim() !== "") {
+          previousMs = entryMs(entry.timestamp);
           items.push({
             kind: "branch_summary",
             entryId: entry.id,
@@ -686,6 +704,7 @@ export function projectTranscript(branch: readonly SessionEntry[]): Transcript {
         }
         break;
       case "custom_message":
+        previousMs = entryMs(entry.timestamp);
         if (entry.display) {
           const text = contentText(entry.content);
           items.push({

@@ -114,6 +114,35 @@ describe("projectTranscript", () => {
     expect(transcript.lastContextTokens).toBe(250);
   });
 
+  it("times reasoning from the last entry of any kind, hidden ones too", () => {
+    const thinking = [{ type: "thinking", thinking: "hm" }];
+    const note = (id: string, parentId: string, display: boolean) =>
+      ({
+        type: "custom_message",
+        id,
+        parentId,
+        timestamp: "2026-09-10T00:05:00.000Z",
+        customType: "note",
+        content: "x",
+        display,
+      }) as SessionEntry;
+    const transcript = projectTranscript([
+      assistantWith("a0", null, [], Date.parse("2026-09-10T00:00:00.000Z")),
+      note("n1", "a0", true),
+      note("n2", "n1", false),
+      assistantWith(
+        "a1",
+        "n2",
+        thinking,
+        Date.parse("2026-09-10T00:05:04.000Z"),
+      ),
+    ]);
+    const item = transcript.items.at(-1);
+    if (item?.kind !== "assistant") throw new Error("expected an assistant");
+    // Four seconds since the last note, not the five minutes since "a0".
+    expect(item.blocks[0]).toMatchObject({ kind: "thinking", seconds: 4 });
+  });
+
   it("renders a reported patch as a diff instead of text", () => {
     const patch = "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n";
     const transcript = projectTranscript([

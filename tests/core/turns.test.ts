@@ -20,7 +20,19 @@ function user(id: string): TranscriptItem {
   };
 }
 
-function assistant(id: string, blocks: unknown[]): TranscriptItem {
+type Usage = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
+};
+
+function assistant(
+  id: string,
+  blocks: unknown[],
+  usage?: Usage,
+): TranscriptItem {
   return {
     kind: "assistant",
     entryId: id,
@@ -29,6 +41,7 @@ function assistant(id: string, blocks: unknown[]): TranscriptItem {
     blocks: blocks as never,
     stopReason: "stop",
     timestamp: "2026-09-10T00:00:00.000Z",
+    ...(usage === undefined ? {} : { usage }),
   };
 }
 
@@ -156,6 +169,25 @@ describe("groupTurns", () => {
       blocks: [tool("c2")],
     });
     expect(turn?.expanded).toBe(false);
+  });
+
+  it("leaves the turn's usage on the answer alone", () => {
+    const usage = {
+      input: 10,
+      output: 2,
+      cacheRead: 3,
+      cacheWrite: 0,
+      total: 15,
+    };
+    const [turn] = groupTurns([
+      user("u1"),
+      assistant("a1", [thinking, text("here it is")], usage),
+    ]);
+    const half = turn?.process.at(-1);
+    expect(half).toMatchObject({ entryId: "a1", processHalf: true });
+    expect(half?.kind === "assistant" && half.usage).toBeUndefined();
+    expect(turn?.answer?.usage).toEqual(usage);
+    expect(turn?.answer?.processHalf).toBeUndefined();
   });
 
   it("opens the disclosure when prose is hidden inside it", () => {

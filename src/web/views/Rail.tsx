@@ -141,6 +141,12 @@ function Node({
 
 /** pi-web's GRAPH_NODE_CLEARANCE: the space it keeps around every node. */
 const CLEARANCE = 5;
+/**
+ * The row pitch is fractional, so an edge's box and the node pills it runs
+ * between round independently and every other edge left a one-pixel hole in
+ * the spine. Stretch each edge a pixel past both nodes; they paint over it.
+ */
+const OVERLAP = 1;
 
 /**
  * One of pi-web's bezier connectors. The clearance is in pixels and the gap is
@@ -172,8 +178,8 @@ function Edge({
       preserveAspectRatio="none"
       style={
         `width:${String(width)}px;` +
-        ` top:calc(${String(PADDING + CLEARANCE)}px + ${String(parent.row)} * ${gap(rows)});` +
-        ` height:max(0px, calc(${String(span)} * ${gap(rows)} - ${String(CLEARANCE * 2)}px))`
+        ` top:calc(${String(PADDING + CLEARANCE - OVERLAP)}px + ${String(parent.row)} * ${gap(rows)});` +
+        ` height:max(0px, calc(${String(span)} * ${gap(rows)} - ${String(CLEARANCE * 2 - OVERLAP * 2)}px))`
       }
     >
       <path

@@ -165,8 +165,13 @@ export function setUpRail(): void {
       });
   };
 
-  /** True while the pointer is over the 36px strip, not the branch graph. */
+  /**
+   * True unless the pointer is over the branch graph beside the 36px strip.
+   * An unbranched rail has no graph, so pi-web skips the test there and
+   * treats the whole width as the strip.
+   */
   const onStrip = (clientX: number) =>
+    !rail.classList.contains("has-branches") ||
     clientX - rail.getBoundingClientRect().left + rail.scrollLeft <= RAIL_WIDTH;
 
   // Pressing anywhere in the strip jumps to the nearest mark and starts a
