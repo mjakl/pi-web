@@ -1266,12 +1266,12 @@ describe("conversation rail, shelf, and written files", () => {
     // No fork, so no structural nodes: pi-web draws the anchors alone.
     expect(page).not.toContain("minimap-junction");
     expect(page).toContain('data-graph-width="36"');
-    // pi-web keeps 5px clear of each node and drops an edge shorter than
-    // that, which `max(0px, ...)` says here. The extra pixel at each end hides
-    // under a node pill so a fractional row pitch cannot break the spine.
-    expect(page).toContain("top:calc(16px + 0 * min(50px, (100% - 54px) / 1))");
+    // pi-web keeps 5px clear of each node — the one-pixel hole that leaves
+    // between a node pill and its edge is in the reference too — and drops an
+    // edge shorter than that, which `max(0px, ...)` says here.
+    expect(page).toContain("top:calc(17px + 0 * min(50px, (100% - 54px) / 1))");
     expect(page).toContain(
-      "height:max(0px, calc(1 * min(50px, (100% - 54px) / 1) - 8px))",
+      "height:max(0px, calc(1 * min(50px, (100% - 54px) / 1) - 10px))",
     );
     expect(page).toContain('class="is-active"');
   });
@@ -1475,6 +1475,39 @@ describe("transcript rendering", () => {
     // Usage, then the timestamp pushed to the right at 10px.
     expect(page).toContain("39,990 in · 10 out");
     expect(page).toContain("font-size:10px; color:var(--text-dim)");
+  });
+
+  it("keeps an extension card's copy button and details toggle on one row", async () => {
+    const { app, world } = testApp();
+    const stored = world.store.get("s1");
+    if (!stored) throw new Error("no session");
+    stored.entries.push({
+      type: "custom_message",
+      id: "c1",
+      parentId: "a1",
+      timestamp: "2026-09-02T00:00:00.000Z",
+      customType: "pi-processes:update",
+      content: "process finished",
+      display: true,
+      details: { exitCode: 0 },
+    } as never);
+
+    const page = await (await app.request("/sessions/s1")).text();
+    // pi-web's footer is one flex row with the copy button and, pushed right,
+    // the details toggle; the row itself is the disclosure here.
+    expect(page).toContain('class="transcript-details note-details"');
+    expect(page).toContain(
+      '<span class="note-details-closed">Show details</span>',
+    );
+    expect(page).toContain(
+      '<span class="note-details-open">Hide details</span>',
+    );
+    // The word alone, with no icon, is what pi-web copies with here.
+    expect(page).toContain(
+      '<button type="button" class="message-copy" style="padding:3px 7px;' +
+        ' border:none; background:none; cursor:pointer; font-size:11px"' +
+        ' data-copy="true" title="Copy message">Copy</button>',
+    );
   });
 
   it("keeps the turn's usage, time and anchor on the answer alone", async () => {

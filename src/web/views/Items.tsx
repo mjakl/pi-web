@@ -145,10 +145,13 @@ function CopyButton({
     " height:22px; background:none; border:none; border-radius:5px;" +
     " cursor:pointer; font-size:11px; font-weight:400; white-space:nowrap;" +
     " transition:opacity 0.12s, color 0.12s",
+  bare,
 }: {
   text: string;
   class?: string;
   style?: string;
+  /** The extension card's footer copies with a word, not an icon (§4.6). */
+  bare?: boolean;
 }) {
   if (text === "") return <></>;
   return (
@@ -163,14 +166,26 @@ function CopyButton({
         data-copy
         title="Copy message"
       >
-        <span data-copy-idle style="display:flex; align-items:center; gap:4px">
-          <CopyIcon size={11} width={1.8} />
-          Copy
-        </span>
-        <span data-copy-done style="display:none; align-items:center; gap:4px">
-          <CheckIcon size={11} width={1.8} />
-          Copied
-        </span>
+        {bare === true ? (
+          "Copy"
+        ) : (
+          <>
+            <span
+              data-copy-idle
+              style="display:flex; align-items:center; gap:4px"
+            >
+              <CopyIcon size={11} width={1.8} />
+              Copy
+            </span>
+            <span
+              data-copy-done
+              style="display:none; align-items:center; gap:4px"
+            >
+              <CheckIcon size={11} width={1.8} />
+              Copied
+            </span>
+          </>
+        )}
       </button>
     </>
   );
@@ -1390,6 +1405,21 @@ function Compaction({
   );
 }
 
+/** The footer row of an extension card, with or without a details panel. */
+const NOTE_FOOTER =
+  "display:flex; align-items:center; gap:8px; padding:4px 9px;" +
+  " border-top:1px solid var(--border); background:var(--bg-subtle)";
+
+function NoteCopy({ text }: { text: string }) {
+  return (
+    <CopyButton
+      text={text}
+      bare
+      style="padding:3px 7px; border:none; background:none; cursor:pointer; font-size:11px"
+    />
+  );
+}
+
 function Note({ item, actions }: { item: NoteItem; actions?: ItemActions }) {
   const time = formatTimestamp(item.timestamp);
   return (
@@ -1444,16 +1474,21 @@ function Note({ item, actions }: { item: NoteItem; actions?: ItemActions }) {
             />
           )}
         </div>
-        <div style="display:flex; align-items:center; gap:8px; padding:4px 9px; border-top:1px solid var(--border); background:var(--bg-subtle)">
-          <CopyButton
-            text={item.text === "" ? (item.details ?? "") : item.text}
-            style="padding:3px 7px; border:none; background:none; cursor:pointer; font-size:11px"
-          />
-        </div>
-        {item.details === undefined ? null : (
-          <details class="transcript-details">
-            <summary style="display:flex; justify-content:flex-end; padding:4px 9px; border-top:1px solid var(--border); background:var(--bg-subtle); color:var(--text-dim); font-size:11px; cursor:pointer">
-              Show details
+        {item.details === undefined ? (
+          <div style={NOTE_FOOTER}>
+            <NoteCopy text={item.text} />
+          </div>
+        ) : (
+          /* pi-web keeps the copy button and the details toggle on one row
+             (MessageView.tsx L2245-L2289). The row is the disclosure here,
+             so the copy button inside it must not open the panel. */
+          <details class="transcript-details note-details">
+            <summary style={`${NOTE_FOOTER}; cursor:pointer`}>
+              <NoteCopy text={item.text === "" ? item.details : item.text} />
+              <span style="margin-left:auto; padding:3px 7px; color:var(--text-dim); font-size:11px">
+                <span class="note-details-closed">Show details</span>
+                <span class="note-details-open">Hide details</span>
+              </span>
             </summary>
             <pre style="margin:0; padding:9px 10px; border-top:1px solid var(--border); background:var(--bg); color:var(--text-muted); font-size:12px; line-height:1.5; white-space:pre-wrap; word-break:break-word; max-height:360px; overflow:auto; font-family:var(--font-mono)">
               {item.details}
@@ -1682,7 +1717,11 @@ function TurnView({ turn, actions }: { turn: Turn; actions?: ItemActions }) {
         <WrittenFiles files={turn.written} actions={actions} />
       )}
       {turn.trailing.map((item) => (
-        <Item item={item} actions={actions} />
+        <Item
+          item={item}
+          actions={actions}
+          starrable={item.entryId === turn.loneAnswerId}
+        />
       ))}
     </section>
   );

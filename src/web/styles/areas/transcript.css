@@ -52,6 +52,16 @@
   display: flex !important;
 }
 
+/* pi-web swaps the extension card's "Show details" for "Hide details" from
+   React state; the disclosure's own state says the same thing here. */
+.note-details-open,
+.note-details[open] .note-details-closed {
+  display: none;
+}
+.note-details[open] .note-details-open {
+  display: inline;
+}
+
 /* A local path in an answer. pi-web renders it as an ordinary Markdown link
    that opens the viewer, so it carries the Markdown link's own decoration. */
 .markdown-file-ref {

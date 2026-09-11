@@ -125,6 +125,12 @@ export function setUpRail(): void {
   };
   view.addEventListener("scroll", schedule, { passive: true });
   document.body.addEventListener("htmx:afterSwap", schedule);
+  // Opening a disclosure in the transcript moves the messages without a
+  // scroll or a swap, so the reading line ends up beside a different mark.
+  // pi-web watches the same two boxes (ChatMinimap.tsx, ResizeObserver).
+  const resize = new ResizeObserver(schedule);
+  resize.observe(view);
+  if (view.firstElementChild) resize.observe(view.firstElementChild);
 
   const smooth = () =>
     matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";

@@ -69,6 +69,9 @@ function setUpCopy(): void {
     if (!(target instanceof HTMLElement)) return;
     const message = target.closest<HTMLElement>("[data-copy]");
     if (message) {
+      // The extension card copies from inside its disclosure's summary row;
+      // copying there must not open the panel underneath.
+      if (message.closest("summary")) event.preventDefault();
       const source =
         message.parentElement?.querySelector<HTMLElement>("[data-copy-source]");
       void copyText(message, source?.textContent ?? "");

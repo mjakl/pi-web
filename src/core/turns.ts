@@ -121,6 +121,11 @@ export type Turn = {
   answer?: AssistantItem;
   /** Anything after the answer, up to the next boundary. */
   trailing: TranscriptItem[];
+  /**
+   * The ungrouped answer of a page that opens mid-turn: pi-web still offers
+   * the star on the last answer it can see (ChatWindow.tsx L1355-L1368).
+   */
+  loneAnswerId?: string;
   processMessages: number;
   processToolCalls: number;
   /** Files this turn wrote or edited, shown as chips under the answer. */
@@ -174,6 +179,22 @@ function buildTurn(
   cwd: string,
 ): Turn {
   const items = rest.map(cleaned);
+  // pi-web groups a turn under its own question and nothing else: messages a
+  // page starts in the middle of belong to no group and are drawn one by one
+  // (ChatWindow.tsx L810-L890 keys its groups on the boundary positions). So
+  // a window that opens mid-turn shows those messages, not a fold over them.
+  if (!boundary) {
+    const lone = items.findLast(hasAnswerContent)?.entryId;
+    return {
+      process: [],
+      trailing: items,
+      ...(lone === undefined ? {} : { loneAnswerId: lone }),
+      processMessages: 0,
+      processToolCalls: 0,
+      written: [],
+      expanded: true,
+    };
+  }
   const assistants = items
     .map((item, index) => ({ item, index }))
     .filter((entry) => entry.item.kind === "assistant");

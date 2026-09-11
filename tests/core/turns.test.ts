@@ -190,6 +190,26 @@ describe("groupTurns", () => {
     expect(turn?.answer?.processHalf).toBeUndefined();
   });
 
+  it("draws a page that opens mid-turn message by message", () => {
+    // No question on the page: pi-web has no group to fold these into, so
+    // they stay visible and the last answer keeps its star.
+    const [turn] = groupTurns([
+      assistant("a1", [thinking, tool("c1")]),
+      assistant("a2", [text("here it is")]),
+      assistant("a3", [tool("c3")]),
+    ]);
+    expect(turn?.boundary).toBeUndefined();
+    expect(turn?.process).toEqual([]);
+    expect(turn?.answer).toBeUndefined();
+    expect(turn?.trailing.map((item) => item.entryId)).toEqual([
+      "a1",
+      "a2",
+      "a3",
+    ]);
+    expect(turn?.loneAnswerId).toBe("a2");
+    expect(turn?.processMessages).toBe(0);
+  });
+
   it("opens the disclosure when prose is hidden inside it", () => {
     const [turn] = groupTurns([
       user("u1"),
