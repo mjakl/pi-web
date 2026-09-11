@@ -51,6 +51,7 @@ import { manifest, offlinePage, OFFLINE_URL, serviceWorker } from "@web/pwa";
 import { ToolsPanel, SystemPromptPanel } from "@web/views/Panels";
 import { IndexPage, NewSessionPage, SessionPage } from "@web/views/SessionPage";
 import {
+  type About,
   PluginsSection,
   resolveSection,
   SettingsBody,
@@ -91,6 +92,8 @@ export type WebDeps = {
   defaultCwd: string;
   /** The reader's home folder, for shortening paths on screen. */
   home?: string;
+  /** Versions for the About line in Settings. */
+  about?: About;
   /** Streaming re-render interval. */
   renderIntervalMs?: number;
 };
@@ -1365,6 +1368,7 @@ export function createWebApp(deps: WebDeps) {
         cwd={usable}
         back={back === undefined ? "/" : `/sessions/${back}`}
         {...(deps.home === undefined ? {} : { home: deps.home })}
+        {...(deps.about === undefined ? {} : { about: deps.about })}
         {...sections}
       />,
     );

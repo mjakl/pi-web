@@ -9,3 +9,4 @@
 /static/client.js.map
 /coverage
 *.log
+/dist

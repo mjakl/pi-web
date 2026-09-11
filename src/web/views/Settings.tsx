@@ -95,8 +95,11 @@ function SectionNav({ active, cwd }: { active: SettingsSection; cwd: string }) {
   );
 }
 
+/** web-pi's own version and the Pi SDK it resolved at startup. */
+export type About = { webPi: string; pi: string };
+
 /** Preferences the server cannot hold: they belong to this browser. */
-function GeneralSettings() {
+function GeneralSettings({ about }: { about?: About }) {
   return (
     <div class="flex max-w-md flex-col gap-5">
       <fieldset>
@@ -150,6 +153,14 @@ function GeneralSettings() {
         These are kept in this browser. Models, skills and plugins live in
         Pi&apos;s own configuration.
       </p>
+      {about === undefined ? null : (
+        <fieldset>
+          <legend class="pb-1 text-sm font-semibold">About</legend>
+          <p class="text-xs text-base-content/60">
+            web-pi {about.webPi} · pi {about.pi}
+          </p>
+        </fieldset>
+      )}
     </div>
   );
 }
@@ -814,6 +825,7 @@ export function SettingsBody({
   skills,
   plugins,
   home,
+  about,
   error,
 }: {
   section: SettingsSection;
@@ -821,6 +833,7 @@ export function SettingsBody({
   skills?: SkillsView;
   plugins?: PackagesView;
   home?: string;
+  about?: About;
   /** Loading the section failed; saying so beats a silent empty panel. */
   error?: string;
 }) {
@@ -845,7 +858,7 @@ export function SettingsBody({
       />
     );
   }
-  return <GeneralSettings />;
+  return <GeneralSettings {...(about === undefined ? {} : { about })} />;
 }
 
 export function SettingsPage(props: {
@@ -854,6 +867,7 @@ export function SettingsPage(props: {
   skills?: SkillsView;
   plugins?: PackagesView;
   home?: string;
+  about?: About;
   error?: string;
   back: string;
 }) {

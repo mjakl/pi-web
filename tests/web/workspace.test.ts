@@ -54,6 +54,7 @@ function testApp(options: Parameters<typeof createFakeWorld>[0] = {}) {
     staticRoot: "/nonexistent",
     defaultCwd: repo,
     home: root,
+    about: { webPi: "9.9.9", pi: "8.8.8" },
     renderIntervalMs: 1,
   });
   return { app, world };
@@ -334,6 +335,9 @@ describe("the settings page", () => {
     expect(html).toContain('id="theme-select"');
     expect(html).toContain('id="sound-toggle"');
     expect(html).toContain('id="dumb-zone-tokens"');
+    // The About line names this build and the Pi SDK it resolved.
+    expect(html).toContain("web-pi 9.9.9");
+    expect(html).toContain("pi 8.8.8");
   });
 
   it("groups skills and shows one in detail", async () => {

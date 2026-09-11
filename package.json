@@ -4,21 +4,29 @@
   "private": true,
   "description": "Server-rendered web UI for the Pi coding agent (Hono + HTMX)",
   "license": "MIT",
+  "bin": {
+    "web-pi": "bin/web-pi.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "static",
+    "!static/*.map",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "scripts": {
-    "prepare": "husky && node --import tsx scripts/link-host-pi.ts"
+    "prepare": "scripts/prepare.sh"
   },
   "dependencies": {
-    "@hono/node-server": "2.1.1",
-    "@mjakl/core": "github:mjakl/core#v0.3.0",
-    "highlight.js": "11.12.0",
-    "hono": "4.13.7",
     "mammoth": "^1.12.2",
-    "marked": "18.0.12",
-    "mermaid": "11.17.2",
+    "undici": "8.10.0",
     "web-push": "3.6.7"
   },
   "devDependencies": {
+    "@hono/node-server": "2.1.1",
+    "@mjakl/core": "github:mjakl/core#v0.3.0",
     "@tailwindcss/cli": "4.3.3",
     "@tailwindcss/typography": "0.5.19",
     "@types/node": "^24.13.3",
@@ -26,9 +34,13 @@
     "@vitest/coverage-v8": "^5.0.0",
     "daisyui": "5.7.33",
     "esbuild": "0.28.2",
+    "highlight.js": "11.12.0",
+    "hono": "4.13.7",
     "htmx-ext-sse": "2.2.4",
     "htmx.org": "2.0.10",
     "husky": "9.1.7",
+    "marked": "18.0.12",
+    "mermaid": "11.17.2",
     "oxfmt": "^0.67.0",
     "oxlint": "^1.82.0",
     "oxlint-plugin-eslint": "^1.82.0",

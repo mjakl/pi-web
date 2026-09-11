@@ -8,6 +8,10 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: /^@\/(.*)$/,
+        replacement: `${path.resolve(rootDir, "src")}/$1`,
+      },
+      {
         find: /^@core\/(.*)$/,
         replacement: `${path.resolve(rootDir, "src/core")}/$1`,
       },
@@ -20,10 +24,6 @@ export default defineConfig({
         replacement: `${path.resolve(rootDir, "src/web")}/$1`,
       },
       {
-        find: /^@scripts\/(.*)$/,
-        replacement: `${path.resolve(rootDir, "scripts")}/$1`,
-      },
-      {
         find: /^#\/(.*)$/,
         replacement: `${path.resolve(rootDir, "tests")}/$1`,
       },
@@ -33,6 +33,13 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts", "tests/**/*.test.tsx", "src/**/*.test.ts"],
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      // The smoke test packs and installs the package, so it runs only when
+      // `just smoke` asks for it.
+      ...(process.env["WEB_PI_SMOKE"] === undefined ? ["tests/smoke/**"] : []),
+    ],
     coverage: { provider: "v8" },
     sequence: { shuffle: true },
     pool: "threads",

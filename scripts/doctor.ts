@@ -1,4 +1,4 @@
-import { CHECKOUT_DIR, resolveHostPi, staleLinks } from "./host-pi.ts";
+import { PACKAGE_ROOT, resolveHostPi, staleLinks } from "@/host-pi.ts";
 
 // Nothing is pinned: report which Pi this checkout compiles and runs against.
 let host;
@@ -11,7 +11,7 @@ try {
   process.exit(1);
 }
 
-const stale = staleLinks(CHECKOUT_DIR, host);
+const stale = staleLinks(PACKAGE_ROOT, host);
 const lines = Object.entries(host.packages).map(
   ([name, target]) =>
     `  ${name} -> ${target}${stale.includes(name) ? "  (not linked)" : ""}`,

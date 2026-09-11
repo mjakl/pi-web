@@ -1,8 +1,8 @@
-import { CHECKOUT_DIR, linkHostPi, resolveHostPi } from "./host-pi.ts";
+import { PACKAGE_ROOT, linkHostPi, resolveHostPi } from "@/host-pi.ts";
 
 try {
   const host = resolveHostPi();
-  const relinked = linkHostPi(CHECKOUT_DIR, host);
+  const relinked = linkHostPi(PACKAGE_ROOT, host);
   const detail =
     relinked.length === 0
       ? "already linked"

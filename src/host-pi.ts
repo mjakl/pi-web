@@ -13,9 +13,10 @@ import {
 import { findPackageJSON } from "node:module";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
 
-// web-pi pins nothing: the SDK this checkout compiles and runs against is the
+// web-pi pins nothing: the SDK this package compiles and runs against is the
 // one behind the `pi` on PATH, symlinked into node_modules. A pin would drift
-// from the CLI that writes the session files we read.
+// from the CLI that writes the session files we read. A checkout links from
+// `prepare` and every `just` recipe; an installed package links from its bin.
 
 const CODING_AGENT = "@earendil-works/pi-coding-agent";
 
@@ -26,7 +27,8 @@ const PI_PACKAGES = [
   "@earendil-works/pi-tui",
 ];
 
-export const CHECKOUT_DIR = resolve(import.meta.dirname, "..");
+/** The repository root in a checkout, the install root in a package. */
+export const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
 
 export type HostPi = {
   executable: string;
@@ -53,6 +55,24 @@ function packageVersion(
   return typeof version === "string" ? version : undefined;
 }
 
+/** This package's own version, for the About line and `--version`. */
+export function webPiVersion(): string {
+  return (
+    packageVersion(join(PACKAGE_ROOT, "package.json"), "web-pi") ?? "0.0.0"
+  );
+}
+
+/**
+ * The version of the Pi SDK actually loaded: the linked package, not whatever
+ * `pi` on PATH resolves to now. Undefined before the links exist.
+ */
+export function linkedPiVersion(): string | undefined {
+  const manifest = findPackageJSON(CODING_AGENT, import.meta.url);
+  return manifest === undefined
+    ? undefined
+    : packageVersion(manifest, CODING_AGENT);
+}
+
 function isExecutable(file: string): boolean {
   try {
     accessSync(file, constants.X_OK);
@@ -73,15 +93,12 @@ function ancestors(start: string): string[] {
 }
 
 /**
- * The first `pi` on PATH, ignoring this checkout's own `node_modules/.bin`,
- * which package managers put first on PATH for every script they run.
+ * The first `pi` on PATH, ignoring our own `node_modules/.bin`, which package
+ * managers put first on PATH for every script they run.
  */
-export function findPiExecutable(
-  env: NodeJS.ProcessEnv,
-  checkoutDir: string,
-): string {
+export function findPiExecutable(env: NodeJS.ProcessEnv, root: string): string {
   // POSIX only: Windows would have to try each PATHEXT suffix in turn.
-  const local = join(checkoutDir, "node_modules", ".bin", "pi");
+  const local = join(root, "node_modules", ".bin", "pi");
   for (const entry of (env["PATH"] ?? "").split(delimiter)) {
     const candidate = resolve(entry === "" ? "." : entry, "pi");
     if (candidate === local) continue;
@@ -117,9 +134,9 @@ export function findCodingAgentRoot(executable: string): string {
 /** Locate the host Pi install and every SDK package this checkout imports. */
 export function resolveHostPi(
   env: NodeJS.ProcessEnv = process.env,
-  checkoutDir: string = CHECKOUT_DIR,
+  root: string = PACKAGE_ROOT,
 ): HostPi {
-  const executable = findPiExecutable(env, checkoutDir);
+  const executable = findPiExecutable(env, root);
   const codingRoot = findCodingAgentRoot(executable);
   const codingManifest = join(codingRoot, "package.json");
   const version = packageVersion(codingManifest, CODING_AGENT);
@@ -149,8 +166,8 @@ export function resolveHostPi(
   return { executable, version, packages };
 }
 
-function linkPath(checkoutDir: string, name: string): string {
-  return join(checkoutDir, "node_modules", "@earendil-works", basename(name));
+function linkPath(root: string, name: string): string {
+  return join(root, "node_modules", "@earendil-works", basename(name));
 }
 
 function currentTarget(link: string): string | undefined {
@@ -162,22 +179,20 @@ function currentTarget(link: string): string | undefined {
 }
 
 /** Symlinks that are missing or point somewhere other than the host install. */
-export function staleLinks(checkoutDir: string, host: HostPi): string[] {
+export function staleLinks(root: string, host: HostPi): string[] {
   return Object.entries(host.packages)
-    .filter(
-      ([name, target]) => currentTarget(linkPath(checkoutDir, name)) !== target,
-    )
+    .filter(([name, target]) => currentTarget(linkPath(root, name)) !== target)
     .map(([name]) => name);
 }
 
 /** Point node_modules/@earendil-works/* at the host install; returns what moved. */
-export function linkHostPi(checkoutDir: string, host: HostPi): string[] {
-  mkdirSync(join(checkoutDir, "node_modules", "@earendil-works"), {
+export function linkHostPi(root: string, host: HostPi): string[] {
+  mkdirSync(join(root, "node_modules", "@earendil-works"), {
     recursive: true,
   });
   const relinked: string[] = [];
   for (const [name, target] of Object.entries(host.packages)) {
-    const link = linkPath(checkoutDir, name);
+    const link = linkPath(root, name);
     if (currentTarget(link) === target) continue;
     relinked.push(name);
     const staging = `${link}.tmp${String(process.pid)}`;

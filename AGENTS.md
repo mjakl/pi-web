@@ -21,11 +21,15 @@ browser holds none.
   Pi's agent directory itself and installs into the real `~/.pi/agent/skills`
   and `~/.agents/.skill-lock.json` whatever `PI_CODING_AGENT_DIR` says. Do not
   run a skill install from a test or an unattended check.
-- The Pi SDK is never pinned: `scripts/link-host-pi.ts` points
-  `node_modules/@earendil-works/*` at the `pi` on `PATH`, and `prepare` plus
-  every `just` recipe that compiles or runs code re-links first. Pi must be
-  installed separately; `just doctor` reports which install was resolved. Never
-  add an `@earendil-works/*` dependency to `package.json`.
+- The Pi SDK is never pinned: `src/host-pi.ts` points
+  `node_modules/@earendil-works/*` at the `pi` on `PATH`. In a checkout
+  `prepare` and every `just` recipe that compiles or runs code re-link first; in
+  an installed package the bin does it on every start. Pi must be installed
+  separately; `just doctor` reports which install was resolved. Never add an
+  `@earendil-works/*` dependency to `package.json`.
+- `dependencies` are only what stays external in `dist/server.js` (the Pi SDK,
+  `mammoth`, `web-push`, `undici`); everything else esbuild bundles and belongs
+  in `devDependencies`. Changing either list means running `just smoke`.
 - `CLAUDE.md` is a symlink to this file.
 
 ## Layout and boundaries
@@ -45,8 +49,12 @@ src/adapters   Pi SDK, filesystem, Git, and in-memory implementations of the
 src/web        Hono routes, JSX views, HTMX/SSE delivery, client bundle, the
                generated service worker and manifest
 src/container.ts  the only file that wires adapters into the core
-src/main.ts    process entrypoint
-tests/         vitest, mirrors src/ and scripts/
+src/server.ts  process entrypoint; src/cli.ts the flags and startup behind the
+               bin, src/host-pi.ts the SDK resolution both of them use,
+               src/http.ts the proxy-aware global dispatcher
+bin/web-pi.js  the published entry point: imports dist/cli.js, nothing else
+tests/         vitest, mirrors src/ and scripts/; tests/smoke runs only from
+               `just smoke`
 scripts/       repository tooling: host Pi linking, doctor, doc checks
 ```
 
@@ -55,11 +63,12 @@ Rules enforced by `.oxlintrc.json`:
 - `src/core` may import SDK **types** but never call the SDK, Node, or Hono.
 - `src/adapters` never import `src/web`.
 - `src/web` never imports adapters or the SDK; it talks to `Workspace`.
-- No parent-relative imports; use `@core/*`, `@adapters/*`, `@web/*`,
-  `@scripts/*`, `#/*`.
+- No parent-relative imports; use `@/*` (src root), `@core/*`, `@adapters/*`,
+  `@web/*`, `#/*` (tests).
 - Hono JSX uses `class`, never `className`. No dynamic imports in `src/`; the
-  one exception is `src/web/client/mermaid.ts`, which loads the separately
-  bundled `static/mermaid.js` by URL and carries a narrowed lint override.
+  two exceptions carry a narrowed lint override — `src/web/client/mermaid.ts`
+  loads the separately bundled `static/mermaid.js` by URL, and `src/cli.ts`
+  loads the server only after the SDK links are in place.
 - `src/web/client/*` is bundled by esbuild and may import `@core/*`; anything it
   imports must run in a browser (no Node, no SDK). `main.ts` and
   `mermaid-lib.ts` are the two bundle entry points.
@@ -88,4 +97,8 @@ root through the allowed-root flow there, never a check in a route handler.
   directory and pass that as the agent directory.
 - Add or update the nearest test for changed behaviour; assert on rendered
   output or port behaviour, never on source text.
+- `just build` writes `dist/` and the built assets; `just smoke` packs the
+  package, installs the tarball into a throwaway project, and serves a fixture
+  session from it. Run it after touching `bin/`, `files`, dependencies, the
+  build, or startup. `just ci` includes it.
 - Inspect `git status` and the diff before handoff.

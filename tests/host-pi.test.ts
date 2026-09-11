@@ -4,7 +4,7 @@ import {
   linkHostPi,
   resolveHostPi,
   staleLinks,
-} from "@scripts/host-pi";
+} from "@/host-pi";
 import {
   mkdirSync,
   mkdtempSync,

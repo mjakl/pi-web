@@ -29,10 +29,10 @@
     "noPropertyAccessFromIndexSignature": true,
 
     "paths": {
+      "@/*": ["./src/*"],
       "@core/*": ["./src/core/*"],
       "@adapters/*": ["./src/adapters/*"],
       "@web/*": ["./src/web/*"],
-      "@scripts/*": ["./scripts/*"],
       "#/*": ["./tests/*"]
     }
   },

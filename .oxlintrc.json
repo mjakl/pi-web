@@ -2,7 +2,12 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "extends": ["./node_modules/@mjakl/core/oxlint.base.json"],
   "plugins": ["typescript", "import"],
-  "jsPlugins": [{ "name": "eslint-js", "specifier": "oxlint-plugin-eslint" }],
+  "jsPlugins": [
+    {
+      "name": "eslint-js",
+      "specifier": "oxlint-plugin-eslint"
+    }
+  ],
   "options": {
     "typeAware": true,
     "typeCheck": true
@@ -115,7 +120,7 @@
       }
     },
     {
-      "files": ["src/web/client/mermaid.ts"],
+      "files": ["src/web/client/mermaid.ts", "src/cli.ts"],
       "rules": {
         "eslint-js/no-restricted-syntax": [
           "error",

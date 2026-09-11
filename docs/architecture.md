@@ -102,14 +102,43 @@ composition root and the only importer of Pi adapters.
 
 - **Pi SDK resolved from the host `pi` on `PATH`**, never pinned. web-pi reads
   and writes the same session files as the installed CLI, so a pin would let the
-  two drift apart silently. `scripts/link-host-pi.ts` walks `PATH` for the first
-  `pi` outside this checkout, finds the `@earendil-works/pi-coding-agent`
-  package that owns it (a bare version-manager shim is rejected: it says nothing
-  about the version), resolves `pi-ai`, `pi-agent-core`, and `pi-tui` through
-  Node from that package, checks all four report the same version, and symlinks
-  them into `node_modules/@earendil-works/`. It runs from `prepare` and from
-  every `just` recipe that compiles or runs code. Trade-off: a fresh checkout
-  needs Pi installed before `pnpm install` succeeds.
+  two drift apart silently. `src/host-pi.ts` walks `PATH` for the first `pi`
+  outside our own `node_modules/.bin`, finds the
+  `@earendil-works/pi-coding-agent` package that owns it (a bare version-manager
+  shim is rejected: it says nothing about the version), resolves `pi-ai`,
+  `pi-agent-core`, and `pi-tui` through Node from that package, checks all four
+  report the same version, and symlinks them into
+  `node_modules/@earendil-works/`. A checkout links from `prepare` and from
+  every `just` recipe that compiles or runs code; an installed package links
+  into itself from the bin, on every start, so upgrading Pi needs only a
+  restart. Trade-off: a fresh checkout needs Pi installed before `pnpm install`
+  succeeds, and an installed package needs a writable install directory.
+- **The package ships a bundle; the checkout runs the sources.** `just build`
+  bundles `src/server.ts` and `src/cli.ts` with esbuild into `dist/`, leaving
+  only the Pi SDK, `mammoth`, `web-push`, and `undici` external, so the
+  published `dependencies` are those four lines and a consumer install has no
+  toolchain in it. `just dev` and every test still run the TypeScript through
+  `tsx`: tests that ran against `dist/` would test the bundler. The one check
+  that does run against the package is `just smoke`
+  (`tests/smoke/packaging.smoke.test.ts`), which packs, installs into a
+  throwaway project, and serves a fixture session from the result — the only way
+  to catch a missing `files` entry or an import that resolves solely in a
+  checkout. `dist/` is not minified: a stack trace from an install should name
+  real functions.
+- **The bin is composition only.** `bin/web-pi.js` is three lines of JavaScript
+  that need no build; `src/cli.ts` parses the flags into the environment
+  `loadConfig()` already reads, links the host Pi, warns when the bind address
+  is not loopback, and then imports `dist/server.js` — which must not load
+  earlier, because its module graph reaches the SDK the link step has yet to put
+  in place.
+- **One HTTP dispatcher, proxy-aware.** `src/http.ts` installs undici's
+  `EnvHttpProxyAgent` globally, so `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`
+  are honoured by every server-side fetch — Node's built-in fetch ignores them,
+  and a model call behind a corporate proxy simply fails. It keeps undici's own
+  300 s idle timeout, which a streaming turn pausing between tokens needs, and
+  attaches an error listener to every client it creates: undici can emit an
+  internal `error` while tearing a response body down, and an unhandled one
+  would take the server with it.
 - **Raw HTML in Markdown is escaped**, not sanitised. No allowlist to maintain,
   no script can pass.
 - **The sidebar shows one project, in pages.** A real store holds ~2,750
@@ -334,8 +363,6 @@ pi-web features absent from this slice, roughly in order of value:
    expanded state is not remembered across a reload.
 3. A running-session cap. Idle shutdown exists only for drafts Pi never wrote to
    disk (10 minutes), as in pi-web.
-4. Packaging: the `web-pi` bin, prebuilt assets, the LAN warning, proxy support
-   and the runtime smoke test are Phase 7.
 
 ## Deliberately not carried over
 

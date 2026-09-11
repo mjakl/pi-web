@@ -3,6 +3,11 @@ set quiet := true
 tailwind := "./node_modules/.bin/tailwindcss -i ./src/web/app.css -o ./static/app.css"
 esbuild := "./node_modules/.bin/esbuild src/web/client/main.ts --bundle --format=esm --target=es2022 --alias:@core=./src/core --outfile=static/client.js"
 esbuild-mermaid := "./node_modules/.bin/esbuild src/web/client/mermaid-lib.ts --bundle --format=esm --target=es2022 --outfile=static/mermaid.js"
+# The published server: everything bundled except the Pi SDK, which the bin
+# links at startup, and the two packages with binary or optional parts. Not
+# minified, so a stack trace from an install still names real functions.
+esbuild-server := "./node_modules/.bin/esbuild src/server.ts src/cli.ts --bundle --platform=node --format=esm --target=node24 --jsx=automatic --jsx-import-source=hono/jsx --alias:@=./src --alias:@core=./src/core --alias:@adapters=./src/adapters --alias:@web=./src/web '--external:@earendil-works/*' --external:mammoth --external:web-push --external:undici --outdir=dist"
+smoke := "WEB_PI_SMOKE=1 pnpm exec vitest run tests/smoke"
 
 # INFO: List all available commands
 default:
@@ -21,7 +26,7 @@ dev: link-pi
     {{ tailwind }}
     {{ esbuild-mermaid }}
     {{ esbuild }} --sourcemap
-    node --watch --import tsx src/main.ts & \
+    node --watch --import tsx src/server.ts & \
     {{ esbuild }} --sourcemap --watch & \
     {{ tailwind }} --watch; \
     kill %1 %2
@@ -35,9 +40,13 @@ build-js:
     {{ esbuild }} --minify
     {{ esbuild-mermaid }} --minify
 
-# DEV: Start the production server
-start: link-pi build-css build-js
-    node --import tsx src/main.ts
+# DEV: Build everything the package ships: assets and dist/
+build: link-pi build-css build-js
+    {{ esbuild-server }}
+
+# DEV: Start the built server, as the published bin does
+start: build
+    node dist/server.js
 
 # LINT: Formatting, lint, and types
 lint: link-pi typecheck
@@ -63,6 +72,10 @@ test: link-pi
 test-one *args: link-pi
     pnpm exec vitest run "$@"
 
+# TEST: Pack the package, install it, and serve a fixture session from it
+smoke: build
+    {{ smoke }}
+
 # QA: The handoff gate: fix, lint, test
 qa: link-pi
     just fix
@@ -70,6 +83,7 @@ qa: link-pi
     just test
 
 # CI: Non-mutating validation
-ci: link-pi build-css build-js
+ci: build
     just lint
     just test
+    {{ smoke }}

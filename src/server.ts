@@ -3,21 +3,27 @@ import { serve } from "@hono/node-server";
 import { homedir } from "node:os";
 import { loadConfig } from "./config.ts";
 import { createDeps } from "./container.ts";
+import { configureHttpDispatcher } from "./http.ts";
+import { linkedPiVersion, webPiVersion } from "./host-pi.ts";
+
+configureHttpDispatcher();
 
 const config = loadConfig();
 const { workspace } = createDeps(config);
+const piVersion = linkedPiVersion() ?? "unknown";
 const app = createWebApp({
   workspace,
   staticRoot: config.staticRoot,
   defaultCwd: config.defaultCwd,
   home: homedir(),
+  about: { webPi: webPiVersion(), pi: piVersion },
 });
 
 const server = serve(
   { fetch: app.fetch, hostname: config.host, port: config.port },
   (info) => {
     process.stdout.write(
-      `web-pi listening on http://${info.address}:${String(info.port)} (${config.runtime} runtime)\n`,
+      `web-pi ${webPiVersion()} listening on http://${info.address}:${String(info.port)} (pi ${piVersion}, ${config.runtime} runtime)\n`,
     );
   },
 );

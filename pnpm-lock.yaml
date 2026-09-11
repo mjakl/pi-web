@@ -109,31 +109,22 @@ importers:
 
   .:
     dependencies:
+      mammoth:
+        specifier: ^1.12.2
+        version: 1.12.2
+      undici:
+        specifier: 8.10.0
+        version: 8.10.0
+      web-push:
+        specifier: 3.6.7
+        version: 3.6.7
+    devDependencies:
       '@hono/node-server':
         specifier: 2.1.1
         version: 2.1.1(hono@4.13.7)
       '@mjakl/core':
         specifier: github:mjakl/core#v0.3.0
         version: https://codeload.github.com/mjakl/core/tar.gz/c3742b726542e5f1d3f365490db531665e4f55b8(oxlint-tsgolint@7.0.2001)(oxlint@1.82.0(oxlint-tsgolint@7.0.2001))(prettier@3.9.6)(typescript@7.0.2)
-      highlight.js:
-        specifier: 11.12.0
-        version: 11.12.0
-      hono:
-        specifier: 4.13.7
-        version: 4.13.7
-      mammoth:
-        specifier: ^1.12.2
-        version: 1.12.2
-      marked:
-        specifier: 18.0.12
-        version: 18.0.12
-      mermaid:
-        specifier: 11.17.2
-        version: 11.17.2
-      web-push:
-        specifier: 3.6.7
-        version: 3.6.7
-    devDependencies:
       '@tailwindcss/cli':
         specifier: 4.3.3
         version: 4.3.3
@@ -155,6 +146,12 @@ importers:
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
+      highlight.js:
+        specifier: 11.12.0
+        version: 11.12.0
+      hono:
+        specifier: 4.13.7
+        version: 4.13.7
       htmx-ext-sse:
         specifier: 2.2.4
         version: 2.2.4
@@ -164,6 +161,12 @@ importers:
       husky:
         specifier: 9.1.7
         version: 9.1.7
+      marked:
+        specifier: 18.0.12
+        version: 18.0.12
+      mermaid:
+        specifier: 11.17.2
+        version: 11.17.2
       oxfmt:
         specifier: ^0.67.0
         version: 0.67.0
@@ -2230,6 +2233,10 @@ packages:
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
+  undici@8.10.0:
+    resolution: {integrity: sha512-HvltHd7avK13QIw/oLe4qoOLyoVSoafqJ2jYOrtMRBkbYT31eiBQ8O0ehRKZiEZCMEyLFQNIADpgCWC5fALvYQ==}
+    engines: {node: '>=22.19.0'}
+
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
@@ -3976,6 +3983,8 @@ snapshots:
   underscore@1.13.8: {}
 
   undici-types@7.18.2: {}
+
+  undici@8.10.0: {}
 
   util-deprecate@1.0.2: {}
 

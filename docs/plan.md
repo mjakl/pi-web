@@ -1,9 +1,25 @@
 # Parity plan
 
-Goal: every pi-web feature, on a leaner Hono + HTMX code base. Phases run in
-order; each ends with `just qa` green, a browser check against the fake runtime,
-and a commit. `docs/architecture.md` lists what is still missing and is updated
-at the end of every phase.
+Goal: every pi-web feature, on a leaner Hono + HTMX code base. Phases ran in
+order; each ended with `just qa` green, a browser check against the fake
+runtime, and a commit.
+
+**All seven phases are done.** What each one covered is below, and what is still
+missing — three deliberate gaps, no packaging ones — is in
+`docs/architecture.md`.
+
+| Phase                           | Commit               |
+| ------------------------------- | -------------------- |
+| Bootstrap: the vertical slice   | `4cd7074`            |
+| 0: foundations                  | `6aa8ffd`            |
+| pi-web behaviour specs          | `b22216e`            |
+| 1: sessions                     | `aab1546`            |
+| 2: composer                     | `65a79d8`            |
+| 3: transcript                   | `65fced4`, `241ce10` |
+| 4: files and Git                | `3f5a7a2`            |
+| 5: workspace and configuration  | `255f8de`            |
+| 6: extensions and notifications | `095badf`            |
+| 7: packaging                    | this commit          |
 
 Conventions for every phase:
 
@@ -82,5 +98,7 @@ environment isolation.
 
 ## Phase 7: packaging
 
-`web-pi` bin, prebuilt assets in the published package, LAN variant, proxy
-support, runtime smoke test, documentation pass.
+`web-pi` bin, an esbuild bundle and prebuilt assets in the published package,
+LAN variant with its warning, proxy support, the version banner in Settings, a
+runtime smoke test against the installed tarball, and the documentation pass.
+`docs/deployment.md` covers running it as a service beside pi-web.
