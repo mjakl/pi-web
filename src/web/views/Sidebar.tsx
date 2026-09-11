@@ -611,7 +611,12 @@ function FolderLabel({
   return (
     <span class="project-folder-label">
       <span>{name}</span>
-      <span class="project-folder-path">{shortPath(path, home)}</span>
+      {/* pi-web's ProjectFolderGroup shortens only paths *under* home
+          (`startsWith(homeDir + "/")`), so the home folder itself keeps its
+          full spelling here where the workspace pill would write "~". */}
+      <span class="project-folder-path">
+        {path === home ? path : shortPath(path, home)}
+      </span>
     </span>
   );
 }

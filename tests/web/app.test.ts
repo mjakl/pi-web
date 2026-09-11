@@ -981,6 +981,38 @@ describe("the sidebar", () => {
     );
   });
 
+  it("spells out the home folder itself in the workspace menu", async () => {
+    // pi-web abbreviates a project path only *below* home, so a session
+    // started in the home directory reads "/repo", not "~".
+    const world = createFakeWorld({
+      delayMs: 2,
+      sessions: [
+        {
+          summary: {
+            id: "h1",
+            cwd: "/repo",
+            name: "At home",
+            createdAt: "2026-09-01T00:00:00.000Z",
+            modifiedAt: "2026-09-02T00:00:00.000Z",
+            fileSize: 10,
+            projectRoot: "/repo",
+          },
+          entries: [userEntry("u1", null, "question")],
+        },
+      ],
+    });
+    const app = createWebApp({
+      workspace: createWorkspace(world),
+      staticRoot: "/nonexistent",
+      defaultCwd: "/repo",
+      home: "/repo",
+      renderIntervalMs: 1,
+    });
+    const menu = await (await app.request("/sidebar/projects")).text();
+    expect(menu).toContain('class="project-folder-path">/repo<');
+    expect(menu).not.toContain('class="project-folder-path">~<');
+  });
+
   it("drops the filter box when there are few projects", async () => {
     const { app } = testApp();
     const menu = await (await app.request("/sidebar/projects")).text();

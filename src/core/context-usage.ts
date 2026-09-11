@@ -12,8 +12,12 @@ export type ContextUsage = {
   estimated: boolean;
 };
 
-export const CONTEXT_WARN_PERCENT = 60;
-export const CONTEXT_CRITICAL_PERCENT = 80;
+/**
+ * pi-web's red zone (`lib/context-warning.ts`): the percentage alone turns the
+ * readout red. There is no percentage that turns it yellow — below this, only
+ * the reader's own token threshold does.
+ */
+export const CONTEXT_CRITICAL_PERCENT = 75;
 
 /**
  * The reader's own warning threshold in tokens, pi-web's "dumb zone": above
@@ -52,8 +56,7 @@ export function contextUsage(input: {
   const level =
     percent !== null && percent >= CONTEXT_CRITICAL_PERCENT
       ? "critical"
-      : (percent !== null && percent >= CONTEXT_WARN_PERCENT) ||
-          (tokens !== null && tokens >= warnTokens)
+      : tokens !== null && tokens >= warnTokens
         ? "warn"
         : percent === null
           ? "unknown"
