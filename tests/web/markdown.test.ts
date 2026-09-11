@@ -11,9 +11,10 @@ describe("renderMarkdown", () => {
 
   it("gives a code block a language header and a copy button", () => {
     const html = renderMarkdown("```ts\nconst a = 1;\n```");
-    expect(html).toContain('<span class="code-lang">ts</span>');
+    expect(html).toContain('<span class="markdown-code-lang">ts</span>');
     expect(html).toContain("data-copy-code");
-    expect(html).toContain('<code class="language-ts">const a = 1;</code>');
+    expect(html).toContain('<code class="language-ts"');
+    expect(html).toContain("const a = 1;");
   });
 
   it("marks a mermaid fence for the preview toggle, disabled while live", () => {
@@ -58,7 +59,7 @@ describe("renderMarkdown", () => {
   it("prints the source of a document too large to parse", () => {
     const html = renderMarkdown(`# head\n${"x".repeat(100_001)}`);
     expect(html).toContain("<details");
-    expect(html).toContain("KB of Markdown");
+    expect(html).toContain("Message content is very large");
     expect(html).not.toContain("<h1");
   });
 });

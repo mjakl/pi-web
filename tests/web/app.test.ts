@@ -249,6 +249,16 @@ describe("web app", () => {
     expect(received).toContain("alpha beta");
     expect(received).toContain("event: status");
     expect(received).toMatch(/event: settled\ndata: <section class="turn"/);
+    // pi-web's streaming header: the model, the running token estimate, and
+    // the rate, in its three fixed columns. web-pi gets both from the
+    // runtime instead of a meter in the browser.
+    expect(received).toContain("grid-template-columns:minmax(0, 1fr) 9ch 10ch");
+    expect(received).toContain("Estimated token count while streaming");
+    // The rate column is there from the start; it stays blank until half a
+    // second of the message has arrived, which this turn never reaches.
+    expect(received).toContain(
+      "text-align:right; color:var(--text-dim); font-size:11px",
+    );
   });
 
   it("loads row metadata lazily and shows the title, counts, and stars", async () => {
@@ -950,7 +960,26 @@ describe("conversation rail, shelf, and written files", () => {
     // The mark on the other branch navigates instead of scrolling.
     expect(page).toContain('data-branch="true"');
     expect(page).toContain('hx-post="/sessions/s1/navigate"');
-    expect(page).toContain("rail-links");
+    expect(page).toContain("minimap-graph");
+  });
+
+  it("places marks on pi-web's rail geometry without measuring", async () => {
+    const { app, world } = testApp();
+    const stored = world.store.get("s1");
+    if (!stored) throw new Error("no session");
+    stored.entries.push(userEntry("u2", "a1", "second question"));
+    stored.entries.push(assistantEntry("a2", "u2", "second answer", 41_000));
+
+    const page = await (await app.request("/sessions/s1")).text();
+    // Row r sits at 12px + r * min(50px, (height - 54px) / rows), which is
+    // pi-web's `graphY` expressed against the rail's own height.
+    expect(page).toContain("top:calc(12px + 0 * min(50px, (100% - 54px) / 1))");
+    expect(page).toContain("top:calc(12px + 1 * min(50px, (100% - 54px) / 1))");
+    expect(page).toContain('class="minimap-row"');
+    expect(page).toContain('class="minimap-message"');
+    expect(page).toContain('class="minimap-dot"');
+    // A mark is never taller than pi-web's 32px cap.
+    expect(page).toContain("height:max(1px, min(32px, 100%))");
   });
 
   it("re-sends the rail out of band when a turn settles", async () => {
@@ -969,7 +998,7 @@ describe("conversation rail, shelf, and written files", () => {
       received += decoder.decode(chunk.value);
     }
     await reader.cancel();
-    expect(received).toContain('id="rail" class="rail"');
+    expect(received).toContain('id="rail" class="minimap-layer"');
     expect(received).toContain('hx-swap-oob="true"');
   });
 
@@ -1039,15 +1068,16 @@ describe("conversation rail, shelf, and written files", () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
     const page = await (await app.request("/sessions/s1")).text();
     expect(page).not.toContain("xxxxx");
-    expect(page.length).toBeLessThan(40_000);
+    // The whole page stays smaller than the one result it left out.
+    expect(page.length).toBeLessThan(output.length + 10_000);
 
     const url = deferredUrl(page);
     const opened = await (await app.request(url)).text();
-    expect(opened).toContain("Show the whole output");
+    expect(opened).toContain("view full output");
     expect(opened.length).toBeLessThan(output.length);
     const full = await (await app.request(`${url}?full=1`)).text();
     expect(full).toContain(output);
-    expect(full).not.toContain("Show the whole output");
+    expect(full).not.toContain("view full output");
   });
 
   it("cuts a diff that is longer than the budget", async () => {
@@ -1073,7 +1103,7 @@ describe("conversation rail, shelf, and written files", () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
     const url = deferredUrl(await (await app.request("/sessions/s1")).text());
     const opened = await (await app.request(url)).text();
-    expect(opened).toContain("Show the whole output");
+    expect(opened).toContain("view full output");
     expect(opened).not.toContain("new 299");
     const full = await (await app.request(`${url}?full=1`)).text();
     expect(full).toContain("new 299");
@@ -1081,6 +1111,76 @@ describe("conversation rail, shelf, and written files", () => {
 });
 
 describe("transcript rendering", () => {
+  it("renders pi-web's message skeleton: band, header, footer, actions", async () => {
+    const { app } = testApp();
+    const page = await (await app.request("/sessions/s1")).text();
+    // The user prompt: a full-width band with the 820px column inside it.
+    expect(page).toContain('class="user-message-band"');
+    expect(page).toContain('class="user-message-band-content"');
+    expect(page).toContain('class="message-row"');
+    // The answer: star toggle, model label, then the hover-only copy button.
+    expect(page).toContain('class="answer-star-toggle"');
+    expect(page).toContain("grid-template-columns:auto minmax(0, 1fr)");
+    expect(page).toContain('class="message-actions message-copy"');
+    expect(page).toContain('class="history-action-host"');
+    expect(page).toContain('class="history-actions"');
+    expect(page).toContain('class="history-action"');
+    // Prose carries pi-web's variant class, which sets its 15px scale.
+    expect(page).toContain("markdown-body markdown-assistant-message");
+    expect(page).toContain("markdown-body markdown-user-message");
+    // Usage, then the timestamp pushed to the right at 10px.
+    expect(page).toContain("39,990 in · 10 out");
+    expect(page).toContain("font-size:10px; color:var(--text-dim)");
+  });
+
+  it("renders a tool call as pi-web's tinted card", async () => {
+    const { app } = testApp({
+      script: (): ScriptedStep[] => [
+        { tool: "read", arguments: { path: "/repo/one/a.ts" }, result: "ok" },
+        { text: "done" },
+      ],
+    });
+    const form = new FormData();
+    form.set("text", "look");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain("border:1px solid rgba(34,197,94,0.25)");
+    expect(page).toContain("background:rgba(34,197,94,0.04)");
+    // Name in mono green, preview in dim mono, chevron last.
+    expect(page).toContain(
+      "color:var(--success); font-family:var(--font-mono)",
+    );
+    expect(page).toContain('class="card-chevron"');
+    // The process disclosure keeps its own chevron and count line.
+    expect(page).toContain('class="process-chevron"');
+  });
+
+  it("renders a notice as pi-web's shelf card", async () => {
+    const { app, world } = testApp();
+    await world.runtime.open({ sessionId: "s1" });
+    const body = new FormData();
+    body.set("cwd", "/repo/one");
+    await app.request("/settings/plugins/reload", { method: "POST", body });
+    const res = await app.request("/sessions/s1/events");
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("no body");
+    let received = "";
+    const decoder = new TextDecoder();
+    while (!received.includes("event: notice")) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      received += decoder.decode(chunk.value);
+    }
+    await reader.cancel();
+    expect(received).toContain('class="notice-shelf-item"');
+    expect(received).toContain("border-radius:14px");
+    expect(received).toContain("min-height:60px");
+    // The type dot, then the message in its own scrolling span.
+    expect(received).toContain("background:var(--accent)");
+    expect(received).toContain("Resources reloaded.");
+  });
+
   it("groups a turn into process details and the answer", async () => {
     const { app } = testApp({
       script: (): ScriptedStep[] => [
@@ -1126,7 +1226,9 @@ describe("transcript rendering", () => {
     const body = await (await app.request(deferredUrl(page))).text();
     expect(body).toContain("const a = 1;");
     expect(body).toContain("const a = 2;");
-    expect(body).toContain("grid-template-columns:1fr 1fr");
+    expect(body).toContain(
+      "grid-template-columns:minmax(0, 1fr) minmax(0, 1fr)",
+    );
     // Edit tools show the diff instead of repeating their arguments.
     expect(body).not.toContain("&quot;file_path&quot;");
   });

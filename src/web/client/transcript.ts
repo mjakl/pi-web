@@ -1,4 +1,4 @@
-import { highlightIn } from "./highlight.ts";
+import { codeText, highlightIn } from "./highlight.ts";
 import { setUpMermaid } from "./mermaid.ts";
 import { setUpRail } from "./rail.ts";
 
@@ -16,16 +16,24 @@ function atTail(view: HTMLElement): boolean {
   );
 }
 
+/**
+ * pi-web swaps the label and the icon for 1.5s and turns the button accent.
+ * The message button carries both states in the markup, a code-block button
+ * only a label; `data-copied` is what the stylesheet keys the colour on.
+ */
 async function copyText(button: HTMLElement, text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
   } catch {
     return;
   }
+  const label = button.querySelector("[data-copy-idle]") === null;
   const previous = button.textContent;
-  button.textContent = "Copied";
+  if (label) button.textContent = "Copied";
+  button.dataset["copied"] = "1";
   setTimeout(() => {
-    button.textContent = previous;
+    if (label) button.textContent = previous;
+    delete button.dataset["copied"];
   }, COPIED_MS);
 }
 
@@ -42,8 +50,7 @@ function setUpCopy(): void {
     }
     const code = target.closest<HTMLElement>("[data-copy-code]");
     if (!code) return;
-    const block = code.closest(".code-block")?.querySelector("code");
-    void copyText(code, block?.textContent ?? "");
+    void copyText(code, codeText(code.closest(".markdown-code-block")));
   });
 }
 
@@ -83,13 +90,18 @@ export function setUpTranscript(): void {
     }
   });
   document.body.addEventListener("htmx:afterSwap", (event) => {
+    const target = event.target;
+    // Only the log and the running turn move the reader to the tail. A tool
+    // card fetching its own body must leave the scroll position alone.
+    const appended =
+      target instanceof Element &&
+      (target.id === "messages" || target.id === "turn");
     if (anchor !== null) {
       view.scrollTop = Math.max(0, view.scrollHeight - anchor);
       anchor = null;
-    } else if (follow) {
+    } else if (follow && appended) {
       view.scrollTop = view.scrollHeight;
     }
-    const target = event.target;
     if (target instanceof Element) highlightIn(target);
     sync();
   });

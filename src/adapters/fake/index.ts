@@ -16,6 +16,7 @@ import {
   resourceTotals,
 } from "@core/packages";
 import type { SkillInfo } from "@core/skills";
+import { estimateTokens, streamedText } from "@core/transcript";
 import type { ProjectInfo, WorktreeInfo } from "@core/workspaces";
 import type {
   AgentRuntime,
@@ -344,6 +345,8 @@ type Part = Record<string, unknown> & { type: string };
 class FakeLiveSession implements LiveSession {
   readonly id: string;
   private partial: Extract<AgentMessage, { role: "assistant" }> | undefined;
+  /** When the message now streaming started, for its tokens-per-second. */
+  private partialStart: number | null = null;
   private turnStart: number;
   private settledTurn: { start: number; end: number } | null = null;
   /** A scripted tool call whose arguments are still streaming in. */
@@ -447,6 +450,7 @@ class FakeLiveSession implements LiveSession {
         running: this.running,
         compacting: this.compacting,
         bashRunning: this.bashRunning,
+        streaming: this.streamingRate(),
         model: FAKE_MODEL,
         thinkingLevel: this.thinkingLevel,
         thinkingLevels: FAKE_MODEL.thinkingLevels ?? [],
@@ -467,7 +471,21 @@ class FakeLiveSession implements LiveSession {
     };
   }
 
+  /** The estimate and rate the real runtime reports while a turn streams. */
+  private streamingRate(): LiveStatus["streaming"] {
+    if (!this.partial || this.partialStart === null) return null;
+    const tokens = Math.round(
+      estimateTokens(streamedText(this.partial.content)),
+    );
+    const elapsed = (Date.now() - this.partialStart) / 1000;
+    return {
+      tokens,
+      tokensPerSecond: elapsed > 0.5 && tokens > 0 ? tokens / elapsed : null,
+    };
+  }
+
   private setPartial(content: Part[]): void {
+    this.partialStart ??= Date.now();
     this.partial = {
       role: "assistant",
       content: content as never,
@@ -652,6 +670,7 @@ class FakeLiveSession implements LiveSession {
     }
     if (content.length > 0) this.settle(parentId, content);
     this.partial = undefined;
+    this.partialStart = null;
     this.partialArguments = undefined;
     this.tools = [];
     this.running = false;
@@ -687,6 +706,7 @@ class FakeLiveSession implements LiveSession {
   abort(): Promise<void> {
     this.running = false;
     this.partial = undefined;
+    this.partialStart = null;
     this.partialArguments = undefined;
     this.tools = [];
     this.endTurn();
