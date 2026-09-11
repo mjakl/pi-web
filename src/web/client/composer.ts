@@ -23,6 +23,41 @@ import { showToast } from "./toasts.ts";
 
 const COMPOSITION_GRACE_MS = 100;
 
+type Action = "send" | "stop" | "steer" | "followup";
+
+/**
+ * The four states of pi-web's primary button. The shapes are the paths
+ * views/icons.tsx draws (#51), repeated here because the button keeps one
+ * `<svg>` and only its contents change.
+ */
+const ACTIONS: Record<Action, { shape: string; label: string; title: string }> =
+  {
+    send: {
+      shape: '<path d="M12 19V5m-7 7 7-7 7 7"></path>',
+      label: "Send",
+      title: "Send",
+    },
+    stop: {
+      shape:
+        '<rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor"></rect>',
+      label: "Stop agent",
+      title: "Stop agent",
+    },
+    steer: {
+      shape: '<path d="M5 19v-5a4 4 0 0 1 4-4h10m-5-5 5 5-5 5"></path>',
+      label: "Steer",
+      title: "Interrupt the current run and inject this message now",
+    },
+    followup: {
+      shape: '<path d="M4 6h14M4 12h8M4 18h8m6-6v8m-4-4h8"></path>',
+      label: "Queue",
+      title: "Queue after the agent finishes (Option/Alt)",
+    },
+  };
+
+/** Alt turns steer into follow-up while it is down, as pi-web does. */
+let altHeld = false;
+
 export function abortTurn(): void {
   const id = document.querySelector("main")?.getAttribute("data-session-id");
   if (id) void fetch(`/sessions/${id}/abort`, { method: "POST" });
@@ -69,7 +104,41 @@ export function setUpComposer(): void {
   const endpoints = menuEndpoints(form);
   const slash = setUpSlashMenu(endpoints);
   const at = setUpAtCompletion(endpoints);
-  const images = setUpImages();
+  const images = setUpImages(() => {
+    shellHint(textarea()?.value ?? "");
+    syncAction();
+  });
+
+  /**
+   * pi-web's primary button: send when idle, steer or follow-up while a turn
+   * runs, stop when there is nothing to send. Alt swaps steer for follow-up,
+   * which is a state of the keyboard, so it cannot come from the server.
+   */
+  const syncAction = (): void => {
+    const button = form.querySelector<HTMLButtonElement>(
+      ".composer-action-primary",
+    );
+    if (!button) return;
+    const filled =
+      (textarea()?.value.trim() ?? "") !== "" || images.count() > 0;
+    const running = form.hasAttribute("data-running");
+    const action: Action = !running
+      ? "send"
+      : filled
+        ? altHeld
+          ? "followup"
+          : "steer"
+        : "stop";
+    if (button.dataset["action"] !== action) {
+      button.dataset["action"] = action;
+      const svg = button.querySelector("svg");
+      if (svg) svg.innerHTML = ACTIONS[action].shape;
+      button.setAttribute("aria-label", ACTIONS[action].label);
+      button.title = ACTIONS[action].title;
+    }
+    button.dataset["behavior"] = action === "followup" ? "followUp" : "steer";
+    button.disabled = !running && !filled;
+  };
   const drafts = setUpDrafts(sessionId, cwd, textarea);
 
   let cycle: number | null = null;
@@ -104,6 +173,7 @@ export function setUpComposer(): void {
     at.refresh();
     shellHint(area.value);
     drafts.save(area.value);
+    syncAction();
   }
 
   function clearComposer(): void {
@@ -162,13 +232,19 @@ export function setUpComposer(): void {
     form.requestSubmit();
   };
 
-  // The Send and Queue buttons go through the same path as the keyboard: the
+  // The primary button goes through the same path as the keyboard: the
   // delivery mode is a hidden field, and a built-in that never leaves the
-  // browser must not be posted as a prompt.
+  // browser must not be posted as a prompt. With nothing to send while a turn
+  // runs, the same button stops the agent instead.
   form.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLElement>(
       "[data-behavior]",
     );
+    if (button?.dataset["action"] === "stop") {
+      event.preventDefault();
+      abortTurn();
+      return;
+    }
     const behavior = button?.dataset["behavior"];
     if (behavior !== "steer" && behavior !== "followUp") return;
     const area = textarea();
@@ -182,7 +258,11 @@ export function setUpComposer(): void {
     at.close();
     drafts.clear();
   });
-  form.addEventListener("input", onInput);
+  // The toolbar's own fields (the model filter, the reasoning select) are in
+  // the form too; only the textarea is the draft.
+  form.addEventListener("input", (event) => {
+    if (event.target === textarea()) onInput();
+  });
   form.addEventListener("compositionstart", () => {
     composing = true;
   });
@@ -240,24 +320,227 @@ export function setUpComposer(): void {
   });
 
   form.addEventListener("htmx:afterRequest", (event) => {
+    // Only the form's own submission empties it. The toolbar's buttons — a
+    // model pick, a queue recall — are inside the form and their requests
+    // bubble through here too.
+    if (event.target !== form) return;
     const detail = (event as CustomEvent<{ successful?: boolean }>).detail;
     // A rejected submission keeps its text: the reader retries or edits it.
     if (detail.successful === true) clearComposer();
   });
 
-  // The primary button reads "Steer" while a turn runs, and a second button
-  // offers the follow-up queue, because a modifier key is invisible on touch.
+  /**
+   * The state of the session, as the stream last reported it, mirrored onto
+   * the form: the primary button, the shell hint and pi-web's disabled model
+   * selector all read it, and CSS keys on it too.
+   */
   const mirrorRunning = (): void => {
-    const status = document.querySelector("#status > div");
+    const state = document.querySelector("#session-state");
+    const running = state?.hasAttribute("data-running") === true;
+    form.toggleAttribute("data-running", running);
     form.toggleAttribute(
-      "data-running",
-      status?.hasAttribute("data-running") === true,
+      "data-bash-running",
+      state?.hasAttribute("data-bash-running") === true,
     );
+    // pi-web locks the selector while a turn or a compaction runs. The server
+    // renders that too, but only when the pick itself changed.
+    const locked = running || state?.hasAttribute("data-compacting") === true;
+    const selector = document.querySelector("#model-selector");
+    selector?.classList.toggle("is-disabled", locked);
+    for (const control of selector?.querySelectorAll<
+      HTMLButtonElement | HTMLSelectElement
+    >("#model-trigger, .composer-thinking-field select") ?? []) {
+      control.disabled = locked;
+    }
+    const note = document.querySelector<HTMLElement>("#composer-running-note");
+    if (note) note.textContent = running ? "Agent running" : "";
+    syncAction();
   };
   document.body.addEventListener("htmx:afterSwap", (swap) => {
     const target = swap.target;
-    if (target instanceof Element && target.closest("#status")) mirrorRunning();
+    if (!(target instanceof Element)) return;
+    if (target.closest("#status")) mirrorRunning();
+    // A recall or a rewind hands back a new textarea, and replacing an
+    // element fires no input event: the button and the hint would go stale.
+    if (target.contains(textarea())) onInput();
   });
+
+  // Alt is held down, not clicked: pi-web watches the key itself so the icon
+  // changes before the press lands.
+  const modifier = (event: KeyboardEvent): void => {
+    const held =
+      event.altKey && !event.getModifierState("AltGraph") && !event.isComposing;
+    if (held === altHeld) return;
+    altHeld = held;
+    syncAction();
+  };
+  const clearModifier = (): void => {
+    if (!altHeld) return;
+    altHeld = false;
+    syncAction();
+  };
+  addEventListener("keydown", modifier);
+  addEventListener("keyup", modifier);
+  addEventListener("blur", clearModifier);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) clearModifier();
+  });
+
+  setUpModelMenu();
+  setUpDropZone(images);
+  setUpShelf();
   mirrorRunning();
   onInput();
+}
+
+const COMPOSER_MENUS = new Set(["model-menu", "composer-controls"]);
+
+/**
+ * The filter above the model list, and what the browser does not do for a
+ * popover: tell its trigger that it is open. Both are delegated, because a
+ * model pick swaps the whole selector, menu and all, for the server's answer.
+ * `toggle` does not bubble, so this listens in the capture phase.
+ */
+function setUpModelMenu(): void {
+  const filterList = (query: string): void => {
+    const menu = document.getElementById("model-menu");
+    for (const group of menu?.querySelectorAll<HTMLElement>(
+      "[data-provider]",
+    ) ?? []) {
+      let shown = 0;
+      for (const option of group.querySelectorAll<HTMLElement>(
+        "[data-model-name]",
+      )) {
+        const match = (option.dataset["modelName"] ?? "")
+          .toLowerCase()
+          .includes(query);
+        option.hidden = !match;
+        if (match) shown += 1;
+      }
+      group.hidden = shown === 0;
+    }
+  };
+  document.addEventListener(
+    "toggle",
+    (event) => {
+      const menu = event.target;
+      if (!(menu instanceof HTMLElement) || !COMPOSER_MENUS.has(menu.id))
+        return;
+      const open =
+        (event as unknown as { newState?: string }).newState === "open";
+      document
+        .querySelector(`[popovertarget="${menu.id}"]`)
+        ?.setAttribute("aria-expanded", String(open));
+      // A closed menu must not open again on yesterday's filter.
+      const filter = menu.querySelector<HTMLInputElement>("#model-filter");
+      if (!open && filter) {
+        filter.value = "";
+        filterList("");
+      }
+    },
+    true,
+  );
+  document.body.addEventListener("input", (event) => {
+    const filter = event.target;
+    if (!(filter instanceof HTMLInputElement) || filter.id !== "model-filter") {
+      return;
+    }
+    filterList(filter.value.trim().toLowerCase());
+  });
+}
+
+/** pi-web's drop overlay: the whole chat window takes an image (§4.1). */
+function setUpDropZone(images: { add(files: readonly File[]): void }): void {
+  const pane = document.querySelector(".chat-window");
+  const zone = pane?.querySelector<HTMLElement>(".chat-drop-zone");
+  if (!pane || !zone) return;
+  let depth = 0;
+  const show = (open: boolean): void => {
+    depth = open ? depth : 0;
+    zone.hidden = !open;
+  };
+  pane.addEventListener("dragenter", (event) => {
+    if (!(event as DragEvent).dataTransfer?.types.includes("Files")) return;
+    depth += 1;
+    show(true);
+  });
+  pane.addEventListener("dragover", (event) => {
+    if (!(event as DragEvent).dataTransfer?.types.includes("Files")) return;
+    event.preventDefault();
+  });
+  pane.addEventListener("dragleave", () => {
+    depth -= 1;
+    if (depth <= 0) show(false);
+  });
+  pane.addEventListener("drop", (event) => {
+    const files = [...((event as DragEvent).dataTransfer?.files ?? [])];
+    show(false);
+    if (files.length === 0) return;
+    event.preventDefault();
+    images.add(files);
+  });
+}
+
+/**
+ * The extension shelf: which widget panel is open, kept across the stream's
+ * re-renders, and the copy of the status line a phone reads in the composer's
+ * menu, because the strip's own line is sr-only there.
+ */
+function setUpShelf(): void {
+  // undefined until the reader has said something: null is "all closed", and
+  // that has to survive the next render as much as an open panel does.
+  let open: string | null | undefined;
+  const paint = (): void => {
+    const shelf = document.getElementById("shelf");
+    const panels = shelf?.querySelector<HTMLElement>(
+      ".extension-widget-panels",
+    );
+    if (shelf && panels) {
+      // The server picked one; adopt it so the first click closes it.
+      if (open === undefined) {
+        open =
+          shelf.querySelector<HTMLElement>(
+            ".extension-widget-trigger.is-expanded",
+          )?.dataset["widget"] ?? null;
+      }
+      let shown = false;
+      for (const trigger of shelf.querySelectorAll<HTMLElement>(
+        "button.extension-widget-trigger",
+      )) {
+        const key = trigger.dataset["widget"] ?? "";
+        const expanded = key === open;
+        trigger.classList.toggle("is-expanded", expanded);
+        trigger.setAttribute("aria-expanded", String(expanded));
+        const panel = document.getElementById(
+          trigger.getAttribute("aria-controls") ?? "",
+        );
+        if (panel) panel.hidden = !expanded;
+        shown ||= expanded;
+      }
+      panels.hidden = !shown;
+    }
+    const line = document.querySelector("#shelf .extension-status-text");
+    const copy = document.getElementById("shelf-mobile");
+    const section = document.getElementById("composer-status-section");
+    if (copy && section) {
+      copy.innerHTML = line?.innerHTML ?? "";
+      section.hidden = line === null;
+    }
+  };
+  document.body.addEventListener("click", (event) => {
+    const trigger = (event.target as HTMLElement).closest<HTMLElement>(
+      "button.extension-widget-trigger",
+    );
+    if (!trigger) return;
+    const key = trigger.dataset["widget"] ?? "";
+    open = open === key ? null : key;
+    paint();
+  });
+  document.body.addEventListener("htmx:afterSwap", (event) => {
+    // An outerHTML swap reports the parent, so look for the strip either way.
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.id === "shelf" || target.querySelector("#shelf")) paint();
+  });
+  paint();
 }

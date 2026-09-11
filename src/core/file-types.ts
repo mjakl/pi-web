@@ -211,6 +211,126 @@ export function iconOf(path: string, isDir: boolean): string {
   return ICON_BY_LANGUAGE[languageOf(path)] ?? "file";
 }
 
+// --- Catppuccin file icons -------------------------------------------------
+//
+// Which of the vendored Catppuccin SVGs a file name draws, as pi-web's
+// `getFileIcon` decides it. The mapping lives in the core because the `@`
+// completion menu builds its rows in the browser, off the local file index,
+// and has to reach the same answer as the views do.
+
+export type CatppuccinIconName =
+  | "_file"
+  | "_folder"
+  | "_folder_open"
+  | "bash"
+  | "bun-lock"
+  | "config"
+  | "css"
+  | "database"
+  | "docker"
+  | "env"
+  | "eslint"
+  | "git"
+  | "go"
+  | "graphql"
+  | "html"
+  | "javascript"
+  | "javascript-react"
+  | "json"
+  | "lock"
+  | "markdown"
+  | "ms-word"
+  | "next"
+  | "npm-lock"
+  | "pdf"
+  | "python"
+  | "rust"
+  | "sass"
+  | "terraform"
+  | "toml"
+  | "typescript"
+  | "typescript-react"
+  | "yaml";
+
+const CATPPUCCIN_BY_EXTENSION: Record<string, CatppuccinIconName> = {
+  ts: "typescript",
+  tsx: "typescript-react",
+  js: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  jsx: "javascript-react",
+  py: "python",
+  json: "json",
+  jsonl: "json",
+  css: "css",
+  less: "css",
+  scss: "sass",
+  html: "html",
+  htm: "html",
+  md: "markdown",
+  mdx: "markdown",
+  yaml: "yaml",
+  yml: "yaml",
+  toml: "toml",
+  sh: "bash",
+  bash: "bash",
+  zsh: "bash",
+  fish: "bash",
+  rs: "rust",
+  go: "go",
+  sql: "database",
+  graphql: "graphql",
+  gql: "graphql",
+  tf: "terraform",
+  hcl: "terraform",
+  docx: "ms-word",
+  pdf: "pdf",
+  lock: "lock",
+};
+
+const ESLINT_CONFIGS = [
+  ".eslintrc",
+  ".eslintrc.js",
+  ".eslintrc.json",
+  ".eslintrc.yml",
+  "eslint.config.mjs",
+  "eslint.config.js",
+];
+
+const NEXT_CONFIGS = [
+  "next.config.js",
+  "next.config.mjs",
+  "next.config.cjs",
+  "next.config.ts",
+];
+
+function specialCatppuccinIcon(name: string): CatppuccinIconName | undefined {
+  if (name === "dockerfile" || name.startsWith("dockerfile.")) return "docker";
+  if (name === ".env" || name.startsWith(".env.")) return "env";
+  if ([".gitignore", ".gitattributes", ".gitmodules"].includes(name)) {
+    return "git";
+  }
+  if (name === "package-lock.json") return "npm-lock";
+  if (name === "bun.lock") return "bun-lock";
+  if (NEXT_CONFIGS.includes(name)) return "next";
+  if (ESLINT_CONFIGS.includes(name)) return "eslint";
+  if (["yarn.lock", "pnpm-lock.yaml", "cargo.lock"].includes(name)) {
+    return "lock";
+  }
+  if (/\.config\.(ts|js|mjs|cjs)$/.test(name)) return "config";
+  return undefined;
+}
+
+/** The icon for a file name: a special name first, then the extension. */
+export function catppuccinIcon(path: string): CatppuccinIconName {
+  const lower = baseName(path).toLowerCase();
+  return (
+    specialCatppuccinIcon(lower) ??
+    CATPPUCCIN_BY_EXTENSION[extensionOf(lower)] ??
+    "_file"
+  );
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;

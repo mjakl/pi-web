@@ -1,14 +1,12 @@
-import { formatContextUsage } from "@core/context-usage";
 import type { ContextUsage } from "@core/context-usage";
 import type { NewSessionView, SessionView, SidebarView } from "@core/workspace";
-import { Composer } from "./Composer.tsx";
+import { Composer, DropZone } from "./Composer.tsx";
 import { FilePanelBody } from "./Files.tsx";
 import { Rail } from "./Rail.tsx";
 import { CustomPanel, ExtensionDialog } from "./Extensions.tsx";
 import { Shelf } from "./Shelf.tsx";
 import {
   CompactIcon,
-  ContextGaugeIcon,
   HamburgerIcon,
   HistoryIcon,
   PanelLeftIcon,
@@ -25,7 +23,7 @@ import {
   TurnFragment,
 } from "./Items.tsx";
 import { Sidebar } from "./Sidebar.tsx";
-import { Status } from "./Status.tsx";
+import { ContextReadout, Status } from "./Status.tsx";
 import { DialogHost, MissingFolderNotice, TrustBadge } from "./Dialogs.tsx";
 
 // The application shell, with pi-web's DOM: the sidebar column, the 36px top
@@ -213,29 +211,6 @@ function TopBar({
   );
 }
 
-/** The context gauge in the top bar; red, amber or plain by threshold. */
-function ContextReadout({ usage }: { usage?: ContextUsage }) {
-  const text = usage ? formatContextUsage(usage) : "";
-  if (!usage || text === "") {
-    return <span style="color:var(--text-dim)">Session info</span>;
-  }
-  const colour =
-    usage.level === "critical"
-      ? "var(--danger)"
-      : usage.level === "warn"
-        ? "rgba(234,179,8,0.95)"
-        : "var(--text-muted)";
-  return (
-    <span
-      style={`display:flex; align-items:center; gap:4px; color:${colour}`}
-      data-context-readout
-    >
-      <ContextGaugeIcon />
-      {text}
-    </span>
-  );
-}
-
 function Shell({
   sidebar,
   activeId,
@@ -384,6 +359,7 @@ export function NewSessionPage({
   return (
     <Shell sidebar={sidebar} cwd={view.cwd} trust={view.trust}>
       <section class="chat-window is-empty" aria-label="Messages">
+        <DropZone />
         <div class="chat-body">
           <div class="chat-scroll">
             <div class="chat-scroll-content">
@@ -465,6 +441,7 @@ export function SessionPage({
         aria-label="Messages"
         style="--expanded-conversation-rail-width:36px"
       >
+        <DropZone />
         <div class="chat-body">
           <div id="log" class="chat-scroll">
             <div class="chat-scroll-content">
@@ -532,16 +509,16 @@ export function SessionPage({
           </div>
         </div>
         <footer class="chat-composer">
-          {/* TODO(composer): pi-web has no status row — the readout moved into
-              the top bar (gap C10). It stays until the composer carries its
-              own token and t/s line. */}
-          <div id="status" sse-swap="status" hx-swap="innerHTML">
-            <Status view={view} />
-          </div>
           {missingFolder ? (
             <MissingFolderNotice cwd={summary.cwd} />
           ) : view.otherBranch ? null : (
-            <Composer sessionId={summary.id} cwd={summary.cwd} draft={draft} />
+            <Composer
+              sessionId={summary.id}
+              cwd={summary.cwd}
+              draft={draft}
+              view={view}
+              status={<Status view={view} />}
+            />
           )}
           <Shelf status={view.status} />
         </footer>

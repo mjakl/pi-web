@@ -1,8 +1,7 @@
-import { formatTokens } from "@core/context-usage";
+import { formatContextUsage, formatTokens } from "@core/context-usage";
 import type { SessionStats } from "@core/session-entries";
 import type { SessionSummary } from "@core/sessions";
 import type { ContextUsage } from "@core/context-usage";
-import { ContextBadge } from "./Status.tsx";
 
 function duration(ms: number): string {
   const seconds = Math.round(ms / 1000);
@@ -102,10 +101,7 @@ export function StatsPanel({
           value={`${formatTokens(usage.contextWindow)} tokens`}
         />
       )}
-      <div>
-        <span>Context</span>
-        <ContextBadge usage={usage} />
-      </div>
+      <Line label="Context usage" value={formatContextUsage(usage)} />
     </div>
   );
 }

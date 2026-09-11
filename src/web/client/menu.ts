@@ -24,8 +24,9 @@ export function createMenu(
   const paint = (index: number): void => {
     for (const item of items()) {
       const active = item.dataset["index"] === String(index);
-      item.toggleAttribute("data-active", active);
-      item.setAttribute("aria-selected", active ? "true" : "false");
+      // `.menu-item[data-active="true"]` is what pi-web's CSS highlights.
+      if (active) item.setAttribute("data-active", "true");
+      else item.removeAttribute("data-active");
       if (active) item.scrollIntoView({ block: "nearest" });
     }
   };

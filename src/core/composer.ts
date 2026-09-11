@@ -16,33 +16,38 @@ export type SlashCommand = {
   whileRunning?: boolean;
 };
 
+// The descriptions are pi-web's own (lib/i18n/messages/en.ts, `chat.command*`).
 export const BUILTIN_COMMANDS: readonly SlashCommand[] = [
   {
     name: "compact",
-    description: "Summarise the conversation to free context",
+    description: "Compress context, optionally with instructions",
     source: "builtin",
   },
   {
     name: "reload",
-    description: "Reload extensions, skills, and prompt templates",
+    description: "Reload extensions, skills, prompts, and tools",
     source: "builtin",
   },
-  { name: "name", description: "Rename this session", source: "builtin" },
+  {
+    name: "name",
+    description: "Set the session display name",
+    source: "builtin",
+  },
   {
     name: "session",
-    description: "Show session statistics",
+    description: "Show session message and token stats",
     source: "builtin",
     whileRunning: true,
   },
   {
     name: "copy",
-    description: "Copy the last answer to the clipboard",
+    description: "Copy the last assistant message",
     source: "builtin",
     whileRunning: true,
   },
   {
     name: "clone",
-    description: "Copy this session into a new one",
+    description: "Clone the current branch into a new session",
     source: "builtin",
   },
 ];

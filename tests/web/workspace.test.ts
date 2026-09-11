@@ -522,4 +522,26 @@ describe("the new-session model picker", () => {
     expect(page).toContain("balanced");
     expect(page).not.toContain('value="xhigh"');
   });
+
+  /**
+   * Before a session exists there is nothing to apply a pick to, so the menu
+   * only re-renders itself with the choice recorded in the field the first
+   * prompt posts.
+   */
+  it("records a pick in the field the first prompt carries", async () => {
+    const { app } = testApp();
+    const page = await (await app.request("/new")).text();
+    expect(page).toContain('<input type="hidden" name="model"');
+    expect(page).toContain("/workspaces/model-selector?cwd=");
+
+    const html = await (
+      await app.request(
+        `/workspaces/model-selector?cwd=${encodeURIComponent(repo)}&model=fake%2Ffake-1`,
+      )
+    ).text();
+    expect(html).toContain('value="fake/fake-1"');
+    expect(html).toContain('aria-selected="true"');
+    // Nothing was started: a pick here is a render, not a command.
+    expect(html).not.toContain("hx-post");
+  });
 });
