@@ -122,17 +122,39 @@ afterAll(async () => {
 });
 
 describe("explorer", () => {
-  it("lists the root with the changes above it", async () => {
+  it("lists the root on pi-web's tree rows", async () => {
     const html = await (await app.request("/files/explorer?session=s1")).text();
     expect(html).toContain('role="tree"');
     expect(html).toContain('data-name="src"');
     expect(html).toContain('data-name="notes.md"');
-    expect(html).toContain("changes-head");
-    expect(html).toContain("src/main.ts (Modified)");
-    expect(html).toContain("fresh.txt (Untracked)");
+    // 24px rows indented 8 + depth * 14, and the Catppuccin icon masks.
+    expect(html).toContain("padding-left:8px");
+    expect(html).toContain("height:24px");
+    expect(html).toContain("/static/icons/catppuccin/latte/markdown.svg");
+    expect(html).toContain("/static/icons/catppuccin/mocha/_folder.svg");
+    // The hover actions: a mention button and a download link per row.
+    expect(html).toContain('data-mention="notes.md"');
+    expect(html).toContain("Insert path into chat");
     // The modified file sits under src/, so the folder carries the dot.
-    expect(html).toContain("tree-dot");
+    expect(html).toContain("Contains changed files");
+    // The count travels with the fragment: the sidebar toggle needs it.
+    expect(html).toMatch(/data-changes="[1-9]/);
+  });
+
+  it("swaps the changes list in for the tree when asked", async () => {
+    const html = await (
+      await app.request("/files/explorer?session=s1&changes=1")
+    ).text();
+    expect(html).toContain("file-explorer-change-row");
+    expect(html).toMatch(/>[1-9]\d* files</);
+    expect(html).toContain(">+2<");
+    expect(html).toContain(">-1<");
+    expect(html).toContain(">src/main.ts<");
+    expect(html).toContain('title="Modified"');
+    expect(html).toContain('title="Untracked"');
     expect(html).toContain('data-file-mode="diff"');
+    // pi-web shows one or the other, never both.
+    expect(html).not.toContain('data-name="notes.md"');
   });
 
   it("expands one directory at a time", async () => {
@@ -140,6 +162,7 @@ describe("explorer", () => {
     const html = await (await app.request(url)).text();
     expect(html).toContain('data-name="main.ts"');
     expect(html).toContain(">M<");
+    expect(html).toContain("padding-left:22px");
     expect(html).not.toContain('data-name="notes.md"');
   });
 
@@ -147,8 +170,15 @@ describe("explorer", () => {
     const found = await (
       await app.request("/files/search?session=s1&q=main")
     ).text();
-    expect(found).toContain("src/main.ts");
+    // Hits come back as a tree: the folder row, then the file inside it.
+    expect(found).toContain('data-name="src"');
+    expect(found).toContain('data-name="main.ts"');
+    expect(found).toContain('aria-expanded="true"');
     expect(found).not.toContain('data-name="notes.md"');
+    const missing = await (
+      await app.request("/files/search?session=s1&q=zzzz")
+    ).text();
+    expect(missing).toContain("No matching files");
     const cleared = await (
       await app.request("/files/search?session=s1&q=")
     ).text();
@@ -157,21 +187,43 @@ describe("explorer", () => {
 });
 
 describe("viewer", () => {
+  it("puts the toolbar controls in pi-web's order", async () => {
+    const url = `/files/view?session=s1&path=${encodeURIComponent(join(repo, "notes.md"))}`;
+    const html = await (await app.request(url)).text();
+    const order = [
+      "file-viewer-path",
+      "file-viewer-meta",
+      "file-viewer-live-indicator",
+      "file-viewer-mode-switch",
+      "file-viewer-actions",
+      "file-viewer-icon-button",
+      "file-viewer-content",
+    ].map((mark) => html.indexOf(mark));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(order[0]).toBeGreaterThan(-1);
+    expect(html).toContain(">Source</button>");
+    expect(html).toContain(">Preview</button>");
+  });
+
   it("numbers the lines of a source file and colours it", async () => {
-    const url = `/files/view?session=s1&path=${encodeURIComponent(join(repo, "src", "main.ts"))}`;
+    const url = `/files/view?session=s1&mode=source&path=${encodeURIComponent(join(repo, "src", "main.ts"))}`;
     const html = await (await app.request(url)).text();
     expect(html).toContain('data-mode="source"');
-    expect(html).toContain('data-line="1"');
+    expect(html).toContain('class="file-source-line" data-line-number="1"');
     expect(html).toContain("hljs-keyword");
-    expect(html).toContain("2 lines");
+    // The 48px gutter, and the trailing newline counted as pi-web counts it.
+    expect(html).toContain("width:48px");
+    expect(html).toContain("3 lines");
+    expect(html).toContain("Enable word wrap");
   });
 
   it("defaults markdown to the rendered preview with its frontmatter", async () => {
     const url = `/files/view?session=s1&path=${encodeURIComponent(join(repo, "notes.md"))}`;
     const html = await (await app.request(url)).text();
     expect(html).toContain('data-mode="preview"');
-    expect(html).toContain("frontmatter-chip");
-    expect(html).toContain(">Notes</h2>");
+    expect(html).toContain("markdown-file-preview-shell");
+    expect(html).toContain("markdown-frontmatter-tag");
+    expect(html).toContain("markdown-frontmatter-title");
     expect(html).toContain("<h1 id=");
     // The block itself never reaches the rendered body.
     expect(html).not.toContain("tags: [one, two]");
@@ -181,9 +233,12 @@ describe("viewer", () => {
     const url = `/files/view?session=s1&mode=diff&path=${encodeURIComponent(join(repo, "src", "main.ts"))}`;
     const html = await (await app.request(url)).text();
     expect(html).toContain('data-mode="diff"');
-    expect(html).toContain("diff-removed");
-    expect(html).toContain("diff-added");
+    expect(html).toContain("file-diff-view");
+    expect(html).toContain("rgba(240,60,60,0.14)");
+    expect(html).toContain("rgba(0,200,80,0.12)");
     expect(html).toContain("const a = 2;");
+    // pi-web renders no @@ headers; the collapsed spans say what was skipped.
+    expect(html).not.toContain("@@");
   });
 
   it("falls back to source when the requested diff does not exist", async () => {
@@ -192,11 +247,16 @@ describe("viewer", () => {
     expect(html).toContain('data-mode="source"');
   });
 
-  it("renders an image through the raw route", async () => {
+  it("renders an image on the checkerboard with its own toolbar", async () => {
     const url = `/files/view?session=s1&path=${encodeURIComponent(join(repo, "logo.png"))}`;
     const html = await (await app.request(url)).text();
-    expect(html).toContain("media-image");
+    expect(html).toContain("file-viewer-media-body");
+    expect(html).toContain("background-size:16px 16px");
     expect(html).toContain("/files/raw?path=");
+    expect(html).toContain(">png<");
+    expect(html).toContain(">static<");
+    // No mode switch or wrap toggle: an image has one way of being shown.
+    expect(html).not.toContain("file-viewer-mode-switch");
   });
 });
 

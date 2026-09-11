@@ -1,9 +1,9 @@
 import {
+  catppuccinIcon,
   extensionOf,
   fileKind,
   formatBytes,
   hasPreview,
-  iconOf,
   languageOf,
   mimeOf,
 } from "@core/file-types";
@@ -39,19 +39,20 @@ describe("fileKind and mimeOf", () => {
   });
 });
 
-describe("hasPreview and iconOf", () => {
+describe("hasPreview and catppuccinIcon", () => {
   it("offers a preview for markdown and html only", () => {
     expect(hasPreview("readme.md")).toBe(true);
     expect(hasPreview("page.html")).toBe(true);
     expect(hasPreview("main.ts")).toBe(false);
   });
 
-  it("picks one of the panel's symbols", () => {
-    expect(iconOf("src", true)).toBe("folder");
-    expect(iconOf("main.ts", false)).toBe("code");
-    expect(iconOf("tsconfig.json", false)).toBe("config");
-    expect(iconOf("logo.png", false)).toBe("image");
-    expect(iconOf("LICENSE", false)).toBe("file");
+  it("picks the icon by special name, then extension", () => {
+    expect(catppuccinIcon("/repo/Dockerfile.web")).toBe("docker");
+    expect(catppuccinIcon("pnpm-lock.yaml")).toBe("lock");
+    expect(catppuccinIcon("vitest.config.ts")).toBe("config");
+    expect(catppuccinIcon("/repo/src/main.tsx")).toBe("typescript-react");
+    expect(catppuccinIcon("notes.MD")).toBe("markdown");
+    expect(catppuccinIcon("LICENSE")).toBe("_file");
   });
 });
 

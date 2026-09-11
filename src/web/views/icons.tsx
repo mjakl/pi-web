@@ -1092,11 +1092,7 @@ export function FolderIcon({
   );
 }
 
-export function GenericFileIcon({ size = 14 }: IconProps) {
-  return <CatppuccinIcon name="_file" size={size} />;
-}
-
-/** The icon for a file name; the mapping is shared with the `@` menu. */
+/** The icon for a file name; `catppuccinIcon` in the core picks which. */
 export function FileIcon({ name, size = 14 }: IconProps & { name: string }) {
   return <CatppuccinIcon name={catppuccinIcon(name)} size={size} />;
 }

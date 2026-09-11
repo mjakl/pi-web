@@ -1,4 +1,5 @@
 import { buildAtInsertText } from "@core/composer";
+import { catppuccinIcon } from "@core/file-types";
 import { replaceRange, textarea } from "./editor.ts";
 import { setUpResize } from "./resize.ts";
 
@@ -11,6 +12,8 @@ import { setUpResize } from "./resize.ts";
 const WIDTH_KEY = "pi-right-panel-width";
 const MIN_WIDTH = 300;
 const MAX_WIDTH = 1200;
+
+const CATPPUCCIN_ROOT = "/static/icons/catppuccin";
 
 type Htmx = {
   ajax(verb: string, path: string, context: unknown): Promise<void>;
@@ -78,33 +81,77 @@ function tabBar(): HTMLElement | null {
   return document.getElementById("file-tabs");
 }
 
+function baseName(path: string): string {
+  return path.replaceAll("\\", "/").split("/").pop() ?? path;
+}
+
+/** The masked Catppuccin span the views render, built without JSX. */
+function fileIcon(name: string, size: number): HTMLSpanElement {
+  const icon = document.createElement("span");
+  const file = catppuccinIcon(name);
+  icon.className = "catppuccin-file-icon";
+  icon.ariaHidden = "true";
+  icon.style.width = `${String(size)}px`;
+  icon.style.height = `${String(size)}px`;
+  icon.style.setProperty(
+    "--catppuccin-icon-light",
+    `url(${CATPPUCCIN_ROOT}/latte/${file}.svg)`,
+  );
+  icon.style.setProperty(
+    "--catppuccin-icon-dark",
+    `url(${CATPPUCCIN_ROOT}/mocha/${file}.svg)`,
+  );
+  return icon;
+}
+
+const CLOSE_ICON = `<svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="2" x2="8" y2="8"></line><line x1="8" y1="2" x2="2" y2="8"></line></svg>`;
+
+/** pi-web's TabBar (components/TabBar.tsx), built in the browser. */
 function renderTabs(): void {
   const bar = tabBar();
   if (!bar) return;
   bar.replaceChildren();
   bar.hidden = tabs.size === 0;
   for (const path of tabs.keys()) {
-    const tab = document.createElement("button");
-    tab.type = "button";
+    const selected = path === active;
+    const label = baseName(path);
+    const tab = document.createElement("div");
     tab.className = "file-tab";
     tab.role = "tab";
-    tab.title = path;
     tab.dataset["path"] = path;
-    tab.setAttribute("aria-selected", path === active ? "true" : "false");
-    const label = document.createElement("span");
-    label.className = "file-tab-label";
-    label.textContent = path.split("/").pop() ?? path;
-    const close = document.createElement("span");
-    close.className = "file-tab-close";
-    close.textContent = "✕";
+    tab.setAttribute("aria-selected", selected ? "true" : "false");
+    tab.style.cssText = `display:flex; align-items:center; gap:6px; height:36px; padding-left:12px; padding-right:6px; border-right:1px solid var(--border); background:${selected ? "var(--bg)" : "var(--bg-panel)"}; cursor:pointer; font-size:12px; color:${selected ? "var(--text)" : "var(--text-muted)"}; white-space:nowrap; max-width:180px; min-width:80px; flex-shrink:0; user-select:none; transition:background 0.1s, color 0.1s`;
+
+    const icon = document.createElement("span");
+    icon.style.cssText = `flex-shrink:0; opacity:${selected ? "1" : "0.7"}; display:flex; align-items:center`;
+    icon.append(fileIcon(label, 13));
+
+    const name = document.createElement("span");
+    name.style.cssText = `overflow:hidden; text-overflow:ellipsis; flex:1; font-weight:${selected ? "500" : "400"}`;
+    name.title = path;
+    name.textContent = label;
+
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "tab-close";
     close.dataset["close"] = "1";
-    tab.append(label, close);
+    close.title = "Close";
+    close.setAttribute("aria-label", `Close ${label}`);
+    close.style.cssText =
+      "display:flex; align-items:center; justify-content:center; width:24px; height:24px; border:none; border-radius:4px; cursor:pointer; padding:0; flex-shrink:0; transition:background 0.1s, color 0.1s";
+    close.innerHTML = CLOSE_ICON;
+
+    tab.append(icon, name, close);
     bar.append(tab);
   }
 }
 
 function viewer(): HTMLElement | null {
-  return document.querySelector("#file-view .viewer");
+  return document.querySelector("#file-view .file-viewer-shell");
+}
+
+function viewerBody(): HTMLElement | null {
+  return document.querySelector("#file-view .file-viewer-content");
 }
 
 function saveActiveState(): void {
@@ -113,7 +160,7 @@ function saveActiveState(): void {
   const state = tabs.get(active);
   if (!element || !state) return;
   state.mode = element.dataset["mode"] ?? state.mode;
-  const body = element.querySelector<HTMLElement>(".viewer-body");
+  const body = viewerBody();
   if (body) state.scrollTop = body.scrollTop;
 }
 
@@ -121,7 +168,7 @@ function loadViewer(path: string, mode?: string): void {
   const state = tabs.get(path);
   const query = new URLSearchParams({ path, session: sessionId() });
   const wanted = mode ?? state?.mode;
-  if (wanted !== undefined) query.set("mode", wanted);
+  if (wanted !== undefined && wanted !== "") query.set("mode", wanted);
   const target = document.getElementById("file-view");
   const id = (requestId += 1);
   void htmx()
@@ -144,17 +191,23 @@ function restoreViewer(): void {
   const state = tabs.get(active);
   if (!state) return;
   state.mode = element.dataset["mode"] ?? state.mode;
-  const source = element.querySelector<HTMLElement>(".file-source");
-  if (source) source.dataset["wrap"] = state.wrap ? "on" : "off";
-  element
-    .querySelector("[data-wrap-toggle]")
-    ?.setAttribute("aria-pressed", state.wrap ? "true" : "false");
-  const body = element.querySelector<HTMLElement>(".viewer-body");
+  applyWrap(state.wrap);
+  const body = viewerBody();
   if (body && state.scrollTop > 0) body.scrollTop = state.scrollTop;
   // Every mode switch and every change replaces the toolbar, so the live
   // indicator has to be re-lit from the stream that is already open.
-  const indicator = element.querySelector<HTMLElement>(".viewer-live");
-  if (indicator) indicator.hidden = stream === null || watching !== active;
+  showWatching(stream !== null && watching === active);
+}
+
+/** pi-web re-renders the source with different inline styles; a class does. */
+function applyWrap(wrap: boolean): void {
+  const source = viewer()?.querySelector<HTMLElement>(".file-source-view");
+  source?.classList.toggle("is-wrapped", wrap);
+  const toggle = viewer()?.querySelector("[data-wrap-toggle]");
+  toggle?.setAttribute("aria-pressed", wrap ? "true" : "false");
+  const label = wrap ? "Disable word wrap" : "Enable word wrap";
+  toggle?.setAttribute("title", label);
+  toggle?.setAttribute("aria-label", label);
 }
 
 export function openFile(path: string, mode?: string): void {
@@ -173,6 +226,16 @@ export function openFile(path: string, mode?: string): void {
   loadViewer(path, mode);
 }
 
+function emptyViewer(): void {
+  const host = document.getElementById("file-view");
+  if (!host) return;
+  const empty = document.createElement("div");
+  empty.style.cssText =
+    "height:100%; display:flex; align-items:center; justify-content:center; color:var(--text-dim); font-size:12px";
+  empty.textContent = "No file open";
+  host.replaceChildren(empty);
+}
+
 function closeTab(path: string): void {
   const wasActive = active === path;
   tabs.delete(path);
@@ -184,7 +247,7 @@ function closeTab(path: string): void {
   active = last ?? null;
   renderTabs();
   if (last === undefined) {
-    document.getElementById("file-view")?.replaceChildren();
+    emptyViewer();
     disconnectWatch();
     setOpen(false);
     return;
@@ -203,6 +266,27 @@ function disconnectWatch(): void {
   watching = null;
 }
 
+/** The dot, and the "live"/"static" word the media toolbars carry beside it. */
+function showWatching(live: boolean): void {
+  const element = viewer();
+  if (!element) return;
+  const dot = element.querySelector<HTMLElement>(".file-viewer-live-indicator");
+  if (dot) {
+    dot.style.background = live ? "var(--success)" : "var(--border)";
+    dot.style.boxShadow = live ? "0 0 4px var(--success)" : "none";
+    const title = live ? "Live sync active" : "Not watching";
+    dot.title = title;
+    dot.setAttribute("aria-label", title);
+  }
+  const pill = element.querySelector<HTMLElement>(".file-viewer-live");
+  if (pill) {
+    pill.style.color = live ? "var(--success)" : "var(--text-dim)";
+    pill.title = live ? "Live sync active" : "Not watching";
+  }
+  const word = element.querySelector(".file-viewer-live-label");
+  if (word) word.textContent = live ? "live" : "static";
+}
+
 function connectWatch(): void {
   if (!isOpen() || active === null) {
     disconnectWatch();
@@ -214,10 +298,8 @@ function connectWatch(): void {
   const query = new URLSearchParams({ path: active, session: sessionId() });
   const source = new EventSource(`/files/watch?${query.toString()}`);
   stream = source;
-  const dot = () => viewer()?.querySelector<HTMLElement>(".viewer-live");
   source.addEventListener("connected", () => {
-    const indicator = dot();
-    if (indicator) indicator.hidden = false;
+    showWatching(true);
   });
   source.addEventListener("change", () => {
     if (active !== null) {
@@ -226,8 +308,7 @@ function connectWatch(): void {
     }
   });
   source.addEventListener("error", () => {
-    const indicator = dot();
-    if (indicator) indicator.hidden = true;
+    showWatching(false);
   });
 }
 
@@ -236,8 +317,8 @@ function connectWatch(): void {
 function lineOf(node: Node | null): number | null {
   const element =
     node instanceof Element ? node : (node?.parentElement ?? null);
-  const row = element?.closest<HTMLElement>(".file-line");
-  const value = Number(row?.dataset["line"]);
+  const row = element?.closest<HTMLElement>(".file-source-line");
+  const value = Number(row?.dataset["lineNumber"]);
   return Number.isInteger(value) ? value : null;
 }
 
@@ -248,7 +329,7 @@ function selectedRange(): { start: number; end: number } | null {
     return null;
   }
   const range = selection.getRangeAt(0);
-  const source = viewer()?.querySelector(".file-source");
+  const source = viewer()?.querySelector(".file-source-view");
   if (!source || !source.contains(range.commonAncestorContainer)) return null;
   const first = lineOf(range.startContainer);
   const last = lineOf(range.endContainer);
@@ -279,11 +360,11 @@ function mentionActiveFile(): void {
   );
 }
 
-// --- Tree keyboard navigation -------------------------------------------
+// --- The explorer tree ---------------------------------------------------
 
 function treeItems(): HTMLElement[] {
   return [
-    ...document.querySelectorAll<HTMLElement>("#file-tree .tree-item"),
+    ...document.querySelectorAll<HTMLElement>("#file-tree [role='treeitem']"),
   ].filter((item) => item.offsetParent !== null);
 }
 
@@ -297,8 +378,23 @@ function focusItem(item: HTMLElement | undefined): void {
 function expand(item: HTMLElement, open: boolean): void {
   if (item.dataset["dir"] !== "1") return;
   item.setAttribute("aria-expanded", open ? "true" : "false");
-  const children = item.querySelector<HTMLElement>(":scope > ul");
+  const children = item.querySelector<HTMLElement>(":scope > [data-children]");
   if (children) children.hidden = !open;
+  const folder = item.querySelector<HTMLElement>(
+    ":scope > .file-tree-row .catppuccin-file-icon",
+  );
+  // The folder icon has an open variant; the chevron is turned by CSS.
+  if (folder) {
+    const name = open ? "_folder_open" : "_folder";
+    folder.style.setProperty(
+      "--catppuccin-icon-light",
+      `url(${CATPPUCCIN_ROOT}/latte/${name}.svg)`,
+    );
+    folder.style.setProperty(
+      "--catppuccin-icon-dark",
+      `url(${CATPPUCCIN_ROOT}/mocha/${name}.svg)`,
+    );
+  }
   if (open) item.dispatchEvent(new CustomEvent("expand"));
 }
 
@@ -314,7 +410,7 @@ function activate(item: HTMLElement): void {
 
 function onTreeKey(event: KeyboardEvent): void {
   const item = (event.target as HTMLElement | null)?.closest<HTMLElement>(
-    ".tree-item",
+    "[role='treeitem']",
   );
   if (!item) return;
   const items = treeItems();
@@ -336,7 +432,8 @@ function onTreeKey(event: KeyboardEvent): void {
       if (item.getAttribute("aria-expanded") === "true") expand(item, false);
       else {
         focusItem(
-          item.parentElement?.closest<HTMLElement>(".tree-item") ?? undefined,
+          item.parentElement?.closest<HTMLElement>("[role='treeitem']") ??
+            undefined,
         );
       }
       break;
@@ -354,6 +451,36 @@ function onTreeKey(event: KeyboardEvent): void {
       return;
   }
   event.preventDefault();
+}
+
+// --- Changed files -------------------------------------------------------
+
+function changesToggle(): HTMLElement | null {
+  return document.getElementById("explorer-changes-toggle");
+}
+
+function showingChanges(): boolean {
+  return changesToggle()?.getAttribute("aria-pressed") === "true";
+}
+
+function explorerUrl(): string {
+  const base = `/files/explorer?session=${encodeURIComponent(sessionId())}`;
+  return showingChanges() ? `${base}&changes=1` : base;
+}
+
+/** pi-web only offers the toggle while something is actually changed. */
+function syncChangesToggle(): void {
+  const toggle = changesToggle();
+  const tree = document.getElementById("file-tree");
+  if (!toggle || !tree) return;
+  // Search results carry no count; they are a view of the same tree, so the
+  // button keeps whatever the last explorer fragment said.
+  const reported = tree.dataset["changes"];
+  if (reported === undefined) return;
+  const count = Number(reported);
+  toggle.hidden = count === 0;
+  toggle.title = `${String(count)} changed files`;
+  if (count === 0) toggle.setAttribute("aria-pressed", "false");
 }
 
 // --- Resizing ------------------------------------------------------------
@@ -377,22 +504,17 @@ function setUpPanelResize(): void {
 
 /**
  * What only the browser can measure: an image's pixels and an audio file's
- * length. Both land next to the size the server already rendered.
+ * length. Both land in the slot the media toolbar keeps for them, ahead of
+ * the size the server already rendered.
  */
 function describeMedia(root: ParentNode): void {
-  const meta = root.querySelector<HTMLElement>(".viewer-meta");
-  if (!meta) return;
-  const append = (text: string): void => {
-    if (meta.textContent?.includes(text) ?? false) return;
-    meta.textContent = `${meta.textContent ?? ""} · ${text}`;
-  };
+  const slot = root.querySelector<HTMLElement>(".file-viewer-measured");
+  if (!slot) return;
   const image = root.querySelector("img");
   if (image) {
     const size = () => {
       if (image.naturalWidth > 0) {
-        append(
-          `${String(image.naturalWidth)} × ${String(image.naturalHeight)}`,
-        );
+        slot.textContent = `${String(image.naturalWidth)} × ${String(image.naturalHeight)}`;
       }
     };
     if (image.complete) size();
@@ -404,7 +526,7 @@ function describeMedia(root: ParentNode): void {
       if (!Number.isFinite(audio.duration)) return;
       const seconds = Math.round(audio.duration);
       const minutes = Math.floor(seconds / 60);
-      append(`${String(minutes)}:${String(seconds % 60).padStart(2, "0")}`);
+      slot.textContent = `${String(minutes)}:${String(seconds % 60).padStart(2, "0")}`;
     };
     if (audio.readyState > 0) length();
     else audio.addEventListener("loadedmetadata", length, { once: true });
@@ -439,17 +561,23 @@ export function setUpFiles(): void {
     }
     if (target.closest("[data-wrap-toggle]")) {
       const state = active === null ? undefined : tabs.get(active);
-      const source = viewer()?.querySelector<HTMLElement>(".file-source");
-      if (!state || !source) return;
+      if (!state) return;
       state.wrap = !state.wrap;
-      source.dataset["wrap"] = state.wrap ? "on" : "off";
-      target
-        .closest("[data-wrap-toggle]")
-        ?.setAttribute("aria-pressed", state.wrap ? "true" : "false");
+      applyWrap(state.wrap);
       return;
     }
     if (target.closest("[data-mention-file]")) {
       mentionActiveFile();
+      return;
+    }
+    const toggle = target.closest("#explorer-changes-toggle");
+    if (toggle) {
+      const showing = showingChanges();
+      toggle.setAttribute("aria-pressed", showing ? "false" : "true");
+      void htmx()?.ajax("GET", explorerUrl(), {
+        target: "#file-tree",
+        swap: "outerHTML",
+      });
       return;
     }
     const holder = target.closest<HTMLElement>("[data-file-path]");
@@ -461,8 +589,9 @@ export function setUpFiles(): void {
       );
       return;
     }
-    const item = target.closest<HTMLElement>(".tree-item");
-    if (item && !target.closest(".tree-actions")) {
+    const row = target.closest<HTMLElement>(".file-tree-row");
+    const item = row?.parentElement;
+    if (item && !target.closest(".file-tree-action")) {
       focusItem(item);
       activate(item);
     }
@@ -500,6 +629,18 @@ export function setUpFiles(): void {
     onTreeKey(event);
   });
 
+  // The explorer refreshes itself on every settled turn; keep the changed
+  // files showing when that is what the reader asked for.
+  document.body.addEventListener("htmx:configRequest", (event) => {
+    const detail = (
+      event as CustomEvent<{ path?: string; parameters?: unknown }>
+    ).detail;
+    if (detail.path?.startsWith("/files/explorer") !== true) return;
+    if (showingChanges()) {
+      (detail.parameters as Record<string, string>)["changes"] = "1";
+    }
+  });
+
   // A refreshed tree loses focus positions; the first row becomes the entry.
   document.body.addEventListener("htmx:afterSwap", (event) => {
     const target = event.target;
@@ -507,6 +648,7 @@ export function setUpFiles(): void {
     if (target.id === "file-explorer" || target.id === "file-tree") {
       const first = treeItems()[0];
       if (first) first.tabIndex = 0;
+      syncChangesToggle();
     }
     if (target.id === "file-view") restoreViewer();
   });
@@ -518,7 +660,7 @@ export function setUpFiles(): void {
       const target = event.target;
       if (
         target instanceof HTMLElement &&
-        target.classList.contains("viewer-body")
+        target.classList.contains("file-viewer-content")
       ) {
         saveActiveState();
       }

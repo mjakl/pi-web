@@ -153,70 +153,13 @@ export function hasPreview(path: string): boolean {
   return language === "markdown" || language === "html";
 }
 
-const ICON_BY_LANGUAGE: Record<string, string> = {
-  bash: "code",
-  c: "code",
-  cpp: "code",
-  csharp: "code",
-  css: "code",
-  dart: "code",
-  diff: "code",
-  dockerfile: "config",
-  elixir: "code",
-  go: "code",
-  graphql: "code",
-  haskell: "code",
-  hcl: "config",
-  html: "code",
-  ini: "config",
-  java: "code",
-  javascript: "code",
-  json: "config",
-  jsx: "code",
-  kotlin: "code",
-  less: "code",
-  lua: "code",
-  makefile: "config",
-  markdown: "doc",
-  nginx: "config",
-  objectivec: "code",
-  perl: "code",
-  php: "code",
-  powershell: "code",
-  protobuf: "code",
-  python: "code",
-  r: "code",
-  ruby: "code",
-  rust: "code",
-  scala: "code",
-  scss: "code",
-  sql: "config",
-  swift: "code",
-  toml: "config",
-  tsx: "code",
-  typescript: "code",
-  word: "doc",
-  xml: "code",
-  yaml: "config",
-};
-
-/**
- * One of a handful of symbols the panel defines inline. A per-language icon
- * set would be prettier; it would also be a few hundred vendored SVGs.
- */
-export function iconOf(path: string, isDir: boolean): string {
-  if (isDir) return "folder";
-  const kind = fileKind(path);
-  if (kind !== "text") return kind === "docx" ? "doc" : kind;
-  return ICON_BY_LANGUAGE[languageOf(path)] ?? "file";
-}
-
 // --- Catppuccin file icons -------------------------------------------------
 //
 // Which of the vendored Catppuccin SVGs a file name draws, as pi-web's
-// `getFileIcon` decides it. The mapping lives in the core because the `@`
-// completion menu builds its rows in the browser, off the local file index,
-// and has to reach the same answer as the views do.
+// `getFileIcon` decides it. The mapping lives in the core because two of its
+// readers run in the browser and cannot import a view: the `@` completion
+// menu builds its rows off the local file index, and the file panel draws its
+// tab strip. All three have to reach the same answer.
 
 export type CatppuccinIconName =
   | "_file"

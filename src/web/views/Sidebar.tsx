@@ -10,6 +10,7 @@ import { shortPath } from "@core/workspaces";
 import {
   ActiveDotIcon,
   BranchBadgeIcon,
+  ChangedFilesIcon,
   CheckIcon,
   ChevronRightIcon,
   MoreDotsIcon,
@@ -772,8 +773,21 @@ function ExplorerSection({
           </span>
           Explorer
         </button>
-        {/* TODO(files): pi-web toggles the search field from this button and
-            adds a changed-files toggle beside it (gap B8). */}
+        {/* Swaps the changes list in for the tree; the files area fills it in
+            and hides this button while nothing is changed. */}
+        <button
+          type="button"
+          class="sidebar-toolbar-button"
+          id="explorer-changes-toggle"
+          aria-pressed="false"
+          title="Changed files"
+          aria-label="Changed files"
+          hidden
+        >
+          <ChangedFilesIcon />
+        </button>
+        {/* TODO(sidebar): pi-web toggles the search field from this button
+            (gap B8). */}
         <button
           type="button"
           class="sidebar-toolbar-button"
