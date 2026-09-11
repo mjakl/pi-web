@@ -170,10 +170,10 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
   });
 
   app.get("/files/view", async (c) => {
-    const sessionId = sessionParameter(c);
+    const scope = scopeParameter(c);
     const path = c.req.query("path") ?? "";
     try {
-      const view = await deps.workspace.fileView(sessionId, path);
+      const view = await deps.workspace.fileView(scope, path);
       const asked = c.req.query("mode");
       const mode: ViewMode =
         asked === "source" || asked === "preview" || asked === "diff"
@@ -184,7 +184,7 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
       const shown: ViewMode =
         mode === "diff" && view.diff === undefined ? "source" : mode;
       return await c.html(
-        <Viewer view={view} mode={shown} sessionId={sessionId ?? ""} />,
+        <Viewer view={view} mode={shown} sessionId={scope.sessionId ?? ""} />,
       );
     } catch (error) {
       return fileFailure(c, error);

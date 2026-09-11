@@ -722,6 +722,20 @@ export function createWorkspace(deps: {
     return cwd;
   }
 
+  /**
+   * The folder a viewed file is read against: it decides the relative path in
+   * the toolbar and whether there is a diff to offer. A folder the reader may
+   * not list just leaves the file without that context; the file itself is
+   * authorized on its own.
+   */
+  async function viewCwd(scope: FileScope): Promise<string> {
+    try {
+      return await scopeCwd(scope);
+    } catch {
+      return "";
+    }
+  }
+
   async function cwdOf(sessionId: string | undefined): Promise<string> {
     if (sessionId === undefined) return "";
     return (await summaryOf(sessionId))?.cwd ?? "";
@@ -1063,11 +1077,9 @@ export function createWorkspace(deps: {
      * and its diff against HEAD. A deleted file has no content left, so it
      * opens with the diff alone.
      */
-    async fileView(
-      sessionId: string | undefined,
-      path: string,
-    ): Promise<FileView> {
-      const cwd = await cwdOf(sessionId);
+    async fileView(scope: FileScope, path: string): Promise<FileView> {
+      const { sessionId } = scope;
+      const cwd = await viewCwd(scope);
       const info = await authorize(path, { sessionId, allowMissing: true });
       const status = cwd === "" ? null : await deps.git.status(cwd);
       const change = status ? changeFor(status, path) : undefined;

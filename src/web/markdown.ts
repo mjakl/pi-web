@@ -56,7 +56,12 @@ function codeBlock(code: string, language: string, live: boolean): string {
   const label = language === "" ? "text" : language;
   const body =
     `<pre class="markdown-code-body" style="margin:0; padding:11px 13px; font-size:12.5px;` +
-    ` line-height:1.62; overflow-x:auto; background:color-mix(in srgb, var(--bg) 92%, var(--bg-panel))">` +
+    // border/radius are pi-web's customStyle reset: the light Prism theme and
+    // `.markdown-file-preview pre` both give the element a border that would
+    // double up inside .markdown-code-block's own.
+    ` line-height:1.62; border:0; border-radius:0; overflow-x:auto;` +
+    ` font-family:var(--code-theme-font);` +
+    ` background:color-mix(in srgb, var(--bg) 92%, var(--bg-panel))">` +
     `<code class="language-${attribute(label)}" style="font-family:var(--font-mono)">${escapeHtml(code)}</code></pre>`;
   const copy = `<button type="button" class="markdown-code-action" data-copy-code>Copy</button>`;
   const header = (actions: string) =>

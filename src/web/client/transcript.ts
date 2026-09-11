@@ -109,6 +109,16 @@ export function setUpTranscript(): void {
   });
 
   view.scrollTop = view.scrollHeight;
+  // Images, mermaid diagrams and the highlighter all resize the transcript
+  // after this first jump, which would leave the page a screenful short of
+  // the tail with the jump button showing. Follow the growth until the
+  // reader scrolls away from the bottom themselves.
+  const content = view.firstElementChild;
+  if (content) {
+    new ResizeObserver(() => {
+      if (follow) view.scrollTop = view.scrollHeight;
+    }).observe(content);
+  }
   sync();
   highlightIn(document);
   setUpCopy();

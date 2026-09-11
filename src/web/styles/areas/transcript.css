@@ -91,10 +91,28 @@
    colour is in pi-web's stylesheet. */
 .markdown-code-body span.linenumber {
   display: inline-block;
-  min-width: 2.25em;
+  /* react-syntax-highlighter sizes the gutter from the widest line number
+     ("<digits>.25em"); client/highlight.ts sets the property per block. */
+  min-width: var(--linenumber-width, 1.25em);
   padding-right: 1em;
   text-align: right;
   user-select: none;
+}
+
+/* The Prism theme's own font stack. Only the <pre> strut uses it -- the <code>
+   inside sets var(--font-mono) for the text itself, as pi-web's codeTagProps
+   do -- but the strut decides the baseline, and leaving it off dropped every
+   line 1px against pi-web. pi-web gets it from the theme object it applies
+   inline, so the <pre> reads this through its own inline font-family; a class
+   rule here would lose to `.markdown-file-preview pre`. */
+.markdown-code-body {
+  --code-theme-font:
+    Consolas, "Bitstream Vera Sans Mono", "Courier New", Courier, monospace;
+}
+html.dark .markdown-code-body {
+  --code-theme-font:
+    Menlo, Monaco, Consolas, "Andale Mono", "Ubuntu Mono", "Courier New",
+    monospace;
 }
 
 /* Prism's `vs` (light) and `vscDarkPlus` (dark) palettes, which pi-web loads

@@ -865,8 +865,14 @@ export function Viewer({
   const meta = deleted
     ? "Deleted"
     : `${view.language} · ${String(lines ?? 0)} lines · ${formatBytes(view.size)}`;
+  // Without a session the panel works from the picked folder, and the mode
+  // buttons have to keep naming it or the diff disappears on the first switch.
+  const scope =
+    sessionId === ""
+      ? `cwd=${encodeURIComponent(view.cwd)}`
+      : `session=${encodeURIComponent(sessionId)}`;
   const url = (next: ViewMode) =>
-    `/files/view?path=${encodeURIComponent(view.path)}&session=${encodeURIComponent(sessionId)}&mode=${next}`;
+    `/files/view?path=${encodeURIComponent(view.path)}&${scope}&mode=${next}`;
   const modes: ViewMode[] = deleted
     ? ["diff"]
     : [

@@ -247,6 +247,21 @@ describe("viewer", () => {
     expect(html).toContain('data-mode="source"');
   });
 
+  it("reads a file against the picked folder when no session is open", async () => {
+    const url =
+      `/files/view?cwd=${encodeURIComponent(repo)}&mode=diff` +
+      `&path=${encodeURIComponent(join(repo, "src", "main.ts"))}`;
+    const html = await (await app.request(url)).text();
+    // Without the folder there is no git status, so no diff and no relative
+    // path: the toolbar would spell the whole absolute path instead.
+    expect(html).toContain('data-mode="diff"');
+    expect(html).toContain("file-diff-view");
+    expect(html).toContain(">src/main.ts<");
+    // Every mode button has to keep naming the folder, or the next switch
+    // loses the diff again.
+    expect(html).toContain(`cwd=${encodeURIComponent(repo)}&amp;mode=source`);
+  });
+
   it("renders an image on the checkerboard with its own toolbar", async () => {
     const url = `/files/view?session=s1&path=${encodeURIComponent(join(repo, "logo.png"))}`;
     const html = await (await app.request(url)).text();

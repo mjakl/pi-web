@@ -41,6 +41,10 @@ export function highlightIn(root: ParentNode): void {
         : text.split("\n").map((line) => escapeHtml(line));
     // A trailing newline is a line break, not an extra numbered line.
     if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+    // react-syntax-highlighter widens the gutter for the highest line number
+    // it will print ("<digits>.25em"); a two-line fence gets 1.25em.
+    const digits = String(lines.length).length;
+    block.style.setProperty("--linenumber-width", `${String(digits)}.25em`);
     block.innerHTML = lines
       .map(
         (line, index) =>

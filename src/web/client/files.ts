@@ -179,7 +179,10 @@ function saveActiveState(): void {
 
 function loadViewer(path: string, mode?: string): void {
   const state = tabs.get(path);
-  const query = new URLSearchParams({ path, session: sessionId() });
+  // The same scope the tree is listed from: without a session the viewer
+  // still needs the folder, for the relative path and the diff against HEAD.
+  const query = new URLSearchParams(scopeQuery());
+  query.set("path", path);
   const wanted = mode ?? state?.mode;
   if (wanted !== undefined && wanted !== "") query.set("mode", wanted);
   const target = document.getElementById("file-view");
@@ -513,7 +516,9 @@ function syncChangesToggle(): void {
   if (reported === undefined) return;
   const count = Number(reported);
   toggle.hidden = count === 0;
-  toggle.title = `${String(count)} changed files`;
+  const label = `${String(count)} changed files`;
+  toggle.title = label;
+  toggle.setAttribute("aria-label", label);
   if (count === 0) toggle.setAttribute("aria-pressed", "false");
 }
 
