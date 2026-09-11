@@ -82,10 +82,12 @@ export function CompactButton({
   sessionId,
   usage,
   oob,
+  disabled,
 }: {
   sessionId: string;
   usage?: ContextUsage;
   oob?: boolean;
+  disabled?: boolean;
 }) {
   const warn =
     usage !== undefined &&
@@ -96,6 +98,7 @@ export function CompactButton({
       id="context-compact"
       class="context-compact-button"
       {...(warn ? { "data-warning": "true" } : {})}
+      {...(disabled === true ? { disabled: true } : {})}
       {...(oob === true ? { "hx-swap-oob": "true" } : {})}
       title="Compact context"
       aria-label="Compact context"
@@ -105,6 +108,19 @@ export function CompactButton({
       <CompactIcon />
     </button>
   );
+}
+
+/**
+ * Whether compacting is refused right now, as pi-web decides it
+ * (ChatWindow.tsx `compactionControl`): a session whose folder is gone is
+ * read-only, and a turn in flight owns the context until it settles, unless
+ * the turn is the compaction itself.
+ */
+export function compactDisabled(view: SessionView): boolean {
+  if (view.summary.cwdAvailable === false) return true;
+  const { status } = view;
+  if (status === null || status.compacting) return false;
+  return status.running || status.bashRunning;
 }
 
 /** One queued message: the kind as a pill, then the text (§6.1). */
@@ -245,7 +261,12 @@ export function Status({
       {oob === true ? (
         <>
           <ContextReadout usage={view.usage} oob />
-          <CompactButton sessionId={summary.id} usage={view.usage} oob />
+          <CompactButton
+            sessionId={summary.id}
+            usage={view.usage}
+            oob
+            disabled={compactDisabled(view)}
+          />
         </>
       ) : null}
       {oob === true && model === true ? (

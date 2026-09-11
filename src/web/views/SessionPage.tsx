@@ -33,7 +33,12 @@ import {
   TurnFragment,
 } from "./Items.tsx";
 import { Sidebar } from "./Sidebar.tsx";
-import { CompactButton, ContextReadout, Status } from "./Status.tsx";
+import {
+  compactDisabled,
+  CompactButton,
+  ContextReadout,
+  Status,
+} from "./Status.tsx";
 import { DialogHost, MissingFolderNotice, TrustBadge } from "./Dialogs.tsx";
 
 // The application shell, with pi-web's DOM: the sidebar column, the 36px top
@@ -79,6 +84,7 @@ function TopBar({
   cwd,
   trust,
   panels,
+  compactOff,
 }: {
   sessionId?: string;
   usage?: ContextUsage;
@@ -88,6 +94,8 @@ function TopBar({
   trust?: { requiresTrust: boolean; trusted: boolean };
   /** What an attached session runs with: the two tabs tint their icons. */
   panels?: { system: boolean; tools: boolean };
+  /** A read-only or busy session refuses to compact; the button dims. */
+  compactOff?: boolean;
 }) {
   const panelIcon = (lit: boolean) =>
     `display:flex; color:var(${lit ? "--accent" : "--text-dim"})`;
@@ -226,6 +234,7 @@ function TopBar({
             <CompactButton
               sessionId={sessionId}
               {...(usage === undefined ? {} : { usage })}
+              {...(compactOff === true ? { disabled: true } : {})}
             />
             <button
               type="button"
@@ -356,6 +365,7 @@ export function Shell({
   tokens,
   trust,
   panels,
+  compactOff,
   children,
   overlay,
 }: {
@@ -369,6 +379,7 @@ export function Shell({
   tokens?: SessionTokens;
   trust?: { requiresTrust: boolean; trusted: boolean };
   panels?: { system: boolean; tools: boolean };
+  compactOff?: boolean;
   children?: unknown;
   /** An overlay over the whole shell: the settings dialog. */
   overlay?: unknown;
@@ -411,6 +422,7 @@ export function Shell({
           {...(cwd === undefined ? {} : { cwd })}
           {...(trust === undefined ? {} : { trust })}
           {...(panels === undefined ? {} : { panels })}
+          {...(compactOff === true ? { compactOff } : {})}
         />
         <main
           style="flex:1; overflow:hidden; position:relative"
@@ -620,6 +632,7 @@ export function SessionPage({
               tools: view.status.hasActiveTools,
             },
           })}
+      {...(compactDisabled(view) ? { compactOff: true } : {})}
       {...(trust === undefined ? {} : { trust })}
       {...(overlay === undefined ? {} : { overlay })}
     >

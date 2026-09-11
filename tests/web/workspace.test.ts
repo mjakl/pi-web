@@ -321,6 +321,34 @@ describe("missing-folder read-only mode", () => {
     }
   });
 
+  it("keeps an attached session's chrome, with compacting refused", async () => {
+    // pi-web reads the shelf and the gauge off the running agent, and a folder
+    // that disappears under it takes neither away: only the actions that would
+    // run the agent go (ChatWindow.tsx `compactionControl`, `readOnly`).
+    const { app, world } = testApp({
+      missingFolders: [repo],
+      script: () => [{ status: "prune", statusText: "on" }, { text: "done" }],
+    });
+    const live = await world.runtime.open({ sessionId: "s1" });
+    const settled = new Promise<void>((resolve) => {
+      const off = live.subscribe((event) => {
+        if (event.type === "turn_done") {
+          off();
+          resolve();
+        }
+      });
+    });
+    await live.prompt("go");
+    await settled;
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain(
+      "Working folder is unavailable. This session is read-only.",
+    );
+    expect(page).toContain('<span class="extension-status-text">on</span>');
+    expect(page).toContain("data-context-readout");
+    expect(page).toMatch(/id="context-compact"[^>]*disabled/);
+  });
+
   it("still lets a reader stop the session and read its statistics", async () => {
     const { app } = testApp({ missingFolders: [repo] });
     expect((await app.request("/sessions/s1/stats")).status).toBe(200);

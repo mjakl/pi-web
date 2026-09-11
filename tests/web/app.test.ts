@@ -1800,6 +1800,19 @@ describe("phase 8 fixes", () => {
     expect(warned).toContain("rgba(234,179,8,0.95)");
   });
 
+  it("refuses to compact while a turn owns the context", async () => {
+    // pi-web disables the button for the length of the run and hands it back
+    // when the turn settles (ChatWindow.tsx `compactionControl`).
+    const { app, world } = testApp({ delayMs: 1000 });
+    const live = await world.runtime.open({ sessionId: "s1" });
+    await live.prompt("go");
+    const running = await (await app.request("/sessions/s1")).text();
+    expect(running).toMatch(/id="context-compact"[^>]*disabled/);
+    await live.abort();
+    const settled = await (await app.request("/sessions/s1")).text();
+    expect(settled).not.toMatch(/id="context-compact"[^>]*disabled/);
+  });
+
   it("keeps the compact button's warning in step with the readout", async () => {
     const { app, world } = testApp();
     await world.runtime.open({ sessionId: "s1" });
