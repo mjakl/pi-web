@@ -25,7 +25,7 @@ import {
 import { type ItemActions, Items, TurnFragment } from "@web/views/Items";
 import { Rail } from "@web/views/Rail";
 import { ShelfBody, changedWidgets, shelfSignature } from "@web/views/Shelf";
-import { Status } from "@web/views/Status";
+import { Status, turnBusy } from "@web/views/Status";
 import { type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import {
@@ -381,6 +381,7 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
           sessionId: id,
           cwd: view.summary.cwd,
           starred: view.starred,
+          ...(turnBusy(view.status) ? { busy: true } : {}),
         };
         if (kind === "turn_done") {
           // The rail rides along out of band: a settled turn is the only

@@ -38,6 +38,7 @@ import {
   CompactButton,
   ContextReadout,
   Status,
+  turnBusy,
 } from "./Status.tsx";
 import { DialogHost, MissingFolderNotice, TrustBadge } from "./Dialogs.tsx";
 
@@ -615,6 +616,7 @@ export function SessionPage({
     cwd: summary.cwd,
     starred: view.starred,
     ...(view.otherBranch || missingFolder ? { readOnly: true } : {}),
+    ...(turnBusy(view.status) ? { busy: true } : {}),
   };
   return (
     <Shell

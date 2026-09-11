@@ -63,6 +63,12 @@ export type ItemActions = {
   timestamps?: Set<string>;
   /** Inside the running turn: no actions, no diagram preview. */
   live?: boolean;
+  /**
+   * A turn is in flight. pi-web keeps the history row rendered and disables
+   * only what the turn owns: branching waits, rewind is gone
+   * (ChatWindow.tsx `branchDisabledReason` and `onRewind`).
+   */
+  busy?: boolean;
   /** The last line each running tool reported, by tool-call id. */
   progress?: Record<string, string>;
   /** Estimated tokens and speed of the message streaming right now. */
@@ -275,16 +281,21 @@ function HistoryActionButtons({
     "hx-swap": "innerHTML",
     "hx-indicator": "#branch-sync",
   };
+  const branchTitle =
+    actions.busy === true
+      ? "Wait for the current operation to finish before branching"
+      : "New branch — continue from this point within the current session";
   return (
     <>
-      <span title="New branch — continue from this point within the current session">
+      <span title={branchTitle}>
         <button
           type="button"
           class="history-action"
           aria-label="New branch"
-          title="New branch — continue from this point within the current session"
+          title={branchTitle}
           hx-post={post("navigate")}
           {...swap}
+          {...(actions.busy === true ? { disabled: true } : {})}
         >
           <EditFromHereIcon />
           New branch
@@ -449,19 +460,21 @@ function UserMessage({
             class="message-actions"
             style="display:flex; gap:3px; flex-wrap:wrap; justify-content:flex-end"
           >
-            <button
-              type="button"
-              class="message-rewind"
-              title="Rewind — remove this message and later history, then edit it again"
-              hx-post={`/sessions/${actions.sessionId}/rewind`}
-              hx-vals={JSON.stringify({ entryId: item.entryId })}
-              hx-confirm="Remove this message and all later history?"
-              hx-target="body"
-              hx-swap="innerHTML"
-            >
-              <RewindIcon />
-              Rewind
-            </button>
+            {actions.busy === true ? null : (
+              <button
+                type="button"
+                class="message-rewind"
+                title="Rewind — remove this message and later history, then edit it again"
+                hx-post={`/sessions/${actions.sessionId}/rewind`}
+                hx-vals={JSON.stringify({ entryId: item.entryId })}
+                hx-confirm="Remove this message and all later history?"
+                hx-target="body"
+                hx-swap="innerHTML"
+              >
+                <RewindIcon />
+                Rewind
+              </button>
+            )}
             <HistoryActionButtons entryId={item.entryId} actions={actions} />
           </div>
         ) : null}

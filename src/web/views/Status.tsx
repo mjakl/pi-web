@@ -111,6 +111,17 @@ export function CompactButton({
 }
 
 /**
+ * Whether a turn owns the session right now: pi-web's `sessionBusy ||
+ * isCompacting` (ChatWindow.tsx), which disables branching and hides rewind.
+ */
+export function turnBusy(status: LiveStatus | null): boolean {
+  return (
+    status !== null &&
+    (status.running || status.bashRunning || status.compacting)
+  );
+}
+
+/**
  * Whether compacting is refused right now, as pi-web decides it
  * (ChatWindow.tsx `compactionControl`): a session whose folder is gone is
  * read-only, and a turn in flight owns the context until it settles, unless

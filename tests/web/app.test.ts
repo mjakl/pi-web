@@ -1813,6 +1813,26 @@ describe("phase 8 fixes", () => {
     expect(settled).not.toMatch(/id="context-compact"[^>]*disabled/);
   });
 
+  it("keeps the history row while a turn runs, with branching disabled", async () => {
+    // pi-web leaves the row rendered and disables only what the turn owns:
+    // New branch waits, Rewind goes away, New session stays
+    // (ChatWindow.tsx `branchDisabledReason` and `onRewind`).
+    const { app, world } = testApp({ delayMs: 1000 });
+    const live = await world.runtime.open({ sessionId: "s1" });
+    await live.prompt("go");
+    const running = await (await app.request("/sessions/s1")).text();
+    expect(running).toMatch(/aria-label="New branch"[^>]*disabled/);
+    expect(running).toContain(
+      "Wait for the current operation to finish before branching",
+    );
+    expect(running).toContain("New session");
+    expect(running).not.toContain('class="message-rewind"');
+    await live.abort();
+    const settled = await (await app.request("/sessions/s1")).text();
+    expect(settled).not.toMatch(/aria-label="New branch"[^>]*disabled/);
+    expect(settled).toContain('class="message-rewind"');
+  });
+
   it("keeps the compact button's warning in step with the readout", async () => {
     const { app, world } = testApp();
     await world.runtime.open({ sessionId: "s1" });

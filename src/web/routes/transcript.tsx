@@ -5,6 +5,7 @@ import { isSessionId } from "@core/sessions";
 import { renderMarkdown } from "@web/markdown";
 import { EarlierPage, StarButton, ToolBody } from "@web/views/Items";
 import { SessionRow } from "@web/views/Sidebar";
+import { turnBusy } from "@web/views/Status";
 import { raw } from "hono/html";
 import { type RouteContext, type WebApp, errorText, field } from "./shared.ts";
 
@@ -56,6 +57,7 @@ export function transcriptRoutes(app: WebApp, ctx: RouteContext): void {
           cwd: view.summary.cwd,
           starred: view.starred,
           ...(view.otherBranch ? { readOnly: true } : {}),
+          ...(turnBusy(view.status) ? { busy: true } : {}),
         }}
         hasMore={view.hasMore}
         {...(view.oldestId === undefined ? {} : { oldestId: view.oldestId })}
