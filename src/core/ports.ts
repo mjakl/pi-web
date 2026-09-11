@@ -243,6 +243,13 @@ export type LiveStatus = {
   tools: RunningTool[];
   /** Set while Pi retries a failed provider call. */
   retry: RetryState | null;
+  /**
+   * What the two top-bar tabs tint their icons from: pi-web reads both off
+   * the agent state it holds (AppShell.tsx L1341, L1406), so a session that
+   * is attached says here whether it runs with a prompt and with tools.
+   */
+  hasSystemPrompt: boolean;
+  hasActiveTools: boolean;
   /** Extension status texts keyed by extension-chosen key. */
   statuses: Record<string, string>;
   /** Extension widgets, in the order the extensions registered them. */

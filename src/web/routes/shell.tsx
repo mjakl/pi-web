@@ -22,12 +22,14 @@ import {
 } from "@web/views/Settings";
 import { StatsPanel } from "@web/views/Stats";
 import { TrustDialog } from "@web/views/Dialogs";
+import type { SidebarView } from "@core/workspace";
 import { type Context } from "hono";
-import { getCookie } from "hono/cookie";
+import { deleteCookie, getCookie } from "hono/cookie";
 import {
   type RouteContext,
   type WebApp,
   CWD_COOKIE,
+  SESSION_COOKIE,
   SETTINGS_COOKIE,
   SKILL_COOKIE,
   currentSessionId,
@@ -56,11 +58,12 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
    * without a folder does the placeholder show (AppShell.tsx L1034).
    */
   app.get("/", async (c) => {
-    const cwd = currentCwd(c);
-    const [sidebar, view] = await Promise.all([
-      sidebarOf(c),
-      deps.workspace.newSession(cwd),
-    ]);
+    const sidebar = await sidebarOf(c);
+    const cwd = currentCwd(c, sidebar);
+    const view = await deps.workspace.newSession(cwd);
+    // The index is no session, so the panels and settings opened from here
+    // are no session either.
+    deleteCookie(c, SESSION_COOKIE, { path: "/" });
     if (view.available) {
       return c.render(
         <NewSessionPage
@@ -80,12 +83,11 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
   });
 
   app.get("/new", async (c) => {
-    const cwd = currentCwd(c);
-    const [sidebar, view] = await Promise.all([
-      sidebarOf(c),
-      deps.workspace.newSession(cwd),
-    ]);
+    const sidebar = await sidebarOf(c);
+    const cwd = currentCwd(c, sidebar);
+    const view = await deps.workspace.newSession(cwd);
     if (view.available) remember(c, CWD_COOKIE, cwd);
+    deleteCookie(c, SESSION_COOKIE, { path: "/" });
     return c.render(
       <NewSessionPage
         sidebar={sidebar}
@@ -110,6 +112,8 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
   async function workspacePage(
     c: Context,
     overlay?: unknown,
+    /** Already resolved by the caller: scanning the store twice is slow. */
+    resolved?: SidebarView,
   ): Promise<Response> {
     const id = currentSessionId(c);
     const view =
@@ -118,7 +122,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
         : await deps.workspace
             .viewSession(id, warnTokens(c))
             .catch(() => undefined);
-    const sidebar = await sidebarOf(c, view?.summary.id);
+    const sidebar = resolved ?? (await sidebarOf(c, view?.summary.id));
     if (view) {
       const trust = await deps.workspace
         .trustStatus(view.summary.cwd)
@@ -133,7 +137,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
         />,
       );
     }
-    const cwd = currentCwd(c);
+    const cwd = currentCwd(c, sidebar);
     const start = await deps.workspace.newSession(cwd);
     if (start.available) {
       return c.render(
@@ -177,6 +181,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
     if (view.summary.cwdAvailable !== false) {
       remember(c, CWD_COOKIE, view.summary.cwd);
     }
+    remember(c, SESSION_COOKIE, id);
     const trust = await deps.workspace
       .trustStatus(view.summary.cwd)
       .catch(() => undefined);
@@ -251,7 +256,8 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
   }
 
   app.get("/settings", async (c) => {
-    const cwd = currentCwd(c);
+    const sidebar = await sidebarOf(c, currentSessionId(c));
+    const cwd = currentCwd(c, sidebar);
     const available = await deps.workspace.newSession(cwd);
     const usable = available.available ? cwd : "";
     const section = resolveSection(
@@ -276,6 +282,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
         {...(deps.home === undefined ? {} : { home: deps.home })}
         {...sections}
       />,
+      sidebar,
     );
   });
 

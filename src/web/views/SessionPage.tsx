@@ -14,7 +14,6 @@ import { Shelf } from "./Shelf.tsx";
 import {
   CacheReadIcon,
   CloseIcon,
-  CompactIcon,
   HamburgerIcon,
   HistoryIcon,
   JumpToLatestIcon,
@@ -34,7 +33,7 @@ import {
   TurnFragment,
 } from "./Items.tsx";
 import { Sidebar } from "./Sidebar.tsx";
-import { ContextReadout, Status } from "./Status.tsx";
+import { CompactButton, ContextReadout, Status } from "./Status.tsx";
 import { DialogHost, MissingFolderNotice, TrustBadge } from "./Dialogs.tsx";
 
 // The application shell, with pi-web's DOM: the sidebar column, the 36px top
@@ -79,6 +78,7 @@ function TopBar({
   tokens,
   cwd,
   trust,
+  panels,
 }: {
   sessionId?: string;
   usage?: ContextUsage;
@@ -86,7 +86,11 @@ function TopBar({
   tokens?: SessionTokens;
   cwd?: string;
   trust?: { requiresTrust: boolean; trusted: boolean };
+  /** What an attached session runs with: the two tabs tint their icons. */
+  panels?: { system: boolean; tools: boolean };
 }) {
+  const panelIcon = (lit: boolean) =>
+    `display:flex; color:var(${lit ? "--accent" : "--text-dim"})`;
   return (
     <div id="top-bar" style="flex-shrink:0; background:var(--bg-panel)">
       <div
@@ -181,8 +185,9 @@ function TopBar({
           >
             {/* pi-web tints both icons with the accent once the session has
                 told it what they hold, and leaves them dim until then
-                (AppShell.tsx L1341, L1406). */}
-            <span data-panel-icon style="display:flex; color:var(--text-dim)">
+                (AppShell.tsx L1341, L1406). Only an attached session knows,
+                which is why a stored one stays dim in pi-web too. */}
+            <span data-panel-icon style={panelIcon(panels?.system === true)}>
               <SystemPromptIcon />
             </span>
             <span>System</span>
@@ -203,7 +208,7 @@ function TopBar({
             hx-target="#top-panel"
             hx-swap="innerHTML"
           >
-            <span data-panel-icon style="display:flex; color:var(--text-dim)">
+            <span data-panel-icon style={panelIcon(panels?.tools === true)}>
               <WrenchIcon />
             </span>
             <span>Tools</span>
@@ -218,20 +223,10 @@ function TopBar({
         )}
         {sessionId === undefined ? null : (
           <>
-            <button
-              type="button"
-              class="context-compact-button"
-              {...(usage !== undefined &&
-              (usage.level === "warn" || usage.level === "critical")
-                ? { "data-warning": "true" }
-                : {})}
-              title="Compact context"
-              aria-label="Compact context"
-              hx-post={`/sessions/${sessionId}/compact`}
-              hx-swap="none"
-            >
-              <CompactIcon />
-            </button>
+            <CompactButton
+              sessionId={sessionId}
+              {...(usage === undefined ? {} : { usage })}
+            />
             <button
               type="button"
               class="context-compact-button"
@@ -360,6 +355,7 @@ export function Shell({
   usage,
   tokens,
   trust,
+  panels,
   children,
   overlay,
 }: {
@@ -372,6 +368,7 @@ export function Shell({
   usage?: ContextUsage;
   tokens?: SessionTokens;
   trust?: { requiresTrust: boolean; trusted: boolean };
+  panels?: { system: boolean; tools: boolean };
   children?: unknown;
   /** An overlay over the whole shell: the settings dialog. */
   overlay?: unknown;
@@ -413,6 +410,7 @@ export function Shell({
           {...(tokens === undefined ? {} : { tokens })}
           {...(cwd === undefined ? {} : { cwd })}
           {...(trust === undefined ? {} : { trust })}
+          {...(panels === undefined ? {} : { panels })}
         />
         <main
           style="flex:1; overflow:hidden; position:relative"
@@ -614,6 +612,14 @@ export function SessionPage({
       usage={view.usage}
       {...(home === undefined ? {} : { home })}
       tokens={view.tokens}
+      {...(view.status === null
+        ? {}
+        : {
+            panels: {
+              system: view.status.hasSystemPrompt,
+              tools: view.status.hasActiveTools,
+            },
+          })}
       {...(trust === undefined ? {} : { trust })}
       {...(overlay === undefined ? {} : { overlay })}
     >

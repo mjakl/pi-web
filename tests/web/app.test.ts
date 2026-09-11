@@ -151,6 +151,29 @@ describe("web app", () => {
     expect(warned).toContain("rgba(234,179,8,0.95)");
   });
 
+  it("tints the System and Tools icons from the attached session", async () => {
+    const { app, world } = testApp();
+    // A stored session tells the page nothing about either, so pi-web leaves
+    // both icons dim until something attaches.
+    const stored = await (await app.request("/sessions/s1")).text();
+    const dim = stored.slice(stored.indexOf('data-top-panel="system"'));
+    expect(dim).toContain(
+      'data-panel-icon="true" style="display:flex; color:var(--text-dim)"',
+    );
+    await world.runtime.open({ sessionId: "s1" });
+    const live = await (await app.request("/sessions/s1")).text();
+    const tabs = live.slice(
+      live.indexOf('data-top-panel="system"'),
+      live.indexOf('id="stats-trigger"'),
+    );
+    expect(tabs).toContain(
+      'data-panel-icon="true" style="display:flex; color:var(--accent)"',
+    );
+    // Both of them, and neither left dim.
+    expect(tabs.split("var(--accent)").length - 1).toBe(2);
+    expect(tabs).not.toContain("color:var(--text-dim)");
+  });
+
   it("renders the top panels with pi-web's menu-panel classes", async () => {
     const { app } = testApp();
     const prompt = await (
@@ -817,6 +840,15 @@ describe("the sidebar", () => {
     expect(worktree).toContain(">/repo/one.wt<");
   });
 
+  it("marks a live session's row with the success colour", async () => {
+    const { app, world } = sidebarApp();
+    await world.runtime.open({ sessionId: "s2" });
+    const row = await (await app.request("/sessions/s2/row")).text();
+    expect(row).toContain("Session active");
+    expect(row).toContain('data-colour="var(--success)"');
+    expect(row).toContain("color:var(--success)");
+  });
+
   it("renders a 54px session row with pi-web's three columns", async () => {
     const { app } = sidebarApp();
     const html = await (await app.request("/sessions/s2")).text();
@@ -848,6 +880,10 @@ describe("the sidebar", () => {
     const other = html.slice(start, html.indexOf('id="session-finished"'));
     expect(other).toContain("border-left:2px solid transparent");
     expect(other).not.toContain("background:var(--bg-selected)");
+
+    // The state's own colour rides along: the browser paints the unread tint
+    // over it and has to be able to put it back (client/sidebar.ts).
+    expect(row).toContain('data-colour="var(--text-dim)"');
 
     // The right column arrives with the row's own metadata.
     const loaded = await (await app.request("/sessions/s2/row")).text();
@@ -1588,6 +1624,34 @@ describe("phase 8 fixes", () => {
     expect(warned).toContain("rgba(234,179,8,0.95)");
   });
 
+  it("keeps the compact button's warning in step with the readout", async () => {
+    const { app, world } = testApp();
+    await world.runtime.open({ sessionId: "s1" });
+    const warn = { cookie: "web-pi-warn-tokens=1000" };
+    const page = await (
+      await app.request("/sessions/s1", { headers: warn })
+    ).text();
+    expect(page).toMatch(/id="context-compact"[^>]*data-warning/);
+    // The stream re-renders the button beside the readout, so a turn that
+    // moves the context tints it without a reload.
+    const form = new FormData();
+    form.set("text", "go");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+    const res = await app.request("/sessions/s1/events", { headers: warn });
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("no body");
+    let received = "";
+    const decoder = new TextDecoder();
+    while (!received.includes("event: status")) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      received += decoder.decode(chunk.value);
+    }
+    await reader.cancel();
+    expect(received).toMatch(/id="context-compact"[^>]*hx-swap-oob/);
+    expect(received).toMatch(/id="context-compact"[^>]*data-warning/);
+  });
+
   it("lists what a subagent run was given, and its progress while it runs", async () => {
     const { app } = testApp({
       delayMs: 40,
@@ -1789,7 +1853,7 @@ describe("the shell chrome, on every route", () => {
     const { app } = testApp();
     const html = await (await app.request("/new")).text();
     const explorer = html.slice(html.indexOf('id="explorer-section"'));
-    expect(explorer).toContain("/files/explorer?cwd=%2Frepo");
+    expect(explorer).toContain("/files/explorer?cwd=%2Frepo%2Fone");
     expect(explorer).toContain('id="explorer-search-toggle"');
     // pi-web keeps the field behind the magnifier until it is asked for.
     expect(explorer).toContain('id="file-search-field"');
@@ -1811,6 +1875,46 @@ describe("the shell chrome, on every route", () => {
     expect(html).toContain('data-session-id="s1"');
     // And its row keeps the selection through the lazy row swap.
     expect(html).toContain("/row?active=s1");
+  });
+
+  it("names one folder in the pill, the tree and the title", async () => {
+    const { app } = testApp();
+    // Nothing is remembered yet, so the folder is the project the sidebar
+    // shows — never the folder the server happens to have started in, which
+    // would leave the pill and the tree naming different places.
+    const html = await (await app.request("/")).text();
+    expect(html).toContain('data-cwd="/repo/one"');
+    expect(html).toContain("/files/explorer?cwd=%2Frepo%2Fone");
+    expect(html).toContain('id="project-select"');
+    expect(html).toContain('title="/repo/one"');
+    // A folder the reader picked still wins over the project's own.
+    const picked = await (
+      await app.request("/new", {
+        headers: { cookie: "web-pi-cwd=/repo/two" },
+      })
+    ).text();
+    expect(picked).toContain('data-cwd="/repo/two"');
+  });
+
+  it("opens settings over the session the reader last opened", async () => {
+    const { app } = testApp();
+    // A settings page reached by its own URL carries no referrer, so the
+    // session behind it comes from the cookie instead.
+    const html = await (
+      await app.request("/settings?section=general", {
+        headers: { cookie: "web-pi-session=s1" },
+      })
+    ).text();
+    expect(html).toContain('class="settings-dialog"');
+    expect(html).toContain('data-session-id="s1"');
+    expect(html).toContain('id="rail-column"');
+    expect(html).toContain('class="chat-transcript"');
+    // Full history exports that session, rather than sitting disabled.
+    expect(html).toContain('href="/sessions/s1/export"');
+    // Leaving for the index closes it: settings opened from there is the
+    // new-session view again, as it is in pi-web.
+    const index = await app.request("/");
+    expect(index.headers.get("set-cookie")).toContain("web-pi-session=;");
   });
 
   it("names the reasoning level beside the model, as pi-web does", async () => {

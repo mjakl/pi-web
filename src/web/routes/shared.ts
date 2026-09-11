@@ -11,6 +11,7 @@ import type { SidebarView, Workspace } from "@core/workspace";
 import type { StaticAssets } from "@web/assets";
 import type { honoFactory } from "@web/hono";
 import type { Context } from "hono";
+import { getCookie } from "hono/cookie";
 
 export type WebApp = ReturnType<typeof honoFactory.createApp>;
 
@@ -38,7 +39,7 @@ export type RouteContext = {
   sidebarOf: (c: Context, activeId?: string) => Promise<SidebarView>;
   remember: (c: Context, name: string, value: string) => void;
   rememberProject: (c: Context, sidebar: SidebarView) => void;
-  currentCwd: (c: Context) => string;
+  currentCwd: (c: Context, sidebar?: SidebarView) => string;
   warnTokens: (c: Context) => { warnTokens: number };
   page: (c: Context, id: string, draft?: string) => Promise<Response>;
   row: (c: Context, id: string) => Promise<Response>;
@@ -70,6 +71,13 @@ export const PROJECT_COOKIE = "web-pi-project";
 /** The working folder the picker last committed: where `/new` starts. */
 export const CWD_COOKIE = "web-pi-cwd";
 
+/**
+ * The session the reader has open. pi-web keeps settings and the top-bar
+ * panels over the workspace it was opened from, which a page reached by its
+ * own URL cannot tell from the referrer alone.
+ */
+export const SESSION_COOKIE = "web-pi-session";
+
 /** Which settings section was open last. */
 export const SETTINGS_COOKIE = "web-pi-settings";
 
@@ -82,7 +90,14 @@ export const YEAR = 60 * 60 * 24 * 365;
 export function currentSessionId(c: Context): string | undefined {
   const url = c.req.header("HX-Current-URL") ?? c.req.header("Referer") ?? "";
   const id = /\/sessions\/([^/?#]+)/.exec(url)?.[1];
-  return id !== undefined && isSessionId(id) ? id : undefined;
+  if (id !== undefined && isSessionId(id)) return id;
+  // Typed, bookmarked or opened in a new tab: no referrer names the session,
+  // so the last one opened does. `/` and `/new` clear it, which is what
+  // closing the session means here.
+  const remembered = getCookie(c, SESSION_COOKIE);
+  return remembered !== undefined && isSessionId(remembered)
+    ? remembered
+    : undefined;
 }
 
 /** Only an https endpoint with both keys can receive an encrypted payload. */

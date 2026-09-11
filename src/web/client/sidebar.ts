@@ -53,8 +53,12 @@ function paintUnread(): void {
     const label = unread ? `${status} · New activity` : status;
     indicator.title = label;
     indicator.setAttribute("aria-label", label);
-    if (unread) indicator.style.color = "var(--info)";
-    else indicator.style.removeProperty("color");
+    // Removing the property would drop the colour the server painted the
+    // running spinner and the live dot with, leaving both the dim of the
+    // meta row they sit in.
+    indicator.style.color = unread
+      ? "var(--info)"
+      : (indicator.dataset["colour"] ?? "");
   }
   const shown =
     document.getElementById("project-select")?.dataset["projectKey"] ?? "";

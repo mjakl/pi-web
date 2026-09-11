@@ -81,10 +81,11 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
 
   /** The projects to choose from; fetched when the selector opens. */
   app.get("/sidebar/projects", async (c) => {
+    const view = await sidebarOf(c, currentSessionId(c));
     return c.html(
       <ProjectPicker
-        view={await sidebarOf(c, currentSessionId(c))}
-        cwd={currentCwd(c)}
+        view={view}
+        cwd={currentCwd(c, view)}
         {...(deps.home === undefined ? {} : { home: deps.home })}
       />,
     );

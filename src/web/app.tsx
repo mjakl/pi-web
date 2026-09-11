@@ -11,6 +11,7 @@ import {
   errorText,
   PROJECT_COOKIE,
   type RouteContext,
+  SESSION_COOKIE,
   toastHeader,
   type WebDeps,
   YEAR,
@@ -61,9 +62,22 @@ export function createWebApp(deps: WebDeps) {
     remember(c, PROJECT_COOKIE, sidebar.selected);
   }
 
-  /** The folder new sessions start in: the picker's choice, else the default. */
-  function currentCwd(c: Context): string {
-    return c.req.query("cwd") ?? getCookie(c, CWD_COOKIE) ?? deps.defaultCwd;
+  /**
+   * The folder new sessions start in: the picker's choice, else the folder of
+   * the project the sidebar shows, else the default. The workspace chip, the
+   * explorer tree and the document title all read this one value, so a
+   * missing cookie cannot leave them naming different folders.
+   */
+  function currentCwd(c: Context, sidebar?: SidebarView): string {
+    const project = sidebar?.projects.find(
+      (entry) => entry.key === sidebar.selected,
+    );
+    return (
+      c.req.query("cwd") ??
+      getCookie(c, CWD_COOKIE) ??
+      project?.entryPath ??
+      deps.defaultCwd
+    );
   }
 
   /**
@@ -87,6 +101,7 @@ export function createWebApp(deps: WebDeps) {
     ]);
     if (!view) return c.notFound();
     rememberProject(c, sidebar);
+    remember(c, SESSION_COOKIE, id);
     c.header("HX-Push-Url", `/sessions/${id}`);
     return c.render(
       <SessionPage

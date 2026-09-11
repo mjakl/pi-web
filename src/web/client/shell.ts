@@ -23,11 +23,21 @@ function sidebar(): HTMLElement | null {
   return document.getElementById("session-sidebar");
 }
 
-/** pi-web's title: the folder on screen, then the product. */
+/**
+ * pi-web's title: the folder on screen, then the product. Only a folder this
+ * page load actually opened counts — a session, or a folder named in the URL
+ * — because pi-web builds the title from `activeCwd`, which stays null on the
+ * restored index and new-session views (AppShell.tsx L1096).
+ */
 function setUpTitle(): void {
-  const cwd = document.querySelector("main")?.dataset["cwd"] ?? "";
+  const main = document.querySelector("main");
+  const cwd = main?.dataset["cwd"] ?? "";
+  const opened =
+    (main?.dataset["sessionId"] ?? "") !== "" ||
+    new URLSearchParams(location.search).has("cwd");
   const name = cwd.split(/[\\/]/).filter(Boolean).pop();
-  document.title = name === undefined ? "Pi Web" : `${name} - Pi Web`;
+  document.title =
+    name === undefined || !opened ? "Pi Web" : `${name} - Pi Web`;
 }
 
 function setSidebarOpen(open: boolean): void {

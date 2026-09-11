@@ -74,9 +74,11 @@
   }
 }
 
-/* The System and Tools icons carry the accent once their panel has told the
-   page what the session runs with; pi-web reads that from the session state
-   it already holds, web-pi from the panel it just loaded (client/shell.ts).
+/* The System and Tools icons carry the accent once the session has told the
+   page what they hold. An attached session says so in its status and the
+   server paints it (SessionPage.tsx); this covers the other way pi-web finds
+   out — opening a panel resumes a dormant session, and the answer is what
+   says there was something in it (client/shell.ts).
    The colour is on an inline style, so this rule needs the weight. */
 [data-top-panel][data-panel-loaded] [data-panel-icon] {
   color: var(--accent) !important;

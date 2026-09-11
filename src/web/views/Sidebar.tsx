@@ -63,6 +63,10 @@ function SessionIndicator({ summary }: { summary: SessionSummary }) {
     <span
       class="session-indicator"
       data-status={label}
+      /* The unread tint is the browser's (client/sidebar.ts): pi-web renders
+         --info in place of this colour, so the state's own colour has to
+         survive being painted over. */
+      data-colour={colour}
       title={label}
       aria-label={label}
       style={`width:14px; height:14px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; color:${colour}`}

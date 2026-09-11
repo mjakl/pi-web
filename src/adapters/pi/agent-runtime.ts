@@ -367,6 +367,8 @@ class PiLiveSession implements LiveSession {
       compactionError: this.compactionError,
       tools: [...this.tools.values()],
       retry: this.retry,
+      hasSystemPrompt: this.inner.systemPrompt !== "",
+      hasActiveTools: this.inner.getActiveToolNames().length > 0,
       statuses: Object.fromEntries(this.statuses),
       widgets: [...this.widgets.values()],
       dialog: this.ui.dialog(),

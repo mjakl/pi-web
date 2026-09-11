@@ -5,6 +5,7 @@ import type { SessionView } from "@core/workspace";
 import { ModelSelector, ModelScopeWarning, modelPick } from "./Composer.tsx";
 import {
   CheckIcon,
+  CompactIcon,
   ContextGaugeIcon,
   RecallQueueIcon,
   RefreshIcon,
@@ -68,6 +69,41 @@ export function ContextReadout({
       <ContextGaugeIcon />
       {text}
     </span>
+  );
+}
+
+/**
+ * The compact button of the top bar. It lives beside the readout because it
+ * carries the same threshold: pi-web tints it green the moment the context
+ * reaches the warning zone, and a turn moves the context, so the stream
+ * re-renders it in place too.
+ */
+export function CompactButton({
+  sessionId,
+  usage,
+  oob,
+}: {
+  sessionId: string;
+  usage?: ContextUsage;
+  oob?: boolean;
+}) {
+  const warn =
+    usage !== undefined &&
+    (usage.level === "warn" || usage.level === "critical");
+  return (
+    <button
+      type="button"
+      id="context-compact"
+      class="context-compact-button"
+      {...(warn ? { "data-warning": "true" } : {})}
+      {...(oob === true ? { "hx-swap-oob": "true" } : {})}
+      title="Compact context"
+      aria-label="Compact context"
+      hx-post={`/sessions/${sessionId}/compact`}
+      hx-swap="none"
+    >
+      <CompactIcon />
+    </button>
   );
 }
 
@@ -206,7 +242,12 @@ export function Status({
       {status?.title ? (
         <span id="extension-title" hidden data-title={status.title} />
       ) : null}
-      {oob === true ? <ContextReadout usage={view.usage} oob /> : null}
+      {oob === true ? (
+        <>
+          <ContextReadout usage={view.usage} oob />
+          <CompactButton sessionId={summary.id} usage={view.usage} oob />
+        </>
+      ) : null}
       {oob === true && model === true ? (
         <ModelSelector pick={modelPick(view)} oob />
       ) : null}

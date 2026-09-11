@@ -460,6 +460,8 @@ class FakeLiveSession implements LiveSession {
         compactionError: this.compactionError,
         tools: [...this.tools],
         retry: this.retry,
+        hasSystemPrompt: FAKE_SYSTEM_PROMPT.length > 0,
+        hasActiveTools: FAKE_TOOLS.some((tool) => tool.active),
         statuses: Object.fromEntries(this.statuses),
         widgets: [...this.widgets.values()],
         dialog: this.dialogs.pending(),
