@@ -25,6 +25,11 @@
   }
 
   #top-bar .mobile-session-context {
+    /* `min-width: 0` lets the readout shrink to nothing, so a narrow chat
+       column clipped the gauge text away and left the token groups standing.
+       pi-web clips the cluster from its left edge instead, keeping the
+       readout whole. */
+    min-width: auto;
     white-space: nowrap;
     line-height: inherit;
     text-align: inherit;

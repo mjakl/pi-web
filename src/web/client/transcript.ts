@@ -11,10 +11,35 @@ import { setUpRail } from "./rail.ts";
 const TAIL_TOLERANCE = 8;
 const COPIED_MS = 1500;
 
+export function isAtTail(
+  top: number,
+  clientHeight: number,
+  scrollHeight: number,
+): boolean {
+  return scrollHeight - top - clientHeight <= TAIL_TOLERANCE;
+}
+
+/**
+ * pi-web's `getLiveFollowAttached` (lib/chat-lazy-load.ts): only a scroll
+ * upwards lets go of the tail. Asking "is it at the tail" alone would let go
+ * halfway through a jump that chases a still-growing transcript - the file
+ * panel narrowing the column, an image loading - and leave the reader a
+ * screenful short of the end with the jump button showing.
+ */
+export function followsTail(
+  wasFollowing: boolean,
+  previousTop: number,
+  top: number,
+  clientHeight: number,
+  scrollHeight: number,
+): boolean {
+  if (isAtTail(top, clientHeight, scrollHeight)) return true;
+  if (top < previousTop) return false;
+  return wasFollowing;
+}
+
 function atTail(view: HTMLElement): boolean {
-  return (
-    view.scrollHeight - view.scrollTop - view.clientHeight <= TAIL_TOLERANCE
-  );
+  return isAtTail(view.scrollTop, view.clientHeight, view.scrollHeight);
 }
 
 /**
@@ -65,9 +90,18 @@ export function setUpTranscript(): void {
   }
   const jump = document.getElementById("jump-to-latest");
   let follow = true;
+  let previousTop = 0;
   const sync = () => {
-    follow = atTail(view);
-    if (jump) jump.hidden = follow;
+    const top = view.scrollTop;
+    follow = followsTail(
+      follow,
+      previousTop,
+      top,
+      view.clientHeight,
+      view.scrollHeight,
+    );
+    previousTop = top;
+    if (jump) jump.hidden = atTail(view);
   };
   view.addEventListener("scroll", sync, { passive: true });
   jump?.addEventListener("click", () => {
