@@ -490,7 +490,7 @@ export function assistantItem(
         const seconds =
           options.previousMs === undefined
             ? 0
-            : Math.floor((message.timestamp - options.previousMs) / 1000);
+            : Math.round((message.timestamp - options.previousMs) / 1000);
         blocks.push({
           kind: "thinking",
           index: thinkingCount,
@@ -572,7 +572,7 @@ function attachResult(
   const seconds =
     requestedMs === undefined
       ? 0
-      : Math.floor((message.timestamp - requestedMs) / 1000);
+      : Math.round((message.timestamp - requestedMs) / 1000);
   const patch = message.isError ? undefined : resultPatch(message.details);
   call.result = {
     entryId,

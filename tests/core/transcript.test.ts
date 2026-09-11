@@ -1,4 +1,5 @@
 import { assistantEntry, userEntry } from "@adapters/fake/index";
+import { conversationRail } from "@core/conversation-rail";
 import {
   assistantItem,
   deferThinking,
@@ -141,6 +142,52 @@ describe("projectTranscript", () => {
     if (item?.kind !== "assistant") throw new Error("expected an assistant");
     // Four seconds since the last note, not the five minutes since "a0".
     expect(item.blocks[0]).toMatchObject({ kind: "thinking", seconds: 4 });
+  });
+
+  it("rounds a duration to the nearest second, as pi-web does", () => {
+    // 5.6s must read "6s", not "5s": pi-web rounds both badges
+    // (components/MessageView.tsx thinkingDurationFromFile, toolCallDurations).
+    const transcript = projectTranscript([
+      assistantWith("a1", null, [readCall], 0),
+      toolResult("t1", "a1", { timestamp: 5600 }),
+      assistantWith("a2", "t1", [{ type: "thinking", thinking: "hm" }], 11100),
+    ]);
+    const call = transcript.items[0];
+    if (call?.kind !== "assistant") throw new Error("expected an assistant");
+    const tool = call.blocks[0];
+    expect(tool?.kind === "tool" && tool.call.result?.seconds).toBe(6);
+    const reasoning = transcript.items[1];
+    if (reasoning?.kind !== "assistant") throw new Error("expected assistant");
+    expect(reasoning.blocks[0]).toMatchObject({ kind: "thinking", seconds: 6 });
+  });
+
+  it("drops a hidden custom message from the transcript", () => {
+    const custom = (id: string, parentId: string, display: boolean) =>
+      ({
+        type: "custom_message",
+        id,
+        parentId,
+        timestamp: "2026-09-10T00:00:00.000Z",
+        customType: "context-prune-summary",
+        content: "internal bookkeeping",
+        display,
+      }) as SessionEntry;
+    const entries: SessionEntry[] = [
+      userEntry("u1", null, "go"),
+      custom("n1", "u1", false),
+      custom("n2", "n1", true),
+      assistantEntry("a1", "n2", "done", 100),
+    ];
+    const transcript = projectTranscript(entries);
+    expect(transcript.items.map((item) => [item.kind, item.entryId])).toEqual([
+      ["user", "u1"],
+      ["note", "n2"],
+      ["assistant", "a1"],
+    ]);
+    // The rail must not anchor on it either (pi-web's isMessageGroupAnchor).
+    expect(conversationRail(entries, "a1", new Set()).map((m) => m.id)).toEqual(
+      ["u1"],
+    );
   });
 
   it("renders a reported patch as a diff instead of text", () => {
