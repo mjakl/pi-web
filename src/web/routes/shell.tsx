@@ -14,7 +14,7 @@ import { SystemPromptPanel, ToolsPanel } from "@web/views/Panels";
 import { IndexPage, NewSessionPage, SessionPage } from "@web/views/SessionPage";
 import {
   PluginsSection,
-  SettingsPage,
+  SettingsDialog,
   SkillSearchResults,
   SkillsSection,
   type SkillsView,
@@ -50,11 +50,30 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
     guard,
   } = ctx;
 
+  /**
+   * The landing page. pi-web shows the chat area whenever a folder is
+   * picked, so with one to start in this is the new-session view; only
+   * without a folder does the placeholder show (AppShell.tsx L1034).
+   */
   app.get("/", async (c) => {
+    const cwd = currentCwd(c);
+    const [sidebar, view] = await Promise.all([
+      sidebarOf(c),
+      deps.workspace.newSession(cwd),
+    ]);
+    if (view.available) {
+      return c.render(
+        <NewSessionPage
+          sidebar={sidebar}
+          view={view}
+          {...(deps.home === undefined ? {} : { home: deps.home })}
+        />,
+      );
+    }
     return c.render(
       <IndexPage
-        sidebar={await sidebarOf(c)}
-        cwd={currentCwd(c)}
+        sidebar={sidebar}
+        cwd={cwd}
         {...(deps.home === undefined ? {} : { home: deps.home })}
       />,
     );
@@ -76,6 +95,65 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
       />,
     );
   });
+
+  // The two panels the top bar opens before there is a session to ask: the
+  // same empty states a stopped session shows.
+  app.get("/panels/system", (c) => c.html(<SystemPromptPanel />));
+  app.get("/panels/tools", (c) => c.html(<ToolsPanel />));
+
+  /**
+   * The workspace as the reader left it, optionally under an overlay: the
+   * open session, else the new-session view, else the placeholder. Settings
+   * renders through this because pi-web opens it over the live workspace
+   * rather than on a page of its own (SettingsPanel.tsx).
+   */
+  async function workspacePage(
+    c: Context,
+    overlay?: unknown,
+  ): Promise<Response> {
+    const id = currentSessionId(c);
+    const view =
+      id === undefined
+        ? undefined
+        : await deps.workspace
+            .viewSession(id, warnTokens(c))
+            .catch(() => undefined);
+    const sidebar = await sidebarOf(c, view?.summary.id);
+    if (view) {
+      const trust = await deps.workspace
+        .trustStatus(view.summary.cwd)
+        .catch(() => undefined);
+      return c.render(
+        <SessionPage
+          sidebar={sidebar}
+          view={view}
+          {...(trust === undefined ? {} : { trust })}
+          {...(deps.home === undefined ? {} : { home: deps.home })}
+          {...(overlay === undefined ? {} : { overlay })}
+        />,
+      );
+    }
+    const cwd = currentCwd(c);
+    const start = await deps.workspace.newSession(cwd);
+    if (start.available) {
+      return c.render(
+        <NewSessionPage
+          sidebar={sidebar}
+          view={start}
+          {...(deps.home === undefined ? {} : { home: deps.home })}
+          {...(overlay === undefined ? {} : { overlay })}
+        />,
+      );
+    }
+    return c.render(
+      <IndexPage
+        sidebar={sidebar}
+        cwd={cwd}
+        {...(deps.home === undefined ? {} : { home: deps.home })}
+        {...(overlay === undefined ? {} : { overlay })}
+      />,
+    );
+  }
 
   app.get("/sessions/:id", async (c) => {
     const id = c.req.param("id");
@@ -174,10 +252,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
 
   app.get("/settings", async (c) => {
     const cwd = currentCwd(c);
-    const [sidebar, available] = await Promise.all([
-      sidebarOf(c),
-      deps.workspace.newSession(cwd),
-    ]);
+    const available = await deps.workspace.newSession(cwd);
     const usable = available.available ? cwd : "";
     const section = resolveSection(
       c.req.query("section") ?? getCookie(c, SETTINGS_COOKIE),
@@ -191,15 +266,14 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
       ...(remembered === undefined ? {} : { selected: remembered }),
     }).catch((error: unknown) => ({ error: errorText(error) }));
     const back = currentSessionId(c);
-    return c.render(
-      <SettingsPage
-        sidebar={sidebar}
+    return workspacePage(
+      c,
+      <SettingsDialog
         section={section}
         cwd={usable}
         warnTokens={warnTokens(c).warnTokens}
         back={back === undefined ? "/" : `/sessions/${back}`}
         {...(deps.home === undefined ? {} : { home: deps.home })}
-        {...(deps.about === undefined ? {} : { about: deps.about })}
         {...sections}
       />,
     );
@@ -455,24 +529,28 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
 
   // --- Session inspection ---------------------------------------------------
 
-  app.get("/sessions/:id/tools", (c) => {
+  app.get("/sessions/:id/tools", async (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
     const tool = c.req.query("tool");
+    const tools = await deps.workspace
+      .toolDefinitions(id)
+      .catch(() => undefined);
     return c.html(
       <ToolsPanel
         sessionId={id}
-        tools={deps.workspace.toolDefinitions(id)}
+        {...(tools === undefined ? {} : { tools })}
         {...(tool === undefined ? {} : { selected: tool })}
       />,
     );
   });
 
-  app.get("/sessions/:id/system-prompt", (c) => {
+  app.get("/sessions/:id/system-prompt", async (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
+    const prompt = await deps.workspace.systemPrompt(id).catch(() => undefined);
     return c.html(
-      <SystemPromptPanel prompt={deps.workspace.systemPrompt(id)} />,
+      <SystemPromptPanel {...(prompt === undefined ? {} : { prompt })} />,
     );
   });
 

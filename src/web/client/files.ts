@@ -32,6 +32,13 @@ function sessionId(): string {
   return panel()?.dataset["session"] ?? "";
 }
 
+/** Which folder the explorer is about: the open session's, or the picked one. */
+function scopeQuery(): string {
+  const id = sessionId();
+  if (id !== "") return `session=${encodeURIComponent(id)}`;
+  return `cwd=${encodeURIComponent(panel()?.dataset["cwd"] ?? "")}`;
+}
+
 /** Per-tab, in memory only: reopening web-pi starts with no tabs, as pi-web. */
 type TabState = { mode: string; wrap: boolean; scrollTop: number };
 
@@ -464,8 +471,29 @@ function showingChanges(): boolean {
 }
 
 function explorerUrl(): string {
-  const base = `/files/explorer?session=${encodeURIComponent(sessionId())}`;
+  const base = `/files/explorer?${scopeQuery()}`;
   return showingChanges() ? `${base}&changes=1` : base;
+}
+
+/**
+ * The magnifier in the explorer header opens the field and closes it again,
+ * as pi-web's `fileSearchOpen` does; closing it puts the tree back.
+ */
+function toggleFileSearch(button: Element): void {
+  const field = document.getElementById("file-search-field");
+  const input = document.getElementById("file-search");
+  if (!field || !(input instanceof HTMLInputElement)) return;
+  const open = field.hidden;
+  field.hidden = !open;
+  button.setAttribute("aria-pressed", open ? "true" : "false");
+  if (open) {
+    input.focus();
+    return;
+  }
+  if (input.value === "") return;
+  input.value = "";
+  // htmx listens for `search`, which is what clearing the field fires.
+  input.dispatchEvent(new Event("search", { bubbles: true }));
 }
 
 /** pi-web only offers the toggle while something is actually changed. */
@@ -568,6 +596,11 @@ export function setUpFiles(): void {
     }
     if (target.closest("[data-mention-file]")) {
       mentionActiveFile();
+      return;
+    }
+    const search = target.closest("#explorer-search-toggle");
+    if (search) {
+      toggleFileSearch(search);
       return;
     }
     const toggle = target.closest("#explorer-changes-toggle");

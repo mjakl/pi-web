@@ -10,7 +10,6 @@ import { isSessionId } from "@core/sessions";
 import type { SidebarView, Workspace } from "@core/workspace";
 import type { StaticAssets } from "@web/assets";
 import type { honoFactory } from "@web/hono";
-import type { About } from "@web/views/Settings";
 import type { Context } from "hono";
 
 export type WebApp = ReturnType<typeof honoFactory.createApp>;
@@ -23,8 +22,6 @@ export type WebDeps = {
   defaultCwd: string;
   /** The reader's home folder, for shortening paths on screen. */
   home?: string;
-  /** Versions for the About line in Settings. */
-  about?: About;
   /** Streaming re-render interval. */
   renderIntervalMs?: number;
 };

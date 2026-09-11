@@ -54,11 +54,11 @@ describe("workspace over the fake runtime", () => {
     ]);
     expect(sidebar.selected).toBe("/repo/b");
     expect(sidebar.sessions).toHaveLength(1);
-    expect(sidebar.sessions[0]?.summary.live).toBe(true);
+    expect(sidebar.sessions[0]?.live).toBe(true);
 
     const remembered = await workspace.sidebar({ remembered: "/repo/a" });
     expect(remembered.selected).toBe("/repo/a");
-    expect(remembered.sessions[0]?.summary.cwd).toBe("/repo/a");
+    expect(remembered.sessions[0]?.cwd).toBe("/repo/a");
   });
 
   it("does not re-render a settled turn when something else happens", async () => {

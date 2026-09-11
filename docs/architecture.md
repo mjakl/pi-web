@@ -198,11 +198,10 @@ composition root and the only importer of Pi adapters.
   adapter streams the file line by line and caches the result by size and mtime.
   The real store renders in well under a second and a revisited row costs
   nothing.
-- **pi-subagent runs are folded away.** Half the files in a real store are
-  `subagent.<hex>` sessions: transcripts of one tool call, not conversations.
-  They are kept out of the list and offered as one collapsed "N subagent runs"
-  line — under their parent session when the header names one, otherwise at the
-  top of the project — which loads the 50 newest when opened.
+- **pi-subagent runs are ordinary rows.** Half the files in a real store are
+  `subagent.<hex>` sessions: transcripts of one tool call. pi-web lists them
+  with everything else, so web-pi does too; the list pages fifty rows at a time,
+  which is what keeps a store of thousands cheap to open.
 - **The conversation rail is server-rendered and positioned in percentages.**
   `src/core/conversation-rail.ts` is pi-web's `lib/conversation-rail.ts` fed
   from the flat entry list rather than a compressed tree: web-pi already holds
@@ -242,8 +241,9 @@ composition root and the only importer of Pi adapters.
   browser asks for permission the first time a run finishes while nobody is
   looking, as a small prompt in the notice shelf with an Allow button — never a
   bare `requestPermission()` out of nowhere, and never again: the answer, or the
-  decision not to answer, is remembered in `web-pi:notify-asked`. The settings
-  toggle stays the way to change it later.
+  decision not to answer, is remembered in `web-pi:notify-asked`. A browser that
+  granted permission is subscribed to Web Push on every load, as pi-web does;
+  there is no toggle, because pi-web has none.
 - **Notifications key off the agent's own idle, not off the turn ending.**
   `src/core/turn-completion.ts` is pi-web's rule: a run has to have started, and
   the session has to be idle when it settles. A stop, an aborted turn or a shell
@@ -357,21 +357,24 @@ composition root and the only importer of Pi adapters.
   that map is what keeps its sessions grouped under the repository.
 - **A missing working folder is read-only, not an error.** The session still
   reads, exports, shows statistics and stops; sending, branching, forking,
-  cloning, compacting, rewinding, switching model, activating and the file
-  explorer all disappear, and `createWorkspace` refuses them server-side with
-  the same sentence the page shows. One `requireFolder` guard, in the workspace,
-  so a new route cannot forget it.
+  cloning, compacting, rewinding, switching model and activating all disappear,
+  and `createWorkspace` refuses them server-side with the same sentence the page
+  shows. One `requireFolder` guard, in the workspace, so a new route cannot
+  forget it.
 - **Trust is a gate, not a setting.** `hasTrustRequiringProjectResources`
   decides whether a folder is gated at all; a grant writes Pi's own `trust.json`
   through `ProjectTrustStore`, is refused while a session in that folder is
   mid-turn, and then **stops** that folder's sessions so they restart with
   project resources loaded. Untrusted projects keep working, with their
   extensions, skills and prompts dormant.
-- **Config pages are pages.** `/settings` is server-rendered with three sections
-  (general, skills, plugins), the last one remembered in a cookie rather than
-  `localStorage`, and the mobile navigation is the same list as a native
-  `<select>` — no script. A section that fails to load says so; falling back to
-  general would quietly show the wrong page under the right tab.
+- **Settings is a route that renders as a dialog.** `/settings` re-renders the
+  page the reader was on — the open session, else the new-session view — and
+  puts the modal over it, because that is where pi-web keeps it. Its three
+  sections (general, skills, plugins) are server-rendered, the last one
+  remembered in a cookie rather than `localStorage`, and the mobile navigation
+  is the same list as a native `<select>` — no script. A section that fails to
+  load says so; falling back to general would quietly show the wrong page under
+  the right tab.
 - **Dialogs are `<dialog open>` from the server, upgraded in the browser.**
   `src/web/client/dialogs.ts` removes the `open` attribute and calls
   `showModal()` for backdrop, focus trap, top layer and focus restore, and

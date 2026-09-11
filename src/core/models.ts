@@ -41,9 +41,15 @@ export function initialModel(
   return match ?? models[0];
 }
 
-/** The reasoning level a model starts on: its `enabledModels` pin, else off. */
-export function initialThinking(model: ModelOption | undefined): ThinkingLevel {
-  return model?.pin ?? "off";
+/**
+ * The reasoning level a model starts on: its `enabledModels` pin, else none
+ * at all. pi-web leaves an unpinned model on "auto", which is Pi deciding,
+ * not a level of its own (useAgentSession.ts L2600).
+ */
+export function initialThinking(
+  model: ModelOption | undefined,
+): ThinkingLevel | undefined {
+  return model?.pin;
 }
 
 export type StartupChoice = {

@@ -12,8 +12,6 @@ import {
 } from "@core/skills";
 import { DEFAULT_WARN_TOKENS } from "@core/context-usage";
 import { shortPath } from "@core/workspaces";
-import type { SidebarView } from "@core/workspace";
-import { Shell } from "./SessionPage.tsx";
 import {
   AddConfigIcon,
   PiDevLogoIcon,
@@ -223,17 +221,8 @@ function SectionNav({ active, cwd }: { active: SettingsSection; cwd: string }) {
   );
 }
 
-/** web-pi's own version and the Pi SDK it resolved at startup. */
-export type About = { webPi: string; pi: string };
-
 /** Preferences the server cannot hold: they belong to this browser. */
-function GeneralSettings({
-  about,
-  warnTokens,
-}: {
-  about?: About;
-  warnTokens: number;
-}) {
+function GeneralSettings({ warnTokens }: { warnTokens: number }) {
   return (
     <div class="settings-general">
       <h2 class="settings-general-title">General</h2>
@@ -296,29 +285,6 @@ function GeneralSettings({
           />
         </div>
       </section>
-      <section class="settings-general-section">
-        <h3 class="settings-general-heading">Notifications</h3>
-        <p class="settings-general-description">
-          Needs permission from the browser, and reaches you with the tab
-          closed.
-        </p>
-        <div class="settings-general-option">
-          <span>Run finished</span>
-          <ConfigSwitch
-            id="push-toggle"
-            checked={false}
-            label="Notify this browser when a run finishes"
-          />
-        </div>
-      </section>
-      {about === undefined ? null : (
-        <section class="settings-general-section">
-          <h3 class="settings-general-heading">About</h3>
-          <p class="settings-general-description">
-            web-pi {about.webPi} · pi {about.pi}
-          </p>
-        </section>
-      )}
     </div>
   );
 }
@@ -767,6 +733,66 @@ const STATUS_COLOUR = {
   missing: "var(--danger)",
 } as const;
 
+/**
+ * pi-web groups a package's resources by kind, in this order, and drops the
+ * kinds it has none of (PluginsConfig.tsx L127-L219).
+ */
+const RESOURCE_GROUPS = [
+  ["extensions", "Extensions"],
+  ["skills", "Skills"],
+  ["prompts", "Prompts"],
+  ["themes", "Themes"],
+] as const;
+
+function ResourceList({ info }: { info: PackageInfo }) {
+  const groups = RESOURCE_GROUPS.map(([kind, label]) => ({
+    label,
+    resources: info.resources.filter((resource) => resource.kind === kind),
+  })).filter((group) => group.resources.length > 0);
+  if (groups.length === 0) {
+    return (
+      <div style="font-size:12px; color:var(--text-dim)">
+        {info.disabled ? "Package disabled." : "No resolved resources"}
+      </div>
+    );
+  }
+  return (
+    <div style="display:flex; flex-direction:column; gap:12px">
+      {groups.map((group, index) => (
+        <div
+          style={
+            index === 0
+              ? ""
+              : "border-top:1px solid var(--border); padding-top:12px"
+          }
+        >
+          <div style="font-size:10px; font-weight:700; color:var(--text-dim); text-transform:uppercase; margin-bottom:6px">
+            {group.label}
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px">
+            {group.resources.map((resource) => (
+              <div style="min-width:0">
+                <div
+                  title={resource.path}
+                  style="font-size:12px; color:var(--text); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap"
+                >
+                  {resource.name}
+                </div>
+                <div
+                  title={resource.path}
+                  style="font-size:10px; color:var(--text-dim); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:1px"
+                >
+                  {resource.relativePath}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function pluginKey(info: PackageInfo): string {
   return `${info.scope} ${info.source}`;
 }
@@ -945,24 +971,7 @@ export function PluginDetail({
       </div>
       <div style="display:flex; flex-direction:column; gap:8px">
         <div class="config-section-title">Resolved Resources</div>
-        {info.resources.length === 0 ? (
-          <div style="font-size:12px; color:var(--text-dim)">
-            No resolved resources
-          </div>
-        ) : (
-          <div style="display:flex; flex-direction:column; gap:6px">
-            {info.resources.map((resource) => (
-              <div style="min-width:0" title={resource.path}>
-                <div style="font-size:12px; color:var(--text); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-                  {resource.name}
-                </div>
-                <div style="font-size:10px; color:var(--text-dim); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:1px">
-                  {resource.kind} · {resource.relativePath}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <ResourceList info={info} />
       </div>
       {message === undefined ? null : (
         <div
@@ -1222,7 +1231,6 @@ export function SettingsBody({
   skills,
   plugins,
   home,
-  about,
   error,
   warnTokens,
 }: {
@@ -1231,7 +1239,6 @@ export function SettingsBody({
   skills?: SkillsView;
   plugins?: PackagesView;
   home?: string;
-  about?: About;
   /** Loading the section failed; saying so beats a silent empty panel. */
   error?: string;
   /** The reader's context-warning threshold, from its cookie. */
@@ -1258,39 +1265,26 @@ export function SettingsBody({
       />
     );
   }
-  return (
-    <GeneralSettings
-      warnTokens={warnTokens ?? DEFAULT_WARN_TOKENS}
-      {...(about === undefined ? {} : { about })}
-    />
-  );
+  return <GeneralSettings warnTokens={warnTokens ?? DEFAULT_WARN_TOKENS} />;
 }
 
 /**
- * pi-web opens settings over the workspace, so the page renders the shell
- * behind the modal. `back` is where the close button and Escape lead.
+ * pi-web opens settings over the workspace, which stays mounted behind the
+ * modal, so this is an overlay the shell renders over whatever page the
+ * reader was on. `back` is where the close button and Escape lead.
  */
-export function SettingsPage(props: {
-  sidebar: SidebarView;
+export function SettingsDialog(props: {
   section: SettingsSection;
   cwd: string;
   skills?: SkillsView;
   plugins?: PackagesView;
   home?: string;
-  about?: About;
   error?: string;
   warnTokens?: number;
   back: string;
 }) {
   return (
-    <Shell
-      sidebar={props.sidebar}
-      {...(props.cwd === "" ? {} : { cwd: props.cwd })}
-      {...(props.home === undefined ? {} : { home: props.home })}
-    >
-      <div style="height:100%; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:15px">
-        Select a session to view the conversation
-      </div>
+    <>
       <input id="settings-cwd" type="hidden" name="cwd" value={props.cwd} />
       <dialog
         class="settings-dialog"
@@ -1320,6 +1314,6 @@ export function SettingsPage(props: {
           </main>
         </div>
       </dialog>
-    </Shell>
+    </>
   );
 }

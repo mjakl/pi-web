@@ -171,7 +171,7 @@ export function SessionRow({
       {...(oob === true ? { "hx-swap-oob": "true" } : {})}
       {...(pending
         ? {
-            "hx-get": `/sessions/${id}/row`,
+            "hx-get": `/sessions/${id}/row${activeId === undefined ? "" : `?active=${encodeURIComponent(activeId)}`}`,
             "hx-trigger": "revealed",
             "hx-swap": "outerHTML",
           }
@@ -199,14 +199,15 @@ export function SessionRow({
             >
               {relativeTime(summary.modifiedAt)}
             </span>
-            {summary.worktreeBranch === undefined ? null : (
+            {summary.isWorktree !== true ||
+            summary.branch === undefined ? null : (
               <span
                 title={`Worktree: ${summary.cwd}`}
                 style="display:flex; align-items:center; gap:3px; color:var(--accent); min-width:0; overflow:hidden"
               >
                 <BranchBadgeIcon />
                 <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-                  {summary.worktreeBranch}
+                  {summary.branch}
                 </span>
               </span>
             )}
@@ -275,41 +276,6 @@ export function SessionRow({
 }
 
 /**
- * The runs a `subagent` tool call spawned. They are transcripts of a tool
- * call, not conversations, so they stay folded away and load only when the
- * line is opened: a real store holds more of them than of real sessions.
- */
-function SubagentRuns({
-  project,
-  parentId,
-  count,
-}: {
-  project: string;
-  parentId?: string;
-  count: number;
-}) {
-  const query = new URLSearchParams({ project });
-  if (parentId !== undefined) query.set("parent", parentId);
-  return (
-    <div style="padding-left:14px; font-size:11px; color:var(--text-dim)">
-      <details>
-        <summary
-          hx-get={`/sidebar/subagents?${query.toString()}`}
-          hx-trigger="click once"
-          hx-target="next div"
-          hx-swap="innerHTML"
-        >
-          {String(count)} subagent run{count === 1 ? "" : "s"}
-        </summary>
-        <div>
-          <span role="status">Loading…</span>
-        </div>
-      </details>
-    </div>
-  );
-}
-
-/**
  * Rows sent on the first render. A busy project holds hundreds of sessions
  * and the reader sees ten; the rest arrive on the same sentinel the
  * transcript pages with.
@@ -333,20 +299,11 @@ export function SessionRows({
   const query = new URLSearchParams({ project, after: String(next) });
   return (
     <>
-      {page.map((row) => (
-        <>
-          <SessionRow
-            summary={row.summary}
-            {...(activeId === undefined ? {} : { activeId })}
-          />
-          {row.subagents > 0 ? (
-            <SubagentRuns
-              project={project}
-              parentId={row.summary.id}
-              count={row.subagents}
-            />
-          ) : null}
-        </>
+      {page.map((summary) => (
+        <SessionRow
+          summary={summary}
+          {...(activeId === undefined ? {} : { activeId })}
+        />
       ))}
       {more ? (
         <div
@@ -378,15 +335,10 @@ export function SessionList({
       style="flex:1 1 auto; overflow-y:auto; padding:0; min-height:80px"
       {...(oob === true ? { "hx-swap-oob": "innerHTML" } : {})}
     >
-      {view.sessions.length === 0 && view.orphans === 0 ? (
+      {view.sessions.length === 0 ? (
         <div style="padding:16px 14px; color:var(--text-muted); font-size:12px">
           No sessions found
         </div>
-      ) : null}
-      {/* Runs with no parent session to hang under stay at the top, where
-          they are reachable without paging through the whole project. */}
-      {view.orphans > 0 ? (
-        <SubagentRuns project={view.selected ?? ""} count={view.orphans} />
       ) : null}
       <SessionRows
         view={view}
@@ -748,10 +700,15 @@ function ExplorerSection({
   sessionId,
   cwd,
 }: {
-  sessionId: string;
+  /** Absent before a session is open: the folder alone roots the tree. */
+  sessionId?: string;
   cwd: string;
 }) {
-  const explorerUrl = `/files/explorer?session=${encodeURIComponent(sessionId)}`;
+  const scope =
+    sessionId === undefined
+      ? `cwd=${encodeURIComponent(cwd)}`
+      : `session=${encodeURIComponent(sessionId)}`;
+  const explorerUrl = `/files/explorer?${scope}`;
   return (
     <div
       id="explorer-section"
@@ -786,8 +743,6 @@ function ExplorerSection({
         >
           <ChangedFilesIcon />
         </button>
-        {/* TODO(sidebar): pi-web toggles the search field from this button
-            (gap B8). */}
         <button
           type="button"
           class="sidebar-toolbar-button"
@@ -815,19 +770,32 @@ function ExplorerSection({
         id="explorer-body"
         style="flex:1; overflow-y:auto; overflow-x:hidden"
       >
-        <input
-          id="file-search"
-          type="search"
-          name="q"
-          placeholder="Search files…"
-          aria-label="Search files"
-          autocomplete="off"
-          style="width:calc(100% - 20px); margin:0 10px 4px; padding:4px 8px; border:1px solid var(--border); border-radius:5px; background:var(--bg); color:var(--text); font-family:var(--font-mono); font-size:11px"
-          hx-get={`/files/search?session=${encodeURIComponent(sessionId)}`}
-          hx-trigger="input changed delay:150ms, search"
-          hx-target="#file-tree"
-          hx-swap="outerHTML"
-        />
+        {/* pi-web keeps the field out of the tree until the magnifier in the
+            header opens it (FileExplorer.tsx, `fileSearchOpen`). */}
+        <div
+          id="file-search-field"
+          style="padding:6px 8px; border-bottom:1px solid var(--border)"
+          hidden
+        >
+          <div style="position:relative">
+            <span style="position:absolute; left:8px; top:50%; transform:translateY(-50%); display:flex; color:var(--text-dim); pointer-events:none">
+              <SearchIcon size={12} />
+            </span>
+            <input
+              id="file-search"
+              type="search"
+              name="q"
+              placeholder="Search files…"
+              aria-label="Search files"
+              autocomplete="off"
+              style="width:100%; box-sizing:border-box; padding:6px 24px; border:1px solid var(--border); border-radius:5px; outline:none; background:var(--bg); color:var(--text); font-family:var(--font-mono); font-size:11px"
+              hx-get={`/files/search?${scope}`}
+              hx-trigger="input changed delay:150ms, search"
+              hx-target="#file-tree"
+              hx-swap="outerHTML"
+            />
+          </div>
+        </div>
         <div
           id="file-explorer"
           class="explorer"
@@ -922,9 +890,14 @@ export function Sidebar({
         view={view}
         {...(activeId === undefined ? {} : { activeId })}
       />
-      {activeId !== undefined && cwd !== undefined ? (
-        <ExplorerSection sessionId={activeId} cwd={cwd} />
-      ) : null}
+      {/* pi-web shows the explorer for whichever folder is selected, with or
+          without a session open (AppShell.tsx L2429). */}
+      {cwd === undefined || cwd === "" ? null : (
+        <ExplorerSection
+          {...(activeId === undefined ? {} : { sessionId: activeId })}
+          cwd={cwd}
+        />
+      )}
     </div>
   );
 }

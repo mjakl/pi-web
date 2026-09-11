@@ -54,7 +54,6 @@ function testApp(options: Parameters<typeof createFakeWorld>[0] = {}) {
     staticRoot: "/nonexistent",
     defaultCwd: repo,
     home: root,
-    about: { webPi: "9.9.9", pi: "8.8.8" },
     renderIntervalMs: 1,
   });
   return { app, world };
@@ -279,8 +278,9 @@ describe("missing-folder read-only mode", () => {
       "Working folder is unavailable. This session is read-only.",
     );
     expect(html).not.toContain('id="composer"');
-    expect(html).not.toContain('id="file-panel-toggle"');
-    // Reading, stats and export stay.
+    // Reading, stats and export stay, and so does the file panel: pi-web
+    // keeps its toggle on every route (AppShell.tsx L1674).
+    expect(html).toContain('id="file-panel-toggle"');
     expect(html).toContain("Full history");
     expect(html).toContain("an answer");
   });
@@ -398,9 +398,6 @@ describe("the settings page", () => {
     expect(html).toContain('data-theme-option="auto"');
     expect(html).toContain('id="sound-toggle"');
     expect(html).toContain('id="dumb-zone-tokens"');
-    // The About line names this build and the Pi SDK it resolved.
-    expect(html).toContain("web-pi 9.9.9");
-    expect(html).toContain("pi 8.8.8");
   });
 
   it("groups skills and shows one in detail", async () => {
@@ -545,8 +542,10 @@ describe("pi-web's settings and trust chrome", () => {
     expect(html).toContain(
       '<button type="button" id="sound-toggle" class="config-switch" role="switch"',
     );
-    expect(html).toContain('id="push-toggle"');
     expect(html).toContain("config-switch-knob");
+    // pi-web's General ends at Completion sound (SettingsPanel.tsx L123).
+    expect(html).not.toContain("Notifications");
+    expect(html).not.toContain(">About<");
   });
 
   it("draws skills and plugins as pi-web's split view", async () => {
@@ -587,6 +586,14 @@ describe("pi-web's settings and trust chrome", () => {
     expect(plugins).toContain("Resolved Resources");
     expect(plugins).toContain("installed 1.2.0");
     expect(plugins).toContain("1 ext");
+    // pi-web groups the resources by kind and gives each group an uppercase
+    // label; the entry's own second line is the relative path alone
+    // (PluginsConfig.tsx L127-L219).
+    const group = plugins.slice(plugins.indexOf("Resolved Resources"));
+    expect(group).toContain("text-transform:uppercase");
+    expect(group.indexOf("Extensions")).toBeLessThan(group.indexOf("review"));
+    expect(group).toContain(">extensions/review/index.ts<");
+    expect(group).not.toContain("extensions · ");
   });
 
   it("warns about an untrusted project twice, and dresses the dialog", async () => {
@@ -607,14 +614,29 @@ describe("pi-web's settings and trust chrome", () => {
 });
 
 describe("tool definitions and the system prompt", () => {
-  it("says nothing has loaded while the session is stopped", async () => {
-    const { app } = testApp();
+  /**
+   * pi-web resumes a dormant session to answer these two panels — a command
+   * that starts no turn (useAgentSession.ts `loadSystemInfo`) — and a folder
+   * that is gone cannot be resumed, so that one keeps the empty state.
+   */
+  it("says nothing has loaded when the session cannot be resumed", async () => {
+    const { app } = testApp({ missingFolders: [repo] });
     expect(await (await app.request("/sessions/s1/tools")).text()).toContain(
       "Tool definitions have not loaded yet",
     );
     expect(
       await (await app.request("/sessions/s1/system-prompt")).text(),
     ).toContain("System prompt has not loaded yet");
+  });
+
+  it("resumes a stopped session to answer the panels", async () => {
+    const { app } = testApp();
+    expect(await (await app.request("/sessions/s1/tools")).text()).toContain(
+      "tool-definitions-item",
+    );
+    expect(
+      await (await app.request("/sessions/s1/system-prompt")).text(),
+    ).toContain("system-prompt-text");
   });
 
   it("shows the active tools and the prompt of a live session", async () => {

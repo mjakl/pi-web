@@ -31,6 +31,8 @@ function Stroked({
   join?: "round" | "miter" | undefined;
   children?: unknown;
 }) {
+  // pi-web sets flexShrink:0 on its icons; without it an svg in an
+  // overflow:hidden flex row (a session row's branch chip) is squashed.
   return (
     <svg
       width={size}
@@ -41,6 +43,7 @@ function Stroked({
       stroke-width={String(width)}
       stroke-linecap={cap}
       {...(join === undefined ? {} : { "stroke-linejoin": join })}
+      style="flex-shrink:0"
       aria-hidden="true"
     >
       {children}

@@ -194,20 +194,20 @@ export function StatsPanel({
               value={summary.projectRoot ?? summary.cwd}
               copy="Copy project directory"
             />
-            {summary.worktreeBranch ? (
+            {summary.branch ? (
               <InfoRow
                 label="Git Branch"
-                value={summary.worktreeBranch}
+                value={summary.branch}
                 copy="Copy git branch"
               />
             ) : null}
-            {summary.projectRoot === undefined ? null : (
+            {summary.isWorktree === true ? (
               <InfoRow
                 label="Worktree"
                 value={summary.cwd}
                 copy="Copy worktree path"
               />
-            )}
+            ) : null}
           </InfoSection>
         </div>
         <CountSection

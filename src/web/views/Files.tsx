@@ -78,11 +78,19 @@ function GitStatusBadge({ status }: { status: GitFileStatus }) {
 }
 
 export type TreeContext = {
-  sessionId: string;
+  /** Absent until a session is open: the folder alone roots the requests. */
+  sessionId?: string;
   cwd: string;
   /** Absolute paths Git reports as changed, with their letter. */
   changes: Map<string, GitChangeFile>;
 };
+
+/** How a files request names its folder: by session, else by path. */
+export function scopeQuery(context: TreeContext): string {
+  return context.sessionId === undefined
+    ? `cwd=${encodeURIComponent(context.cwd)}`
+    : `session=${encodeURIComponent(context.sessionId)}`;
+}
 
 function changedUnder(context: TreeContext, directory: string): boolean {
   for (const path of context.changes.keys()) {
@@ -98,7 +106,7 @@ function RowActions({
   path,
   isDir,
 }: {
-  sessionId: string;
+  sessionId?: string;
   cwd: string;
   path: string;
   isDir: boolean;
@@ -159,11 +167,7 @@ function TreeNode({
 }) {
   const change = context.changes.get(path);
   const marked = isDir && (change !== undefined || changedUnder(context, path));
-  const query = new URLSearchParams({
-    path,
-    session: context.sessionId,
-    depth: String(depth + 1),
-  }).toString();
+  const query = `path=${encodeURIComponent(path)}&${scopeQuery(context)}&depth=${String(depth + 1)}`;
   return (
     <div
       class="file-tree-node"
@@ -227,7 +231,9 @@ function TreeNode({
           </span>
         ) : null}
         <RowActions
-          sessionId={context.sessionId}
+          {...(context.sessionId === undefined
+            ? {}
+            : { sessionId: context.sessionId })}
           cwd={context.cwd}
           path={path}
           isDir={isDir}

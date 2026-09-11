@@ -16,7 +16,6 @@ const app = createWebApp({
   staticRoot: config.staticRoot,
   defaultCwd: config.defaultCwd,
   home: homedir(),
-  about: { webPi: webPiVersion(), pi: piVersion },
 });
 
 const server = serve(

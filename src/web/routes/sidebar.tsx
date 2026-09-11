@@ -10,7 +10,6 @@ import {
   ProjectPicker,
   ProjectSelect,
   RenameRow,
-  SIDEBAR_PAGE,
   SessionList,
   SessionRow,
   SessionRows,
@@ -106,32 +105,6 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
         offset={offset}
         {...(activeId === undefined ? {} : { activeId })}
       />,
-    );
-  });
-
-  /** The runs behind a collapsed "N subagent runs" line. */
-  app.get("/sidebar/subagents", async (c) => {
-    const project = c.req.query("project") ?? "";
-    const parent = c.req.query("parent");
-    const runs = await deps.workspace.subagentRuns(
-      project,
-      parent === undefined || parent === "" ? undefined : parent,
-    );
-    if (runs.length === 0) {
-      return c.html(<li>No runs</li>);
-    }
-    // A project can hold thousands of runs; the newest page is enough to
-    // find the one a reader is after.
-    const shown = runs.slice(0, SIDEBAR_PAGE);
-    return c.html(
-      <>
-        {shown.map((summary) => (
-          <SessionRow summary={summary} />
-        ))}
-        {runs.length > shown.length ? (
-          <li>{String(runs.length - shown.length)} older runs not shown</li>
-        ) : null}
-      </>,
     );
   });
 
@@ -303,7 +276,7 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
               // A session with no row yet needs the whole list; an existing
               // row is swapped on its own.
               const known = view.sessions.some(
-                (row) => row.summary.id === event.sessionId,
+                (row) => row.id === event.sessionId,
               );
               await stream.writeSSE({
                 event: "rows",

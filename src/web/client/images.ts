@@ -181,3 +181,74 @@ export function setUpImages(changed: () => void): Attachments {
     count: () => attached.length,
   };
 }
+
+/**
+ * pi-web's ImagePreview: a click on a transcript image opens it in a modal
+ * over the dimmed app, with Escape, a backdrop click and the close button all
+ * closing it and handing focus back to the thumbnail.
+ */
+export function setUpImagePreview(): void {
+  document.body.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const trigger = target.closest<HTMLElement>("[data-image-preview]");
+    if (!trigger) return;
+    const source = trigger.dataset["imagePreview"] ?? "";
+    if (source === "") return;
+    event.preventDefault();
+    openPreview(trigger, source);
+  });
+}
+
+function openPreview(trigger: HTMLElement, source: string): void {
+  const dialog = document.createElement("dialog");
+  dialog.className = "image-preview-dialog";
+  dialog.setAttribute("aria-label", "Preview image");
+  const image = document.createElement("img");
+  image.className = "image-preview-image";
+  image.src = source;
+  image.alt = "";
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "image-preview-close";
+  close.title = "Close";
+  close.setAttribute("aria-label", "Close");
+  // views/icons.tsx #49 at 16px, drawn here because the dialog is built in
+  // the browser.
+  close.innerHTML =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>';
+  dialog.append(image, close);
+  document.body.append(dialog);
+  const overflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+  trigger.setAttribute("aria-expanded", "true");
+  const dismiss = () => {
+    if (dialog.open) dialog.close();
+  };
+  close.addEventListener("click", dismiss);
+  // Only the dialog box itself: a click on the image inside it bubbles here
+  // with the image as its target.
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dismiss();
+  });
+  // Escape must not also reach the shell, which would close something else.
+  dialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dismiss();
+  });
+  dialog.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    dismiss();
+  });
+  dialog.addEventListener("close", () => {
+    document.body.style.overflow = overflow;
+    dialog.remove();
+    trigger.setAttribute("aria-expanded", "false");
+    if (trigger.isConnected) trigger.focus({ preventScroll: true });
+  });
+  dialog.showModal();
+  close.focus({ preventScroll: true });
+}

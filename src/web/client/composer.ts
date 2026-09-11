@@ -391,6 +391,25 @@ export function setUpComposer(): void {
   setUpShelf();
   mirrorRunning();
   onInput();
+  focusComposer();
+}
+
+/**
+ * pi-web hands the composer the caret once per opened session, on a pointer
+ * device only, and never over something the reader is already using
+ * (hooks/useSessionInputFocus.ts). One page load here is one opened session.
+ */
+function focusComposer(): void {
+  if (matchMedia("(max-width: 640px), (pointer: coarse)").matches) return;
+  if (document.querySelector("dialog[open]")) return;
+  const active = document.activeElement;
+  if (active !== null && active !== document.body) return;
+  const area = textarea();
+  if (!area || area.disabled) return;
+  requestAnimationFrame(() => {
+    area.focus({ preventScroll: true });
+    area.setSelectionRange(area.value.length, area.value.length);
+  });
 }
 
 const COMPOSER_MENUS = new Set(["model-menu", "composer-controls"]);

@@ -5,7 +5,7 @@ import { extensionOf, mimeOf } from "@core/file-types";
 import { FileAccessError } from "@core/path-access";
 import { type GitChangeFile } from "@core/ports";
 import { isSessionId } from "@core/sessions";
-import { type Workspace } from "@core/workspace";
+import { type FileScope, type Workspace } from "@core/workspace";
 import {
   Explorer,
   SearchResults,
@@ -39,27 +39,50 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
     return id !== undefined && isSessionId(id) ? id : undefined;
   }
 
-  async function treeContext(sessionId: string): Promise<
+  /**
+   * Which folder this request is about: the open session's, or the one the
+   * page named. pi-web's explorer works from a picked folder before any
+   * session exists, and so does this one.
+   */
+  function scopeParameter(c: Context): FileScope {
+    const sessionId = sessionParameter(c);
+    if (sessionId !== undefined) return { sessionId };
+    const cwd = c.req.query("cwd") ?? "";
+    return cwd === "" ? {} : { cwd };
+  }
+
+  async function treeContext(scope: FileScope): Promise<
     | {
         context: TreeContext;
         status: Awaited<ReturnType<Workspace["gitChanges"]>>;
       }
     | undefined
   > {
-    const cwd = await deps.workspace.sessionFolder(sessionId);
-    if (cwd === undefined) return undefined;
-    const status = await deps.workspace.gitChanges(sessionId);
+    const cwd =
+      scope.sessionId === undefined
+        ? scope.cwd
+        : await deps.workspace.sessionFolder(scope.sessionId);
+    if (cwd === undefined || cwd === "") return undefined;
+    const status = await deps.workspace.gitChanges(scope);
     const changes = new Map<string, GitChangeFile>(
       status.files.map((file) => [file.path, file]),
     );
-    return { context: { sessionId, cwd, changes }, status };
+    return {
+      context: {
+        ...(scope.sessionId === undefined
+          ? {}
+          : { sessionId: scope.sessionId }),
+        cwd,
+        changes,
+      },
+      status,
+    };
   }
 
   app.get("/files/explorer", async (c) => {
-    const sessionId = sessionParameter(c);
-    if (sessionId === undefined) return c.notFound();
+    const scope = scopeParameter(c);
     try {
-      const found = await treeContext(sessionId);
+      const found = await treeContext(scope);
       if (!found) return await c.notFound();
       // The sidebar's changed-files toggle asks for the same fragment with
       // the changes list in place of the tree, as pi-web swaps the two. With
@@ -68,7 +91,10 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
         c.req.query("changes") === "1" && found.status.files.length > 0;
       const listing = changes
         ? { entries: [] }
-        : await deps.workspace.listDirectory(sessionId, found.context.cwd);
+        : await deps.workspace.listDirectory(
+            scope.sessionId,
+            found.context.cwd,
+          );
       return await c.html(
         <Explorer
           context={found.context}
@@ -83,16 +109,14 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
   });
 
   app.get("/files/tree", async (c) => {
-    const sessionId = sessionParameter(c);
+    const scope = scopeParameter(c);
     const path = c.req.query("path") ?? "";
     const depth = Number(c.req.query("depth") ?? "1");
-    if (sessionId === undefined || !Number.isInteger(depth) || depth < 0) {
-      return c.notFound();
-    }
+    if (!Number.isInteger(depth) || depth < 0) return c.notFound();
     try {
-      const found = await treeContext(sessionId);
+      const found = await treeContext(scope);
       if (!found) return await c.notFound();
-      const listing = await deps.workspace.listDirectory(sessionId, path);
+      const listing = await deps.workspace.listDirectory(scope.sessionId, path);
       return await c.html(
         <TreeNodes
           context={found.context}
@@ -108,15 +132,14 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
 
   /** An empty query puts the tree back; that is what closing search means. */
   app.get("/files/search", async (c) => {
-    const sessionId = sessionParameter(c);
-    if (sessionId === undefined) return c.notFound();
+    const scope = scopeParameter(c);
     const query = (c.req.query("q") ?? "").slice(0, 500).trim();
     try {
-      const found = await treeContext(sessionId);
+      const found = await treeContext(scope);
       if (!found) return await c.notFound();
       if (query === "") {
         const listing = await deps.workspace.listDirectory(
-          sessionId,
+          scope.sessionId,
           found.context.cwd,
         );
         return await c.html(
@@ -128,7 +151,7 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
           />,
         );
       }
-      const matches = await deps.workspace.searchFiles(sessionId, query);
+      const matches = await deps.workspace.searchFiles(scope, query);
       return await c.html(
         <SearchResults
           context={found.context}

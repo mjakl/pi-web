@@ -79,8 +79,6 @@ import {
   type SessionStats,
 } from "./session-entries.ts";
 import {
-  compareSessions,
-  isSubagentSession,
   type ProjectEntry,
   projectKeyOf,
   recentProjects,
@@ -103,6 +101,12 @@ import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 
 // The application service. Inbound port for every page and partial: the web
 // layer renders what this returns and never touches Pi or the file system.
+
+/**
+ * Where a files request is rooted: the open session's folder, or the folder
+ * the page has picked when no session is open yet.
+ */
+export type FileScope = { sessionId?: string; cwd?: string };
 
 /** Which slice of which branch a page shows. */
 export type ViewOptions = {
@@ -167,10 +171,8 @@ export type SessionView = {
 export type SidebarView = {
   projects: ProjectEntry[];
   selected?: string;
-  /** Conversations of the selected project, with the runs each spawned. */
-  sessions: { summary: SessionSummary; subagents: number }[];
-  /** Subagent runs of this project whose parent session is not in the list. */
-  orphans: number;
+  /** Conversations of the selected project, subagent runs among them. */
+  sessions: SessionSummary[];
   /** Some other project has a session running: the closed selector says so. */
   activityElsewhere: boolean;
 };
@@ -197,7 +199,8 @@ export type NewSessionView = {
   models: ModelOption[];
   modelWarnings: string[];
   model: ModelOption | undefined;
-  thinkingLevel: ThinkingLevel;
+  /** Unset means "auto": Pi picks the level the model runs at. */
+  thinkingLevel?: ThinkingLevel;
   trust: { requiresTrust: boolean; trusted: boolean };
 };
 
@@ -300,16 +303,14 @@ export function createWorkspace(deps: {
     return sessions.map((session) => {
       const live = deps.runtime.get(session.id);
       const project = roots.get(session.cwd);
-      const worktree = project && project.root !== session.cwd;
       return {
         ...session,
         ...(live
           ? { live: true, running: live.snapshot().status.running }
           : {}),
         ...(project ? { projectRoot: project.root } : {}),
-        ...(worktree && project.branch
-          ? { worktreeBranch: project.branch }
-          : {}),
+        ...(project?.branch ? { branch: project.branch } : {}),
+        ...(project?.isWorktree ? { isWorktree: true } : {}),
         ...(present.get(session.cwd) === false ? { cwdAvailable: false } : {}),
       };
     });
@@ -692,6 +693,23 @@ export function createWorkspace(deps: {
     return info;
   }
 
+  /**
+   * The folder a files request is rooted in. A session names its own; without
+   * one the folder comes from the page, so it goes through the same
+   * containment check every other path does before it is listed.
+   */
+  async function scopeCwd(scope: FileScope): Promise<string> {
+    if (scope.sessionId !== undefined) {
+      const cwd = await cwdOf(scope.sessionId);
+      if (cwd === "") throw new FileAccessError("Unknown session", 404);
+      return cwd;
+    }
+    const cwd = scope.cwd ?? "";
+    if (cwd === "") throw new FileAccessError("Unknown folder", 404);
+    await authorize(cwd, { listing: true });
+    return cwd;
+  }
+
   async function cwdOf(sessionId: string | undefined): Promise<string> {
     if (sessionId === undefined) return "";
     return (await summaryOf(sessionId))?.cwd ?? "";
@@ -744,63 +762,15 @@ export function createWorkspace(deps: {
           ? {}
           : { remembered: options.remembered }),
       });
-      const inProject = all.filter(
-        (session) => projectKeyOf(session) === selected,
-      );
-      const sessions = sessionsForProject(
-        inProject.filter((session) => !isSubagentSession(session)),
-        undefined,
-      );
-      const known = new Set(sessions.map((session) => session.id));
-      const runs = new Map<string, number>();
-      let orphans = 0;
-      for (const run of inProject.filter(isSubagentSession)) {
-        const parent = run.parentId;
-        if (parent !== undefined && known.has(parent)) {
-          runs.set(parent, (runs.get(parent) ?? 0) + 1);
-        } else orphans += 1;
-      }
+      const sessions = sessionsForProject(all, selected);
       return {
         projects,
         ...(selected === undefined ? {} : { selected }),
-        sessions: sessions.map((summary) => ({
-          summary,
-          subagents: runs.get(summary.id) ?? 0,
-        })),
-        orphans,
+        sessions,
         activityElsewhere: projects.some(
           (project) => project.key !== selected && project.running > 0,
         ),
       };
-    },
-
-    /**
-     * The runs behind a collapsed "N subagent runs" line: either one session's
-     * children, or the project's runs that have no parent to hang under.
-     */
-    async subagentRuns(
-      project: string,
-      parentId?: string,
-    ): Promise<SessionSummary[]> {
-      const all = await decorate(await deps.sessions.list());
-      const known = new Set(
-        all
-          .filter(
-            (session) =>
-              !isSubagentSession(session) && projectKeyOf(session) === project,
-          )
-          .map((session) => session.id),
-      );
-      return all
-        .filter(
-          (session) =>
-            isSubagentSession(session) &&
-            projectKeyOf(session) === project &&
-            (parentId === undefined
-              ? session.parentId === undefined || !known.has(session.parentId)
-              : session.parentId === parentId),
-        )
-        .sort(compareSessions);
     },
 
     /**
@@ -1072,10 +1042,8 @@ export function createWorkspace(deps: {
     },
 
     /** What the working tree changed, for the panel's changes section. */
-    async gitChanges(sessionId: string): Promise<GitStatus> {
-      const cwd = await cwdOf(sessionId);
-      if (cwd === "") throw new FileAccessError("Unknown session", 404);
-      return deps.git.status(cwd);
+    async gitChanges(scope: FileScope): Promise<GitStatus> {
+      return deps.git.status(await scopeCwd(scope));
     },
 
     /**
@@ -1190,12 +1158,11 @@ export function createWorkspace(deps: {
 
     /** The explorer's search box: files of the index, ranked. */
     async searchFiles(
-      sessionId: string,
+      scope: FileScope,
       query: string,
       limit = 50,
     ): Promise<FileEntry[]> {
-      const cwd = await authorizedCwd(sessionId, undefined);
-      const index = await deps.files.index(cwd);
+      const index = await deps.files.index(await scopeCwd(scope));
       const entries = index.files.map((path) => ({ path, isDir: false }));
       return filterFileEntries(entries, query, limit);
     },
@@ -1320,7 +1287,9 @@ export function createWorkspace(deps: {
         models: listing.models,
         modelWarnings: listing.warnings,
         model,
-        thinkingLevel: initialThinking(model),
+        ...(initialThinking(model) === undefined
+          ? {}
+          : { thinkingLevel: initialThinking(model) }),
         trust,
       };
     },
@@ -1479,12 +1448,25 @@ export function createWorkspace(deps: {
     // --- Session inspection ----------------------------------------------
 
     /** Tool definitions of a running session; nothing is started to get them. */
-    toolDefinitions(id: string): ToolView[] | undefined {
-      return deps.runtime.get(id)?.toolDefinitions();
+    /**
+     * What the session would run with. pi-web resumes a dormant session to
+     * answer these two panels — a command that starts no turn and writes no
+     * message, but does let the reader see the prompt before sending one
+     * (useAgentSession.ts `loadSystemInfo`). A session whose folder is gone
+     * cannot be resumed, and says so through the panel's empty state.
+     */
+    async toolDefinitions(id: string): Promise<ToolView[] | undefined> {
+      const live = deps.runtime.get(id);
+      if (live) return live.toolDefinitions();
+      await requireFolder(id);
+      return (await deps.runtime.open({ sessionId: id })).toolDefinitions();
     },
 
-    systemPrompt(id: string): string | undefined {
-      return deps.runtime.get(id)?.systemPrompt();
+    async systemPrompt(id: string): Promise<string | undefined> {
+      const live = deps.runtime.get(id);
+      if (live) return live.systemPrompt();
+      await requireFolder(id);
+      return (await deps.runtime.open({ sessionId: id })).systemPrompt();
     },
 
     async setModel(

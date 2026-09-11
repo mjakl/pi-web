@@ -1,12 +1,13 @@
 import type { ToolView } from "@core/ports";
 
 // What the session is actually running with: the tools it may call and the
-// prompt it was given. Both come from the live session and nothing is started
-// to fetch them — a stopped session simply says so. pi-web draws them as menu
-// panels under the top bar (components/SystemPromptPanel.tsx,
+// prompt it was given. Both come from the session itself, which pi-web resumes
+// to answer — a command that starts no turn — and a session whose folder is
+// gone simply says nothing has loaded. pi-web draws them as menu panels under
+// the top bar (components/SystemPromptPanel.tsx,
 // components/ToolDefinitionsPanel.tsx); the class names are its own.
 
-export function SystemPromptPanel({ prompt }: { prompt: string | undefined }) {
+export function SystemPromptPanel({ prompt }: { prompt?: string }) {
   return (
     <section
       class="system-prompt-panel menu-surface menu-panel"
@@ -97,8 +98,9 @@ export function ToolsPanel({
   tools,
   selected,
 }: {
-  sessionId: string;
-  tools: ToolView[] | undefined;
+  /** Absent before there is a session: the panel is then empty anyway. */
+  sessionId?: string;
+  tools?: ToolView[];
   selected?: string;
 }) {
   const active = tools?.filter((tool) => tool.active);
@@ -126,7 +128,7 @@ export function ToolsPanel({
                     : "tool-definitions-item"
                 }
                 aria-pressed={tool.name === shown?.name ? "true" : "false"}
-                hx-get={`/sessions/${sessionId}/tools?tool=${encodeURIComponent(tool.name)}`}
+                hx-get={`/sessions/${sessionId ?? ""}/tools?tool=${encodeURIComponent(tool.name)}`}
                 hx-target="#top-panel"
                 hx-swap="innerHTML"
               >

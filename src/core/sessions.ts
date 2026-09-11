@@ -13,8 +13,10 @@ export type SessionSummary = {
   running?: boolean;
   /** Git top level of `cwd`, when it differs. Sessions group by this. */
   projectRoot?: string;
-  /** Checked-out branch of `cwd`, when it is a worktree of `projectRoot`. */
-  worktreeBranch?: string;
+  /** Checked-out branch of `cwd`, when it is a git checkout at all. */
+  branch?: string;
+  /** `cwd` is a linked worktree, not the main checkout of `projectRoot`. */
+  isWorktree?: boolean;
   /** Id of the session this one was forked from, when the header names one. */
   parentId?: string;
   /** The JSONL Pi keeps this conversation in; shown in the statistics panel. */
@@ -105,7 +107,7 @@ export function recentProjects(
     if (!entry.folders.some((folder) => folder.path === session.cwd)) {
       entry.folders.push({
         path: session.cwd,
-        branch: session.worktreeBranch ?? null,
+        branch: session.branch ?? null,
       });
     }
     byKey.set(key, entry);

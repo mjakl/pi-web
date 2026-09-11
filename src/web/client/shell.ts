@@ -96,6 +96,27 @@ function setUpSidebar(): void {
  * one is open at a time. A second click on the open button closes it, which
  * has to happen before htmx sees the click and fetches the panel again.
  */
+/**
+ * The narrow-phone toolbar: the three tabs live behind the "more" button and
+ * slide in over the bar, as pi-web's `mobileToolbarMoreOpen` does.
+ */
+function setUpMobileToolbar(): void {
+  const button = document.getElementById("mobile-toolbar-more");
+  const tabs = document.getElementById("top-bar-tabs");
+  if (!button || !tabs) return;
+  const closed = button.querySelector<HTMLElement>("[data-more-closed-icon]");
+  const open = button.querySelector<HTMLElement>("[data-more-open-icon]");
+  button.addEventListener("click", () => {
+    const showing = !tabs.hasAttribute("data-open");
+    tabs.toggleAttribute("data-open", showing);
+    button.setAttribute("aria-expanded", String(showing));
+    button.title = showing ? "Close" : "More controls";
+    button.setAttribute("aria-label", showing ? "Close" : "More controls");
+    if (closed) closed.hidden = showing;
+    if (open) open.hidden = !showing;
+  });
+}
+
 function setUpTopPanels(): void {
   const host = document.getElementById("top-panel");
   const bar = document.getElementById("top-bar");
@@ -129,6 +150,18 @@ function setUpTopPanels(): void {
     host.replaceChildren();
     paint("");
   };
+  // What a panel answered decides its icon's colour, as the session state
+  // does in pi-web: a prompt or an active tool tints the tab's icon.
+  host.addEventListener("htmx:afterSwap", () => {
+    const open = buttons.find(
+      (button) => button.getAttribute("aria-pressed") === "true",
+    );
+    if (!open) return;
+    const loaded =
+      host.querySelector(".system-prompt-text, .tool-definitions-item") !==
+      null;
+    open.toggleAttribute("data-panel-loaded", loaded);
+  });
   document.body.addEventListener(
     "click",
     (event) => {
@@ -282,6 +315,7 @@ export function setUpShell(): void {
   setUpPreferences();
   setUpDialogs();
   setUpSidebar();
+  setUpMobileToolbar();
   setUpTopPanels();
   setUpShortcuts();
   setUpToasts();

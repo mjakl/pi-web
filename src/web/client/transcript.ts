@@ -1,4 +1,5 @@
 import { codeText, highlightIn } from "./highlight.ts";
+import { setUpImagePreview } from "./images.ts";
 import { setUpMermaid } from "./mermaid.ts";
 import { setUpRail } from "./rail.ts";
 
@@ -56,6 +57,7 @@ function setUpCopy(): void {
 
 export function setUpTranscript(): void {
   setUpRail();
+  setUpImagePreview();
   const view = document.getElementById("log");
   if (!view) {
     setUpCopy();

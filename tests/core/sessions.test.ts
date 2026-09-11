@@ -98,7 +98,7 @@ describe("sidebar order and grouping", () => {
       summary("a", {
         cwd: "/repo/wt",
         projectRoot: "/repo/main",
-        worktreeBranch: "feature",
+        branch: "feature",
       }),
       summary("b", { cwd: "/repo/main", projectRoot: "/repo/main" }),
       // A second session in a folder already listed adds nothing.

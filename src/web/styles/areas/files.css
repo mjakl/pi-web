@@ -66,10 +66,11 @@
   outline-offset: -2px;
 }
 
-/* The changed-files toggle in the sidebar's explorer header. pi-web passes
-   the resting colours to ToolbarIconButton as props; `.sidebar-toolbar-button`
-   reads them from these two custom properties. */
-#explorer-changes-toggle {
+/* The explorer header's icon buttons. pi-web passes the resting colours to
+   ToolbarIconButton as props (SessionSidebar.tsx L1763-L1828);
+   `.sidebar-toolbar-button` reads them from these two custom properties, so
+   they are set here rather than left to fall back to the inherited colour. */
+.sidebar-toolbar-button {
   --toolbar-button-color: var(--text-dim);
   --toolbar-button-background: none;
 }
@@ -77,6 +78,10 @@
 #explorer-changes-toggle[aria-pressed="true"] {
   --toolbar-button-color: var(--accent);
   --toolbar-button-background: var(--bg-selected);
+}
+
+#explorer-search-toggle[aria-pressed="true"] {
+  --toolbar-button-color: var(--accent);
 }
 
 /* The slot the media toolbar keeps for a measurement only the browser has

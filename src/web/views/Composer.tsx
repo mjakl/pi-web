@@ -252,10 +252,13 @@ const FILTER_FROM = 8;
  */
 export function modelPick(view: SessionView): ModelPick {
   const { status } = view;
+  const current = status?.model ?? view.model ?? null;
   return {
     models: view.models,
-    current: status?.model ?? view.model ?? null,
-    levels: status?.thinkingLevels ?? [],
+    current,
+    // A session nothing is running for still offers the levels its model
+    // knows, as pi-web's picker does from the model list alone.
+    levels: status?.thinkingLevels ?? current?.thinkingLevels ?? [],
     ...(status === null ? {} : { level: status.thinkingLevel }),
     sessionId: view.summary.id,
     disabled: status?.running === true || status?.compacting === true,
@@ -266,13 +269,14 @@ function modelValue(model: ModelOption): string {
   return `${model.provider}/${model.id}`;
 }
 
-/** The reasoning level shown beside the model name, and inside the menu. */
-function levelLabel(pick: ModelPick): string | undefined {
-  if (pick.current?.reasoning !== true || pick.levels.length === 0) {
-    return undefined;
-  }
+/**
+ * The reasoning level shown beside the model name, and inside the menu. pi-web
+ * shows it on every chat, naming the provider's own label when the level maps
+ * to one and "auto" while Pi is left to decide (ChatInput.tsx L1734).
+ */
+function levelLabel(pick: ModelPick): string {
   const choice = pick.levels.find((entry) => entry.level === pick.level);
-  return choice?.label ?? "auto";
+  return choice?.label ?? pick.level ?? "auto";
 }
 
 /** Where a pick goes, as htmx attributes: the same swap in both places. */
@@ -382,9 +386,7 @@ export function ModelSelector({
         <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
           {name}
         </span>
-        {detail === undefined ? null : (
-          <span class="composer-model-detail">{detail}</span>
-        )}
+        <span class="composer-model-detail">{detail}</span>
         <ChevronDownIcon />
       </button>
       <div
@@ -574,7 +576,9 @@ export function Composer({
           models: start.models,
           current: start.model ?? null,
           levels: start.model?.thinkingLevels ?? [],
-          level: start.thinkingLevel,
+          ...(start.thinkingLevel === undefined
+            ? {}
+            : { level: start.thinkingLevel }),
           auto: true,
           cwd: start.cwd,
         }

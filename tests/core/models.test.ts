@@ -33,8 +33,8 @@ describe("the model a new session starts on", () => {
 
   it("starts at the level an enabledModels pattern pinned", () => {
     expect(initialThinking(scope[1])).toBe("high");
-    expect(initialThinking(scope[0])).toBe("off");
-    expect(initialThinking(undefined)).toBe("off");
+    expect(initialThinking(scope[0])).toBeUndefined();
+    expect(initialThinking(undefined)).toBeUndefined();
   });
 });
 

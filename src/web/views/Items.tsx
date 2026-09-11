@@ -220,11 +220,16 @@ function Images({
       style={`display:flex; gap:${String(gap)}px; flex-wrap:wrap; margin-bottom:${String(marginBottom)}px`}
     >
       {indices.map((index) => (
-        <a
-          href={imageUrl(actions, entryId, index)}
-          target="_blank"
-          rel="noreferrer"
-          style="display:block; cursor:zoom-in"
+        // pi-web opens a transcript image in a modal over the app, never in a
+        // tab of its own (components/ImagePreview.tsx).
+        <button
+          type="button"
+          data-image-preview={imageUrl(actions, entryId, index)}
+          aria-haspopup="dialog"
+          aria-expanded="false"
+          title="Preview image"
+          aria-label="Preview image"
+          style="display:block; padding:0; border:none; background:none; color:inherit; cursor:zoom-in"
         >
           <img
             style={
@@ -234,7 +239,7 @@ function Images({
             loading="lazy"
             src={imageUrl(actions, entryId, index)}
           />
-        </a>
+        </button>
       ))}
     </div>
   );
@@ -1546,7 +1551,11 @@ export function Item({
         </HistoryActionFrame>
       );
     case "compaction":
-      return <Compaction item={item} actions={actions} />;
+      return (
+        <HistoryActionFrame entryId={item.entryId} actions={actions}>
+          <Compaction item={item} actions={actions} />
+        </HistoryActionFrame>
+      );
     case "branch_summary":
       return (
         <div id={`entry-${item.entryId}`} style="margin-bottom:16px">
@@ -1561,10 +1570,20 @@ export function Item({
           />
         </div>
       );
+    // pi-web frames every entry a branch can start from: an extension's own
+    // message and a shell run as much as an answer (MessageView.tsx L240-L292).
     case "note":
-      return <Note item={item} actions={actions} />;
+      return (
+        <HistoryActionFrame entryId={item.entryId} actions={actions}>
+          <Note item={item} actions={actions} />
+        </HistoryActionFrame>
+      );
     default:
-      return <Bash item={item} actions={actions} />;
+      return (
+        <HistoryActionFrame entryId={item.entryId} actions={actions}>
+          <Bash item={item} actions={actions} />
+        </HistoryActionFrame>
+      );
   }
 }
 

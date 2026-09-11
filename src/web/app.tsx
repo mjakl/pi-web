@@ -102,7 +102,9 @@ export function createWebApp(deps: WebDeps) {
     const found = await deps.workspace.row(id);
     if (!found) return c.notFound();
     // The open session's row keeps its selected background through a swap.
-    const activeId = currentSessionId(c);
+    // The page says which that is when its own URL cannot: settings opens
+    // over a session without becoming one.
+    const activeId = c.req.query("active") ?? currentSessionId(c);
     return c.html(
       <SessionRow
         {...found}

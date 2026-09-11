@@ -314,7 +314,9 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
             models: view.models,
             current: chosen ?? view.model ?? null,
             levels: chosen?.thinkingLevels ?? view.model?.thinkingLevels ?? [],
-            ...(chosen ? {} : { level: view.thinkingLevel }),
+            ...(chosen || view.thinkingLevel === undefined
+              ? {}
+              : { level: view.thinkingLevel }),
             auto: true,
             cwd: view.cwd,
           }}

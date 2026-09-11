@@ -51,14 +51,15 @@
     display: flex !important;
   }
 
+  /* Both carry pi-web's inline styles, which outrank a plain rule. */
   #top-bar [data-cache-read],
   #top-bar .mobile-session-context > svg {
-    display: none;
+    display: none !important;
   }
 
   #top-bar [data-top-bar-tab] {
-    width: 36px;
-    padding: 0;
+    width: 36px !important;
+    padding: 0 !important;
   }
 
   #top-bar [data-top-bar-tab] > span {
@@ -70,5 +71,53 @@
     gap: 7px;
     padding-right: 6px;
     padding-left: 6px;
+  }
+}
+
+/* The System and Tools icons carry the accent once their panel has told the
+   page what the session runs with; pi-web reads that from the session state
+   it already holds, web-pi from the panel it just loaded (client/shell.ts).
+   The colour is on an inline style, so this rule needs the weight. */
+[data-top-panel][data-panel-loaded] [data-panel-icon] {
+  color: var(--accent) !important;
+}
+
+/* The narrow-phone toolbar. pi-web renders the three tabs into an overlay
+   that slides over the bar from behind a "more" button, and renders neither
+   on a wider viewport (AppShell.tsx L1978-L2090). The server cannot see the
+   viewport, so both live in the page and this query picks the shape:
+   36px sidebar toggle + 36px more button = the overlay's left edge. */
+/* Both carry pi-web's own inline styles, so the display each viewport does
+   not use has to be overridden with more weight than an attribute has. */
+#mobile-toolbar-more {
+  display: none !important;
+}
+
+@media (max-width: 480px) {
+  #mobile-toolbar-more {
+    display: flex !important;
+  }
+
+  #mobile-toolbar-more[aria-expanded="true"] {
+    z-index: 21;
+    background: var(--bg-selected);
+    color: var(--text);
+  }
+
+  #top-bar-tabs {
+    display: none !important;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 72px;
+    z-index: 20;
+    background: color-mix(in srgb, var(--bg-panel) 94%, var(--bg));
+    box-shadow: 4px 0 18px rgba(0, 0, 0, 0.12);
+    backdrop-filter: blur(10px);
+  }
+
+  #top-bar-tabs[data-open] {
+    display: flex !important;
   }
 }

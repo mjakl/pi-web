@@ -2,26 +2,6 @@
 // run reaches a reader whose tab is closed; everything else here already
 // assumes a page is open.
 
-import { setSwitch, switchOn } from "./preferences.ts";
-
-const PUSH_KEY = "web-pi:push";
-
-function wanted(): boolean {
-  try {
-    return localStorage.getItem(PUSH_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-function remember(on: boolean): void {
-  try {
-    localStorage.setItem(PUSH_KEY, on ? "true" : "false");
-  } catch {
-    // Without storage the choice lasts for this page only.
-  }
-}
-
 function registerWorker(): void {
   if (!("serviceWorker" in navigator)) return;
   const src = document.body.dataset["swSrc"];
@@ -96,44 +76,16 @@ export function subscribePush(): Promise<boolean> {
   return attempt;
 }
 
-/** The settings toggle: asking for permission needs a real click. */
-function setUpToggle(): void {
-  const toggle = document.querySelector<HTMLButtonElement>("#push-toggle");
-  if (!toggle) return;
-  const supported =
-    "serviceWorker" in navigator &&
-    "PushManager" in window &&
-    "Notification" in window;
-  if (!supported) {
-    toggle.disabled = true;
-    toggle.title = "This browser cannot receive push notifications";
-    return;
-  }
-  setSwitch(toggle, wanted() && Notification.permission === "granted");
-  toggle.addEventListener("click", () => {
-    if (switchOn(toggle)) {
-      // There is no unsubscribe route, as in pi-web: the server drops a
-      // subscription when the push service says it is gone.
-      setSwitch(toggle, false);
-      remember(false);
-      return;
-    }
-    void (async () => {
-      const permission =
-        Notification.permission === "default"
-          ? await Notification.requestPermission()
-          : Notification.permission;
-      const ok = permission === "granted" && (await subscribePush());
-      setSwitch(toggle, ok);
-      remember(ok);
-    })();
-  });
-}
-
 export function setUpPush(): void {
   registerWorker();
-  setUpToggle();
-  // A browser that already agreed re-subscribes quietly: the push service may
-  // have retired the old endpoint while this tab was away.
-  if (wanted()) void subscribePush();
+  // pi-web has no switch for this: a browser that granted notifications is
+  // subscribed, and re-subscribed on every load, because the push service may
+  // have retired the old endpoint while this tab was away (AppShell.tsx L106).
+  if (
+    "Notification" in window &&
+    Notification.permission === "granted" &&
+    document.body.dataset["swSrc"] !== undefined
+  ) {
+    void subscribePush();
+  }
 }
