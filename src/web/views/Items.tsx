@@ -11,6 +11,7 @@ import type {
   BashItem,
   CompactionItem,
   NoteItem,
+  SubagentCall,
   SubagentRun,
   SubagentView,
   ToolCallView,
@@ -41,6 +42,8 @@ export type ItemActions = {
   timestamps?: Set<string>;
   /** Inside the running turn: no actions, no diagram preview. */
   live?: boolean;
+  /** The last line each running tool reported, by tool-call id. */
+  progress?: Record<string, string>;
 };
 
 function Markdown({
@@ -218,12 +221,16 @@ function UserMessage({
           size="thumb"
         />
         {item.command === undefined ? (
-          <div class="w-full rounded-box bg-base-200 px-3 py-2 whitespace-pre-wrap">
+          // `data-user-text` is what the composer's ArrowUp history reads.
+          <div
+            data-user-text
+            class="w-full rounded-box bg-base-200 px-3 py-2 whitespace-pre-wrap"
+          >
             {item.text}
           </div>
         ) : (
           <details class="w-full rounded-box bg-base-200 px-3 py-2">
-            <summary class="cursor-pointer font-mono text-sm">
+            <summary data-user-text class="cursor-pointer font-mono text-sm">
               {item.command}
             </summary>
             <Markdown source={item.text} actions={actions} />
@@ -439,6 +446,30 @@ const STATUS_GLYPH = {
   unknown: "—",
 } as const;
 
+/** What a subagent run was given and where it ran. */
+function RunDetails({ call, run }: { call: SubagentCall; run?: SubagentRun }) {
+  const rows: [string, string][] = [
+    ["Agent", call.agent],
+    ["Model", run?.model ?? call.model ?? ""],
+    ["Folder", run?.cwd ?? call.cwd ?? ""],
+    ["Initial context", call.initialContext ?? ""],
+    ["Session", call.session ?? ""],
+  ].filter((row): row is [string, string] => (row[1] ?? "") !== "");
+  if (rows.length === 0) return <></>;
+  return (
+    <dl class="grid grid-cols-[auto_1fr] gap-x-3 text-xs text-base-content/60">
+      {rows.map(([label, value]) => (
+        <>
+          <dt>{label}</dt>
+          <dd class="truncate font-mono" title={value}>
+            {value}
+          </dd>
+        </>
+      ))}
+    </dl>
+  );
+}
+
 function SubagentRunBody({
   run,
   prompt,
@@ -450,10 +481,6 @@ function SubagentRunBody({
 }) {
   return (
     <div class="flex flex-col gap-2">
-      <div class="text-xs text-base-content/60">
-        {run.model ?? ""}{" "}
-        {run.cwd ? <span title={run.cwd}>{run.cwd}</span> : null}
-      </div>
       {run.error === undefined ? null : (
         <p class="text-sm text-error">{run.error}</p>
       )}
@@ -488,6 +515,8 @@ function Subagent({
 }) {
   const { calls, runs } = view;
   const running = call.result === undefined;
+  // What the tool last reported, while it is still reporting.
+  const progress = actions?.progress?.[call.id];
   const counts = new Map<string, number>();
   for (const run of runs ?? []) {
     counts.set(run.status, (counts.get(run.status) ?? 0) + 1);
@@ -505,7 +534,9 @@ function Subagent({
       <summary class="flex cursor-pointer flex-wrap items-center gap-2 px-3 py-1">
         <span class="font-mono text-xs">{summary}</span>
         {running ? (
-          <span class="text-xs text-base-content/60">◌ running</span>
+          <span class="text-xs text-base-content/60">
+            ◌ running{progress === undefined ? "" : ` · ${progress}`}
+          </span>
         ) : (
           <span class="text-xs text-base-content/60">
             {[...counts.entries()]
@@ -530,6 +561,12 @@ function Subagent({
                   {run ? `${STATUS_GLYPH[run.status]} ${run.status}` : "◌"}
                 </span>
               </summary>
+              <RunDetails call={item} {...(run ? { run } : {})} />
+              {progress === undefined ? null : (
+                <p class="animate-pulse font-mono text-xs text-base-content/60">
+                  {progress}
+                </p>
+              )}
               {run ? (
                 <SubagentRunBody
                   run={run}
@@ -854,6 +891,12 @@ function Compaction({
   actions?: ItemActions;
 }) {
   const files = item.readFiles.length + item.modifiedFiles.length;
+  // What it cost and what it left behind. The "after" is Pi's own context
+  // build re-run at this entry, so it is an estimate and says so.
+  const numbers =
+    item.tokensAfter === undefined
+      ? `${formatTokens(item.tokensBefore)} tokens before`
+      : `${formatTokens(item.tokensBefore)} → ~${formatTokens(item.tokensAfter)} tokens`;
   return (
     <details
       id={`entry-${item.entryId}`}
@@ -861,9 +904,18 @@ function Compaction({
     >
       <summary
         class="cursor-pointer text-base-content/70"
-        aria-label={`Conversation compacted: ${formatTokens(item.tokensBefore)} tokens before`}
+        aria-label={`Conversation compacted: ${numbers}`}
       >
-        Conversation compacted · {formatTokens(item.tokensBefore)} tokens before
+        Conversation compacted ·{" "}
+        <span
+          title={
+            item.tokensAfter === undefined
+              ? "Reported by the model"
+              : "The size after compaction is estimated"
+          }
+        >
+          {numbers}
+        </span>
       </summary>
       <p class="my-2 text-xs text-base-content/60">
         Everything before this point was replaced by the summary below.
@@ -965,14 +1017,22 @@ function Bash({ item, actions }: { item: BashItem; actions?: ItemActions }) {
         )}
         <div class="flex items-center gap-2">
           {item.truncated && item.outputPath !== undefined && actions ? (
-            <a
-              class="link text-xs"
-              target="_blank"
-              rel="noreferrer"
-              href={`/sessions/${actions.sessionId}/bash-output?path=${encodeURIComponent(item.outputPath)}`}
-            >
-              View full output
-            </a>
+            <>
+              <a
+                class="link text-xs"
+                target="_blank"
+                rel="noreferrer"
+                href={`/sessions/${actions.sessionId}/bash-output?path=${encodeURIComponent(item.outputPath)}`}
+              >
+                View full output
+              </a>
+              <a
+                class="link text-xs"
+                href={`/sessions/${actions.sessionId}/bash-output?path=${encodeURIComponent(item.outputPath)}&download=1`}
+              >
+                Download
+              </a>
+            </>
           ) : null}
           <Copy text={item.output} />
           {actions && !item.pending ? (
@@ -1193,11 +1253,20 @@ export function TurnFragment({
   // Only a turn that is actually working renders flat: grouping a moving
   // target hides what just happened. A finished turn groups like any other.
   const live = status?.running === true || status?.bashRunning === true;
+  const progress = Object.fromEntries(
+    (status?.tools ?? [])
+      .filter((tool) => tool.progress !== undefined)
+      .map((tool) => [tool.id, tool.progress ?? ""]),
+  );
   return (
     <>
       <Items
         items={items}
-        actions={{ ...actions, ...(live ? { live } : {}) }}
+        actions={{
+          ...actions,
+          ...(live ? { live } : {}),
+          ...(Object.keys(progress).length > 0 ? { progress } : {}),
+        }}
       />
       {label === null ? null : (
         <p class="my-2 animate-pulse font-mono text-xs text-base-content/60">

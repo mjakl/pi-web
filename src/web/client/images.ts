@@ -63,7 +63,7 @@ export function setUpImages(): Attachments {
       URL.revokeObjectURL(url.src);
     }
     previews.replaceChildren();
-    attached.forEach((file, index) => {
+    for (const file of attached) {
       const wrapper = document.createElement("div");
       wrapper.className = "relative";
       const image = document.createElement("img");
@@ -76,13 +76,17 @@ export function setUpImages(): Attachments {
         "btn absolute -top-2 -right-2 btn-circle btn-xs btn-neutral";
       remove.textContent = "×";
       remove.setAttribute("aria-label", `Remove ${file.name}`);
+      // By identity, never by the index this closure was built with: a
+      // downscale finishing in the meantime renumbers the list.
       remove.addEventListener("click", () => {
-        attached.splice(index, 1);
+        const at = attached.indexOf(file);
+        if (at === -1) return;
+        attached.splice(at, 1);
         paint();
       });
       wrapper.append(image, remove);
       previews.append(wrapper);
-    });
+    }
     document
       .querySelector("#composer")
       ?.toggleAttribute("data-has-images", attached.length > 0);
@@ -139,6 +143,31 @@ export function setUpImages(): Attachments {
     if (files.length === 0) return;
     event.preventDefault();
     add(files);
+  });
+
+  // Images a recall took back out of the queue arrive as base64 in a hidden
+  // element; they become Files again so the next send carries them.
+  document.body.addEventListener("htmx:afterSwap", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element) || target.id !== "recalled-images") return;
+    const recalled: File[] = [];
+    for (const item of target.querySelectorAll<HTMLElement>("[data-image]")) {
+      const data = item.dataset["image"] ?? "";
+      const mime = item.dataset["mime"] ?? "image/png";
+      if (data === "") continue;
+      try {
+        const bytes = Uint8Array.from(atob(data), (c) => c.codePointAt(0) ?? 0);
+        recalled.push(
+          new File([bytes], `recalled.${mime.split("/")[1] ?? "png"}`, {
+            type: mime,
+          }),
+        );
+      } catch {
+        // A payload the browser cannot decode is simply not restored.
+      }
+    }
+    target.replaceChildren();
+    if (recalled.length > 0) add(recalled);
   });
 
   return {

@@ -1,3 +1,5 @@
+import { upgradeDialogs } from "./dialogs.ts";
+
 type Mermaid = {
   initialize(config: Record<string, unknown>): void;
   parse(text: string): Promise<unknown>;
@@ -38,6 +40,10 @@ async function library(): Promise<Mermaid> {
 function zoomDialog(svg: string): void {
   const dialog = document.createElement("dialog");
   dialog.className = "modal";
+  // Every modal in this app is a `dialog[data-modal]` that `dialogs.ts`
+  // upgrades and removes; going through it is what makes Escape close the
+  // zoom instead of aborting the turn behind it.
+  dialog.setAttribute("data-modal", "");
   let zoom = 1;
   dialog.innerHTML = `<div class="modal-box max-w-[95vw]">
     <div class="mb-2 flex items-center gap-2">
@@ -71,11 +77,8 @@ function zoomDialog(svg: string): void {
     else zoom = Math.max(ZOOM_MIN, zoom - ZOOM_STEP);
     apply();
   });
-  dialog.addEventListener("close", () => {
-    dialog.remove();
-  });
   document.body.append(dialog);
-  dialog.showModal();
+  upgradeDialogs(dialog);
 }
 
 async function preview(block: HTMLElement): Promise<void> {

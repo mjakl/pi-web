@@ -1,5 +1,6 @@
 import { buildAtInsertText } from "@core/composer";
 import { replaceRange, textarea } from "./editor.ts";
+import { setUpResize } from "./resize.ts";
 
 // The file panel's browser half: how wide it is, which tabs are open, where
 // each was scrolled, and the stream that tells the viewer its file moved.
@@ -9,8 +10,6 @@ import { replaceRange, textarea } from "./editor.ts";
 const WIDTH_KEY = "web-pi:panel-width";
 const MIN_WIDTH = 300;
 const MAX_WIDTH = 1200;
-const KEY_STEP = 12;
-const SHIFT_STEP = 32;
 
 type Htmx = {
   ajax(verb: string, path: string, context: unknown): Promise<void>;
@@ -41,16 +40,6 @@ function defaultWidth(): number {
   return Math.min(640, Math.max(360, Math.round(innerWidth * 0.42)));
 }
 
-function storedWidth(): number {
-  try {
-    const value = Number(localStorage.getItem(WIDTH_KEY));
-    if (Number.isFinite(value) && value > 0) return value;
-  } catch {
-    // Storage can be blocked; the default width still works.
-  }
-  return defaultWidth();
-}
-
 /**
  * The panel is a column beside the conversation at 960px and up, so it may
  * not grow past what leaves the transcript room to read; below that it
@@ -63,28 +52,6 @@ function maxWidth(): number {
     panel()?.parentElement?.getBoundingClientRect().width ?? innerWidth;
   const room = innerWidth >= 960 ? row - 420 : row;
   return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, room));
-}
-
-function applyWidth(width: number, persist: boolean): void {
-  const clamped = Math.min(maxWidth(), Math.max(MIN_WIDTH, Math.round(width)));
-  document.documentElement.style.setProperty(
-    "--file-panel-width",
-    `${String(clamped)}px`,
-  );
-  if (!persist) return;
-  try {
-    localStorage.setItem(WIDTH_KEY, String(clamped));
-  } catch {
-    // Without storage the width lasts for this page only.
-  }
-}
-
-function currentWidth(): number {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(
-    "--file-panel-width",
-  );
-  const width = Number.parseFloat(value);
-  return Number.isFinite(width) ? width : storedWidth();
 }
 
 function isOpen(): boolean {
@@ -169,7 +136,9 @@ function loadViewer(path: string, mode?: string): void {
 
 function restoreViewer(): void {
   const element = viewer();
-  if (!element || active === null) return;
+  if (!element) return;
+  describeMedia(element);
+  if (active === null) return;
   const state = tabs.get(active);
   if (!state) return;
   state.mode = element.dataset["mode"] ?? state.mode;
@@ -387,51 +356,76 @@ function onTreeKey(event: KeyboardEvent): void {
 
 // --- Resizing ------------------------------------------------------------
 
-function setUpResize(): void {
+function setUpPanelResize(): void {
   const handle = document.querySelector<HTMLElement>(".panel-resize");
   if (!handle) return;
-  let dragging = false;
-  handle.addEventListener("pointerdown", (event) => {
-    dragging = true;
-    handle.setPointerCapture(event.pointerId);
-    event.preventDefault();
+  setUpResize({
+    handle,
+    storageKey: WIDTH_KEY,
+    property: "--file-panel-width",
+    min: MIN_WIDTH,
+    max: maxWidth,
+    fallback: defaultWidth,
+    // Anchored to the right edge: the width is the distance to it.
+    widthAt: (clientX) => innerWidth - clientX,
   });
-  handle.addEventListener("pointermove", (event) => {
-    // The panel is anchored to the right edge, so the width is the distance
-    // from the pointer to that edge.
-    if (dragging) applyWidth(innerWidth - event.clientX, false);
-  });
-  const release = (event: PointerEvent) => {
-    if (!dragging) return;
-    dragging = false;
-    handle.releasePointerCapture(event.pointerId);
-    applyWidth(currentWidth(), true);
+}
+
+/**
+ * What only the browser can measure: an image's pixels and an audio file's
+ * length. Both land next to the size the server already rendered.
+ */
+function describeMedia(root: ParentNode): void {
+  const meta = root.querySelector<HTMLElement>(".viewer-meta");
+  if (!meta) return;
+  const append = (text: string): void => {
+    if (meta.textContent?.includes(text) ?? false) return;
+    meta.textContent = `${meta.textContent ?? ""} · ${text}`;
   };
-  handle.addEventListener("pointerup", release);
-  handle.addEventListener("pointercancel", release);
-  handle.addEventListener("blur", () => {
-    dragging = false;
-  });
-  handle.addEventListener("dblclick", () => {
-    applyWidth(defaultWidth(), true);
-  });
-  handle.addEventListener("keydown", (event) => {
-    const step = event.shiftKey ? SHIFT_STEP : KEY_STEP;
-    const width = currentWidth();
-    if (event.key === "ArrowLeft") applyWidth(width + step, true);
-    else if (event.key === "ArrowRight") applyWidth(width - step, true);
-    else if (event.key === "Home") applyWidth(MIN_WIDTH, true);
-    else if (event.key === "End") applyWidth(maxWidth(), true);
-    else if (event.key === "Enter") applyWidth(defaultWidth(), true);
-    else return;
-    event.preventDefault();
+  const image = root.querySelector("img");
+  if (image) {
+    const size = () => {
+      if (image.naturalWidth > 0) {
+        append(
+          `${String(image.naturalWidth)} × ${String(image.naturalHeight)}`,
+        );
+      }
+    };
+    if (image.complete) size();
+    else image.addEventListener("load", size, { once: true });
+  }
+  const audio = root.querySelector("audio");
+  if (audio) {
+    const length = () => {
+      if (!Number.isFinite(audio.duration)) return;
+      const seconds = Math.round(audio.duration);
+      const minutes = Math.floor(seconds / 60);
+      append(`${String(minutes)}:${String(seconds % 60).padStart(2, "0")}`);
+    };
+    if (audio.readyState > 0) length();
+    else audio.addEventListener("loadedmetadata", length, { once: true });
+  }
+}
+
+/** The sidebar drags the same way the panel does, from the other side. */
+export function setUpSidebarResize(): void {
+  const handle = document.querySelector<HTMLElement>(".sidebar-resize");
+  if (!handle) return;
+  setUpResize({
+    handle,
+    storageKey: "web-pi:sidebar-width",
+    property: "--sidebar-width",
+    min: 180,
+    max: () => Math.min(480, Math.max(180, innerWidth - 320)),
+    fallback: () => 260,
+    // Anchored to the left edge: the width is the pointer's own x.
+    widthAt: (clientX) => clientX,
   });
 }
 
 export function setUpFilePanel(): void {
   if (!panel()) return;
-  applyWidth(storedWidth(), false);
-  setUpResize();
+  setUpPanelResize();
   document.body.dataset["filePanel"] = "closed";
 
   document

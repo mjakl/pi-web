@@ -3,6 +3,8 @@
 // bold are carried over; every other escape is dropped and every character of
 // text is escaped, so extension output can never become markup.
 
+import { escapeHtml } from "./html.ts";
+
 /** Any escape sequence: CSI, OSC or APC (Pi's cursor marker), or a short one. */
 const ESCAPE =
   // eslint-disable-next-line no-control-regex -- this module exists to match them
@@ -40,14 +42,6 @@ function cube(index: number): string {
   const green = step(Math.floor(offset / 6) % 6);
   const blue = step(offset % 6);
   return `rgb(${String(red)},${String(green)},${String(blue)})`;
-}
-
-export function escapeHtml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 /** Terminal output as plain text: for titles, labels, and screen readers. */

@@ -1,6 +1,7 @@
 import { formatTokens } from "@core/context-usage";
-import type { LiveStatus, ModelOption } from "@core/ports";
+import type { LiveStatus } from "@core/ports";
 import type { SessionView } from "@core/workspace";
+import { ModelPicker } from "./Composer.tsx";
 
 const LEVEL_CLASS = {
   unknown: "badge-ghost",
@@ -30,43 +31,6 @@ export function ContextBadge({ usage }: { usage: SessionView["usage"] }) {
       {estimated ? "~" : ""}
       {text}
     </span>
-  );
-}
-
-/** Providers keep their first-appearance order; headers only when there are two. */
-function ModelSelect({
-  models,
-  current,
-}: {
-  models: ModelOption[];
-  current: ModelOption | null;
-}) {
-  const providers = [...new Set(models.map((model) => model.provider))];
-  const option = (model: ModelOption) => (
-    <option
-      value={`${model.provider}/${model.id}`}
-      selected={current?.provider === model.provider && current.id === model.id}
-    >
-      {model.name}
-    </option>
-  );
-  return (
-    <select
-      name="model"
-      class="select max-w-48 select-xs"
-      aria-label="Model"
-      title={`${String(models.length)} models. Type to search.`}
-    >
-      {providers.length > 1
-        ? providers.map((provider) => (
-            <optgroup label={provider}>
-              {models
-                .filter((model) => model.provider === provider)
-                .map(option)}
-            </optgroup>
-          ))
-        : models.map(option)}
-    </select>
   );
 }
 
@@ -165,23 +129,12 @@ export function Status({ view }: { view: SessionView }) {
           hx-swap="none"
           class="flex items-center gap-1"
         >
-          <ModelSelect models={view.models} current={current} />
-          {current?.reasoning ? (
-            <select
-              name="thinking"
-              class="select select-xs"
-              aria-label="Reasoning"
-            >
-              {status.thinkingLevels.map((choice) => (
-                <option
-                  value={choice.level}
-                  selected={choice.level === status.thinkingLevel}
-                >
-                  {choice.label}
-                </option>
-              ))}
-            </select>
-          ) : null}
+          <ModelPicker
+            models={view.models}
+            current={current}
+            levels={status.thinkingLevels}
+            level={status.thinkingLevel}
+          />
         </form>
       ) : (
         <span class="text-base-content/60">not running</span>
@@ -230,6 +183,11 @@ export function Status({ view }: { view: SessionView }) {
           Retrying ({String(status.retry.attempt)}/
           {String(status.retry.maxAttempts)})…
           <span class="opacity-60">{status.retry.message}</span>
+        </div>
+      ) : null}
+      {status?.compactionError ? (
+        <div class="alert w-full py-1 text-xs alert-error" role="alert">
+          {status.compactionError}
         </div>
       ) : null}
       {status?.compaction ? (

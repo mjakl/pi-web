@@ -1,6 +1,8 @@
 import {
   directoryWithin,
   isBashOutputPath,
+  localFilePath,
+  resolveUnder,
   parentPath,
   referencesPath,
   samePath,
@@ -83,5 +85,28 @@ describe("referencesPath", () => {
 
   it("finds a percent-encoded mention", () => {
     expect(referencesPath("href=/repo/a%20b.txt", "/repo/a b.txt")).toBe(true);
+  });
+});
+
+describe("localFilePath", () => {
+  it("accepts absolute, file:, and contained relative paths", () => {
+    expect(localFilePath("/etc/hosts", "/repo")).toBe("/etc/hosts");
+    expect(localFilePath("file:///repo/a.ts", "/repo")).toBe("/repo/a.ts");
+    expect(localFilePath("src/a.ts:12", "/repo")).toBe("/repo/src/a.ts");
+  });
+
+  it("rejects other schemes, protocol-relative, and escapes", () => {
+    expect(localFilePath("https://x.dev/a", "/repo")).toBeNull();
+    expect(localFilePath("//x.dev/a", "/repo")).toBeNull();
+    expect(localFilePath("../../etc/passwd", "/repo")).toBeNull();
+    expect(localFilePath("just words", "/repo")).toBeNull();
+  });
+});
+
+describe("resolveUnder", () => {
+  it("joins a relative path onto the folder and collapses dots", () => {
+    expect(resolveUnder("/repo", "src/a.ts")).toBe("/repo/src/a.ts");
+    expect(resolveUnder("/repo", "./src/../a.ts")).toBe("/repo/a.ts");
+    expect(resolveUnder("/repo", "/tmp/a.ts")).toBe("/tmp/a.ts");
   });
 });

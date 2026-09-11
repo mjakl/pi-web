@@ -1,7 +1,31 @@
-import type { ModelOption, ThinkingLevel } from "./ports.ts";
+import type { ModelOption, ThinkingChoice, ThinkingLevel } from "./ports.ts";
 
 // Which model a new session starts on, and which of those choices are written
 // back to Pi's settings as the new default.
+
+/** Every level Pi knows, in the order a picker shows them. */
+const THINKING_LEVELS: ThinkingLevel[] = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
+/**
+ * The reasoning levels a model actually offers. Pi's `thinkingLevelMap` marks
+ * an unsupported level with `null` and gives the others the name the provider
+ * uses; a missing map means the model takes every level as it comes.
+ */
+export function thinkingChoices(
+  map: Partial<Record<string, string | null>> | undefined,
+): ThinkingChoice[] {
+  return THINKING_LEVELS.filter((level) => map?.[level] !== null).map(
+    (level) => ({ level, label: map?.[level] ?? level }),
+  );
+}
 
 /** The configured default when it is still in scope, else the first model. */
 export function initialModel(

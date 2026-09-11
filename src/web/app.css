@@ -85,6 +85,25 @@
   --tw-prose-td-borders: var(--color-base-300);
 }
 
+/* The app is exactly as tall as what the reader can see. `--app-viewport-height`
+   is set by src/web/client/viewport.ts only while a phone keyboard is covering
+   part of the page; an installed app has no browser chrome to account for. */
+html {
+  height: var(--app-viewport-height, 100dvh);
+}
+
+@media (display-mode: standalone) {
+  :root {
+    --app-viewport-height: 100vh;
+  }
+}
+
+#composer {
+  padding-bottom: calc(
+    0.75rem + var(--app-safe-area-bottom, env(safe-area-inset-bottom))
+  );
+}
+
 /* The composer grows with its content and stops before it owns the screen. */
 .composer-textarea {
   field-sizing: content;
@@ -418,6 +437,45 @@
 
 .extension-status {
   color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
+}
+
+/* The sidebar is a column of its own width, dragged by the same handle code
+   as the file panel and remembered in localStorage. */
+:root {
+  --sidebar-width: 260px;
+}
+
+.sidebar {
+  position: relative;
+  width: var(--sidebar-width);
+  border-right: 1px solid var(--color-base-300);
+}
+
+.sidebar-resize {
+  position: absolute;
+  z-index: 10;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar-resize:hover,
+.sidebar-resize:focus-visible {
+  background: color-mix(in oklab, var(--color-primary) 40%, transparent);
+}
+
+@media (max-width: 767px) {
+  /* A drawer owns its width; there is nothing beside it to trade with. */
+  .sidebar {
+    width: 18rem;
+  }
+
+  .sidebar-resize {
+    display: none;
+  }
 }
 
 /* File panel: a resizable column at ≥960px, an overlay below that, and the

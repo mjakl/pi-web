@@ -24,6 +24,9 @@ import type { ProjectInfo, WorktreeInfo } from "./workspaces.ts";
 // system; adapters in src/adapters implement them. Everything here is an
 // Internal interface: all consumers live in this repository.
 
+/** A thinking level plus the label the model gives it. */
+export type ThinkingChoice = { level: ThinkingLevel; label: string };
+
 export type ModelOption = {
   provider: string;
   id: string;
@@ -32,6 +35,8 @@ export type ModelOption = {
   reasoning: boolean;
   /** Reasoning level pinned for this model by an `enabledModels` pattern. */
   pin?: ThinkingLevel;
+  /** The reasoning levels this model offers, for a picker before a session. */
+  thinkingLevels?: ThinkingChoice[];
 };
 
 export type { ThinkingLevel };
@@ -60,6 +65,16 @@ export type SessionCatalog = {
   ): Promise<
     { summary: SessionSummary; metadata: SessionRowMetadata } | undefined
   >;
+  /**
+   * Tokens the context holds right after the compaction at `entryId`: Pi's
+   * own context build, estimated the way Pi estimates it. Undefined when the
+   * entry is not on a branch that can be rebuilt.
+   */
+  contextTokensAt(
+    sessionId: string,
+    entries: readonly SessionEntry[],
+    entryId: string,
+  ): number | undefined;
   rename(id: string, name: string): Promise<void>;
   /** Deletes the file and re-attaches its children to its own parent. */
   remove(id: string): Promise<void>;
@@ -147,10 +162,12 @@ export type Notice = { level: "info" | "warning" | "error"; message: string };
 
 export type ImageAttachment = { data: string; mimeType: string };
 
-export type QueuedMessage = { text: string; behavior: "steer" | "followUp" };
-
-/** A thinking level plus the label the model gives it. */
-export type ThinkingChoice = { level: ThinkingLevel; label: string };
+export type QueuedMessage = {
+  text: string;
+  behavior: "steer" | "followUp";
+  /** Attachments the queued message carried, so a recall keeps them. */
+  images?: ImageAttachment[];
+};
 
 export type CompactionSummary = {
   tokensBefore: number;
@@ -178,7 +195,7 @@ export type ToolView = {
 };
 
 /** A tool executing right now, with the last line it reported. */
-export type RunningTool = { name: string; progress?: string };
+export type RunningTool = { id: string; name: string; progress?: string };
 
 /** Pi is retrying a failed provider call by itself. */
 export type RetryState = {
@@ -206,6 +223,8 @@ export type LiveStatus = {
   queue: QueuedMessage[];
   /** The last compaction that finished, for the success strip. */
   compaction: CompactionSummary | null;
+  /** Why the last compaction failed: an alert, not a toast that scrolls away. */
+  compactionError: string | null;
   /** Tools running right now, for the activity line. */
   tools: RunningTool[];
   /** Set while Pi retries a failed provider call. */
@@ -232,8 +251,20 @@ export type LiveSnapshot = {
   branch: SessionEntry[];
   /** Every entry of the session, all branches. */
   entries: SessionEntry[];
-  /** Index into `branch` where the current or last turn began. */
+  /**
+   * Index into `branch` where the current turn begins. It moves to the end of
+   * the branch the moment the agent settles, so everything before it is
+   * settled history and a re-render after the turn cannot show it twice.
+   */
   turnStart: number;
+  /**
+   * The turn that just ended, as a range into `branch`. It survives the next
+   * prompt, so the one render that appends it to the log gets the right
+   * messages even when it runs after that prompt has started.
+   */
+  settledTurn: { start: number; end: number } | null;
+  /** Arguments still streaming in, by index in the partial message's content. */
+  partialArguments?: Record<string, string>;
   /** In-progress assistant message while streaming. */
   partial?: Extract<AgentMessage, { role: "assistant" }>;
   /** Shell command running right now, with the output collected so far. */

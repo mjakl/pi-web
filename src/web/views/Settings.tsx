@@ -10,6 +10,7 @@ import {
   type SkillSearchHit,
   type SkillUpdate,
 } from "@core/skills";
+import { DEFAULT_WARN_TOKENS } from "@core/context-usage";
 import { shortPath } from "./Workspace.tsx";
 
 // Settings are plain pages: one section at a time, swapped by HTMX. Nothing
@@ -99,7 +100,13 @@ function SectionNav({ active, cwd }: { active: SettingsSection; cwd: string }) {
 export type About = { webPi: string; pi: string };
 
 /** Preferences the server cannot hold: they belong to this browser. */
-function GeneralSettings({ about }: { about?: About }) {
+function GeneralSettings({
+  about,
+  warnTokens,
+}: {
+  about?: About;
+  warnTokens: number;
+}) {
   return (
     <div class="flex max-w-md flex-col gap-5">
       <fieldset>
@@ -141,7 +148,7 @@ function GeneralSettings({ about }: { about?: About }) {
             type="number"
             min="1"
             step="1000"
-            value="100000"
+            value={String(warnTokens)}
             class="input w-32 input-sm"
           />
           <span class="text-base-content/60">
@@ -210,6 +217,8 @@ export type SkillsView = {
   projectResourcesLoaded: boolean;
   /** The last check, so a row can carry its ↑ marker. */
   updates?: SkillUpdate[];
+  /** The skill this folder was last looking at. */
+  selected?: string;
 };
 
 function skillRowClass(active: boolean): string {
@@ -468,7 +477,9 @@ export function SkillsSection({
   home?: string;
 }) {
   const skill =
-    view.skills.find((entry) => entry.filePath === selected) ?? view.skills[0];
+    view.skills.find(
+      (entry) => entry.filePath === (selected ?? view.selected),
+    ) ?? view.skills[0];
   return (
     <div class="flex min-h-0 flex-col gap-2">
       {view.projectResourcesLoaded ? null : <TrustNotice what="skills" />}
@@ -812,6 +823,19 @@ export function PluginsSection({
         >
           Refresh
         </button>
+        {/* A plugin change only reaches a session that is rebuilt: this asks
+            every live session of this folder to reload its resources. */}
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs"
+          title="Reload extensions, skills, and prompts in the sessions of this folder"
+          hx-post="/settings/plugins/reload"
+          hx-vals={JSON.stringify({ cwd })}
+          hx-target="#settings-body"
+          hx-swap="innerHTML"
+        >
+          Reload sessions
+        </button>
       </div>
     </div>
   );
@@ -827,6 +851,7 @@ export function SettingsBody({
   home,
   about,
   error,
+  warnTokens,
 }: {
   section: SettingsSection;
   cwd: string;
@@ -836,6 +861,8 @@ export function SettingsBody({
   about?: About;
   /** Loading the section failed; saying so beats a silent empty panel. */
   error?: string;
+  /** The reader's context-warning threshold, from its cookie. */
+  warnTokens?: number;
 }) {
   if (error !== undefined) {
     return (
@@ -858,7 +885,12 @@ export function SettingsBody({
       />
     );
   }
-  return <GeneralSettings {...(about === undefined ? {} : { about })} />;
+  return (
+    <GeneralSettings
+      warnTokens={warnTokens ?? DEFAULT_WARN_TOKENS}
+      {...(about === undefined ? {} : { about })}
+    />
+  );
 }
 
 export function SettingsPage(props: {
@@ -869,6 +901,7 @@ export function SettingsPage(props: {
   home?: string;
   about?: About;
   error?: string;
+  warnTokens?: number;
   back: string;
 }) {
   return (

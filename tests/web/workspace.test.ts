@@ -6,7 +6,7 @@ import {
 } from "@adapters/fake/index";
 import { createWorkspace } from "@core/workspace";
 import { createWebApp } from "@web/app";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -89,6 +89,44 @@ describe("the folder picker", () => {
     expect(html).toContain("feature");
     expect(html).toContain('aria-current="true"');
     expect(html).toContain("repo · main");
+  });
+
+  it("refuses to probe a folder outside every allowed root", async () => {
+    const { app } = testApp();
+    // Probing runs git in the folder the query names; pi-web gates it the
+    // same way, through the allowed roots.
+    const denied = await app.request("/workspaces/folders?cwd=/etc");
+    expect(denied.status).toBe(403);
+  });
+
+  it("still answers for a project whose folder is gone", async () => {
+    const { app } = testApp({ missingFolders: [repo], worktrees: () => [] });
+    await rm(repo, { recursive: true, force: true });
+    const html = await (
+      await app.request(`/workspaces/folders?cwd=${encodeURIComponent(repo)}`)
+    ).text();
+    expect(html).toContain("No working folders available");
+  });
+
+  it("adds a listed worktree to the roots a file may be read from", async () => {
+    const { app } = testApp({
+      worktrees: (cwd) => [
+        { path: cwd, branch: "main" },
+        { path: join(root, "wt"), branch: "feature" },
+      ],
+    });
+    await mkdir(join(root, "wt"), { recursive: true });
+    await writeFile(join(root, "wt", "note.txt"), "hello\n");
+    const before = await app.request(
+      `/files/view?path=${encodeURIComponent(join(root, "wt", "note.txt"))}`,
+    );
+    expect(before.status).toBe(403);
+
+    await app.request(`/workspaces/folders?cwd=${encodeURIComponent(repo)}`);
+    const after = await app.request(
+      `/files/view?path=${encodeURIComponent(join(root, "wt", "note.txt"))}`,
+    );
+    expect(after.status).toBe(200);
   });
 
   it("says so when a project has no folder left to offer", async () => {
@@ -468,5 +506,16 @@ describe("tool definitions and the system prompt", () => {
       await app.request("/sessions/s1/system-prompt")
     ).text();
     expect(prompt).toContain("You are Pi, a coding agent.");
+  });
+});
+
+describe("the new-session model picker", () => {
+  it("offers the model's own reasoning levels, plus auto", async () => {
+    const { app } = testApp();
+    const page = await (await app.request("/new")).text();
+    expect(page).toContain('<option value="">auto</option>');
+    // From the catalog's own list for this model, not a hard-coded one.
+    expect(page).toContain("balanced");
+    expect(page).not.toContain('value="xhigh"');
   });
 });

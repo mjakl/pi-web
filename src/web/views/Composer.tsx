@@ -1,5 +1,10 @@
 import type { SlashCommand, SlashSource } from "@core/composer";
-import type { ModelOption, Notice, ThinkingLevel } from "@core/ports";
+import type {
+  ModelOption,
+  Notice,
+  ThinkingChoice,
+  ThinkingLevel,
+} from "@core/ports";
 import type { NewSessionView } from "@core/workspace";
 
 // The composer is one form. The server renders it and every menu it opens;
@@ -90,6 +95,30 @@ function Menu({ id, label }: { id: string; label: string }) {
   );
 }
 
+/**
+ * Images a recall took back out of the queue. The client bundle turns each
+ * one into a File and puts it back in the attachment strip; nothing renders.
+ */
+export function RecalledImages({
+  images,
+  oob,
+}: {
+  images: { data: string; mimeType: string }[];
+  oob?: boolean;
+}) {
+  return (
+    <div
+      id="recalled-images"
+      hidden
+      {...(oob === false ? {} : { "hx-swap-oob": "innerHTML" })}
+    >
+      {images.map((image) => (
+        <span data-image={image.data} data-mime={image.mimeType} />
+      ))}
+    </div>
+  );
+}
+
 export function ComposerText({ draft }: { draft?: string }) {
   return (
     <textarea
@@ -106,16 +135,65 @@ export function ComposerText({ draft }: { draft?: string }) {
   );
 }
 
-/** Reasoning levels a model may be asked for; the model clamps what it cannot. */
-const THINKING_LEVELS: ThinkingLevel[] = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-];
+/**
+ * The model and reasoning selects, rendered the same way wherever they
+ * appear: the status bar of a running session and the new-session composer.
+ * `auto` is offered only before a session exists, where leaving the level
+ * unset means "whatever Pi defaults to".
+ */
+export function ModelPicker({
+  models,
+  current,
+  levels,
+  level,
+  auto,
+}: {
+  models: ModelOption[];
+  current: ModelOption | null;
+  levels: ThinkingChoice[];
+  level?: ThinkingLevel;
+  auto?: boolean;
+}) {
+  const providers = [...new Set(models.map((model) => model.provider))];
+  const option = (model: ModelOption) => (
+    <option
+      value={`${model.provider}/${model.id}`}
+      selected={current?.provider === model.provider && current.id === model.id}
+    >
+      {model.name}
+    </option>
+  );
+  return (
+    <>
+      <select
+        name="model"
+        class="select max-w-48 select-xs"
+        aria-label="Model"
+        title={`${String(models.length)} models. Type to search.`}
+      >
+        {providers.length > 1
+          ? providers.map((provider) => (
+              <optgroup label={provider}>
+                {models
+                  .filter((model) => model.provider === provider)
+                  .map(option)}
+              </optgroup>
+            ))
+          : models.map(option)}
+      </select>
+      {current?.reasoning && levels.length > 0 ? (
+        <select name="thinking" class="select select-xs" aria-label="Reasoning">
+          {auto ? <option value="">auto</option> : null}
+          {levels.map((choice) => (
+            <option value={choice.level} selected={choice.level === level}>
+              {choice.label}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </>
+  );
+}
 
 /**
  * The model a new session starts on. An explicit pick also becomes Pi's
@@ -124,44 +202,15 @@ const THINKING_LEVELS: ThinkingLevel[] = [
  */
 function StartupModel({ view }: { view: NewSessionView }) {
   if (view.models.length === 0) return <></>;
-  const providers = [...new Set(view.models.map((model) => model.provider))];
-  const option = (model: ModelOption) => (
-    <option
-      value={`${model.provider}/${model.id}`}
-      selected={
-        view.model?.provider === model.provider && view.model.id === model.id
-      }
-    >
-      {model.name}
-    </option>
-  );
   return (
     <div class="flex flex-wrap items-center gap-1">
-      <select
-        name="model"
-        class="select max-w-48 select-xs"
-        aria-label="Model"
-        title={`${String(view.models.length)} models. Type to search.`}
-      >
-        {providers.length > 1
-          ? providers.map((provider) => (
-              <optgroup label={provider}>
-                {view.models
-                  .filter((model) => model.provider === provider)
-                  .map(option)}
-              </optgroup>
-            ))
-          : view.models.map(option)}
-      </select>
-      {view.model?.reasoning ? (
-        <select name="thinking" class="select select-xs" aria-label="Reasoning">
-          {THINKING_LEVELS.map((level) => (
-            <option value={level} selected={level === view.thinkingLevel}>
-              {level}
-            </option>
-          ))}
-        </select>
-      ) : null}
+      <ModelPicker
+        models={view.models}
+        current={view.model ?? null}
+        levels={view.model?.thinkingLevels ?? []}
+        level={view.thinkingLevel}
+        auto
+      />
       {view.modelWarnings.length > 0 ? (
         <span class="w-full text-xs text-warning" role="alert">
           {view.modelWarnings.join("\n")}
@@ -214,6 +263,7 @@ export function Composer({
         value="steer"
       />
       <div id="image-previews" class="flex flex-wrap gap-2 empty:hidden" />
+      <RecalledImages images={[]} oob={false} />
       <input
         id="image-input"
         type="file"
@@ -240,10 +290,13 @@ export function Composer({
         </button>
         <span id="shell-hint" class="text-xs text-base-content/60" hidden />
         <span class="flex-1" />
+        {/* The delivery mode travels in the hidden field above, which the
+            click handler sets: htmx appends a submitter's own name and value
+            *after* the form's fields, so a named button here would lose to
+            the hidden one. */}
         <button
           type="submit"
-          name="behavior"
-          value="followUp"
+          data-behavior="followUp"
           class="composer-running-only btn btn-sm"
           title="Queue after the agent finishes (Alt+Enter)"
         >
@@ -251,8 +304,7 @@ export function Composer({
         </button>
         <button
           type="submit"
-          name="behavior"
-          value="steer"
+          data-behavior="steer"
           class="btn btn-primary btn-sm"
           title="Ctrl+Enter to send"
         >

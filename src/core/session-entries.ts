@@ -156,6 +156,23 @@ export function sessionStats(entries: readonly SessionEntry[]): SessionStats {
   };
 }
 
+/** Root-first path from an entry to the root, the way Pi walks a branch. */
+export function branchTo(
+  entries: readonly SessionEntry[],
+  leafId: string | null,
+): SessionEntry[] {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  const path: SessionEntry[] = [];
+  for (
+    let entry = leafId === null ? undefined : byId.get(leafId);
+    entry;
+    entry = entry.parentId === null ? undefined : byId.get(entry.parentId)
+  ) {
+    path.push(entry);
+  }
+  return path.reverse();
+}
+
 export type BranchLeaf = {
   /** Entry to view or navigate to; the tip of this branch. */
   id: string;
@@ -226,28 +243,60 @@ export function branchLeaves(
   );
 }
 
+/**
+ * The sidebar row rule as a fold, so the streaming reader in the Pi adapter
+ * and the in-memory caller apply exactly the same one: the last `session_info`
+ * wins, the first user message is the title, and a star only counts while its
+ * target is an assistant answer of this file.
+ */
+export function rowMetadataFold(): {
+  add(entry: SessionEntry): void;
+  finish(file: { modifiedAt: string; fileSize: number }): SessionRowMetadata;
+} {
+  const stars = new Map<string, boolean>();
+  const answers = new Set<string>();
+  let name: string | undefined;
+  let firstMessage = "";
+  let messageCount = 0;
+  return {
+    add(entry) {
+      if (entry.type === "session_info") {
+        const trimmed = entry.name?.trim();
+        name = trimmed === "" ? undefined : trimmed;
+        return;
+      }
+      const star = starData(entry);
+      if (star) {
+        stars.set(star.targetId, star.starred);
+        return;
+      }
+      if (entry.type !== "message") return;
+      messageCount += 1;
+      if (entry.message.role === "assistant") answers.add(entry.id);
+      else if (!firstMessage) firstMessage = userMessageText(entry) ?? "";
+    },
+    finish(file) {
+      let starCount = 0;
+      for (const [targetId, starred] of stars) {
+        if (starred && answers.has(targetId)) starCount += 1;
+      }
+      return {
+        ...(name ? { name } : {}),
+        firstMessage,
+        messageCount,
+        starCount,
+        ...file,
+      };
+    },
+  };
+}
+
 /** Sidebar row summary for a session held in memory (see the Pi adapter for files). */
 export function rowMetadata(
   entries: readonly SessionEntry[],
   file: { modifiedAt: string; fileSize: number },
 ): SessionRowMetadata {
-  let name: string | undefined;
-  let firstMessage = "";
-  let messageCount = 0;
-  for (const entry of entries) {
-    if (entry.type === "session_info") {
-      const trimmed = entry.name?.trim();
-      name = trimmed === "" ? undefined : trimmed;
-    } else if (entry.type === "message") {
-      messageCount += 1;
-      if (!firstMessage) firstMessage = userMessageText(entry) ?? "";
-    }
-  }
-  return {
-    ...(name ? { name } : {}),
-    firstMessage,
-    messageCount,
-    starCount: readStars(entries).size,
-    ...file,
-  };
+  const fold = rowMetadataFold();
+  for (const entry of entries) fold.add(entry);
+  return fold.finish(file);
 }

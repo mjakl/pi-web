@@ -282,6 +282,41 @@ export function bashCommand(
   return command === "" ? null : { command, excluded };
 }
 
+/**
+ * Whether the page should size itself to the visual viewport instead of the
+ * layout one: pi-web's `shouldUseVisualViewportHeight`. Only while an on-screen
+ * keyboard is actually covering part of the page — a focused editable, no
+ * pinch zoom, and a viewport shorter than the layout — because at every other
+ * moment the layout height is the right one and pinning it fights the browser.
+ */
+export function useVisualViewport(state: {
+  focusedEditable: boolean;
+  scale: number;
+  layoutHeight: number;
+  viewportHeight: number;
+}): boolean {
+  return (
+    state.focusedEditable &&
+    Math.abs(state.scale - 1) < 0.01 &&
+    state.layoutHeight - state.viewportHeight > 1
+  );
+}
+
+/**
+ * The follow-up queue as the composer recalls it. Two halves can hold
+ * something at once — the SDK's own queue and the mirror the runtime keeps
+ * from `queue_update` — and dropping either would lose a message a reader
+ * typed, so they are merged and only exact repeats are dropped.
+ */
+export function mergeQueue<T extends { text: string; behavior: string }>(
+  fromSdk: readonly T[],
+  mirrored: readonly T[],
+): T[] {
+  const key = (message: T) => `${message.behavior}\0${message.text}`;
+  const seen = new Set(fromSdk.map(key));
+  return [...fromSdk, ...mirrored.filter((message) => !seen.has(key(message)))];
+}
+
 export const MAX_IMAGES = 10;
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 

@@ -7,6 +7,7 @@ import {
   filterFileEntries,
   isFilePathQuery,
 } from "@core/composer";
+import { escapeHtml } from "@core/html";
 import { type MenuEndpoints, replaceRange, textarea } from "./editor.ts";
 import { createMenu, type Menu } from "./menu.ts";
 
@@ -16,13 +17,6 @@ import { createMenu, type Menu } from "./menu.ts";
 
 const INDEX_TTL_MS = 10_000;
 const SEARCH_DEBOUNCE_MS = 150;
-
-function escapeHtml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
 
 function renderEntries(entries: FileEntry[]): string {
   if (entries.length === 0) {
@@ -171,6 +165,13 @@ export function setUpAtCompletion(endpoints: MenuEndpoints | null): AtMenu {
           event.preventDefault();
           menu.applyActive();
           return true;
+        case "Enter": {
+          // Enter completes the highlighted entry; with nothing to complete
+          // it falls through and sends, and Shift+Enter is a newline.
+          if (event.shiftKey || !menu.applyActive()) return false;
+          event.preventDefault();
+          return true;
+        }
         default:
           return false;
       }

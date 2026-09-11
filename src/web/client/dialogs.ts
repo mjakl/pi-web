@@ -2,10 +2,12 @@
 // show without script. This upgrades them to real modals: backdrop, focus
 // trap, top layer, and focus restore, all from the platform.
 
-export function upgradeDialogs(root: ParentNode = document): void {
-  for (const dialog of root.querySelectorAll<HTMLDialogElement>(
-    "dialog[data-modal]",
-  )) {
+export function upgradeDialogs(root: ParentNode | Element = document): void {
+  const found =
+    root instanceof HTMLDialogElement && root.matches("dialog[data-modal]")
+      ? [root]
+      : [...root.querySelectorAll<HTMLDialogElement>("dialog[data-modal]")];
+  for (const dialog of found) {
     if (dialog.dataset["upgraded"] === "1") continue;
     dialog.dataset["upgraded"] = "1";
     // `showModal` throws on an already-open dialog, so the server's `open`

@@ -1,8 +1,9 @@
-import type { SlashCommand } from "@core/composer";
+import { mergeQueue, type SlashCommand } from "@core/composer";
 import type {
   AgentRuntime,
   ToolView,
   ExtensionWidget,
+  ImageAttachment,
   LiveEvent,
   LiveSession,
   LiveSnapshot,
@@ -41,6 +42,9 @@ import { createExtensionUi } from "./extension-ui.ts";
 import { projectTrustReloadOptions } from "./project-trust.ts";
 import type { PiSessionCatalog } from "./session-catalog.ts";
 
+/** Streaming tool arguments kept for the card; the entry holds the rest. */
+const PARTIAL_ARGUMENT_CHARS = 4096;
+
 const RENDER_NOTE =
   "The interface renders Markdown with tables, task lists, links, and fenced code blocks. LaTeX/math typesetting is not supported; use plain text or code for math.";
 
@@ -49,10 +53,15 @@ type Partial = Extract<AgentMessage, { role: "assistant" }>;
 class PiLiveSession implements LiveSession {
   readonly id: string;
   private partial: Partial | undefined;
+  private readonly partialArguments = new Map<string, string>();
+  /** Attachments of messages waiting in the SDK's queue, keyed by their text. */
+  private readonly queuedImages = new Map<string, ImageAttachment[]>();
   private turnStart: number;
+  private settledTurn: { start: number; end: number } | null = null;
   private compacting = false;
   private queue: QueuedMessage[] = [];
   private compaction: LiveStatus["compaction"] = null;
+  private compactionError: LiveStatus["compactionError"] = null;
   private bash: { command: string; output: string } | undefined;
   private readonly statuses = new Map<string, string>();
   private readonly widgets = new Map<string, ExtensionWidget>();
@@ -118,21 +127,31 @@ class PiLiveSession implements LiveSession {
   private handle(event: AgentSessionEvent): void {
     switch (event.type) {
       case "message_start":
+        this.partialArguments.clear();
+        if (event.message.role === "assistant") this.partial = event.message;
+        this.emit({ type: "activity" });
+        break;
       case "message_update":
         if (event.message.role === "assistant") this.partial = event.message;
+        this.collectArguments(event.assistantMessageEvent);
         this.emit({ type: "activity" });
         break;
       case "message_end":
         this.partial = undefined;
+        this.partialArguments.clear();
         this.emit({ type: "activity" });
         break;
       case "tool_execution_start":
-        this.tools.set(event.toolCallId, { name: event.toolName });
+        this.tools.set(event.toolCallId, {
+          id: event.toolCallId,
+          name: event.toolName,
+        });
         this.emit({ type: "activity" });
         break;
       case "tool_execution_update": {
         const progress = toolProgress(event.partialResult);
         this.tools.set(event.toolCallId, {
+          id: event.toolCallId,
           name: event.toolName,
           ...(progress === undefined ? {} : { progress }),
         });
@@ -157,12 +176,13 @@ class PiLiveSession implements LiveSession {
         break;
       case "compaction_start":
         this.compacting = true;
+        this.compactionError = null;
         this.emit({ type: "activity" });
         break;
       case "compaction_end":
         this.compacting = false;
         if (event.errorMessage) {
-          this.notices.push({ level: "error", message: event.errorMessage });
+          this.compactionError = event.errorMessage;
         } else if (event.result && !event.aborted) {
           this.compaction = {
             tokensBefore: event.result.tokensBefore,
@@ -172,27 +192,42 @@ class PiLiveSession implements LiveSession {
         }
         this.emit({ type: "activity" });
         break;
-      case "queue_update":
+      case "queue_update": {
+        // The SDK reports the queue as texts; the attachments that came with
+        // them are this wrapper's to remember, or a recall loses them.
+        const queued = (
+          behavior: "steer" | "followUp",
+          texts: readonly string[],
+        ) =>
+          texts.map((text): QueuedMessage => {
+            const images = this.queuedImages.get(text);
+            return {
+              text,
+              behavior,
+              ...(images === undefined ? {} : { images }),
+            };
+          });
         this.queue = [
-          ...event.steering.map((text): QueuedMessage => ({
-            text,
-            behavior: "steer",
-          })),
-          ...event.followUp.map((text): QueuedMessage => ({
-            text,
-            behavior: "followUp",
-          })),
+          ...queued("steer", event.steering),
+          ...queued("followUp", event.followUp),
         ];
+        const live = new Set(this.queue.map((message) => message.text));
+        for (const text of this.queuedImages.keys()) {
+          if (!live.has(text)) this.queuedImages.delete(text);
+        }
         this.emit({ type: "activity" });
         break;
+      }
       case "bash_execution_update":
         if (this.bash) this.bash.output += event.delta;
         this.emit({ type: "activity" });
         break;
       case "agent_settled":
         this.partial = undefined;
+        this.partialArguments.clear();
         this.tools.clear();
         this.retry = null;
+        this.endTurn();
         this.emit({ type: "turn_done" });
         if (this.run.settled(this.busy)) this.emit({ type: "completed" });
         break;
@@ -209,6 +244,39 @@ class PiLiveSession implements LiveSession {
       default:
         break;
     }
+  }
+
+  /**
+   * A tool call's arguments arrive as JSON fragments before the call is
+   * complete. Keeping the first few kilobytes is enough for the card to show
+   * what is being generated; the whole thing lands in the entry anyway.
+   */
+  private collectArguments(event: {
+    type: string;
+    contentIndex?: number;
+    delta?: string;
+  }): void {
+    if (typeof event.contentIndex !== "number") return;
+    const key = String(event.contentIndex);
+    if (event.type === "toolcall_start") this.partialArguments.set(key, "");
+    else if (event.type === "toolcall_delta") {
+      const collected = this.partialArguments.get(key) ?? "";
+      if (collected.length < PARTIAL_ARGUMENT_CHARS) {
+        this.partialArguments.set(key, collected + (event.delta ?? ""));
+      }
+    } else if (event.type === "toolcall_end") {
+      this.partialArguments.delete(key);
+    }
+  }
+
+  /**
+   * The turn is over: everything up to here is settled history, and the range
+   * it covered is kept for the render that appends it to the log.
+   */
+  private endTurn(): void {
+    const end = this.inner.sessionManager.getBranch().length;
+    this.settledTurn = { start: Math.min(this.turnStart, end), end };
+    this.turnStart = end;
   }
 
   private emit(event: LiveEvent): void {
@@ -238,6 +306,7 @@ class PiLiveSession implements LiveSession {
       createdAt: header?.timestamp ?? modifiedAt,
       modifiedAt,
       fileSize,
+      ...(file === undefined ? {} : { filePath: file }),
       live: true,
     };
   }
@@ -269,6 +338,7 @@ class PiLiveSession implements LiveSession {
       contextTokens: this.inner.getContextUsage()?.tokens ?? null,
       queue: this.queue,
       compaction: this.compaction,
+      compactionError: this.compactionError,
       tools: [...this.tools.values()],
       retry: this.retry,
       statuses: Object.fromEntries(this.statuses),
@@ -287,6 +357,10 @@ class PiLiveSession implements LiveSession {
       branch: this.inner.sessionManager.getBranch(),
       entries: this.inner.sessionManager.getEntries(),
       turnStart: this.turnStart,
+      settledTurn: this.settledTurn,
+      ...(this.partialArguments.size > 0
+        ? { partialArguments: Object.fromEntries(this.partialArguments) }
+        : {}),
       ...(this.partial ? { partial: this.partial } : {}),
       ...(this.bash ? { bash: { ...this.bash } } : {}),
       status: this.status(),
@@ -294,7 +368,11 @@ class PiLiveSession implements LiveSession {
   }
 
   prompt(text: string, input: PromptInput = {}): Promise<void> {
-    if (!this.inner.isStreaming) {
+    if (this.inner.isStreaming) {
+      if (input.images && input.images.length > 0) {
+        this.queuedImages.set(text, input.images);
+      }
+    } else {
       this.turnStart = this.inner.sessionManager.getBranch().length;
       this.compaction = null;
     }
@@ -328,8 +406,15 @@ class PiLiveSession implements LiveSession {
     });
   }
 
-  abort(): Promise<void> {
-    return this.inner.abort();
+  /**
+   * Stopping a turn on a session Pi never wrote to disk is the reader saying
+   * they are done with it: pi-web's `forceShutdownOnIdle`. It shuts down as
+   * soon as the turn really stops, instead of idling for ten minutes.
+   */
+  async abort(): Promise<void> {
+    const draft = !this.hasTranscript();
+    await this.inner.abort();
+    if (draft && !this.busy && !this.hasTranscript()) await this.stop();
   }
 
   async setModel(provider: string, modelId: string): Promise<void> {
@@ -377,6 +462,7 @@ class PiLiveSession implements LiveSession {
       ...(summarize === undefined ? {} : { summarize }),
     });
     this.turnStart = this.inner.sessionManager.getBranch().length;
+    this.settledTurn = null;
     this.emit({ type: "activity" });
     return result;
   }
@@ -431,6 +517,7 @@ class PiLiveSession implements LiveSession {
 
   async compact(instructions?: string): Promise<void> {
     this.compaction = null;
+    this.compactionError = null;
     await this.inner.compact(instructions);
   }
 
@@ -466,22 +553,32 @@ class PiLiveSession implements LiveSession {
   }
 
   clearQueue(): QueuedMessage[] {
-    const cleared = this.queue;
+    const mirrored = this.queue;
     const dropped = this.inner.clearQueue();
     this.queue = [];
+    const images = new Map(this.queuedImages);
+    this.queuedImages.clear();
     this.emit({ type: "activity" });
-    return cleared.length > 0
-      ? cleared
-      : [
-          ...dropped.steering.map((text): QueuedMessage => ({
-            text,
-            behavior: "steer",
-          })),
-          ...dropped.followUp.map((text): QueuedMessage => ({
-            text,
-            behavior: "followUp",
-          })),
-        ];
+    // Both halves can hold something: the SDK's own queue and the mirror this
+    // wrapper keeps from `queue_update`. Recall must not silently drop either,
+    // so they are merged and the duplicates the mirror carries are dropped.
+    const restore = (
+      behavior: "steer" | "followUp",
+      texts: readonly string[],
+    ) =>
+      texts.map((text): QueuedMessage => {
+        const attached = images.get(text);
+        return {
+          text,
+          behavior,
+          ...(attached === undefined ? {} : { images: attached }),
+        };
+      });
+    const fromSdk: QueuedMessage[] = [
+      ...restore("steer", dropped.steering),
+      ...restore("followUp", dropped.followUp),
+    ];
+    return mergeQueue(fromSdk, mirrored);
   }
 
   /** `!cmd` in the composer. Output streams through `bash_execution_update`. */
@@ -503,6 +600,7 @@ class PiLiveSession implements LiveSession {
       });
     } finally {
       this.bash = undefined;
+      this.endTurn();
       this.emit({ type: "turn_done" });
     }
   }

@@ -1,4 +1,5 @@
 import type { FileEntry } from "@core/composer";
+import { FileAccessError } from "@core/path-access";
 import type { DirEntry, Files, FileStat } from "@core/ports";
 import mammoth from "mammoth";
 import { execFile } from "node:child_process";
@@ -183,7 +184,10 @@ export function createFileTree(): Files {
         const info = await handle.stat();
         if (!info.isFile()) throw new Error("Not a regular file");
         if (info.size > MAX_OUTPUT_BYTES) {
-          throw new Error("Output file is too large to show here");
+          throw new FileAccessError(
+            `Output file is ${String(info.size)} bytes, above the 5 MiB this route serves. Download it instead.`,
+            413,
+          );
         }
         return await handle.readFile("utf8");
       } finally {

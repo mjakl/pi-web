@@ -20,6 +20,29 @@ function marks(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>("#rail .rail-mark")];
 }
 
+/**
+ * The mark closest to a position. `at` says where a mark sits on the axis in
+ * question — the transcript's scroll height while tracking, the pointer's own
+ * Y while dragging — and returns null for a mark that does not take part.
+ */
+function nearestMark(
+  target: number,
+  at: (mark: HTMLElement) => number | null,
+): HTMLElement | undefined {
+  let best: HTMLElement | undefined;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const mark of marks()) {
+    const position = at(mark);
+    if (position === null) continue;
+    const distance = Math.abs(position - target);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = mark;
+    }
+  }
+  return best;
+}
+
 function entryOf(mark: HTMLElement): HTMLElement | null {
   const id = mark.dataset["entryId"];
   return id === undefined ? null : document.getElementById(`entry-${id}`);
@@ -54,19 +77,12 @@ export function setUpRail(): void {
   /** The mark whose message sits nearest the reading line. */
   const track = () => {
     if (Date.now() < lockedUntil) return;
-    const line = view.scrollTop + view.clientHeight * TARGET;
-    let best: HTMLElement | undefined;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (const mark of marks()) {
-      const entry = entryOf(mark);
-      if (!entry) continue;
-      const distance = Math.abs(topOf(view, entry) - line);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = mark;
-      }
-    }
-    light(best);
+    light(
+      nearestMark(view.scrollTop + view.clientHeight * TARGET, (mark) => {
+        const entry = entryOf(mark);
+        return entry === null ? null : topOf(view, entry);
+      }),
+    );
   };
 
   let scheduled = false;
@@ -124,17 +140,11 @@ export function setUpRail(): void {
   // drag; a mark on another branch is left to htmx, which posts /navigate.
   let dragging = false;
   const follow = (clientY: number, behavior: ScrollBehavior) => {
-    let best: HTMLElement | undefined;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (const mark of marks()) {
-      if (mark.dataset["branch"] !== undefined) continue;
+    const best = nearestMark(clientY, (mark) => {
+      if (mark.dataset["branch"] !== undefined) return null;
       const box = mark.getBoundingClientRect();
-      const distance = Math.abs(box.top + box.height / 2 - clientY);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = mark;
-      }
-    }
+      return box.top + box.height / 2;
+    });
     if (best) jump(best, behavior);
   };
   rail.addEventListener("pointerdown", (event) => {

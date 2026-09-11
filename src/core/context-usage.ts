@@ -15,10 +15,31 @@ export type ContextUsage = {
 export const CONTEXT_WARN_PERCENT = 60;
 export const CONTEXT_CRITICAL_PERCENT = 80;
 
+/**
+ * The reader's own warning threshold in tokens, pi-web's "dumb zone": above
+ * this many tokens in context a model gets noticeably worse, whatever the
+ * window says. Kept in a cookie so the server renders the badge already
+ * coloured, with the same default pi-web uses.
+ */
+export const DEFAULT_WARN_TOKENS = 100_000;
+
+/** The cookie the browser writes it to, read by every page that shows usage. */
+export const WARN_TOKENS_COOKIE = "web-pi-warn-tokens";
+
+/** Only a positive whole number is a threshold; anything else is the default. */
+export function parseWarnTokens(value: string | undefined): number {
+  const tokens = Number(value);
+  return Number.isSafeInteger(tokens) && tokens > 0
+    ? tokens
+    : DEFAULT_WARN_TOKENS;
+}
+
 export function contextUsage(input: {
   tokens: number | null | undefined;
   contextWindow: number | null | undefined;
   estimated?: boolean;
+  /** The reader's token threshold; `DEFAULT_WARN_TOKENS` when unset. */
+  warnTokens?: number | undefined;
 }): ContextUsage {
   const tokens = input.tokens ?? null;
   const contextWindow =
@@ -27,13 +48,15 @@ export function contextUsage(input: {
     tokens === null || contextWindow === null
       ? null
       : Math.min(100, (tokens / contextWindow) * 100);
+  const warnTokens = input.warnTokens ?? DEFAULT_WARN_TOKENS;
   const level =
-    percent === null
-      ? "unknown"
-      : percent >= CONTEXT_CRITICAL_PERCENT
-        ? "critical"
-        : percent >= CONTEXT_WARN_PERCENT
-          ? "warn"
+    percent !== null && percent >= CONTEXT_CRITICAL_PERCENT
+      ? "critical"
+      : (percent !== null && percent >= CONTEXT_WARN_PERCENT) ||
+          (tokens !== null && tokens >= warnTokens)
+        ? "warn"
+        : percent === null
+          ? "unknown"
           : "ok";
   return {
     tokens,

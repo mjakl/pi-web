@@ -25,7 +25,7 @@ function Shell({
   children?: unknown;
 }) {
   return (
-    <div class="drawer h-dvh md:drawer-open">
+    <div class="drawer h-full md:drawer-open">
       <input id="nav-drawer" type="checkbox" class="drawer-toggle" />
       <div class="drawer-content flex min-h-0 flex-col">
         <div class="flex items-center gap-2 border-b border-base-300 px-2 py-1 md:hidden">

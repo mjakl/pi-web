@@ -1,11 +1,10 @@
-// The three settings the server cannot hold, because they belong to this
-// browser and not to Pi's configuration. Every accessor treats storage as
-// optional: a private window still gets a working settings page.
+// The settings that belong to this browser rather than to Pi's configuration.
+// Every accessor treats storage as optional: a private window still gets a
+// working settings page.
+
+import { WARN_TOKENS_COOKIE } from "@core/context-usage";
 
 export const SOUND_KEY = "web-pi:sound";
-export const DUMB_ZONE_KEY = "web-pi:dumb-zone-tokens";
-
-const DEFAULT_DUMB_ZONE = 100_000;
 
 function read(key: string): string | null {
   try {
@@ -28,12 +27,6 @@ export function soundEnabled(): boolean {
   return read(SOUND_KEY) !== "false";
 }
 
-/** Only a positive whole number is a threshold; anything else is the default. */
-export function dumbZoneTokens(): number {
-  const value = Number(read(DUMB_ZONE_KEY));
-  return Number.isSafeInteger(value) && value > 0 ? value : DEFAULT_DUMB_ZONE;
-}
-
 export function setUpPreferences(): void {
   const sound = document.querySelector<HTMLInputElement>("#sound-toggle");
   if (sound) {
@@ -42,17 +35,20 @@ export function setUpPreferences(): void {
       write(SOUND_KEY, sound.checked ? "true" : "false");
     });
   }
-  const dumbZone =
+  // The context-warning threshold is the one browser preference the server
+  // reads: it colours a badge the server renders, so it lives in a cookie
+  // rather than in localStorage, and the input arrives already filled in.
+  const warnTokens =
     document.querySelector<HTMLInputElement>("#dumb-zone-tokens");
-  if (dumbZone) {
-    dumbZone.value = String(dumbZoneTokens());
-    dumbZone.addEventListener("change", () => {
-      const value = Number(dumbZone.value);
+  if (warnTokens) {
+    const previous = warnTokens.value;
+    warnTokens.addEventListener("change", () => {
+      const value = Number(warnTokens.value);
       if (!Number.isSafeInteger(value) || value <= 0) {
-        dumbZone.value = String(dumbZoneTokens());
+        warnTokens.value = previous;
         return;
       }
-      write(DUMB_ZONE_KEY, String(value));
+      document.cookie = `${WARN_TOKENS_COOKIE}=${String(value)}; path=/; max-age=31536000; samesite=lax`;
     });
   }
 }

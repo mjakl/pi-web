@@ -74,6 +74,13 @@ export function setUpSlashMenu(endpoints: MenuEndpoints | null): SlashMenu {
           event.preventDefault();
           menu.applyActive();
           return true;
+        case "Enter": {
+          // Enter completes the highlighted entry; with nothing to complete
+          // it falls through and sends, and Shift+Enter is a newline.
+          if (event.shiftKey || !menu.applyActive()) return false;
+          event.preventDefault();
+          return true;
+        }
         default:
           return false;
       }

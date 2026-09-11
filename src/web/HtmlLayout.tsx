@@ -38,7 +38,7 @@ export function HtmlLayout(
         <script type="module" src={assets.js}></script>
       </head>
       <body
-        class="h-dvh overflow-hidden bg-base-100 text-base-content"
+        class="h-full overflow-hidden bg-base-100 text-base-content"
         data-mermaid-src={assets.mermaid}
         // The service worker is registered with this build's asset hash, so a
         // new build replaces the worker and its cache instead of being served

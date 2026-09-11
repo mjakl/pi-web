@@ -125,12 +125,16 @@ function setUpEditorInserts(): void {
 
 /** `setTitle`: the badge the status bar renders also names the browser tab. */
 function setUpExtensionTitle(): void {
-  document.body.addEventListener("htmx:afterSwap", (event) => {
-    const target = event.target;
-    if (!(target instanceof Element) || target.id !== "status") return;
+  const apply = (): void => {
     const title = document.getElementById("extension-title")?.dataset["title"];
     if (title) document.title = title;
+  };
+  document.body.addEventListener("htmx:afterSwap", (event) => {
+    const target = event.target;
+    if (target instanceof Element && target.id === "status") apply();
   });
+  // A page rendered with the title already set never swaps `#status`.
+  apply();
 }
 
 export function setUpExtensions(): void {

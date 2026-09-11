@@ -72,7 +72,9 @@ import type {
 import {
   type BranchLeaf,
   branchLeaves,
+  branchTo,
   readStars,
+  rowMetadata,
   sessionStats,
   type SessionStats,
 } from "./session-entries.ts";
@@ -97,6 +99,7 @@ import {
   type TranscriptItem,
 } from "./transcript.ts";
 import { pageItems } from "./turns.ts";
+import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 
 // The application service. Inbound port for every page and partial: the web
 // layer renders what this returns and never touches Pi or the file system.
@@ -111,6 +114,8 @@ export type ViewOptions = {
   before?: string;
   /** Widen the page until this entry is part of it. */
   through?: string;
+  /** The reader's context-warning threshold, in tokens. */
+  warnTokens?: number;
 };
 
 export type SessionView = {
@@ -125,6 +130,12 @@ export type SessionView = {
   leaf?: string;
   /** The current (or just finished) turn, re-rendered while streaming. */
   turn: TranscriptItem[];
+  /**
+   * The turn that just ended, for the one render that appends it to the log.
+   * Empty at every other moment: once handed over it belongs to `items`, so a
+   * later re-render cannot put the same messages on the page twice.
+   */
+  settledTurn: TranscriptItem[];
   status: LiveStatus | null;
   usage: ContextUsage;
   models: ModelOption[];
@@ -351,6 +362,9 @@ export function createWorkspace(deps: {
     options: ViewOptions,
   ): SessionView {
     const snapshot = live.snapshot();
+    // `turnStart` moves to the end of the branch the moment the agent settles,
+    // so a settled turn is part of the log and only the settled-turn render
+    // still sees it.
     const settled = projectTranscript(
       snapshot.branch.slice(0, snapshot.turnStart),
     );
@@ -358,7 +372,13 @@ export function createWorkspace(deps: {
     deferThinking(page.items);
     const turn = projectTranscript(snapshot.branch.slice(snapshot.turnStart));
     if (snapshot.partial) {
-      turn.items.push(assistantItem("partial", snapshot.partial));
+      turn.items.push(
+        assistantItem("partial", snapshot.partial, {
+          ...(snapshot.partialArguments === undefined
+            ? {}
+            : { partialArguments: snapshot.partialArguments }),
+        }),
+      );
     }
     if (snapshot.bash) {
       turn.items.push({
@@ -374,6 +394,14 @@ export function createWorkspace(deps: {
         timestamp: new Date().toISOString(),
       });
     }
+    const settledTurn = snapshot.settledTurn
+      ? projectTranscript(
+          snapshot.branch.slice(
+            snapshot.settledTurn.start,
+            snapshot.settledTurn.end,
+          ),
+        ).items
+      : [];
     const { status } = snapshot;
     // This view is what delivers notices and extension composer text; nothing
     // else may consume them.
@@ -382,6 +410,11 @@ export function createWorkspace(deps: {
     const leafId = snapshot.branch.at(-1)?.id ?? null;
     const reported = status.contextTokens;
     const fallback = turn.lastContextTokens ?? settled.lastContextTokens;
+    fillCompactions(summary.id, snapshot.entries, [
+      ...page.items,
+      ...turn.items,
+      ...settledTurn,
+    ]);
     return {
       summary,
       items: page.items,
@@ -389,20 +422,38 @@ export function createWorkspace(deps: {
       ...(page.oldestId === undefined ? {} : { oldestId: page.oldestId }),
       ...(options.leaf === undefined ? {} : { leaf: options.leaf }),
       turn: turn.items,
+      settledTurn,
       status,
       usage: contextUsage({
         tokens: reported ?? fallback,
         contextWindow: status.model?.contextWindow,
         estimated: reported === null && fallback !== null,
+        ...(options.warnTokens === undefined
+          ? {}
+          : { warnTokens: options.warnTokens }),
       }),
       models: models.models,
       modelWarnings: models.warnings,
       starred,
       leaves: branchLeaves(snapshot.entries, leafId),
-      otherBranch: false,
+      otherBranch:
+        options.leaf !== undefined && options.leaf !== (leafId ?? undefined),
       rail: conversationRail(snapshot.entries, leafId, starred),
       branched: hasBranches(snapshot.entries),
     };
+  }
+
+  /** The post-compaction estimate every compaction card on the page shows. */
+  function fillCompactions(
+    id: string,
+    entries: readonly SessionEntry[],
+    items: readonly TranscriptItem[],
+  ): void {
+    for (const item of items) {
+      if (item.kind !== "compaction") continue;
+      const after = deps.sessions.contextTokensAt(id, entries, item.entryId);
+      if (after !== undefined) item.tokensAfter = after;
+    }
   }
 
   async function storedView(
@@ -415,6 +466,7 @@ export function createWorkspace(deps: {
     const leafId = stored.branch.at(-1)?.id ?? null;
     const page = pageItems(transcript.items, options);
     deferThinking(page.items);
+    fillCompactions(stored.summary.id, stored.entries, page.items);
     const listing = await modelsFor(stored.summary.cwd);
     const model = transcript.lastModel
       ? listing.models.find(
@@ -430,10 +482,14 @@ export function createWorkspace(deps: {
       ...(page.oldestId === undefined ? {} : { oldestId: page.oldestId }),
       ...(options.leaf === undefined ? {} : { leaf: options.leaf }),
       turn: [],
+      settledTurn: [],
       status: null,
       usage: contextUsage({
         tokens: transcript.lastContextTokens,
         contextWindow: model?.contextWindow,
+        ...(options.warnTokens === undefined
+          ? {}
+          : { warnTokens: options.warnTokens }),
       }),
       models: listing.models,
       modelWarnings: listing.warnings,
@@ -479,10 +535,28 @@ export function createWorkspace(deps: {
     id: string,
     options: ViewOptions = {},
   ): Promise<SessionView | undefined> {
-    const live = options.leaf === undefined ? deps.runtime.get(id) : undefined;
+    // A running session owns its file, so even another branch of it is read
+    // from the runtime: the file on disk may be a flush behind.
+    const live = deps.runtime.get(id);
     if (live) {
       const summary = await summaryOf(id);
       if (!summary) return undefined;
+      const snapshot = live.snapshot();
+      const leafId = snapshot.branch.at(-1)?.id ?? null;
+      if (options.leaf !== undefined && options.leaf !== leafId) {
+        // Another branch of a running session: read-only, but still from the
+        // runtime's entries rather than from a file it has yet to flush.
+        return storedView(
+          {
+            summary: snapshot.summary,
+            branch: branchTo(snapshot.entries, options.leaf),
+            entries: snapshot.entries,
+            leafId,
+          },
+          summary,
+          options,
+        );
+      }
       return liveView(live, summary, await modelsFor(summary.cwd), options);
     }
     const stored = await deps.sessions.read(id, options.leaf);
@@ -729,15 +803,29 @@ export function createWorkspace(deps: {
       { summary: SessionSummary; metadata?: SessionRowMetadata } | undefined
     > {
       const live = deps.runtime.get(id);
+      const snapshot = live?.snapshot();
       const found = await deps.sessions.rowMetadata(id);
-      const base = live?.snapshot().summary ?? found?.summary;
+      const base = snapshot?.summary ?? found?.summary;
       if (!base) return undefined;
       const [summary] = await decorate([base]);
       if (!summary) return undefined;
-      return { summary, ...(found ? { metadata: found.metadata } : {}) };
+      // A session Pi has not flushed yet has no file to count; its entries are
+      // right here, and they answer the same question.
+      const metadata =
+        found?.metadata ??
+        (snapshot
+          ? rowMetadata(snapshot.entries, {
+              modifiedAt: base.modifiedAt,
+              fileSize: base.fileSize,
+            })
+          : undefined);
+      return { summary, ...(metadata ? { metadata } : {}) };
     },
 
-    async sessionStats(id: string): Promise<
+    async sessionStats(
+      id: string,
+      options: { warnTokens?: number } = {},
+    ): Promise<
       | {
           summary: SessionSummary;
           stats: SessionStats;
@@ -749,7 +837,7 @@ export function createWorkspace(deps: {
       // the one context-usage number the whole page shows.
       const [stored, view] = await Promise.all([
         entriesOf(id),
-        viewSession(id),
+        viewSession(id, options),
       ]);
       if (!stored || !view) return undefined;
       return {
@@ -856,10 +944,20 @@ export function createWorkspace(deps: {
       deps.push.subscribe(subscription);
     },
 
-    /** Empties the queue and hands its texts back as one composer draft. */
-    recallQueue(id: string): string {
+    /**
+     * Empties the queue and hands it back for the composer: the texts as one
+     * draft, and the images of every queued message, so recalling a message
+     * that carried a screenshot does not silently drop it.
+     */
+    recallQueue(id: string): { text: string; images: ImageAttachment[] } {
       const queued = deps.runtime.get(id)?.clearQueue() ?? [];
-      return queued.map((message) => message.text).join("\n\n");
+      return {
+        text: queued
+          .map((message) => message.text)
+          .filter((text) => text !== "")
+          .join("\n\n"),
+        images: queued.flatMap((message) => message.images ?? []),
+      };
     },
 
     clearQueue(id: string): void {
@@ -1152,9 +1250,18 @@ export function createWorkspace(deps: {
       return deps.browser.browse(path);
     },
 
-    /** One project row of the picker: its worktrees, freshly probed. */
+    /**
+     * One project row of the picker: its worktrees, freshly probed. Probing
+     * runs git in the folder, so the folder has to be one this reader may
+     * already reach; the worktrees it reports join the allowed roots, which is
+     * how a session in a sibling worktree stays readable after a restart.
+     */
     async folders(cwd: string): Promise<FolderChoice> {
       const available = await folderAvailable(cwd);
+      // A folder that is gone is never probed, so there is nothing to gate;
+      // one that is there has git run in it, and that needs a folder this
+      // reader may already reach.
+      if (available) await authorize(cwd, { listing: true });
       const listing = await deps.projects.worktrees(cwd);
       const worktrees =
         listing.worktrees.length > 0
@@ -1162,6 +1269,7 @@ export function createWorkspace(deps: {
           : available
             ? [{ path: cwd, branch: listing.project.branch }]
             : [];
+      for (const tree of worktrees) validatedRoots.add(tree.path);
       return {
         cwd,
         available,
@@ -1344,6 +1452,22 @@ export function createWorkspace(deps: {
       await deps.packages.run(action, request);
       deps.models.invalidate(request.cwd);
       return deps.packages.list(request.cwd);
+    },
+
+    /**
+     * Reload the resources of every live session in a folder. A plugin change
+     * reaches a running session no other way: its extensions were built when
+     * it started.
+     */
+    async reloadFolder(cwd: string): Promise<number> {
+      const inFolder = (await deps.sessions.list()).filter((session) =>
+        samePath(session.cwd, cwd),
+      );
+      const live = inFolder
+        .map((session) => deps.runtime.get(session.id))
+        .filter((session) => session !== undefined);
+      for (const session of live) await session.reload();
+      return live.length;
     },
 
     // --- Session inspection ----------------------------------------------

@@ -1,6 +1,6 @@
 import { createFileTree } from "@adapters/fs/file-tree";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -90,5 +90,13 @@ describe("file tree", () => {
     await writeFile(join(root, "capture.log"), "output");
     expect(await files.readOutput(join(root, "capture.log"))).toBe("output");
     await expect(files.readOutput(join(root, "src"))).rejects.toThrow();
+  });
+
+  it("answers 413, not 404, for a capture past the 5 MiB cap", async () => {
+    const files = createFileTree();
+    const big = join(root, "huge.log");
+    await writeFile(big, "");
+    await truncate(big, 5 * 1024 * 1024 + 1);
+    await expect(files.readOutput(big)).rejects.toMatchObject({ status: 413 });
   });
 });

@@ -229,6 +229,62 @@ describe("Pi session catalog", () => {
     await catalog.remove(id);
     expect(await catalog.read(id)).toBeUndefined();
   });
+
+  it("says nothing rather than throwing for a file Pi has not written", async () => {
+    const catalog = createPiSessionCatalog({ agentDir: root });
+    // The runtime remembers where a new session will live before Pi flushes
+    // it; the sidebar row must not 500 over that.
+    catalog.remember(
+      "01999999-9999-7999-8999-999999999999",
+      join(sessionDir, "not-written-yet.jsonl"),
+    );
+    expect(
+      await catalog.rowMetadata("01999999-9999-7999-8999-999999999999"),
+    ).toBeUndefined();
+  });
+
+  it("re-reads a file that changed instead of serving the cached counts", async () => {
+    const manager = makeSession(["hello"]);
+    const catalog = createPiSessionCatalog({ agentDir: root });
+    const id = manager.getSessionId();
+    await catalog.list();
+    expect((await catalog.rowMetadata(id))?.metadata.messageCount).toBe(2);
+
+    manager.appendMessage({ role: "user", content: "more", timestamp: 2 });
+    // The cache is keyed by file and stamped by size and mtime, so the older
+    // stamp cannot linger and win.
+    expect((await catalog.rowMetadata(id))?.metadata.messageCount).toBe(3);
+  });
+
+  it("forks a user message with no text before the message itself", async () => {
+    const manager = makeSession(["hello"]);
+    manager.appendMessage({
+      role: "user",
+      content: [{ type: "image", data: "AAAA", mimeType: "image/png" }],
+      timestamp: 3,
+    });
+    const catalog = createPiSessionCatalog({ agentDir: root });
+    const id = manager.getSessionId();
+    await catalog.list();
+    const wordless = manager.getEntries().at(-1);
+    if (!wordless) throw new Error("missing entry");
+
+    const forked = await catalog.fork(id, wordless.id);
+    const branch = (await catalog.read(forked.id))?.branch ?? [];
+    expect(branch.map((entry) => entry.id)).not.toContain(wordless.id);
+    expect(branch).toHaveLength(2);
+  });
+
+  it("estimates what a compaction left in context", async () => {
+    const manager = makeSession(["hello"]);
+    const catalog = createPiSessionCatalog({ agentDir: root });
+    const id = manager.getSessionId();
+    await catalog.list();
+    const entries = manager.getEntries();
+    const last = entries.at(-1);
+    if (!last) throw new Error("missing entry");
+    expect(catalog.contextTokensAt(id, entries, last.id)).toBeGreaterThan(0);
+  });
 });
 
 describe("HTML export", () => {

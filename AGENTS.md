@@ -38,8 +38,9 @@ browser holds none.
 src/core       rules and ports: transcript projection, session derivations
                (stars, statistics, branches), project selection, the
                conversation rail layout, terminal-output conversion, context
-               usage, composer input rules, path containment, file kinds,
-               Git status parsing, patches, frontmatter, worktree identity,
+               usage, composer input rules, path containment and local file
+               links, HTML escaping, file kinds, Git status parsing,
+               patches, frontmatter, worktree identity,
                the skill frontmatter toggle, skill install metadata, package
                list semantics, startup model preferences, tool schemas,
                pending extension dialogs and custom-UI frames, terminal key
@@ -65,6 +66,9 @@ Rules enforced by `.oxlintrc.json`:
 - `src/web` never imports adapters or the SDK; it talks to `Workspace`.
 - No parent-relative imports; use `@/*` (src root), `@core/*`, `@adapters/*`,
   `@web/*`, `#/*` (tests).
+- One escaper: `escapeHtml` in `src/core/html.ts`. Views, the ANSI converter,
+  and the client bundle all build markup from untrusted text, and a second
+  escaper is how one of them ends up missing an entity.
 - Hono JSX uses `class`, never `className`. No dynamic imports in `src/`; the
   two exceptions carry a narrowed lint override — `src/web/client/mermaid.ts`
   loads the separately bundled `static/mermaid.js` by URL, and `src/cli.ts`

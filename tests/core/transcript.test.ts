@@ -1,5 +1,6 @@
 import { assistantEntry, userEntry } from "@adapters/fake/index";
 import {
+  assistantItem,
   deferThinking,
   projectTranscript,
   toolPreview,
@@ -315,5 +316,36 @@ describe("tool text helpers", () => {
     ).toBe("two");
     expect(toolProgress({ content: [] })).toBeUndefined();
     expect(toolProgress("nope")).toBeUndefined();
+  });
+});
+
+describe("streaming tool arguments", () => {
+  it("marks a call whose arguments are still arriving", () => {
+    const item = assistantItem(
+      "partial",
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "one moment" },
+          { type: "toolCall", id: "c1", name: "write", arguments: {} },
+        ],
+        api: "openai-responses",
+        provider: "fake",
+        model: "fake-1",
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: "pending",
+        timestamp: 0,
+      } as never,
+      { partialArguments: { "1": '{"path":"/re' } },
+    );
+    const tool = item.blocks.find((block) => block.kind === "tool");
+    expect(tool?.call.partialArguments).toBe('{"path":"/re');
   });
 });

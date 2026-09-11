@@ -88,13 +88,62 @@ export function parentPath(path: string): string {
 
 /**
  * A tool may report a file relative to the folder it ran in. Resolving it
- * here is what lets the transcript link it into the file panel.
+ * here is what lets the transcript link it into the file panel. `.` and `..`
+ * are collapsed, so the result is one spelling of the file.
  */
 export function resolveUnder(cwd: string, path: string): string {
   if (path === "") return path;
-  if (isAbsolutePath(path)) return path;
+  if (isAbsolutePath(path)) return normalizeDots(path);
   if (cwd === "") return path;
-  return `${cwd.replace(/[\\/]+$/, "")}/${path.replace(/^\.\//, "")}`;
+  return normalizeDots(`${cwd.replace(/[\\/]+$/, "")}/${path}`);
+}
+
+/** Collapses `.` and `..` without touching case or separators. */
+function normalizeDots(path: string): string {
+  if (!path.includes("./") && !path.endsWith("/.") && !path.endsWith("/..")) {
+    return path;
+  }
+  const windows = /^[a-zA-Z]:[\\/]/.test(path);
+  const slashed = path.replaceAll("\\", "/");
+  const parts: string[] = [];
+  const [drive = ""] = windows ? slashed.split("/") : [];
+  for (const part of slashed.slice(drive.length).split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return `${drive}/${parts.join("/")}`;
+}
+
+/** A trailing `:12` or `:12:3` names a line, not part of the file name. */
+const LINE_REFERENCE = /:\d+(?::\d+)?$/;
+
+/**
+ * The file a Markdown link or image points at, or null when it points at the
+ * web. Relative hrefs only count when they look like a path rather than like
+ * prose, and they never escape the folder they are resolved against.
+ */
+export function localFilePath(
+  href: string,
+  cwd: string | undefined,
+): string | null {
+  const clean = (href.split(/[?#]/)[0] ?? "").trim();
+  if (clean === "" || clean.startsWith("//")) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(clean)) {
+    if (!clean.toLowerCase().startsWith("file:")) return null;
+    try {
+      return decodeURIComponent(new URL(clean).pathname);
+    } catch {
+      return null;
+    }
+  }
+  if (clean.startsWith("/")) return clean.replace(LINE_REFERENCE, "");
+  if (cwd === undefined) return null;
+  if (!/^\.{1,2}\//.test(clean) && !/^[\w@.-]+(?:\/|\.\w+)/.test(clean)) {
+    return null;
+  }
+  const resolved = resolveUnder(cwd, clean).replace(LINE_REFERENCE, "");
+  return directoryWithin(cwd, resolved) ? resolved : null;
 }
 
 const BASH_OUTPUT_NAME = /^pi-bash-[A-Za-z0-9_-]+\.log$/;

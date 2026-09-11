@@ -126,6 +126,8 @@ export type CompactionItem = {
   readFiles: string[];
   modifiedFiles: string[];
   tokensBefore: number;
+  /** What Pi's context build estimates the compaction left behind. */
+  tokensAfter?: number;
   timestamp: string;
 };
 
@@ -421,12 +423,19 @@ function contextTokensOf(message: AgentMessage): number | undefined {
 export function assistantItem(
   entryId: string,
   message: Extract<AgentMessage, { role: "assistant" }>,
-  options: { timestamp?: string; previousMs?: number } = {},
+  options: {
+    timestamp?: string;
+    previousMs?: number;
+    /** Arguments still streaming in, by index in the message's content. */
+    partialArguments?: Record<string, string>;
+  } = {},
 ): AssistantItem {
   const blocks: AssistantBlock[] = [];
   let thinkingCount = 0;
   let imageCount = 0;
+  let index = -1;
   for (const part of contentParts(message.content)) {
+    index += 1;
     switch (part.type) {
       case "text":
         blocks.push({ kind: "text", text: part.text ?? "" });
@@ -457,6 +466,7 @@ export function assistantItem(
           arguments: unknown;
         };
         const calls = subagentCalls(call.name, call.arguments);
+        const streaming = options.partialArguments?.[String(index)];
         blocks.push({
           kind: "tool",
           call: {
@@ -464,6 +474,7 @@ export function assistantItem(
             name: call.name,
             arguments: call.arguments,
             preview: toolPreview(call.arguments),
+            ...(streaming === undefined ? {} : { partialArguments: streaming }),
             ...(calls
               ? { subagent: { calls, runs: null, failed: false } }
               : {}),

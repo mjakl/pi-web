@@ -162,12 +162,25 @@ export function setUpComposer(): void {
     form.requestSubmit();
   };
 
+  // The Send and Queue buttons go through the same path as the keyboard: the
+  // delivery mode is a hidden field, and a built-in that never leaves the
+  // browser must not be posted as a prompt.
   form.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLElement>(
       "[data-behavior]",
     );
     const behavior = button?.dataset["behavior"];
-    if (behavior === "steer" || behavior === "followUp") setBehavior(behavior);
+    if (behavior !== "steer" && behavior !== "followUp") return;
+    const area = textarea();
+    if (area && runLocalBuiltin(area.value.trim())) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    setBehavior(behavior);
+    slash.close();
+    at.close();
+    drafts.clear();
   });
   form.addEventListener("input", onInput);
   form.addEventListener("compositionstart", () => {

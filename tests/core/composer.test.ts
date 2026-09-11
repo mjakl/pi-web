@@ -1,5 +1,7 @@
 import {
   bashCommand,
+  mergeQueue,
+  useVisualViewport,
   BUILTIN_COMMANDS,
   buildAtInsertText,
   buildEntriesFromFiles,
@@ -166,5 +168,47 @@ describe("shell commands and attachments", () => {
     expect(
       imageLimitError([{ mimeType: "image/png", bytes: 11 * 1024 * 1024 }]),
     ).toContain("10 MB");
+  });
+});
+
+describe("mergeQueue", () => {
+  it("keeps both halves and drops only exact repeats", () => {
+    const sdk = [
+      { text: "a", behavior: "steer" },
+      { text: "b", behavior: "followUp" },
+    ];
+    const mirror = [
+      { text: "b", behavior: "followUp" },
+      { text: "c", behavior: "steer" },
+    ];
+    expect(mergeQueue(sdk, mirror)).toEqual([
+      { text: "a", behavior: "steer" },
+      { text: "b", behavior: "followUp" },
+      { text: "c", behavior: "steer" },
+    ]);
+    // The same text queued both ways is two messages, not one.
+    expect(
+      mergeQueue(
+        [{ text: "a", behavior: "steer" }],
+        [{ text: "a", behavior: "followUp" }],
+      ),
+    ).toHaveLength(2);
+  });
+});
+
+describe("useVisualViewport", () => {
+  it("pins the height only while a keyboard covers an unzoomed page", () => {
+    const covered = {
+      focusedEditable: true,
+      scale: 1,
+      layoutHeight: 800,
+      viewportHeight: 400,
+    };
+    expect(useVisualViewport(covered)).toBe(true);
+    expect(useVisualViewport({ ...covered, focusedEditable: false })).toBe(
+      false,
+    );
+    expect(useVisualViewport({ ...covered, scale: 1.4 })).toBe(false);
+    expect(useVisualViewport({ ...covered, viewportHeight: 800 })).toBe(false);
   });
 });

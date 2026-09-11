@@ -15,11 +15,37 @@ function duration(ms: number): string {
   return `${String(seconds)}s`;
 }
 
-function Line({ label, value }: { label: string; value: string }) {
+function Line({
+  label,
+  value,
+  copy,
+}: {
+  label: string;
+  value: string;
+  /** A path or an id is worth copying; a count is not. */
+  copy?: boolean;
+}) {
   return (
-    <div class="flex justify-between gap-4">
-      <span class="text-base-content/60">{label}</span>
-      <span class="text-right">{value}</span>
+    <div class="flex items-center justify-between gap-2">
+      <span class="shrink-0 text-base-content/60">{label}</span>
+      <span class="truncate text-right" title={value}>
+        {value}
+      </span>
+      {copy === true && value !== "" ? (
+        <span class="inline-flex shrink-0">
+          <span hidden data-copy-source>
+            {value}
+          </span>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            data-copy
+            aria-label={`Copy ${label.toLowerCase()}`}
+          >
+            ⧉
+          </button>
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -38,8 +64,12 @@ export function StatsPanel({
   const { tokens } = stats;
   return (
     <div class="flex flex-col gap-1">
-      <Line label="Session" value={summary.id} />
-      <Line label="Folder" value={summary.cwd} />
+      {summary.name ? <Line label="Name" value={summary.name} /> : null}
+      <Line label="Session" value={summary.id} copy />
+      {summary.filePath === undefined ? null : (
+        <Line label="Session file" value={summary.filePath} copy />
+      )}
+      <Line label="Folder" value={summary.cwd} copy />
       {stats.activeMs > 0 ? (
         <Line label="Active time" value={duration(stats.activeMs)} />
       ) : null}
@@ -66,6 +96,12 @@ export function StatsPanel({
         <Line
           label="Avg cache hit rate"
           value={`${(stats.cacheHitRate * 100).toFixed(1)}%`}
+        />
+      )}
+      {usage.contextWindow === null ? null : (
+        <Line
+          label="Context window"
+          value={`${formatTokens(usage.contextWindow)} tokens`}
         />
       )}
       <div class="mt-1 flex justify-between gap-4">

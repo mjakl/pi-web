@@ -812,3 +812,205 @@ describe("transcript rendering", () => {
     expect(await missing.text()).toContain("unavailable");
   });
 });
+
+describe("phase 8 fixes", () => {
+  it("leaves the delivery mode to the hidden field, not to the submitter", async () => {
+    const { app } = testApp();
+    const page = await (await app.request("/sessions/s1")).text();
+    // htmx appends a submitter's own name and value after the form's fields,
+    // so a named Queue button would always lose to the hidden `steer`.
+    expect(page).toContain('data-behavior="followUp"');
+    expect(page).not.toMatch(/name="behavior"\s+value="followUp"/);
+    expect(page.match(/name="behavior"/g)).toHaveLength(1);
+  });
+
+  it("queues a follow-up instead of steering when asked to", async () => {
+    const { app, world } = testApp({ delayMs: 30 });
+    const first = new FormData();
+    first.set("text", "go");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: first });
+    const second = new FormData();
+    second.set("text", "and then this");
+    second.set("behavior", "followUp");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: second });
+
+    expect(world.runtime.get("s1")?.snapshot().status.queue).toEqual([
+      { text: "and then this", behavior: "followUp" },
+    ]);
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain("follow-up");
+  });
+
+  it("carries the text ArrowUp cycles through", async () => {
+    const { app } = testApp();
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain("data-user-text");
+  });
+
+  it("recalls queued images for the composer to put back", async () => {
+    const { app } = testApp({ delayMs: 30 });
+    const first = new FormData();
+    first.set("text", "go");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: first });
+    const second = new FormData();
+    second.set("text", "with a picture");
+    second.set("behavior", "followUp");
+    second.set(
+      "images[]",
+      new File([Buffer.from("89504e47", "hex")], "shot.png", {
+        type: "image/png",
+      }),
+    );
+    await app.request("/sessions/s1/prompt", { method: "POST", body: second });
+
+    const recalled = await (
+      await app.request("/sessions/s1/queue/recall", { method: "POST" })
+    ).text();
+    expect(recalled).toContain("with a picture");
+    expect(recalled).toContain('data-mime="image/png"');
+  });
+
+  it("colours the context badge from the reader's own threshold", async () => {
+    const { app } = testApp();
+    const plain = await (await app.request("/sessions/s1")).text();
+    expect(plain).toContain("badge-ghost");
+    // 40 000 tokens of a 100 000 window is 40 %: below every percent rule,
+    // above a threshold the reader set at 30 000.
+    const warned = await (
+      await app.request("/sessions/s1", {
+        headers: { cookie: "web-pi-warn-tokens=30000" },
+      })
+    ).text();
+    expect(warned).toContain("badge-warning");
+  });
+
+  it("lists what a subagent run was given, and its progress while it runs", async () => {
+    const { app } = testApp({
+      delayMs: 40,
+      script: (): ScriptedStep[] => [
+        {
+          tool: "subagent",
+          arguments: {
+            calls: [
+              { agent: "explorer", prompt: "look around", model: "fake-1" },
+            ],
+          },
+          progress: ["reading src/"],
+          details: {
+            kind: "pi-subagent",
+            results: [
+              {
+                agent: "explorer",
+                exitCode: 0,
+                model: "fake-1",
+                messages: [
+                  {
+                    role: "assistant",
+                    content: [{ type: "text", text: "ok" }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        { text: "done" },
+      ],
+    });
+    const form = new FormData();
+    form.set("text", "explore");
+    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const running = await (await app.request("/sessions/s1")).text();
+    expect(running).toContain("reading src/");
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain("<dl");
+    expect(page).toContain("<dt>Agent</dt>");
+    expect(page).toContain("explorer");
+  });
+
+  it("shows the post-compaction estimate on the card", async () => {
+    const { app, world } = testApp();
+    world.store.set("k1", {
+      summary: {
+        id: "k1",
+        cwd: "/repo/one",
+        createdAt: "2026-09-01T00:00:00.000Z",
+        modifiedAt: "2026-09-01T00:00:00.000Z",
+        fileSize: 2,
+      },
+      entries: [
+        userEntry("u1", null, "question"),
+        {
+          type: "compaction",
+          id: "c1",
+          parentId: "u1",
+          timestamp: "2026-09-01T00:00:00.000Z",
+          summary: "what happened",
+          tokensBefore: 40_000,
+          firstKeptEntryId: "u1",
+        } as never,
+      ],
+    });
+    const page = await (await app.request("/sessions/k1")).text();
+    expect(page).toContain("40k → ~");
+  });
+
+  it("shows the name, the session file, and the context window in stats", async () => {
+    const { app } = testApp();
+    const stats = await (await app.request("/sessions/s1/stats")).text();
+    expect(stats).toContain("Session file");
+    expect(stats).toContain("/agent/sessions/s1.jsonl");
+    expect(stats).toContain("Context window");
+    expect(stats).toContain("data-copy");
+  });
+
+  it("offers the sidebar resize handle and a manual refresh", async () => {
+    const { app } = testApp();
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain("sidebar-resize");
+    expect(page).toContain('id="sidebar-refresh"');
+  });
+
+  it("serves a shell capture as an attachment when asked", async () => {
+    const { app } = testApp();
+    const attached = await app.request(
+      "/sessions/s1/bash-output?path=/tmp/pi-bash-x.log&download=1",
+    );
+    // The session did not produce that file, so the containment answer comes
+    // first; the download variant only changes the disposition.
+    expect(attached.status).toBe(403);
+  });
+
+  it("reloads the live sessions of a folder from the plugins panel", async () => {
+    const { app, world } = testApp();
+    await world.runtime.open({ sessionId: "s1" });
+    const body = new FormData();
+    body.set("cwd", "/repo/one");
+    const reloaded = await app.request("/settings/plugins/reload", {
+      method: "POST",
+      body,
+    });
+    expect(reloaded.status).toBe(200);
+    expect(await reloaded.text()).toContain("Reloaded 1 session");
+  });
+
+  it("remembers which skill a folder was looking at", async () => {
+    const { app } = testApp();
+    const detail = await app.request(
+      "/settings/skills/detail?cwd=/repo/one&path=/agent/skills/changelog/SKILL.md",
+    );
+    const cookie = detail.headers.get("set-cookie") ?? "";
+    expect(cookie).toContain("web-pi-skill");
+    const page = await (
+      await app.request("/settings?section=skills&cwd=/repo/one", {
+        headers: { cookie: cookie.split(";")[0] ?? "" },
+      })
+    ).text();
+    // The remembered skill is the one whose detail pane is open.
+    const detailPane = page.slice(page.indexOf('id="skill-detail"'));
+    expect(detailPane).toContain("changelog");
+  });
+});

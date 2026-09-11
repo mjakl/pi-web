@@ -1,3 +1,5 @@
+import { escapeHtml } from "@core/html";
+import { localFilePath } from "@core/path-access";
 import { Marked, type Tokens } from "marked";
 
 // Model output is untrusted. Raw HTML inside Markdown is shown as text rather
@@ -22,14 +24,7 @@ export function rawFileUrl(path: string, sessionId?: string): string {
   return `/files/raw?${query.toString()}`;
 }
 
-export function escapeHtml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
+export { escapeHtml };
 
 function attribute(value: string): string {
   return escapeHtml(value);
@@ -51,41 +46,6 @@ function formatBytes(bytes: number): string {
 }
 
 const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(\r?\n|$)/;
-const LINE_SUFFIX = /:\d+(?::\d+)?$/;
-
-/**
- * A link or image that points into the working folder rather than the web.
- * These open in the file panel.
- */
-export function localFilePath(
-  href: string,
-  cwd: string | undefined,
-): string | null {
-  const clean = (href.split(/[?#]/)[0] ?? "").trim();
-  if (clean === "" || clean.startsWith("//")) return null;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(clean)) {
-    if (!clean.toLowerCase().startsWith("file:")) return null;
-    try {
-      return decodeURIComponent(new URL(clean).pathname);
-    } catch {
-      return null;
-    }
-  }
-  if (clean.startsWith("/")) return clean.replace(LINE_SUFFIX, "");
-  if (cwd === undefined) return null;
-  // Relative links only count when they look like a path, not like prose.
-  if (!/^\.{1,2}\//.test(clean) && !/^[\w@.-]+(?:\/|\.\w+)/.test(clean)) {
-    return null;
-  }
-  const parts: string[] = [];
-  for (const part of `${cwd}/${clean}`.split("/")) {
-    if (part === "" || part === ".") continue;
-    if (part === "..") parts.pop();
-    else parts.push(part);
-  }
-  const resolved = `/${parts.join("/")}`.replace(LINE_SUFFIX, "");
-  return resolved.startsWith(cwd) ? resolved : null;
-}
 
 function codeBlock(code: string, language: string, live: boolean): string {
   const label = language === "" ? "text" : language;

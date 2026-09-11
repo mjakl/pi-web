@@ -67,6 +67,12 @@ export const FAKE_MODEL: ModelOption = {
   name: "Fake 1",
   contextWindow: 100_000,
   reasoning: true,
+  thinkingLevels: [
+    { level: "off", label: "off" },
+    { level: "low", label: "brief" },
+    { level: "medium", label: "balanced" },
+    { level: "high", label: "thorough" },
+  ],
 };
 
 /**
@@ -339,12 +345,16 @@ class FakeLiveSession implements LiveSession {
   readonly id: string;
   private partial: Extract<AgentMessage, { role: "assistant" }> | undefined;
   private turnStart: number;
+  private settledTurn: { start: number; end: number } | null = null;
+  /** A scripted tool call whose arguments are still streaming in. */
+  private partialArguments: Record<string, string> | undefined;
   private running = false;
   private compacting = false;
   private bashRunning = false;
   private bash: { command: string; output: string } | undefined;
   private queue: QueuedMessage[] = [];
   private compaction: LiveStatus["compaction"] = null;
+  private compactionError: LiveStatus["compactionError"] = null;
   private tools: RunningTool[] = [];
   private retry: LiveStatus["retry"] = null;
   private notices: LiveStatus["notices"] = [];
@@ -388,6 +398,13 @@ class FakeLiveSession implements LiveSession {
     for (const listener of this.listeners) listener(event);
   }
 
+  /** The turn is over: the boundary moves, the range it covered is kept. */
+  private endTurn(): void {
+    const end = branchOf(this.stored).length;
+    this.settledTurn = { start: Math.min(this.turnStart, end), end };
+    this.turnStart = end;
+  }
+
   private nextId(): string {
     this.counter += 1;
     return `${this.id}-e${String(this.counter + this.stored.entries.length)}`;
@@ -420,6 +437,10 @@ class FakeLiveSession implements LiveSession {
       branch,
       entries: [...this.stored.entries],
       turnStart: this.turnStart,
+      settledTurn: this.settledTurn,
+      ...(this.partialArguments === undefined
+        ? {}
+        : { partialArguments: this.partialArguments }),
       ...(this.partial ? { partial: this.partial } : {}),
       ...(this.bash ? { bash: { ...this.bash } } : {}),
       status: {
@@ -428,15 +449,11 @@ class FakeLiveSession implements LiveSession {
         bashRunning: this.bashRunning,
         model: FAKE_MODEL,
         thinkingLevel: this.thinkingLevel,
-        thinkingLevels: [
-          { level: "off", label: "off" },
-          { level: "low", label: "brief" },
-          { level: "medium", label: "balanced" },
-          { level: "high", label: "thorough" },
-        ],
+        thinkingLevels: FAKE_MODEL.thinkingLevels ?? [],
         contextTokens,
         queue: [...this.queue],
         compaction: this.compaction,
+        compactionError: this.compactionError,
         tools: [...this.tools],
         retry: this.retry,
         statuses: Object.fromEntries(this.statuses),
@@ -595,12 +612,19 @@ class FakeLiveSession implements LiveSession {
         name: step.tool,
         arguments: step.arguments ?? {},
       });
+      // Arguments arrive as JSON fragments before the call is complete; the
+      // card says so until the last one lands.
+      const json = JSON.stringify(step.arguments ?? {});
+      this.partialArguments = {
+        [String(content.length - 1)]: json.slice(0, Math.ceil(json.length / 2)),
+      };
       this.setPartial(content);
       await this.wait();
+      this.partialArguments = undefined;
       parentId = this.settle(parentId, content);
       content = [];
       for (const line of step.progress ?? []) {
-        this.tools = [{ name: step.tool, progress: line }];
+        this.tools = [{ id: callId, name: step.tool, progress: line }];
         this.emit({ type: "activity" });
         await this.wait();
       }
@@ -628,15 +652,23 @@ class FakeLiveSession implements LiveSession {
     }
     if (content.length > 0) this.settle(parentId, content);
     this.partial = undefined;
+    this.partialArguments = undefined;
     this.tools = [];
     this.running = false;
+    this.endTurn();
     this.emit({ type: "turn_done" });
     this.emit({ type: "completed" });
   }
 
   prompt(text: string, input: PromptInput = {}): Promise<void> {
     if (this.running) {
-      this.queue.push({ text, behavior: input.behavior ?? "steer" });
+      this.queue.push({
+        text,
+        behavior: input.behavior ?? "steer",
+        ...(input.images && input.images.length > 0
+          ? { images: input.images }
+          : {}),
+      });
       this.emit({ type: "activity" });
       return Promise.resolve();
     }
@@ -655,7 +687,9 @@ class FakeLiveSession implements LiveSession {
   abort(): Promise<void> {
     this.running = false;
     this.partial = undefined;
+    this.partialArguments = undefined;
     this.tools = [];
+    this.endTurn();
     this.emit({ type: "turn_done" });
     return Promise.resolve();
   }
@@ -697,9 +731,16 @@ class FakeLiveSession implements LiveSession {
   compact(instructions?: string): Promise<void> {
     this.compacting = true;
     this.compaction = null;
+    this.compactionError = null;
     this.emit({ type: "activity" });
     setTimeout(() => {
       this.compacting = false;
+      // "fail" as the instruction is how a test asks for the error path.
+      if (instructions === "fail") {
+        this.compactionError = "Compaction failed: the model refused.";
+        this.emit({ type: "activity" });
+        return;
+      }
       this.compaction = {
         tokensBefore: 40_000,
         tokensAfter: 8000,
@@ -776,6 +817,7 @@ class FakeLiveSession implements LiveSession {
             excludeFromContext,
           ),
         );
+        this.endTurn();
         this.emit({ type: "turn_done" });
         resolve();
       };
@@ -793,6 +835,7 @@ class FakeLiveSession implements LiveSession {
     if (!entry) throw new Error("Select an existing conversation message");
     this.stored.leafId = targetId;
     this.turnStart = branchOf(this.stored).length;
+    this.settledTurn = null;
     this.emit({ type: "activity" });
     return Promise.resolve(userMessageText(entry));
   }
@@ -851,8 +894,20 @@ export function createFakeWorld(
     packages?: PackageInfo[];
   } = {},
 ): FakeWorld {
+  // Every session has a file, as it would under Pi: the statistics panel
+  // shows where a conversation lives.
+  const withFile = (session: FakeStoredSession): FakeStoredSession => ({
+    ...session,
+    summary: {
+      filePath: `/agent/sessions/${session.summary.id}.jsonl`,
+      ...session.summary,
+    },
+  });
   const store = new Map(
-    (options.sessions ?? []).map((session) => [session.summary.id, session]),
+    (options.sessions ?? []).map((session) => [
+      session.summary.id,
+      withFile(session),
+    ]),
   );
   const live = new Map<string, FakeLiveSession>();
   const watchers = new Set<(event: RuntimeEvent) => void>();
@@ -910,6 +965,7 @@ export function createFakeWorld(
       summary: {
         ...stored.summary,
         id: newId,
+        filePath: `/agent/sessions/${newId}.jsonl`,
         createdAt: now,
         modifiedAt: now,
         fileSize: entries.length,
@@ -951,6 +1007,20 @@ export function createFakeWorld(
             : undefined,
         );
       },
+      // A rough stand-in for Pi's context build: every message on the path
+      // from the compaction entry, 4 characters to the token.
+      contextTokensAt: (_id, entries, entryId) => {
+        const byId = new Map(entries.map((entry) => [entry.id, entry]));
+        let total = 0;
+        for (
+          let entry = byId.get(entryId);
+          entry;
+          entry = entry.parentId === null ? undefined : byId.get(entry.parentId)
+        ) {
+          total += Math.ceil(JSON.stringify(entry).length / 4);
+        }
+        return total;
+      },
       rename: (id, name) => {
         const stored = need(id);
         stored.summary = { ...stored.summary, name };
@@ -980,7 +1050,12 @@ export function createFakeWorld(
         const entry = stored.entries.find((item) => item.id === entryId);
         if (!entry) throw new Error("Select an existing conversation message");
         const text = userMessageText(entry) ?? "";
-        const leafId = text ? entry.parentId : entry.id;
+        // The role decides, as in the Pi adapter: a question that is only
+        // images is still a question, and editing it reopens the history
+        // before it.
+        const isUserMessage =
+          entry.type === "message" && entry.message.role === "user";
+        const leafId = isUserMessage ? entry.parentId : entry.id;
         if (leafId === null) {
           throw new Error(
             "Nothing precedes the first message; use New for an empty session.",
@@ -1035,7 +1110,7 @@ export function createFakeWorld(
         }
         created += 1;
         const now = new Date().toISOString();
-        const stored: FakeStoredSession = {
+        const stored: FakeStoredSession = withFile({
           summary: {
             id: `new-${String(created)}`,
             cwd: target.cwd,
@@ -1045,7 +1120,7 @@ export function createFakeWorld(
           },
           entries: [],
           leafId: null,
-        };
+        });
         store.set(stored.summary.id, stored);
         return Promise.resolve(open(stored));
       },

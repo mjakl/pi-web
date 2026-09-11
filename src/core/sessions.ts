@@ -17,6 +17,8 @@ export type SessionSummary = {
   worktreeBranch?: string;
   /** Id of the session this one was forked from, when the header names one. */
   parentId?: string;
+  /** The JSONL Pi keeps this conversation in; shown in the statistics panel. */
+  filePath?: string;
 };
 
 /** What a sidebar row shows once its file has been read. */

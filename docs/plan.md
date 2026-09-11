@@ -4,8 +4,8 @@ Goal: every pi-web feature, on a leaner Hono + HTMX code base. Phases ran in
 order; each ended with `just qa` green, a browser check against the fake
 runtime, and a commit.
 
-**All seven phases are done.** What each one covered is below, and what is still
-missing — three deliberate gaps, no packaging ones — is in
+**All eight phases are done.** What each one covered is below, and what is still
+missing — four deliberate gaps, no packaging ones — is in
 `docs/architecture.md`.
 
 | Phase                           | Commit               |
@@ -19,7 +19,8 @@ missing — three deliberate gaps, no packaging ones — is in
 | 4: files and Git                | `3f5a7a2`            |
 | 5: workspace and configuration  | `255f8de`            |
 | 6: extensions and notifications | `095badf`            |
-| 7: packaging                    | this commit          |
+| 7: packaging                    | `d18d98b`            |
+| 8: parity audit fixes           | this commit          |
 
 Conventions for every phase:
 
@@ -102,3 +103,18 @@ environment isolation.
 LAN variant with its warning, proxy support, the version banner in Settings, a
 runtime smoke test against the installed tarball, and the documentation pass.
 `docs/deployment.md` covers running it as a service beside pi-web.
+
+## Phase 8: parity audit fixes
+
+A read of every spec against the code, then the fixes it found: the Queue
+button, input history, the settled turn re-rendering itself, a leaked file
+descriptor, trimmed dialog answers, a row whose file Pi had not written yet,
+forking a message that is only images, the row cache, the Mermaid zoom as a real
+modal, removing an attachment mid-downscale, the two halves of the queue, and
+reading another branch of a running session from the runtime. Then the gaps:
+Enter completing a menu entry, the compaction card's post-compaction estimate,
+recalling queued images, the context-warning threshold actually reaching the
+badge, `/copy` and `/session` from the Send button, the phone keyboard, worktree
+probing behind the allowed roots, streaming tool arguments, subagent run
+details, and the notification prompt. Seven rules that had two implementations
+became one each.

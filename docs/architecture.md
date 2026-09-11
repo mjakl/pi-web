@@ -41,8 +41,13 @@ use it.
 ## One rendering of UI state
 
 `SessionView` holds `items` (settled conversation), `turn` (the current turn,
-including the in-progress assistant message), `status`, `usage`, and `models`.
-Page load, HTMX responses, and SSE events all render the same three views:
+including the in-progress assistant message), `settledTurn` (the turn that just
+ended, for the one render that appends it to the log), `status`, `usage`, and
+`models`. A turn is handed over exactly once: when the agent settles, the
+runtime moves the boundary to the end of the branch, so the messages belong to
+`items` from then on and any later re-render — a star, a rename, an extension
+status — cannot put them on the page a second time. Page load, HTMX responses,
+and SSE events all render the same three views:
 
 - `#messages` receives settled turn items (`sse-swap="settled"`, `beforeend`),
   with the re-rendered conversation rail riding along out of band;
@@ -89,9 +94,14 @@ sidebar row summary. The catalog hands the core entries; no rule reads a file.
 
 `src/core/context-usage.ts` is the only formula: tokens reported by Pi for the
 last completed call (falling back to the transcript's last reported usage,
-flagged as estimated), the model's window, a percent, and one threshold pair
-(warn 60 %, critical 80 %). The badge, the per-message footer, and any future
-warning read this value.
+flagged as estimated), the model's window, a percent, and the thresholds — warn
+at 60 %, critical at 80 %, and warn again once the count passes the reader's own
+token threshold (pi-web's "dumb zone", 100,000 by default). That last one is a
+browser preference the server has to know, because the server renders the badge,
+so it travels in the `web-pi-warn-tokens` cookie and enters the formula as an
+argument of `contextUsage()`; the settings page renders the current value and
+the input writes the cookie. The badge, the compaction button, the statistics
+panel, and any future warning read this one value.
 
 ## Dependency rules
 
@@ -196,6 +206,12 @@ composition root and the only importer of Pi adapters.
   lone carriage return — which is what Enter sends — does not survive a
   multipart parser. Closing is Ctrl+C: a pi-tui component has no close command
   to receive.
+- **A notification is offered once, at the moment it would have helped.** The
+  browser asks for permission the first time a run finishes while nobody is
+  looking, as a small prompt in the notice shelf with an Allow button — never a
+  bare `requestPermission()` out of nowhere, and never again: the answer, or the
+  decision not to answer, is remembered in `web-pi:notify-asked`. The settings
+  toggle stays the way to change it later.
 - **Notifications key off the agent's own idle, not off the turn ending.**
   `src/core/turn-completion.ts` is pi-web's rule: a run has to have started, and
   the session has to be idle when it settles. A stop, an aborted turn or a shell
@@ -287,14 +303,18 @@ composition root and the only importer of Pi adapters.
   [ADR 0001](adr/0001-project-command-environment.md).
 - **The chosen folder is a cookie, and validating it is what grants access.**
   `web-pi-cwd` holds the folder new sessions start in, `web-pi-project` the
-  sidebar's project. The picker commits through `POST /workspaces/validate`,
-  which adds the folder to the in-memory allowed roots — so the new-session
-  composer gets `@` completion, the slash menu and a model picker, and `/new`
-  re-validates its cookie on every load rather than trusting it. Browsing
-  (`GET /workspaces/browse`) is deliberately outside that policy: it exposes
-  directory _names_ only, and a reader has to be able to see a folder before
-  asking for it. pi-web keeps the last custom path in `localStorage`; here the
-  cookie is the memory and `web-pi:last-cwd` only pre-fills the browse box.
+  sidebar's project, `web-pi-settings` the open settings section, `web-pi-skill`
+  the skill that folder was last reading, and `web-pi-warn-tokens` the context
+  threshold the badge is coloured by. A preference the server renders from is a
+  cookie; everything only the browser acts on stays in `localStorage`. The
+  picker commits through `POST /workspaces/validate`, which adds the folder to
+  the in-memory allowed roots — so the new-session composer gets `@` completion,
+  the slash menu and a model picker, and `/new` re-validates its cookie on every
+  load rather than trusting it. Browsing (`GET /workspaces/browse`) is
+  deliberately outside that policy: it exposes directory _names_ only, and a
+  reader has to be able to see a folder before asking for it. pi-web keeps the
+  last custom path in `localStorage`; here the cookie is the memory and
+  `web-pi:last-cwd` only pre-fills the browse box.
 - **Worktree discovery is a rule plus a map.** `src/core/workspaces.ts` holds
   the identity rules (bare repositories, linked worktrees, subdirectories keep
   their own identity) and the parse of `git worktree list --porcelain -z`; the
@@ -360,9 +380,12 @@ pi-web features absent from this slice, roughly in order of value:
 2. The rail's branch marks move the session's leaf through `/navigate`, which
    offers the prompt there for editing, rather than opening that branch
    read-only. The explorer has no create, rename, delete or upload, and its
-   expanded state is not remembered across a reload.
-3. A running-session cap. Idle shutdown exists only for drafts Pi never wrote to
-   disk (10 minutes), as in pi-web.
+   expanded state is not remembered across a reload. The branch-sync line is an
+   indicator, not a notice with a Retry button: nothing here can fail halfway.
+3. A running-session cap. Idle shutdown exists for drafts Pi never wrote to disk
+   (10 minutes, or immediately when the reader stops the turn), as in pi-web.
+4. No live token counter or tokens-per-second in the assistant header: the
+   number would be an estimate of an estimate, re-rendered ten times a second.
 
 ## Deliberately not carried over
 

@@ -141,6 +141,25 @@ describe("extension dialogs", () => {
     expect(status(world)?.dialog).toBeNull();
   });
 
+  it("hands an editor's answer to the extension exactly as typed", async () => {
+    const { app, world } = testApp(() => [
+      { dialog: { method: "editor", title: "Message" } },
+    ]);
+    await send(app, "go");
+    await settle();
+    const id = status(world)?.dialog?.id ?? "";
+    const body = new FormData();
+    // Leading spaces and the trailing newline are content in an editor, and
+    // a select option with spaces has to match what the extension offered.
+    body.append("value", "  keep\n  the newline\n");
+    await app.request(`/sessions/s1/ui/${id}`, { method: "POST", body });
+    await settle();
+    // (multipart normalises the line endings themselves; nothing is trimmed)
+    const answered = status(world)?.notices[0]?.message ?? "";
+    expect(answered).toContain('{"value":"  keep');
+    expect(answered.endsWith('the newline\\r\\n"}')).toBe(true);
+  });
+
   it("renders the editor dialog with its prefill", async () => {
     const { app } = testApp(() => [
       { dialog: { method: "editor", title: "Message", prefill: "Fix it" } },

@@ -20,6 +20,7 @@ let outside = "";
 let pickable = "";
 let app: ReturnType<typeof createWebApp>;
 let hasZip = true;
+let streams = 0;
 
 function git(...args: string[]): void {
   execFileSync("git", args, { cwd: repo, stdio: "ignore" });
@@ -99,6 +100,13 @@ beforeAll(async () => {
       },
     ],
   });
+  // Every stream this port hands out is a file descriptor; the raw route
+  // must open exactly one per request, whatever the Range header says.
+  const opened = world.files.stream.bind(world.files);
+  world.files.stream = (path, range) => {
+    streams += 1;
+    return opened(path, range);
+  };
   app = createWebApp({
     workspace: createWorkspace(world),
     staticRoot: "/nonexistent",
@@ -195,6 +203,19 @@ describe("viewer", () => {
 describe("raw bytes", () => {
   const url = (extra = "") =>
     `/files/raw?session=s1&path=${encodeURIComponent(join(repo, "logo.png"))}${extra}`;
+
+  it("opens one stream per request, whatever the range", async () => {
+    streams = 0;
+    await (await app.request(url())).arrayBuffer();
+    expect(streams).toBe(1);
+    await (
+      await app.request(url(), { headers: { Range: "bytes=0-3" } })
+    ).arrayBuffer();
+    expect(streams).toBe(2);
+    // An unsatisfiable range answers from the size alone.
+    await app.request(url(), { headers: { Range: "bytes=99-1" } });
+    expect(streams).toBe(2);
+  });
 
   it("streams with range headers and the right type", async () => {
     const res = await app.request(url());

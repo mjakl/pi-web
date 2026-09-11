@@ -1,13 +1,21 @@
 import { pathKey } from "@core/path-access";
 import type { SessionCatalog, SessionRead } from "@core/ports";
-import { STAR_TYPE, userMessageText } from "@core/session-entries";
+import {
+  rowMetadataFold,
+  STAR_TYPE,
+  userMessageText,
+} from "@core/session-entries";
 import {
   isSessionId,
   type SessionRowMetadata,
   type SessionSummary,
 } from "@core/sessions";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import {
+  buildSessionContext,
+  estimateTokens,
+  SessionManager,
+} from "@earendil-works/pi-coding-agent";
 import { closeSync, createReadStream, openSync, readSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
@@ -72,63 +80,57 @@ function readHeader(filePath: string): Header | undefined {
 }
 
 /**
- * Row metadata by streaming: the same counts `rowMetadata()` derives in the
- * core, but one line at a time so a hundred-megabyte session never lands in
+ * Row metadata by streaming: the same fold `rowMetadata()` applies in the
+ * core, fed one line at a time so a hundred-megabyte session never lands in
  * memory just to show a sidebar row.
  */
 async function streamRowMetadata(
   filePath: string,
   file: { modifiedAt: string; fileSize: number },
 ): Promise<SessionRowMetadata> {
-  const stars = new Map<string, boolean>();
-  const answers = new Set<string>();
-  let name: string | undefined;
-  let firstMessage = "";
-  let messageCount = 0;
-
+  const fold = rowMetadataFold();
   const lines = createInterface({
     input: createReadStream(filePath, "utf8"),
     crlfDelay: Number.POSITIVE_INFINITY,
   });
   for await (const line of lines) {
     if (!line) continue;
-    let entry: SessionEntry;
     try {
-      entry = JSON.parse(line) as SessionEntry;
+      fold.add(JSON.parse(line) as SessionEntry);
     } catch {
       continue;
     }
-    if (entry.type === "session_info") {
-      const trimmed = entry.name?.trim();
-      name = trimmed === "" ? undefined : trimmed;
-    } else if (entry.type === "custom" && entry.customType === STAR_TYPE) {
-      const data = entry.data as
-        | { targetId?: unknown; starred?: unknown }
-        | undefined;
-      if (
-        typeof data?.targetId === "string" &&
-        typeof data.starred === "boolean"
-      ) {
-        stars.set(data.targetId, data.starred);
-      }
-    } else if (entry.type === "message") {
-      messageCount += 1;
-      if (entry.message.role === "assistant") answers.add(entry.id);
-      else if (!firstMessage) firstMessage = userMessageText(entry) ?? "";
-    }
   }
+  return fold.finish(file);
+}
 
-  let starCount = 0;
-  for (const [targetId, starred] of stars) {
-    if (starred && answers.has(targetId)) starCount += 1;
+/**
+ * What the context holds right after a compaction: Pi's own context build at
+ * that entry, estimated the way Pi estimates it. Entries before a compaction
+ * never change, so one answer per entry is cached for the life of the process.
+ */
+const compactionTokens = new Map<string, number>();
+
+function contextTokensAt(
+  sessionId: string,
+  entries: readonly SessionEntry[],
+  entryId: string,
+): number | undefined {
+  const key = `${sessionId}\0${entryId}`;
+  const cached = compactionTokens.get(key);
+  if (cached !== undefined) return cached;
+  try {
+    const context = buildSessionContext([...entries], entryId);
+    const total = context.messages.reduce(
+      (sum, message) => sum + estimateTokens(message),
+      0,
+    );
+    compactionTokens.set(key, total);
+    return total;
+  } catch {
+    // A branch the entry no longer belongs to: no estimate, no card number.
+    return undefined;
   }
-  return {
-    ...(name ? { name } : {}),
-    firstMessage,
-    messageCount,
-    starCount,
-    ...file,
-  };
 }
 
 export type PiSessionCatalog = SessionCatalog & {
@@ -143,9 +145,15 @@ export function createPiSessionCatalog(options: {
 }): PiSessionCatalog {
   const sessionsDir = join(options.agentDir, "sessions");
   const paths = new Map<string, string>();
+  // One entry per file: a re-read replaces the stamp instead of leaving the
+  // superseded key behind, so the cap never evicts a hot session for a stale
+  // copy of itself.
   const rows = new Map<
     string,
-    { summary: SessionSummary; metadata: SessionRowMetadata }
+    {
+      stamp: string;
+      row: { summary: SessionSummary; metadata: SessionRowMetadata };
+    }
   >();
 
   async function scan(): Promise<SessionSummary[]> {
@@ -185,6 +193,7 @@ export function createPiSessionCatalog(options: {
             createdAt: header.timestamp,
             modifiedAt: info.mtime.toISOString(),
             fileSize: info.size,
+            filePath,
           });
         } catch {
           // Unreadable or concurrently removed files are left out.
@@ -217,6 +226,7 @@ export function createPiSessionCatalog(options: {
   return {
     list: scan,
     pathOf,
+    contextTokensAt,
     remember(id, filePath) {
       paths.set(id, filePath);
     },
@@ -237,6 +247,7 @@ export function createPiSessionCatalog(options: {
           createdAt: header.timestamp,
           modifiedAt: info.mtime.toISOString(),
           fileSize: info.size,
+          filePath,
         },
         branch: manager.getBranch(leafId),
         entries: manager.getEntries(),
@@ -247,10 +258,13 @@ export function createPiSessionCatalog(options: {
     async rowMetadata(id) {
       const filePath = await pathOf(id);
       if (!filePath) return undefined;
-      const info = await stat(filePath);
-      const key = `${filePath}\0${String(info.size)}\0${String(info.mtimeMs)}`;
-      const cached = rows.get(key);
-      if (cached) return cached;
+      // Pi remembers the path of a session it has not flushed yet; the row is
+      // simply not on disk, which is not an error.
+      const info = await stat(filePath).catch(() => undefined);
+      if (!info) return undefined;
+      const stamp = `${String(info.size)}\0${String(info.mtimeMs)}`;
+      const cached = rows.get(filePath);
+      if (cached?.stamp === stamp) return cached.row;
       const header = readHeader(filePath);
       if (!header) return undefined;
       const file = {
@@ -268,11 +282,11 @@ export function createPiSessionCatalog(options: {
         },
         metadata,
       };
-      if (rows.size >= METADATA_CACHE_MAX) {
+      if (!rows.has(filePath) && rows.size >= METADATA_CACHE_MAX) {
         const oldest = rows.keys().next().value;
         if (oldest !== undefined) rows.delete(oldest);
       }
-      rows.set(key, row);
+      rows.set(filePath, { stamp, row });
       return row;
     },
 
@@ -301,8 +315,11 @@ export function createPiSessionCatalog(options: {
       if (!entry) throw new Error("Select an existing conversation message");
       const text = userMessageText(entry) ?? "";
       // Editing a user message reopens the history *before* it; anything else
-      // is copied up to and including itself.
-      const leafId = text ? entry.parentId : entry.id;
+      // is copied up to and including itself. The role decides, not the text:
+      // a question that is only images is still a question.
+      const isUserMessage =
+        entry.type === "message" && entry.message.role === "user";
+      const leafId = isUserMessage ? entry.parentId : entry.id;
       if (leafId === null) {
         throw new Error(
           "Nothing precedes the first message; use New for an empty session.",

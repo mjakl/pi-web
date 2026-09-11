@@ -510,14 +510,26 @@ export function Sidebar({
   activeId?: string;
 }) {
   return (
-    <aside
-      id="sidebar"
-      class="flex h-full w-72 flex-col border-r border-base-300 bg-base-200"
-    >
-      <div class="flex items-center justify-between px-3 py-2">
+    <aside id="sidebar" class="sidebar flex h-full flex-col bg-base-200">
+      <div class="flex items-center justify-between gap-1 px-3 py-2">
         <a href="/" class="font-semibold">
           Pi
         </a>
+        <span class="flex-1" />
+        {/* The list is pushed by the shared stream; this is for a session
+            started in the terminal, which nothing here can hear about. */}
+        <button
+          type="button"
+          id="sidebar-refresh"
+          class="btn btn-square btn-ghost btn-xs"
+          aria-label="Refresh the session list"
+          title="Refresh the session list"
+          hx-get="/sidebar"
+          hx-target="#project-nav"
+          hx-swap="outerHTML"
+        >
+          ↻
+        </button>
         <a
           href="/new"
           class="btn btn-primary btn-xs"
@@ -537,6 +549,14 @@ export function Sidebar({
       </div>
       <ProjectNav view={view} activeId={activeId} />
       <Footer />
+      {/* Dragged by src/web/client/panel.ts's shared resize handle. */}
+      <div
+        class="sidebar-resize"
+        role="separator"
+        aria-label="Resize the sidebar"
+        aria-orientation="vertical"
+        tabindex={0}
+      />
     </aside>
   );
 }

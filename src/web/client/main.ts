@@ -7,9 +7,10 @@ import { setUpNotifications } from "./notify.ts";
 import { setUpPush } from "./push.ts";
 import { setUpFolderMemory, setUpPreferences } from "./preferences.ts";
 import { DARK_THEME, LIGHT_THEME, THEME_KEY } from "./theme.ts";
-import { setUpFilePanel } from "./panel.ts";
+import { setUpFilePanel, setUpSidebarResize } from "./panel.ts";
 import { setUpRail } from "./rail.ts";
 import { setUpToasts } from "./toasts.ts";
+import { setUpViewport } from "./viewport.ts";
 import { setUpTranscript } from "./transcript.ts";
 
 type Theme = "light" | "dark" | "system";
@@ -81,8 +82,9 @@ function setUpShortcuts(): void {
     }
     // Digits pick the nth session, but they are ordinary typing in a field.
     if (inTextEntry(event.target)) return;
-    const position = Number(event.key);
-    if (!Number.isInteger(position) || position < 1 || position > 9) return;
+    // 1..9, and 0 for the tenth, as in a browser's own tab shortcuts.
+    const position = event.key === "0" ? 10 : Number(event.key);
+    if (!Number.isInteger(position) || position < 1 || position > 10) return;
     const links = document.querySelectorAll<HTMLAnchorElement>(
       "#sidebar a[href^='/sessions/']",
     );
@@ -240,6 +242,19 @@ function setUpProjectFilter(): void {
   });
 }
 
+/** The refresh button says it worked: a check for two seconds. */
+function setUpSidebarRefresh(): void {
+  const button = document.getElementById("sidebar-refresh");
+  if (!button) return;
+  const glyph = button.textContent;
+  button.addEventListener("htmx:afterRequest", () => {
+    button.textContent = "✓";
+    setTimeout(() => {
+      button.textContent = glyph;
+    }, 2000);
+  });
+}
+
 function setUpFilter(): void {
   document
     .querySelector<HTMLInputElement>("#session-filter")
@@ -255,11 +270,14 @@ setUpTranscript();
 setUpRail();
 setUpShortcuts();
 setUpFilter();
+setUpSidebarRefresh();
 setUpProjectFilter();
 setUpUnread();
 setUpToasts();
 setUpComposer();
 setUpFilePanel();
+setUpSidebarResize();
+setUpViewport();
 setUpExtensions();
 setUpNotifications();
 setUpPush();

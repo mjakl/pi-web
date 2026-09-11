@@ -1,0 +1,66 @@
+import { useVisualViewport } from "@core/composer";
+
+// The phone keyboard. When it opens, the layout viewport stays the height of
+// the screen and the page is simply covered; `--app-viewport-height` pins the
+// app to what is still visible, so the composer sits above the keyboard
+// instead of under it. Everything is rAF-coalesced because WebKit fires
+// `resize` before `visualViewport.height` has settled.
+
+const HEIGHT = "--app-viewport-height";
+const SAFE_AREA = "--app-safe-area-bottom";
+
+function focusedEditable(): boolean {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement)) return false;
+  return (
+    active.isContentEditable ||
+    active instanceof HTMLInputElement ||
+    active instanceof HTMLSelectElement ||
+    active instanceof HTMLTextAreaElement
+  );
+}
+
+export function setUpViewport(): void {
+  const viewport = window.visualViewport;
+  if (!viewport) return;
+  const root = document.documentElement;
+  let scheduled = false;
+  let pinned = false;
+
+  const update = (): void => {
+    const use = useVisualViewport({
+      focusedEditable: focusedEditable(),
+      scale: viewport.scale,
+      layoutHeight: root.clientHeight,
+      viewportHeight: viewport.height,
+    });
+    if (use) {
+      root.style.setProperty(HEIGHT, `${String(viewport.height)}px`);
+      // The keyboard already covers the inset; adding it would leave a gap.
+      root.style.setProperty(SAFE_AREA, "0px");
+    } else {
+      root.style.removeProperty(HEIGHT);
+      root.style.removeProperty(SAFE_AREA);
+    }
+    // iOS scrolls the whole page to reveal the field; with the app sized to
+    // the visible box that offset is pure damage.
+    if (use !== pinned && viewport.scale <= 1.01) scrollTo(0, 0);
+    pinned = use;
+  };
+
+  const schedule = (): void => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      update();
+    });
+  };
+
+  viewport.addEventListener("resize", schedule);
+  viewport.addEventListener("scroll", schedule);
+  for (const event of ["resize", "focusin", "focusout", "pageshow"] as const) {
+    addEventListener(event, schedule);
+  }
+  update();
+}

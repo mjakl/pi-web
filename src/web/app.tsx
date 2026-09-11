@@ -1,4 +1,5 @@
 import { bashCommand, imageLimitError } from "@core/composer";
+import { parseWarnTokens, WARN_TOKENS_COOKIE } from "@core/context-usage";
 import { extensionOf, mimeOf } from "@core/file-types";
 import { FileAccessError } from "@core/path-access";
 import type {
@@ -20,7 +21,12 @@ import {
 import { honoFactory } from "@web/hono";
 import { HtmlLayout } from "@web/HtmlLayout";
 import { renderMarkdown } from "@web/markdown";
-import { CommandMenu, ComposerText, Toasts } from "@web/views/Composer";
+import {
+  CommandMenu,
+  ComposerText,
+  RecalledImages,
+  Toasts,
+} from "@web/views/Composer";
 import {
   EarlierPage,
   type ItemActions,
@@ -124,6 +130,9 @@ const CWD_COOKIE = "web-pi-cwd";
 /** Which settings section was open last. */
 const SETTINGS_COOKIE = "web-pi-settings";
 
+/** The skill last opened, and the folder it belongs to. */
+const SKILL_COOKIE = "web-pi-skill";
+
 const YEAR = 60 * 60 * 24 * 365;
 
 /** The session the reader has open, for requests that only carry a referrer. */
@@ -153,8 +162,13 @@ function isPushSubscription(
 }
 
 function field(form: FormData, name: string): string {
+  return rawField(form, name).trim();
+}
+
+/** The field as it was sent: whitespace is content in an editor dialog. */
+function rawField(form: FormData, name: string): string {
   const value = form.get(name);
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === "string" ? value : "";
 }
 
 /** Errors reach the reader as a toast, wherever the request came from. */
@@ -233,6 +247,15 @@ export function createWebApp(deps: WebDeps) {
     return c.req.query("cwd") ?? getCookie(c, CWD_COOKIE) ?? deps.defaultCwd;
   }
 
+  /**
+   * The reader's context-warning threshold. It belongs to the browser, but
+   * the badge is rendered here, so it travels in a cookie rather than in
+   * every request.
+   */
+  function warnTokens(c: Context): { warnTokens: number } {
+    return { warnTokens: parseWarnTokens(getCookie(c, WARN_TOKENS_COOKIE)) };
+  }
+
   /** The whole session page, swapped into <body> after a history change. */
   async function page(
     c: Context,
@@ -241,7 +264,7 @@ export function createWebApp(deps: WebDeps) {
   ): Promise<Response> {
     const [sidebar, view] = await Promise.all([
       sidebarOf(c, id),
-      deps.workspace.viewSession(id),
+      deps.workspace.viewSession(id, warnTokens(c)),
     ]);
     if (!view) return c.notFound();
     rememberProject(c, sidebar);
@@ -429,6 +452,7 @@ export function createWebApp(deps: WebDeps) {
         ? {}
         : { leaf: c.req.query("leaf") }),
       ...(through === undefined ? {} : { through }),
+      ...warnTokens(c),
     };
     const [sidebar, view] = await Promise.all([
       sidebarOf(c, id),
@@ -462,7 +486,7 @@ export function createWebApp(deps: WebDeps) {
   app.get("/sessions/:id/stats", async (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
-    const found = await deps.workspace.sessionStats(id);
+    const found = await deps.workspace.sessionStats(id, warnTokens(c));
     if (!found) return c.notFound();
     return c.html(<StatsPanel {...found} />);
   });
@@ -578,11 +602,21 @@ export function createWebApp(deps: WebDeps) {
     return c.body(null, 204);
   });
 
-  /** Recall answers with the composer's textarea holding the queued texts. */
+  /**
+   * Recall answers with the composer's textarea holding the queued texts, and
+   * the images those messages carried riding along out of band for the client
+   * bundle to put back into the attachment strip.
+   */
   app.post("/sessions/:id/queue/recall", (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
-    return c.html(<ComposerText draft={deps.workspace.recallQueue(id)} />);
+    const recalled = deps.workspace.recallQueue(id);
+    return c.html(
+      <>
+        <ComposerText draft={recalled.text} />
+        <RecalledImages images={recalled.images} />
+      </>,
+    );
   });
 
   app.post("/sessions/:id/queue/clear", (c) => {
@@ -714,15 +748,24 @@ export function createWebApp(deps: WebDeps) {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
     const path = c.req.query("path") ?? "";
+    const download = c.req.query("download") === "1";
     try {
       const output = await deps.workspace.bashOutput(id, path);
       return c.text(output, 200, {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
+        ...(download
+          ? { "Content-Disposition": disposition("bash-output.log", true) }
+          : {}),
       });
     } catch (error) {
       if (error instanceof ForbiddenPath) return c.text(errorText(error), 403);
+      // Too large to read is not "missing": the reader is told the size and
+      // the cap rather than being sent looking for a file that is right there.
+      if (error instanceof FileAccessError) {
+        return c.text(errorText(error), error.status);
+      }
       return c.text("Cannot read that output file", 404);
     }
   });
@@ -1038,7 +1081,11 @@ export function createWebApp(deps: WebDeps) {
     const path = c.req.query("path") ?? "";
     const download = c.req.query("download") === "1";
     try {
-      const { size } = await deps.workspace.fileBytes(sessionId, path);
+      const header = c.req.header("Range");
+      // One call only: every `fileBytes` opens a stream, and a second one
+      // would leak the file descriptor of the first.
+      const meta = await deps.workspace.fileMeta(sessionId, path);
+      const { size } = meta;
       const mime = download ? "application/octet-stream" : mimeOf(path);
       const headers: Record<string, string> = {
         "Content-Type": mime,
@@ -1052,7 +1099,6 @@ export function createWebApp(deps: WebDeps) {
         headers["Content-Security-Policy"] =
           "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'";
       }
-      const header = c.req.header("Range");
       if (header === undefined) {
         const { stream } = await deps.workspace.fileBytes(sessionId, path);
         return c.body(stream, 200, {
@@ -1201,13 +1247,17 @@ export function createWebApp(deps: WebDeps) {
   app.get("/workspaces/folders", async (c) => {
     const cwd = c.req.query("cwd") ?? "";
     if (cwd === "") return c.text("cwd is required", 400);
-    const choice = await deps.workspace.folders(cwd);
-    return c.html(
-      <FolderList
-        choice={choice}
-        {...(deps.home === undefined ? {} : { home: deps.home })}
-      />,
-    );
+    try {
+      const choice = await deps.workspace.folders(cwd);
+      return await c.html(
+        <FolderList
+          choice={choice}
+          {...(deps.home === undefined ? {} : { home: deps.home })}
+        />,
+      );
+    } catch (error) {
+      return fileFailure(c, error);
+    }
   });
 
   /**
@@ -1327,7 +1377,7 @@ export function createWebApp(deps: WebDeps) {
   async function settingsView(
     section: "general" | "skills" | "plugins",
     cwd: string,
-    options: { updates?: SkillsView["updates"] } = {},
+    options: { updates?: SkillsView["updates"]; selected?: string } = {},
   ) {
     if (section === "skills") {
       const listed = await deps.workspace.skills(cwd);
@@ -1338,6 +1388,9 @@ export function createWebApp(deps: WebDeps) {
           ...(options.updates === undefined
             ? {}
             : { updates: options.updates }),
+          ...(options.selected === undefined
+            ? {}
+            : { selected: options.selected }),
         } satisfies SkillsView,
       };
     }
@@ -1358,14 +1411,16 @@ export function createWebApp(deps: WebDeps) {
     remember(c, SETTINGS_COOKIE, section);
     // A section that cannot load says so; falling back to general would
     // quietly show the wrong page under the right tab.
-    const sections = await settingsView(section, usable).catch(
-      (error: unknown) => ({ error: errorText(error) }),
-    );
+    const remembered = rememberedSkill(c, usable);
+    const sections = await settingsView(section, usable, {
+      ...(remembered === undefined ? {} : { selected: remembered }),
+    }).catch((error: unknown) => ({ error: errorText(error) }));
     const back = currentSessionId(c);
     return c.render(
       <SettingsPage
         section={section}
         cwd={usable}
+        warnTokens={warnTokens(c).warnTokens}
         back={back === undefined ? "/" : `/sessions/${back}`}
         {...(deps.home === undefined ? {} : { home: deps.home })}
         {...(deps.about === undefined ? {} : { about: deps.about })}
@@ -1374,10 +1429,26 @@ export function createWebApp(deps: WebDeps) {
     );
   });
 
+  /** The skill this folder was last looking at, when it still belongs to it. */
+  function rememberedSkill(c: Context, cwd: string): string | undefined {
+    const [folder, path] = (getCookie(c, SKILL_COOKIE) ?? "").split("|");
+    if (folder === undefined || path === undefined || path === "") {
+      return undefined;
+    }
+    return decodeURIComponent(folder) === cwd
+      ? decodeURIComponent(path)
+      : undefined;
+  }
+
   /** One skill's detail pane, and the toggle that rewrites its frontmatter. */
   app.get("/settings/skills/detail", async (c) => {
     const cwd = c.req.query("cwd") ?? "";
     const path = c.req.query("path") ?? "";
+    remember(
+      c,
+      SKILL_COOKIE,
+      `${encodeURIComponent(cwd)}|${encodeURIComponent(path)}`,
+    );
     return guard(c, async () => {
       const listed = await deps.workspace.skills(cwd);
       const skill = listed.skills.find((entry) => entry.filePath === path);
@@ -1549,6 +1620,28 @@ export function createWebApp(deps: WebDeps) {
     });
   });
 
+  /** Rebuilds the extensions of every live session in this folder. */
+  app.post("/settings/plugins/reload", async (c) => {
+    const form = await c.req.formData();
+    const cwd = field(form, "cwd");
+    return guard(c, async () => {
+      const reloaded = await deps.workspace.reloadFolder(cwd);
+      const view = await deps.workspace.plugins(cwd);
+      return c.html(
+        <PluginsSection
+          cwd={cwd}
+          view={view}
+          message={
+            reloaded === 0
+              ? "No session of this folder is running."
+              : `Reloaded ${String(reloaded)} session${reloaded === 1 ? "" : "s"}.`
+          }
+          {...(deps.home === undefined ? {} : { home: deps.home })}
+        />,
+      );
+    });
+  });
+
   app.get("/settings/plugins", async (c) => {
     const cwd = c.req.query("cwd") ?? "";
     const selected = c.req.query("selected");
@@ -1663,13 +1756,16 @@ export function createWebApp(deps: WebDeps) {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
     const form = await c.req.formData();
+    // The value is passed on verbatim: an editor's text keeps its leading
+    // whitespace and its trailing newline, and a select option still matches
+    // the string the extension offered.
     const answer: DialogAnswer =
       field(form, "cancelled") !== ""
         ? { cancelled: true }
         : form.has("confirmed")
           ? { confirmed: field(form, "confirmed") !== "" }
           : form.has("value")
-            ? { value: field(form, "value") }
+            ? { value: rawField(form, "value") }
             : { cancelled: true };
     const answered = deps.workspace.answerDialog(
       id,
@@ -1832,6 +1928,7 @@ export function createWebApp(deps: WebDeps) {
   app.get("/sessions/:id/events", (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
+    const thresholds = warnTokens(c);
     return streamSSE(c, async (stream) => {
       // The shelf holds open panels, so it is only re-sent when an extension
       // actually changed a status or a widget.
@@ -1843,7 +1940,7 @@ export function createWebApp(deps: WebDeps) {
       let frame = "";
       const widgetLines = new Map<string, string>();
       const render = async (kind: "activity" | "turn_done") => {
-        const view = await deps.workspace.viewSession(id);
+        const view = await deps.workspace.viewSession(id, thresholds);
         if (!view) return;
         const actions: ItemActions = {
           sessionId: id,
@@ -1857,7 +1954,7 @@ export function createWebApp(deps: WebDeps) {
             event: "settled",
             data: await html(
               <>
-                <Items items={view.turn} actions={actions} />
+                <Items items={view.settledTurn} actions={actions} />
                 <Rail view={view} oob />
               </>,
             ),

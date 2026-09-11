@@ -269,19 +269,28 @@ describe("activityLabel", () => {
     expect(
       activityLabel({
         bashRunning: false,
-        tools: [{ name: "bash", progress: "line 3" }],
+        tools: [{ id: "t1", name: "bash", progress: "line 3" }],
       }),
     ).toBe("Running bash... line 3");
     expect(
       activityLabel({
         bashRunning: false,
-        tools: [{ name: "a" }, { name: "b" }, { name: "c" }],
+        tools: [
+          { id: "a", name: "a" },
+          { id: "b", name: "b" },
+          { id: "c", name: "c" },
+        ],
       }),
     ).toBe("Running a, b, c...");
     expect(
       activityLabel({
         bashRunning: false,
-        tools: [{ name: "a" }, { name: "b" }, { name: "c" }, { name: "d" }],
+        tools: [
+          { id: "a", name: "a" },
+          { id: "b", name: "b" },
+          { id: "c", name: "c" },
+          { id: "d", name: "d" },
+        ],
       }),
     ).toBe("Running a, b (+2)...");
   });

@@ -42,8 +42,55 @@ function unwatched(): boolean {
   return document.visibilityState !== "visible" || !document.hasFocus();
 }
 
+/**
+ * Asked once, ever, and only when a run has actually finished while nobody
+ * was looking: that is the moment a notification would have been useful. A
+ * button rather than a bare `requestPermission()`, because a prompt out of
+ * nowhere is what makes people click "block".
+ */
+const ASKED_KEY = "web-pi:notify-asked";
+
+function offerNotifications(): void {
+  if (!("Notification" in window) || Notification.permission !== "default") {
+    return;
+  }
+  try {
+    if (localStorage.getItem(ASKED_KEY) === "1") return;
+    localStorage.setItem(ASKED_KEY, "1");
+  } catch {
+    // Without storage the offer would come back every time; skip it.
+    return;
+  }
+  const shelf = document.getElementById("toasts");
+  if (!shelf) return;
+  const box = document.createElement("div");
+  box.className =
+    "alert pointer-events-auto flex-wrap gap-2 py-2 text-sm alert-info";
+  const text = document.createElement("span");
+  text.textContent = "Notify you when a run finishes?";
+  const yes = document.createElement("button");
+  yes.type = "button";
+  yes.className = "btn btn-xs";
+  yes.textContent = "Allow";
+  yes.addEventListener("click", () => {
+    box.remove();
+    void Notification.requestPermission();
+  });
+  const no = document.createElement("button");
+  no.type = "button";
+  no.className = "btn btn-ghost btn-xs";
+  no.textContent = "No thanks";
+  no.addEventListener("click", () => {
+    box.remove();
+  });
+  box.append(text, yes, no);
+  shelf.append(box);
+}
+
 function notify(title: string, body: string, tag: string): void {
-  if (!("Notification" in window) || Notification.permission !== "granted") {
+  if (!("Notification" in window)) return;
+  if (Notification.permission !== "granted") {
+    offerNotifications();
     return;
   }
   const options = { body, tag };

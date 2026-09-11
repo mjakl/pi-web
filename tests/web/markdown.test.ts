@@ -1,4 +1,4 @@
-import { localFilePath, renderMarkdown } from "@web/markdown";
+import { renderMarkdown } from "@web/markdown";
 import { describe, expect, it } from "vitest";
 
 describe("renderMarkdown", () => {
@@ -60,20 +60,5 @@ describe("renderMarkdown", () => {
     expect(html).toContain("<details");
     expect(html).toContain("KB of Markdown");
     expect(html).not.toContain("<h1");
-  });
-});
-
-describe("localFilePath", () => {
-  it("accepts absolute, file:, and contained relative paths", () => {
-    expect(localFilePath("/etc/hosts", "/repo")).toBe("/etc/hosts");
-    expect(localFilePath("file:///repo/a.ts", "/repo")).toBe("/repo/a.ts");
-    expect(localFilePath("src/a.ts:12", "/repo")).toBe("/repo/src/a.ts");
-  });
-
-  it("rejects other schemes, protocol-relative, and escapes", () => {
-    expect(localFilePath("https://x.dev/a", "/repo")).toBeNull();
-    expect(localFilePath("//x.dev/a", "/repo")).toBeNull();
-    expect(localFilePath("../../etc/passwd", "/repo")).toBeNull();
-    expect(localFilePath("just words", "/repo")).toBeNull();
   });
 });

@@ -1,3 +1,4 @@
+import { thinkingChoices } from "@core/models";
 import type { ModelCatalog, ModelListing, ModelOption } from "@core/ports";
 import {
   ModelRuntime,
@@ -56,6 +57,9 @@ export function createPiModelCatalog(options: {
       name: model.name,
       contextWindow: model.contextWindow,
       reasoning: model.reasoning,
+      ...(model.reasoning
+        ? { thinkingLevels: thinkingChoices(model.thinkingLevelMap) }
+        : {}),
     });
     const settings = SettingsManager.create(cwd, options.agentDir);
     const provider = settings.getDefaultProvider();
