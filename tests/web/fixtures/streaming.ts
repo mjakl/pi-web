@@ -16,8 +16,12 @@ export async function streamingFixture() {
   const live = world.runtime.get(id);
   if (!live) throw new Error("Missing fixture runtime");
   let snapshot = live.snapshot();
+  let snapshotReads = 0;
   const listeners = new Set<(event: LiveEvent) => void>();
-  live.snapshot = () => snapshot;
+  live.snapshot = () => {
+    snapshotReads += 1;
+    return snapshot;
+  };
   live.subscribe = (listener) => {
     listeners.add(listener);
     return () => {
@@ -118,8 +122,14 @@ export async function streamingFixture() {
     update,
     finish,
     runningTools,
+    resetSnapshotReads() {
+      snapshotReads = 0;
+    },
     get snapshot() {
       return snapshot;
+    },
+    get snapshotReads() {
+      return snapshotReads;
     },
     get subscribers() {
       return listeners.size;

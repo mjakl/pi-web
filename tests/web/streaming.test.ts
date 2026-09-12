@@ -28,6 +28,22 @@ async function open(
   return browser;
 }
 
+it("renders each live update from one coherent runtime snapshot", async () => {
+  const f = await streamingFixture();
+  const { document } = await open(f);
+  await expect.poll(() => f.subscribers).toBe(1);
+  await expect.poll(() => f.snapshotReads).toBeGreaterThan(0);
+
+  f.resetSnapshotReads();
+  f.runningTools();
+  f.emit("activity");
+
+  await expect
+    .poll(() => document.querySelector("#turn")?.textContent)
+    .toContain("streaming text");
+  expect(f.snapshotReads).toBe(1);
+});
+
 it("recovers a canonical answer settled between page render and initial subscription", async () => {
   const f = await streamingFixture();
   f.runningTools();

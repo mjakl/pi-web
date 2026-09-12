@@ -4,6 +4,7 @@ import { isThinkingLevel } from "@core/models";
 import type {
   EditableMessage,
   LiveSession,
+  LiveSnapshot,
   ModelListing,
   RuntimeEvent,
   SessionRead,
@@ -45,16 +46,15 @@ export function sessionUseCases({
   entriesOf,
   modelsFor,
   requireFolder,
-  summaryOf,
   cwdOf,
 }: Shared) {
   function liveView(
     live: LiveSession,
+    snapshot: LiveSnapshot,
     summary: SessionSummary,
     models: ModelListing,
     options: ViewOptions,
   ): SessionView {
-    const snapshot = live.snapshot();
     // Settlement moves the boundary, so canonical history and the live tail
     // always come from the same snapshot and never overlap.
     const settledBranch = snapshot.branch.slice(0, snapshot.turnStart);
@@ -213,9 +213,12 @@ export function sessionUseCases({
     // from the runtime: the file on disk may be a flush behind.
     const live = deps.runtime.get(id);
     if (live) {
-      const summary = await summaryOf(id);
-      if (!summary) return undefined;
       const snapshot = live.snapshot();
+      const [summary] = await decorate(
+        [snapshot.summary],
+        new Map([[id, snapshot]]),
+      );
+      if (!summary) return undefined;
       const leafId = snapshot.branch.at(-1)?.id ?? null;
       if (options.leaf !== undefined && options.leaf !== leafId) {
         // Another branch of a running session: read-only, but still from the
@@ -231,7 +234,13 @@ export function sessionUseCases({
           options,
         );
       }
-      return liveView(live, summary, await modelsFor(summary.cwd), options);
+      return liveView(
+        live,
+        snapshot,
+        summary,
+        await modelsFor(summary.cwd),
+        options,
+      );
     }
     const stored = await deps.sessions.read(id, options.leaf);
     if (!stored) return undefined;
