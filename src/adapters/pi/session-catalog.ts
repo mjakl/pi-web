@@ -28,9 +28,8 @@ import {
 } from "./session-files.ts";
 
 // Reads Pi's sessions/<encoded-cwd>/*.jsonl store. Listing touches only the
-// first line of every file (the header), so a multi-gigabyte store stays cheap
-// to browse. Full parsing happens only for the one session being viewed, and
-// row metadata streams a file line by line instead of holding it.
+// first line of every file (the header). Sidebar pages then load their rows'
+// metadata by streaming each file line by line instead of holding it.
 
 const HEADER_MAX_BYTES = 8192;
 const METADATA_CACHE_MAX = 4096;
@@ -44,8 +43,9 @@ type Header = {
 };
 
 function readHeader(filePath: string): Header | undefined {
-  const fd = openSync(filePath, "r");
+  let fd: number | undefined;
   try {
+    fd = openSync(filePath, "r");
     const buffer = Buffer.alloc(HEADER_MAX_BYTES);
     const bytes = readSync(fd, buffer, 0, HEADER_MAX_BYTES, 0);
     const newline = buffer.indexOf(10);
@@ -72,11 +72,23 @@ function readHeader(filePath: string): Header | undefined {
         ? { parentSession: header.parentSession }
         : {}),
     };
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (error instanceof SyntaxError || isFileReadError(error))
+      return undefined;
+    throw error;
   } finally {
-    closeSync(fd);
+    if (fd !== undefined) closeSync(fd);
   }
+}
+
+function isFileReadError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "syscall" in error &&
+    (error.syscall === "open" ||
+      error.syscall === "read" ||
+      error.syscall === "stat")
+  );
 }
 
 /**
@@ -274,7 +286,10 @@ export function createPiSessionCatalog(options: {
       if (!filePath) return undefined;
       // Pi remembers the path of a session it has not flushed yet; the row is
       // simply not on disk, which is not an error.
-      const info = await stat(filePath).catch(() => undefined);
+      const info = await stat(filePath).catch((error: unknown) => {
+        if (isFileReadError(error)) return undefined;
+        throw error;
+      });
       if (!info) return undefined;
       const stamp = `${String(info.size)}\0${String(info.mtimeMs)}`;
       const cached = rows.get(filePath);
@@ -285,7 +300,13 @@ export function createPiSessionCatalog(options: {
         modifiedAt: info.mtime.toISOString(),
         fileSize: info.size,
       };
-      const metadata = await streamRowMetadata(filePath, file);
+      const metadata = await streamRowMetadata(filePath, file).catch(
+        (error: unknown) => {
+          if (isFileReadError(error)) return undefined;
+          throw error;
+        },
+      );
+      if (!metadata) return undefined;
       const row = {
         summary: {
           id: header.id,

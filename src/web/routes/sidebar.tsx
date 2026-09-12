@@ -129,14 +129,16 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
     const project = c.req.query("project");
     const offset = Number(c.req.query("after") ?? "0");
     if (!Number.isInteger(offset) || offset < 0) return c.notFound();
-    const view = await deps.workspace.sidebar(
-      project === undefined || project === "" ? {} : { remembered: project },
-    );
+    const view = await deps.workspace.sidebar({
+      offset,
+      ...(project === undefined || project === ""
+        ? {}
+        : { remembered: project }),
+    });
     const activeId = currentSessionId(c);
     return c.html(
       <SessionRows
         view={view}
-        offset={offset}
         {...(activeId === undefined ? {} : { activeId })}
       />,
     );

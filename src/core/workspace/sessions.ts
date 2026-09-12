@@ -255,8 +255,33 @@ export function sessionUseCases({
     else await deps.sessions.setStar(id, targetId, starred);
   }
 
+  /** Disk metadata, or runtime entries for a session Pi has not flushed yet. */
+  async function row(
+    id: string,
+  ): Promise<
+    { summary: SessionSummary; metadata: SessionRowMetadata } | undefined
+  > {
+    const snapshot = deps.runtime.get(id)?.snapshot();
+    const found = await deps.sessions.rowMetadata(id);
+    const base = snapshot?.summary ?? found?.summary;
+    if (!base) return undefined;
+    const [summary] = await decorate([base]);
+    if (!summary) return undefined;
+    const metadata =
+      found?.metadata ??
+      (snapshot
+        ? rowMetadata(snapshot.entries, {
+            modifiedAt: base.modifiedAt,
+            fileSize: base.fileSize,
+          })
+        : undefined);
+    if (!metadata) return undefined;
+    return { summary, metadata };
+  }
+
   return {
     viewSession,
+    row,
     stop,
     setStar,
 
@@ -272,7 +297,7 @@ export function sessionUseCases({
      * session always shows the project it belongs to.
      */
     async sidebar(
-      options: { remembered?: string; activeId?: string } = {},
+      options: { remembered?: string; activeId?: string; offset?: number } = {},
     ): Promise<SidebarView> {
       const stored = await deps.sessions.list();
       const known = new Set(stored.map((session) => session.id));
@@ -295,43 +320,26 @@ export function sessionUseCases({
           : { remembered: options.remembered }),
       });
       const sessions = sessionsForProject(all, selected);
+      const offset = options.offset ?? 0;
+      const next = offset + 50;
+      const page = await Promise.all(
+        sessions.slice(offset, next).map(async (summary) => {
+          const found = await row(summary.id);
+          return (
+            found && { ...found, summary: { ...summary, ...found.summary } }
+          );
+        }),
+      );
       return {
         projects,
+        rows: page.filter((found) => found !== undefined),
+        ...(next < sessions.length ? { nextOffset: next } : {}),
         ...(selected === undefined ? {} : { selected }),
         sessions,
         activityElsewhere: projects.some(
           (project) => project.key !== selected && project.running > 0,
         ),
       };
-    },
-
-    /**
-     * One sidebar row. The counts come from the catalog's cached pass over the
-     * file; a live session's own summary wins, because it may have no file yet.
-     */
-    async row(
-      id: string,
-    ): Promise<
-      { summary: SessionSummary; metadata?: SessionRowMetadata } | undefined
-    > {
-      const live = deps.runtime.get(id);
-      const snapshot = live?.snapshot();
-      const found = await deps.sessions.rowMetadata(id);
-      const base = snapshot?.summary ?? found?.summary;
-      if (!base) return undefined;
-      const [summary] = await decorate([base]);
-      if (!summary) return undefined;
-      // A session Pi has not flushed yet has no file to count; its entries are
-      // right here, and they answer the same question.
-      const metadata =
-        found?.metadata ??
-        (snapshot
-          ? rowMetadata(snapshot.entries, {
-              modifiedAt: base.modifiedAt,
-              fileSize: base.fileSize,
-            })
-          : undefined);
-      return { summary, ...(metadata ? { metadata } : {}) };
     },
 
     async sessionStats(

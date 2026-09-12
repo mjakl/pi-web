@@ -310,30 +310,35 @@ describe("web app", () => {
     );
   });
 
-  it("loads row metadata lazily and shows the title, counts, and stars", async () => {
-    const { app } = testApp();
-    const list = await (await app.request("/")).text();
-    // The listing itself stays header-only: the row asks for its own counts.
-    expect(list).toContain('hx-get="/sessions/s1/row"');
-    // An IntersectionObserver trigger: htmx's `revealed` only re-checks on
-    // window scroll, and #session-list scrolls on its own.
-    expect(list).toContain('hx-trigger="intersect once"');
-    expect(list).not.toContain("msgs");
+  it("renders metadata and actions in the initial response, including on revisit", async () => {
+    const { app, world } = testApp();
+    await world.sessions.setStar("s1", "a1", true);
+    for (let visit = 0; visit < 2; visit += 1) {
+      const list = await (await app.request("/")).text();
+      expect(list).toContain("Stored one");
+      expect(list).toContain("2 msgs");
+      expect(list).toContain("1 starred answers");
+      expect(list).toContain("Clear all stars");
+      expect(list).toContain("Activate");
+      expect(list).toContain("Delete");
+      expect(list).not.toContain('hx-get="/sessions/s1/row"');
+      expect(list).not.toContain('aria-label="Loading..."');
+    }
 
     const row = await (await app.request("/sessions/s1/row")).text();
     expect(row).toContain("Stored one");
     expect(row).toContain("2 msgs");
     expect(row).toContain("Activate");
     expect(row).toContain("Delete");
-    // The hydrated row replaces the pending one and asks for nothing more.
+    // The endpoint still serves row actions and rename cancellation.
     expect(row).not.toContain("hx-trigger=");
     expect(row).not.toContain('hx-get="/sessions/s1/row"');
-    // A row whose session went away while it waited answers with a 404,
+    // A row whose session went away answers with a 404,
     // which htmx leaves unswapped.
     expect((await app.request("/sessions/gone/row")).status).toBe(404);
   });
 
-  it("pages the list, and the next page's rows hydrate the same way", async () => {
+  it("renders full metadata in 50-row pages without reading the next page early", async () => {
     const { app, world } = testApp();
     for (let index = 0; index < 60; index += 1) {
       const id = `p${String(index)}`;
@@ -348,17 +353,67 @@ describe("web app", () => {
         entries: [userEntry(`${id}-u`, null, `prompt ${id}`)],
       });
     }
+    const read = world.sessions.rowMetadata.bind(world.sessions);
+    const metadata = vi
+      .spyOn(world.sessions, "rowMetadata")
+      .mockImplementation((id) =>
+        id === "p40" ? Promise.resolve(undefined) : read(id),
+      );
     const page = await (await app.request("/")).text();
+    // The unreadable row consumes its slot, without shifting the next offset.
+    expect(page.match(/class="session-row"/g)).toHaveLength(49);
+    expect(page).not.toContain('id="row-p40"');
+    expect(metadata).toHaveBeenCalledTimes(50);
+    expect(page).toContain("prompt p59");
+    expect(page).not.toContain('hx-get="/sessions/p59/row"');
+    metadata.mockClear();
     const sentinel = /hx-get="([^"]*\/sidebar\/rows[^"]*)"/.exec(page)?.[1];
-    expect(sentinel).toBeDefined();
+    expect(sentinel).toContain("after=50");
     expect(page).toContain("Loading more sessions…");
-    // The second page: pending rows with the same observer trigger.
+    // Only the sentinel fetches more; each returned row is complete.
     const next = await (
       await app.request((sentinel ?? "").replaceAll("&amp;", "&"))
     ).text();
-    expect(next).toContain('hx-get="/sessions/p0/row"');
-    expect(next).toContain('hx-trigger="intersect once"');
+    expect(next.match(/class="session-row"/g)).toHaveLength(11);
+    expect(metadata).toHaveBeenCalledTimes(11);
+    expect(next).toContain("prompt p0");
+    expect(next).toContain("1 msgs");
+    expect(next).not.toContain('hx-get="/sessions/p0/row"');
+    expect(next).not.toContain('hx-trigger="intersect once"');
     expect(next).not.toContain("Loading more sessions…");
+  });
+
+  it("omits unreadable rows but keeps readable untitled and empty sessions", async () => {
+    const { app, world } = testApp();
+    const original = world.store.get("s1");
+    if (!original) throw new Error("missing fixture");
+    for (const id of ["untitled-session", "empty-session-long-id"]) {
+      const { name: _name, ...summary } = original.summary;
+      world.store.set(id, {
+        summary: { ...summary, id },
+        entries: id.startsWith("empty")
+          ? []
+          : [userEntry("u", null, "A legitimate first prompt")],
+      });
+    }
+    const read = world.sessions.rowMetadata.bind(world.sessions);
+    vi.spyOn(world.sessions, "rowMetadata").mockImplementation((id) =>
+      id === "s1" ? Promise.resolve(undefined) : read(id),
+    );
+    for (const path of [
+      "/",
+      "/sidebar?project=%2Frepo%2Fone",
+      "/sidebar/rows?project=%2Frepo%2Fone",
+    ]) {
+      const response = await app.request(path);
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      expect(body).not.toContain('id="row-s1"');
+      expect(body).toContain("A legitimate first prompt");
+      expect(body).toContain('data-title="empty-sessio"');
+      expect(body).toContain("0 msgs");
+      expect(body).not.toContain('aria-label="Loading..."');
+    }
   });
 
   it("renames a session and answers with the row", async () => {
@@ -771,8 +826,7 @@ describe("web app", () => {
       received += decoder.decode(chunk.value);
     }
     await reader.cancel();
-    // Creation pushes the whole list before dispatch, since the page has no
-    // row yet. Its lazy row request reads the state after prompt admission.
+    // Creation pushes a complete list, including the unflushed runtime row.
     const list = received.slice(0, received.indexOf("\n\n"));
     expect(list).toContain(
       '<hx-partial hx-target="#session-list" hx-swap="innerHTML">',
@@ -780,8 +834,12 @@ describe("web app", () => {
     expect(list).toContain('id="row-new-1"');
     const hydrated = await (await app.request("/sessions/new-1/row")).text();
     expect(hydrated).toContain('data-status="Agent running…"');
-    // The pushed rows are pending, and observe their own way into view.
-    expect(list).toContain('hx-trigger="intersect once"');
+    expect(list).toContain("Stored one");
+    expect(list).toContain("2 msgs");
+    expect(list).toContain('class="session-message-count"');
+    expect(list).not.toContain('hx-trigger="intersect once"');
+    expect(list).not.toContain('hx-get="/sessions/new-1/row"');
+    expect(list).not.toContain('aria-label="Loading..."');
     // The page the browser is sent to, rendered while the turn still runs,
     // shows the same row selected.
     const page = await (await app.request("/sessions/new-1")).text();
@@ -868,6 +926,9 @@ describe("web app", () => {
     expect(nav).toContain('id="project-nav"');
     expect(nav).toContain('href="/sessions/s1"');
     expect(nav).not.toContain('href="/sessions/s2"');
+    expect(nav).toContain("Stored one");
+    expect(nav).toContain("2 msgs");
+    expect(nav).not.toContain('hx-get="/sessions/s1/row"');
 
     // Opening a session of the other project selects that project again.
     const page = await (
@@ -2358,8 +2419,9 @@ describe("the shell chrome, on every route", () => {
     expect(html).toContain('class="composer-surface"');
     expect(html).toContain('id="rail-column"');
     expect(html).toContain('data-session-id="s1"');
-    // And its row keeps the selection through the lazy row swap.
-    expect(html).toContain("/row?active=s1");
+    // Its complete row is selected before any client request.
+    expect(html).toMatch(/id="row-s1"[^>]*background:var\(--bg-selected\)/);
+    expect(html).not.toContain("/row?active=s1");
   });
 
   it("names one folder in the pill, the tree and the title", async () => {

@@ -13,9 +13,20 @@ import { readStars, rowMetadata, userMessageText } from "@core/session-entries";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return { ...actual, createReadStream: vi.fn(actual.createReadStream) };
+});
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, stat: vi.fn(actual.stat) };
+});
 
 // These run against real session files the Pi SDK wrote, in a throwaway agent
 // directory. Never point them at ~/.pi/agent.
@@ -32,6 +43,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   rmSync(root, { recursive: true, force: true });
 });
@@ -263,6 +275,66 @@ describe("Pi session catalog", () => {
     expect(
       await catalog.rowMetadata("01999999-9999-7999-8999-999999999999"),
     ).toBeUndefined();
+  });
+
+  it.each(["header", "stream"])(
+    "omits a file removed before the %s read",
+    async (phase) => {
+      const removed = makeSession(["removed"]);
+      const kept = makeSession(["kept"]);
+      const file = fileOf(removed);
+      const catalog = createPiSessionCatalog({ agentDir: root });
+      await catalog.list();
+      if (phase === "header") {
+        const stat = fsp.stat;
+        vi.spyOn(fsp, "stat").mockImplementationOnce(async (...args) => {
+          const info = await stat(...args);
+          rmSync(file);
+          return info;
+        });
+      } else {
+        const createReadStream = fs.createReadStream;
+        vi.spyOn(fs, "createReadStream").mockImplementationOnce((...args) => {
+          rmSync(file);
+          return createReadStream(...args);
+        });
+      }
+      expect(await catalog.rowMetadata(removed.getSessionId())).toBeUndefined();
+      expect(
+        (await catalog.rowMetadata(kept.getSessionId()))?.metadata,
+      ).toMatchObject({
+        firstMessage: "kept",
+        messageCount: 2,
+      });
+    },
+  );
+
+  it("does not hide unexpected errors while reading metadata", async () => {
+    const manager = makeSession(["hello"]);
+    const catalog = createPiSessionCatalog({ agentDir: root });
+    await catalog.list();
+    vi.spyOn(fs, "createReadStream").mockImplementationOnce(() => {
+      throw new TypeError("unexpected reader bug");
+    });
+    await expect(catalog.rowMetadata(manager.getSessionId())).rejects.toThrow(
+      "unexpected reader bug",
+    );
+  });
+
+  it("skips malformed JSONL lines and retains the latest title and cached metadata", async () => {
+    const manager = makeSession(["hello"]);
+    manager.appendSessionInfo("Old title");
+    manager.appendSessionInfo("Latest title");
+    const file = fileOf(manager);
+    writeFileSync(file, `${readFileSync(file, "utf8")}not json\n`);
+    const catalog = createPiSessionCatalog({ agentDir: root });
+    const first = await catalog.rowMetadata(manager.getSessionId());
+    expect(first?.metadata).toMatchObject({
+      name: "Latest title",
+      firstMessage: "hello",
+      messageCount: 2,
+    });
+    expect(await catalog.rowMetadata(manager.getSessionId())).toBe(first);
   });
 
   it("re-reads a file that changed instead of serving the cached counts", async () => {

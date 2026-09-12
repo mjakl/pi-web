@@ -33,7 +33,7 @@ import {
 // camelCase turned to kebab and numbers to px; the class names are what its
 // stylesheets key on.
 
-export type Row = { summary: SessionSummary; metadata?: SessionRowMetadata };
+export type Row = { summary: SessionSummary; metadata: SessionRowMetadata };
 
 /** pi-web's SESSION_ITEM_HEIGHT. */
 const ROW_HEIGHT = 54;
@@ -155,7 +155,7 @@ export function RenameRow({ summary, metadata }: Row) {
   );
 }
 
-/** One sidebar row. Without metadata it loads its own when scrolled into view. */
+/** One complete sidebar row, shared by pages and live updates. */
 export function SessionRow({
   summary,
   metadata,
@@ -164,7 +164,6 @@ export function SessionRow({
 }: Row & { activeId?: string; oob?: boolean }) {
   const id = summary.id;
   const title = sessionTitle(summary, metadata);
-  const pending = metadata === undefined;
   const selected = id === activeId;
   const menuId = `row-menu-${id}`;
   return (
@@ -174,15 +173,6 @@ export function SessionRow({
       data-session-id={id}
       data-title={title.toLowerCase()}
       {...(oob === true ? { "hx-swap-oob": "true" } : {})}
-      {...(pending
-        ? {
-            "hx-get": `/sessions/${id}/row${activeId === undefined ? "" : `?active=${encodeURIComponent(activeId)}`}`,
-            // `intersect`, not `revealed`: htmx only re-checks `revealed` on
-            // window scroll, and #session-list scrolls on its own.
-            "hx-trigger": "intersect once",
-            "hx-swap": "outerHTML",
-          }
-        : {})}
       style={`height:${String(ROW_HEIGHT)}px; display:flex; align-items:center; padding-left:14px; padding-right:8px; cursor:pointer; ${selected ? "background:var(--bg-selected); " : ""}border-left:2px solid ${selected ? "var(--accent)" : "transparent"}; transition:background 0.1s; gap:6px; overflow:hidden`}
     >
       <a
@@ -234,86 +224,67 @@ export function SessionRow({
           aria-hidden="true"
           style="display:none; align-items:center; justify-content:center; width:28px; height:28px; color:var(--text-dim); font-family:var(--font-mono); font-size:10px"
         />
-        {pending ? (
-          <span />
-        ) : (
-          <button
-            type="button"
-            class="session-menu-trigger"
-            popovertarget={menuId}
-            aria-label={`Session actions for ${title}`}
-            aria-controls={menuId}
-            /* pi-web sets `background: transparent` inline and flips it to
+        <button
+          type="button"
+          class="session-menu-trigger"
+          popovertarget={menuId}
+          aria-label={`Session actions for ${title}`}
+          aria-controls={menuId}
+          /* pi-web sets `background: transparent` inline and flips it to
                --bg-selected while the menu is open; an inline value would
                outrank the rule in areas/sidebar.css that does that here, and
                base.css already makes a button transparent. */
-            style="display:flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; border:1px solid transparent; border-radius:6px; color:var(--text-muted); cursor:pointer"
-          >
-            <MoreDotsIcon size={16} radius={1.8} />
-          </button>
-        )}
-        {pending ? (
-          <span role="status" aria-label="Loading...">
-            …
-          </span>
-        ) : (
-          <span class="session-counts">
-            {metadata.starCount > 0 ? (
-              <span
-                class="session-star-count"
-                title={`${String(metadata.starCount)} starred answers`}
-                aria-label={`${String(metadata.starCount)} starred answers`}
-              >
-                <span>{metadata.starCount.toLocaleString("en")}</span>
-                <StarIcon size={11} filled />
-              </span>
-            ) : null}
+          style="display:flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; border:1px solid transparent; border-radius:6px; color:var(--text-muted); cursor:pointer"
+        >
+          <MoreDotsIcon size={16} radius={1.8} />
+        </button>
+        <span class="session-counts">
+          {metadata.starCount > 0 ? (
             <span
-              class="session-message-count"
-              title={`${String(metadata.messageCount)} msgs`}
-              style="white-space:nowrap"
+              class="session-star-count"
+              title={`${String(metadata.starCount)} starred answers`}
+              aria-label={`${String(metadata.starCount)} starred answers`}
             >
-              {String(metadata.messageCount)} msgs
+              <span>{metadata.starCount.toLocaleString("en")}</span>
+              <StarIcon size={11} filled />
             </span>
+          ) : null}
+          <span
+            class="session-message-count"
+            title={`${String(metadata.messageCount)} msgs`}
+            style="white-space:nowrap"
+          >
+            {String(metadata.messageCount)} msgs
           </span>
-        )}
+        </span>
       </div>
-      {pending ? null : <RowMenu summary={summary} metadata={metadata} />}
+      <RowMenu summary={summary} metadata={metadata} />
     </div>
   );
 }
-
-/**
- * Rows sent on the first render. A busy project holds hundreds of sessions
- * and the reader sees ten; the rest arrive on the same sentinel the
- * transcript pages with.
- */
-export const SIDEBAR_PAGE = 50;
 
 /** One page of rows, plus the sentinel that fetches the page after it. */
 export function SessionRows({
   view,
   activeId,
-  offset = 0,
 }: {
   view: SidebarView;
   activeId?: string;
-  offset?: number;
 }) {
   const project = view.selected ?? "";
-  const page = view.sessions.slice(offset, offset + SIDEBAR_PAGE);
-  const next = offset + SIDEBAR_PAGE;
-  const more = next < view.sessions.length;
-  const query = new URLSearchParams({ project, after: String(next) });
+  const query = new URLSearchParams({
+    project,
+    after: String(view.nextOffset),
+  });
   return (
     <>
-      {page.map((summary) => (
+      {view.rows.map((row) => (
         <SessionRow
-          summary={summary}
+          {...row}
           {...(activeId === undefined ? {} : { activeId })}
         />
       ))}
-      {more ? (
+      {view.nextOffset !== undefined ? (
         <div
           style="padding:8px 12px; font-size:11px; color:var(--text-dim)"
           hx-get={`/sidebar/rows?${query.toString()}`}
@@ -341,7 +312,7 @@ export function SessionList({
 }) {
   const body = (
     <>
-      {view.sessions.length === 0 ? (
+      {view.rows.length === 0 && view.nextOffset === undefined ? (
         <div style="padding:16px 14px; color:var(--text-muted); font-size:12px">
           No sessions found
         </div>

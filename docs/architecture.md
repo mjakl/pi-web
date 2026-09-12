@@ -151,8 +151,8 @@ the list and its small `#sidebar-events` owner live in `#project-nav`. Switching
 project replaces the nav and reconnects; switching working folder within that
 project replaces only the stream owner and folder controls. The stream URL names
 both project and folder, never a captured selected session. Row selection is
-projected from the displayed `main` on processing and settlement, including lazy
-rows, star responses and stream updates.
+projected from the displayed `main` on processing and settlement, including
+paginated rows, star responses and stream updates.
 
 `src/core/transcript.ts` projects one branch into items, and `src/core/turns.ts`
 groups those items into turns, pages them, and writes the activity line. Every
@@ -324,16 +324,19 @@ composition root and the only importer of Pi adapters.
   3.0 MB. `src/core/sessions.ts` owns the rules — project key, recent projects,
   which one is selected, the order within it — and the workspace returns one
   `SidebarView`. The selected project is the open session's, else the
-  `web-pi-project` cookie, else the most recent. Three things are fetched only
-  when asked for: the project list (when the selector opens), rows past the
-  first 50 (`hx-trigger="intersect once"`, the transcript's own sentinel
-  pattern), and each row's counts. That is 3.0 MB down to 48 KB of sidebar.
-- **Sidebar rows load their own metadata.** Listing 2,700 sessions reads one
-  header per file; a row's title, message count and star count need a pass over
-  the whole file, so each row fetches its own (`hx-trigger="revealed"`) and the
-  adapter streams the file line by line and caches the result by size and mtime.
-  The real store renders in well under a second and a revisited row costs
-  nothing.
+  `web-pi-project` cookie, else the most recent. The project list is fetched
+  when the selector opens; rows past the first 50 arrive through an
+  `hx-trigger="intersect once"` sentinel.
+- **Sidebar pages arrive with complete row metadata.** Catalog listing reads one
+  header per file. Before rendering a page, the workspace loads titles, message
+  counts and star counts for its 50 rows. Initial documents, project switches
+  and refreshes, pagination and SSE list replacements use this same path, with
+  no per-row metadata-loading request. The adapter streams each file line by
+  line and retains its size/mtime cache. Unreadable files are omitted; readable
+  untitled or empty sessions keep their normal fallback labels. Page offsets
+  still count omitted files, so pagination does not repeat rows. Cold pages can
+  take longer because metadata must be ready before the response. The row
+  endpoint remains for actions and live updates.
 - **pi-subagent runs are ordinary rows.** Half the files in a real store are
   `subagent.<hex>` sessions: transcripts of one tool call. pi-web lists them
   with everything else, so web-pi does too; the list pages fifty rows at a time,

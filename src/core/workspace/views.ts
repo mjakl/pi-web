@@ -4,7 +4,11 @@ import type { FileKind } from "@core/file-types";
 import type { GitFileStatus } from "@core/git-status";
 import type { LiveStatus, ModelOption, ThinkingLevel } from "@core/ports";
 import type { BranchLeaf, SessionStats } from "@core/session-entries";
-import type { ProjectEntry, SessionSummary } from "@core/sessions";
+import type {
+  ProjectEntry,
+  SessionSummary,
+  SessionRowMetadata,
+} from "@core/sessions";
 import type { TranscriptItem } from "@core/transcript";
 import type { ProjectInfo, WorktreeInfo } from "@core/workspaces";
 
@@ -88,6 +92,10 @@ export type SidebarView = {
   selected?: string;
   /** Conversations of the selected project, subagent runs among them. */
   sessions: SessionSummary[];
+  /** This page's readable rows, with metadata ready to render. */
+  rows: { summary: SessionSummary; metadata: SessionRowMetadata }[];
+  /** Offset in sessions, including any unreadable rows omitted from this page. */
+  nextOffset?: number;
   /** Some other project has a session running: the closed selector says so. */
   activityElsewhere: boolean;
 };
