@@ -65,9 +65,12 @@ type Registration = {
 
 const registrations: Registration[] = [];
 
+// The page's `EventTarget` is not the class every node, the document and the
+// window inherit `addEventListener` from; that base class sits above `Node`.
+const eventTarget = Object.getPrototypeOf(Node.prototype) as EventTarget;
 // eslint-disable-next-line typescript/unbound-method -- called with `this` below
-const { addEventListener: addListener } = EventTarget.prototype;
-EventTarget.prototype.addEventListener = function (
+const { addEventListener: addListener } = eventTarget;
+eventTarget.addEventListener = function (
   this: EventTarget,
   type: string,
   listener: EventListenerOrEventListenerObject | null,
@@ -97,13 +100,16 @@ function clearAttributes(element: Element): void {
   }
 }
 
+// No test reaches the network: a request nothing answered gets an empty
+// reply. A test that wants to see requests stubs `fetch` on top of this.
+globalThis.fetch = () => Promise.resolve(new Response(""));
+
 beforeEach(() => {
   vi.resetModules();
   installFakeHtmx();
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(() => Promise.resolve(new Response(""))),
-  );
+  // Timers are faked by default so a debounce a test set going cannot fire
+  // into the next test; a test that needs the clock to move advances it.
+  vi.useFakeTimers();
 });
 
 afterEach(() => {

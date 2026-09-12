@@ -25,9 +25,14 @@ export function htmx(): FakeHtmx {
   return fake;
 }
 
+/** The HTML a Hono JSX node renders to. */
+export function render(node: unknown): string {
+  return String(node);
+}
+
 /** Puts server markup on the page: a Hono JSX node or a string. */
 export function mount(markup: unknown): void {
-  document.body.innerHTML = String(markup);
+  document.body.innerHTML = render(markup);
 }
 
 export function byId(id: string): HTMLElement {
@@ -123,13 +128,9 @@ export function htmxEvent(
   return event;
 }
 
-/** Waits for happy-dom's animation frame, which is a Node immediate. */
-export function frame(): Promise<void> {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => {
-      resolve();
-    });
-  });
+/** Runs the animation frame callbacks queued so far (timers are faked). */
+export function frame(): void {
+  vi.advanceTimersToNextFrame();
 }
 
 /** Lets pending promise callbacks run. */
