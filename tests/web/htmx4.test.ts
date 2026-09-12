@@ -351,7 +351,7 @@ describe("shipped HTMX 4 with the real browser client", () => {
     const stream = controlledStream();
     const { document, window } = await open(
       page(
-        `<main data-session-id="s1"><div id="live" hx-sse:connect="/events" hx-swap="none"></div>${ids.map((id) => `<div id="${id}">old</div>`).join("")}</main><div class="session-row" data-session-id="s2"><span class="session-indicator"></span></div>`,
+        `<main data-session-id="s1"><div id="live" hx-sse:connect="/events" hx-trigger="web-pi:sse-start" hx-swap="none"></div>${ids.map((id) => `<div id="${id}">old</div>`).join("")}</main><div class="session-row" data-session-id="s2"><span class="session-indicator"></span></div>`,
       ),
       () => stream.response,
     );
@@ -426,7 +426,7 @@ describe("shipped HTMX 4 with the real browser client", () => {
       page(
         `${
           composer
-        }<div id="live" hx-sse:connect="/events" hx-swap="none"></div><div id="status"></div><div id="extension-dialog"></div>`,
+        }<div id="live" hx-sse:connect="/events" hx-trigger="web-pi:sse-start" hx-swap="none"></div><div id="status"></div><div id="extension-dialog"></div>`,
       ),
       () => stream.response,
     );
@@ -459,13 +459,191 @@ describe("shipped HTMX 4 with the real browser client", () => {
     });
   });
 
+  it.each([
+    ["/sessions/s1/events", "network"],
+    ["/sessions/s1/events", "503"],
+    ["/events", "network"],
+    ["/events", "503"],
+  ])("establishes %s after an initial %s failure", async (url, failure) => {
+    const stream = controlledStream();
+    let connections = 0;
+    const { document, window } = await open(
+      page(
+        `<div id="live" hx-sse:connect="${url}" hx-trigger="web-pi:sse-start" hx-swap="none"></div><div id="messages"></div><div id="toasts"></div>`,
+      ),
+      () => {
+        connections += 1;
+        if (connections === 1) {
+          if (failure === "network")
+            throw new TypeError("Network connection reset");
+          return new Response("Unavailable", { status: 503 });
+        }
+        return stream.response;
+      },
+    );
+    // Reprocessing while the initial connection is pending must not queue a
+    // second connection when the extension installs its trigger again.
+    window.eval("htmx.process(document.body)");
+    await expect.poll(() => connections, { timeout: 2000 }).toBe(2);
+    stream.send(
+      '<hx-partial hx-target="#messages" hx-swap="beforeend"><p>Future update</p></hx-partial>',
+    );
+    await eventually(() => {
+      expect(document.querySelectorAll("#messages p")).toHaveLength(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(connections).toBe(2);
+    expect(document.querySelectorAll("#messages p")).toHaveLength(1);
+  });
+
+  it("starts once when the client bundle loads after HTMX processing", async () => {
+    const stream = controlledStream();
+    let connections = 0;
+    const { window } = await open(
+      page(
+        '<div id="live" hx-sse:connect="/events" hx-trigger="web-pi:sse-start" hx-swap="none"></div>',
+      ),
+      () => {
+        connections += 1;
+        return stream.response;
+      },
+      true,
+    );
+    await eventually(() => {
+      expect(connections).toBe(1);
+    });
+    window.eval("htmx.process(document.body)");
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(connections).toBe(1);
+  });
+
+  it.each([false, true])(
+    "cancels startup backoff on owner removal (replacement: %s)",
+    async (replace) => {
+      const stream = controlledStream();
+      const owner =
+        '<div id="live" hx-sse:connect="/events" hx-trigger="web-pi:sse-start" hx-swap="none"></div>';
+      let connections = 0;
+      const { document } = await open(
+        page(
+          `${owner}<div id="messages"></div><div id="toasts"></div><button id="remove" hx-get="/remove" hx-target="#live" hx-swap="outerHTML">Remove</button>`,
+        ),
+        (request) => {
+          if (new URL(request.url).pathname === "/remove")
+            return new Response(replace ? owner : '<div id="removed"></div>');
+          connections += 1;
+          return connections === 1
+            ? new Response("Unavailable", { status: 503 })
+            : stream.response;
+        },
+      );
+      const oldOwner = required(document.getElementById("live"));
+      required(document.querySelector<HTMLButtonElement>("#remove")).click();
+      await eventually(() => {
+        expect(oldOwner.isConnected).toBe(false);
+      });
+      if (replace) {
+        await eventually(() => {
+          expect(connections).toBe(2);
+        });
+        stream.send(
+          '<hx-partial hx-target="#messages" hx-swap="beforeend"><p>Replacement</p></hx-partial>',
+        );
+        await eventually(() => {
+          expect(document.querySelectorAll("#messages p")).toHaveLength(1);
+        });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      expect(connections).toBe(replace ? 2 : 1);
+      expect(required(document.getElementById("toasts")).textContent).toBe("");
+    },
+  );
+
+  it("aborts an initial fetch when its owner is removed", async () => {
+    let signal: AbortSignal | undefined;
+    let connections = 0;
+    const { document } = await open(
+      page(
+        '<div id="live" hx-sse:connect="/events" hx-trigger="web-pi:sse-start" hx-swap="none"></div><div id="toasts"></div><button id="remove" hx-get="/remove" hx-target="#live" hx-swap="outerHTML">Remove</button>',
+      ),
+      (request) => {
+        if (new URL(request.url).pathname === "/remove")
+          return new Response('<div id="removed"></div>');
+        connections += 1;
+        signal = request.signal;
+        return new Promise<Response>((_resolve, reject) => {
+          request.signal.addEventListener(
+            "abort",
+            () => {
+              reject(new DOMException("Removed", "AbortError"));
+            },
+            { once: true },
+          );
+        });
+      },
+    );
+    required(document.querySelector<HTMLButtonElement>("#remove")).click();
+    await eventually(() => {
+      expect(signal?.aborted).toBe(true);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(connections).toBe(1);
+    expect(required(document.getElementById("toasts")).textContent).toBe("");
+  });
+
+  it.each([200, 401, 403, 404])(
+    "reports a non-SSE HTTP %s response without retrying",
+    async (status) => {
+      let connections = 0;
+      const { document, window } = await open(
+        page(
+          '<div id="live" hx-sse:connect="/events" hx-trigger="web-pi:sse-start" hx-swap="none"></div><div id="toasts"></div>',
+        ),
+        () => {
+          connections += 1;
+          return new Response("Not an event stream", { status });
+        },
+      );
+      await eventually(() => {
+        expect(
+          required(document.getElementById("toasts")).textContent,
+        ).toContain("Reload this page to reconnect.");
+      });
+      window.eval("htmx.process(document.body)");
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      expect(connections).toBe(1);
+    },
+  );
+
+  it("stops after six startup attempts and reports how to reconnect", async () => {
+    let connections = 0;
+    const { document, window } = await open(
+      page(
+        '<div id="live" hx-sse:connect="/events" hx-trigger="web-pi:sse-start" hx-swap="none"></div><div id="toasts"></div>',
+      ),
+      () => {
+        connections += 1;
+        return new Response("Unavailable", { status: 503 });
+      },
+    );
+    await expect
+      .poll(() => required(document.getElementById("toasts")).textContent, {
+        timeout: 18000,
+      })
+      .toContain("Reload this page to reconnect.");
+    expect(connections).toBe(6);
+    window.eval("htmx.process(document.body)");
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(connections).toBe(6);
+  });
+
   it("reconnects with Last-Event-ID, stays connected while hidden, and cleans up a removed owner", async () => {
     const first = controlledStream();
     const second = controlledStream();
     let connections = 0;
     const { window, document, requests } = await open(
       page(
-        `<div id="live" hx-sse:connect="/events" hx-config="sse.reconnectDelay:1 sse.reconnectJitter:0" hx-swap="none"></div><button id="remove" hx-get="/remove" hx-target="#live" hx-swap="outerHTML">Remove</button>`,
+        `<div id="live" hx-sse:connect="/events" hx-trigger="web-pi:sse-start" hx-config="sse.reconnectDelay:1 sse.reconnectJitter:0" hx-swap="none"></div><button id="remove" hx-get="/remove" hx-target="#live" hx-swap="outerHTML">Remove</button>`,
       ),
       (request) => {
         if (new URL(request.url).pathname === "/remove")

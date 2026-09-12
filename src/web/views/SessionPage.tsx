@@ -430,6 +430,7 @@ export function Shell({
           data-session-id={activeId}
           data-cwd={cwd}
           hx-sse:connect={activeId ? `/sessions/${activeId}/events` : undefined}
+          hx-trigger="web-pi:sse-start"
           hx-swap="none"
         >
           {children}

@@ -695,6 +695,7 @@ export function ProjectNav({
       id="project-nav"
       style="display:flex; min-height:0; flex:1 1 0; flex-direction:column"
       hx-sse:connect={`/events${view.selected === undefined ? "" : `?project=${encodeURIComponent(view.selected)}`}`}
+      hx-trigger="web-pi:sse-start"
       hx-swap="none"
     >
       <SessionList

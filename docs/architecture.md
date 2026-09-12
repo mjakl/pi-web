@@ -86,9 +86,15 @@ The SSE endpoint coalesces activity into one re-render per 100 ms. A later
 activity render replaces the entire current turn. Reconnection does not replay
 missed settled turns or notices; that existing limitation remains. The bundled
 SSE extension has `pauseOnBackground: false` so hiding a tab does not introduce
-additional disconnects. Ordinary requests retain the previous unlimited timeout
-for compaction and package actions. Inherited 4xx/5xx no-swap rules preserve
-error toasts without replacing the requested region.
+additional disconnects. The client starts each owner through its native
+`web-pi:sse-start` trigger after installing failure handlers. Before the first
+SSE connection, network failures and HTTP 408, 429, 500, 502, 503, and 504 get
+five retries, delayed by 500, 1,000, 2,000, 4,000, and 8,000 ms. Other non-SSE
+responses or six failed attempts show a toast asking the reader to reload.
+Removing an owner cancels its pending startup; after connection, the bundled
+extension alone handles reconnection. Ordinary requests retain the previous
+unlimited timeout for compaction and package actions. Inherited 4xx/5xx no-swap
+rules preserve error toasts without replacing the requested region.
 
 A second stream, `GET /events`, belongs to the sidebar rather than to one
 session. It pushes a re-rendered row (`hx-partial`) whenever a session of the

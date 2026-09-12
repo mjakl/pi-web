@@ -8,8 +8,10 @@ import { setUpTranscript } from "./transcript.ts";
 import { setUpComposer } from "./composer.ts";
 import { setUpFiles } from "./files.ts";
 import { setUpRequestFields } from "./htmx.ts";
+import { setUpSseStartup } from "./sse.ts";
 
 setUpRequestFields();
+setUpSseStartup();
 setUpShell();
 setUpSidebar();
 setUpTranscript();

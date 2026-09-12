@@ -12,7 +12,8 @@ const client = buildSync({
       import { setUpToasts } from './src/web/client/toasts.ts';
       import { setUpDialogs } from './src/web/client/dialogs.ts';
       import { setUpSidebar } from './src/web/client/sidebar.ts';
-      setUpRequestFields(); setUpComposer(); setUpToasts(); setUpDialogs(); setUpSidebar();
+      import { setUpSseStartup } from './src/web/client/sse.ts';
+      setUpRequestFields(); setUpComposer(); setUpToasts(); setUpDialogs(); setUpSidebar(); setUpSseStartup();
     `,
     resolveDir: process.cwd(),
   },
@@ -27,7 +28,11 @@ const client = buildSync({
 export type Transport = (request: Request) => Promise<Response> | Response;
 
 /** Separate JS realm: no tests/client/setup.ts and no fake HTMX object. */
-export async function htmxBrowser(markup: string, transport: Transport) {
+export async function htmxBrowser(
+  markup: string,
+  transport: Transport,
+  clientAfterHtmx = false,
+) {
   const window = new Window({
     url: "http://htmx.test/sessions/s1",
     settings: {
@@ -95,8 +100,13 @@ export async function htmxBrowser(markup: string, transport: Transport) {
   for (const path of [HTMX_SRC, HTMX_SSE_SRC]) {
     window.eval(readFileSync(resolve(process.cwd(), path.slice(1)), "utf8"));
   }
+  if (clientAfterHtmx) {
+    window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
   window.eval(client);
-  window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
+  if (!clientAfterHtmx)
+    window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
   await new Promise((resolve) => setTimeout(resolve, 10));
   return {
     window,
