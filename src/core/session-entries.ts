@@ -183,6 +183,26 @@ export type BranchLeaf = {
   current: boolean;
 };
 
+/** Pi's /copy selection rule, retaining source whitespace rather than trimming it. */
+export function lastAssistantText(
+  branch: readonly SessionEntry[],
+): string | undefined {
+  for (let index = branch.length - 1; index >= 0; index -= 1) {
+    const entry = branch[index];
+    if (entry?.type !== "message" || entry.message.role !== "assistant")
+      continue;
+    const message = entry.message;
+    if (message.stopReason === "aborted" && message.content.length === 0)
+      continue;
+    const text = message.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("");
+    return text.trim() ? text : undefined;
+  }
+  return undefined;
+}
+
 /** Only user-authored content may become an editable draft, never tool output. */
 export function editableUserMessage(
   entry: SessionEntry,

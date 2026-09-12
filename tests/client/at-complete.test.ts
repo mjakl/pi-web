@@ -119,7 +119,7 @@ describe("the local index", () => {
     await flush();
     expect(fetch).not.toHaveBeenCalled();
     expect(byId("at-menu").hidden).toBe(true);
-    expect(at.handleKey(keydown(area(), "ArrowDown"))).toBe(false);
+    expect(at.handleKey(keydown(area(), "ArrowDown"), true)).toBe(false);
   });
 });
 
@@ -179,16 +179,16 @@ describe("completing", () => {
     at.refresh();
     await flush();
     expect(rows()[0]).toBe("src");
-    expect(at.handleKey(keydown(area(), "ArrowDown"))).toBe(true);
-    expect(at.handleKey(keydown(area(), "ArrowDown"))).toBe(true);
+    expect(at.handleKey(keydown(area(), "ArrowDown"), true)).toBe(true);
+    expect(at.handleKey(keydown(area(), "ArrowDown"), true)).toBe(true);
     expect(query('[data-path="src/app.ts"]').dataset["active"]).toBe("true");
-    expect(at.handleKey(keydown(area(), "Tab"))).toBe(true);
+    expect(at.handleKey(keydown(area(), "Tab"), true)).toBe(true);
     expect(area().value).toBe("see @src/app.ts ");
     expect(byId("at-menu").hidden).toBe(true);
     typed("see @sr");
     at.refresh();
     await flush();
-    expect(at.handleKey(keydown(area(), "Enter"))).toBe(true);
+    expect(at.handleKey(keydown(area(), "Enter"), true)).toBe(true);
     expect(area().value).toBe("see @src/");
     await flush();
     expect(byId("at-menu").hidden).toBe(false);
@@ -201,8 +201,8 @@ describe("completing", () => {
     typed('@"my docs" tail', 9);
     at.refresh();
     await flush();
-    at.handleKey(keydown(area(), "ArrowDown"));
-    at.handleKey(keydown(area(), "Tab"));
+    at.handleKey(keydown(area(), "ArrowDown"), true);
+    at.handleKey(keydown(area(), "Tab"), true);
     expect(area().value).toBe('@"my docs/a.md"  tail');
   });
 
@@ -212,11 +212,11 @@ describe("completing", () => {
     typed("@a");
     at.refresh();
     await flush();
-    expect(at.handleKey(keydown(area(), "Enter", { shiftKey: true }))).toBe(
-      false,
-    );
-    expect(at.handleKey(keydown(area(), "a"))).toBe(false);
-    expect(at.handleKey(keydown(area(), "Escape"))).toBe(true);
+    expect(
+      at.handleKey(keydown(area(), "Enter", { shiftKey: true }), false),
+    ).toBe(false);
+    expect(at.handleKey(keydown(area(), "a"), true)).toBe(false);
+    expect(at.handleKey(keydown(area(), "Escape"), true)).toBe(true);
     expect(byId("at-menu").hidden).toBe(true);
     at.close();
   });

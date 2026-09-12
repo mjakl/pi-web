@@ -11,6 +11,7 @@ import type {
 import {
   branchLeaves,
   branchTo,
+  lastAssistantText,
   readStars,
   rowMetadata,
   sessionStats,
@@ -249,6 +250,12 @@ export function sessionUseCases({
     viewSession,
     stop,
     setStar,
+
+    async lastAssistantText(id: string): Promise<string | undefined> {
+      // Read the complete active branch, not a page or the streaming partial.
+      const read = await entriesOf(id);
+      return read && lastAssistantText(read.branch);
+    },
 
     /**
      * The whole sidebar: the projects to choose from, and the sessions of the

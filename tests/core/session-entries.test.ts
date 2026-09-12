@@ -2,6 +2,7 @@ import { assistantEntry, userEntry } from "@adapters/fake/index";
 import {
   branchLeaves,
   editableUserMessage,
+  lastAssistantText,
   readStars,
   rowMetadata,
   sessionStats,
@@ -9,6 +10,52 @@ import {
 } from "@core/session-entries";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
+
+describe("last assistant text", () => {
+  it("keeps every text block verbatim and ignores other roles and content", () => {
+    const entry = assistantEntry("answer", null, "", 100);
+    if (entry.type !== "message" || entry.message.role !== "assistant")
+      throw new Error("Expected assistant");
+    entry.message.content = [
+      { type: "text", text: "  **first**\n\t" },
+      { type: "thinking", thinking: "not text" },
+      { type: "toolCall", id: "tool", name: "read", arguments: {} },
+      { type: "text", text: "second  \n" },
+    ];
+    expect(
+      lastAssistantText([entry, userEntry("user", "answer", "not the answer")]),
+    ).toBe("  **first**\n\tsecond  \n");
+  });
+
+  it.each(["empty", "whitespace", "thinking", "tool", "empty aborted"])(
+    "matches Pi's latest-message selection for %s",
+    (kind) => {
+      const older = assistantEntry("older", null, "old answer", 100);
+      const latest = assistantEntry("latest", "older", "", 100);
+      if (latest.type !== "message" || latest.message.role !== "assistant")
+        throw new Error("Expected assistant");
+      latest.message.content =
+        kind === "thinking"
+          ? [{ type: "thinking", thinking: "private" }]
+          : kind === "tool"
+            ? [{ type: "toolCall", id: "tool", name: "read", arguments: {} }]
+            : kind === "whitespace"
+              ? [{ type: "text", text: " \n\t " }]
+              : [];
+      if (kind === "empty aborted") latest.message.stopReason = "aborted";
+      expect(lastAssistantText([older, latest])).toBe(
+        kind === "empty aborted" ? "old answer" : undefined,
+      );
+    },
+  );
+
+  it("does not confuse no assistant with a user message", () => {
+    expect(lastAssistantText([])).toBeUndefined();
+    expect(
+      lastAssistantText([userEntry("u", null, "question")]),
+    ).toBeUndefined();
+  });
+});
 
 describe("editable history messages", () => {
   it("preserves text whitespace and both stored image shapes in order", () => {

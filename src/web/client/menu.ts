@@ -10,6 +10,36 @@ export type Menu = {
   applyActive(): boolean;
 };
 
+/** The composer decides whether Enter means completion/send or a newline. */
+export function handleMenuKey(
+  menu: Menu,
+  event: KeyboardEvent,
+  completeOnEnter: boolean,
+): boolean {
+  if (!menu.isOpen()) return false;
+  switch (event.key) {
+    case "ArrowDown":
+    case "ArrowUp":
+      event.preventDefault();
+      menu.move(event.key === "ArrowDown" ? 1 : -1);
+      return true;
+    case "Escape":
+      event.preventDefault();
+      menu.close();
+      return true;
+    case "Tab":
+      event.preventDefault();
+      menu.applyActive();
+      return true;
+    case "Enter":
+      if (!completeOnEnter || !menu.applyActive()) return false;
+      event.preventDefault();
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function createMenu(
   id: string,
   apply: (item: HTMLElement) => void,

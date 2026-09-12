@@ -219,6 +219,26 @@ edits and explicit history-restored payloads invalidate older revisions.
 Rejected or ambiguous submissions retain the draft; no response is retried
 automatically.
 
+The composer decides Enter's meaning before either completion menu or an exact
+built-in can handle it. Composition state, `isComposing`, and key code 229
+suppress commands; send shortcuts also consume Enter during the 100 ms grace
+after composition ends. Above 640 px, plain Enter completes or sends. At 640 px
+and below it remains a newline, even with a menu open. Ctrl, Meta or Alt permits
+completion/send; Shift always leaves Enter as a newline. Both menus share the
+same arrow, Escape, Tab and admitted-Enter dispatch.
+
+`/copy` fetches plain text from `GET /sessions/:id/last-assistant-text`. The
+workspace reads the complete active branch from its current writer, without
+opening a runtime or using the paginated view. Like Pi's `getLastAssistantText`,
+it selects the latest completed assistant message, skips empty aborted messages,
+and concatenates its text blocks without separators. Streaming partials do not
+count; a latest thinking-only, tool-only or blank answer has nothing to copy.
+Unlike the SDK's final trim, the response preserves source whitespace. The
+browser copies only while the requesting composer and text revision remain
+current. Failed lookups or clipboard writes retain the command; success clears
+only that revision, never later attachments. Existing per-message source-copy
+buttons keep their rendered process/answer-half behavior.
+
 ## Dependency rules
 
 Enforced by `.oxlintrc.json` (see `AGENTS.md`). `src/container.ts` is the

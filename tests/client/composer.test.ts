@@ -279,26 +279,89 @@ describe("local built-ins", () => {
     const write = vi
       .spyOn(navigator.clipboard, "writeText")
       .mockResolvedValue(undefined);
-    page({ answers: ["first", "  the last one  "] });
+    const fetch = mockFetch(() => text("  **the last one**\n "));
+    const { submits } = page({ answers: ["first", "wrong DOM answer"] });
     const { setUpComposer } = await load();
     setUpComposer();
     type(area(), "/copy");
     keydown(area(), "Enter");
     await flush();
-    expect(write).toHaveBeenCalledWith("the last one");
+    expect(fetch).toHaveBeenCalledWith("/sessions/s1/last-assistant-text", {
+      signal: expect.any(AbortSignal) as AbortSignal,
+    });
+    expect(write).toHaveBeenCalledWith("  **the last one**\n ");
+    expect(submits).toHaveLength(0);
     expect(byId("toasts").textContent).toContain("Answer copied.");
     expect(area().value).toBe("");
   });
 
   it("warns on /copy with nothing to copy", async () => {
+    mockFetch(() => text(""));
     const write = vi.spyOn(navigator.clipboard, "writeText");
     page();
     const { setUpComposer } = await load();
     setUpComposer();
     type(area(), "/copy");
     keydown(area(), "Enter");
+    await flush();
     expect(write).not.toHaveBeenCalled();
     expect(byId("toasts").textContent).toContain("No answer to copy yet.");
+    expect(area().value).toBe("/copy");
+  });
+
+  it.each(["clipboard rejected", "clipboard unavailable", "lookup rejected"])(
+    "retains /copy when %s",
+    async (failure) => {
+      mockFetch(() =>
+        text("raw answer", failure === "lookup rejected" ? 500 : 200),
+      );
+      const write = vi
+        .spyOn(navigator.clipboard, "writeText")
+        .mockRejectedValue(new Error("denied"));
+      if (failure === "clipboard unavailable")
+        vi.spyOn(navigator, "clipboard", "get").mockReturnValue(
+          undefined as never,
+        );
+      const { submits } = page();
+      const { setUpComposer } = await load();
+      setUpComposer();
+      type(area(), "/copy");
+      click(primary());
+      await flush();
+      expect(area().value).toBe("/copy");
+      expect(submits).toHaveLength(0);
+      expect(byId("toasts").textContent).toContain(
+        failure === "lookup rejected"
+          ? "Could not load the answer to copy."
+          : "Could not reach the clipboard.",
+      );
+      if (failure !== "clipboard rejected")
+        expect(write).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not clear a newly typed /copy when an earlier clipboard write finishes", async () => {
+    mockFetch(() => text("raw answer"));
+    let finish: (() => void) | undefined;
+    const write = vi.spyOn(navigator.clipboard, "writeText").mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    page();
+    const { setUpComposer } = await load();
+    setUpComposer();
+    type(area(), "/copy");
+    keydown(area(), "Enter");
+    await flush();
+    expect(write).toHaveBeenCalledOnce();
+    type(area(), "different");
+    type(area(), "/copy");
+    finish?.();
+    await flush();
+    expect(area().value).toBe("/copy");
+    expect(byId("toasts").textContent).not.toContain("Answer copied.");
   });
 });
 

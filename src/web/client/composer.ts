@@ -75,13 +75,6 @@ function isSendShortcut(event: KeyboardEvent): boolean {
   return event.ctrlKey || event.metaKey || event.altKey || !narrowScreen();
 }
 
-function lastAnswer(): string {
-  const answers = document.querySelectorAll<HTMLElement>(
-    '[data-role="assistant"] .markdown-body',
-  );
-  return answers[answers.length - 1]?.textContent?.trim() ?? "";
-}
-
 let composerSetUp = false;
 const submissions = new WeakMap<HtmxRequestCtx, () => void>();
 
@@ -176,7 +169,7 @@ function mountComposer(form: HTMLElement, signal: AbortSignal): void {
   const drafts = setUpDrafts(sessionId, cwd, textarea, signal);
 
   let cycle: number | null = null;
-  let compositionEndedAt = 0;
+  let compositionEndedAt = -Infinity;
   let composing = false;
 
   function history(): string[] {
@@ -221,7 +214,49 @@ function mountComposer(form: HTMLElement, signal: AbortSignal): void {
     shellHint("");
   }
 
-  /** `/session` and `/copy` never leave the browser. */
+  let copying = false;
+
+  async function copyAnswer(): Promise<void> {
+    if (copying) return;
+    if (!sessionId) {
+      showToast("No answer to copy yet.", "warning");
+      return;
+    }
+    const version = drafts.version();
+    const current = () =>
+      !signal.aborted &&
+      form.isConnected &&
+      drafts.version() === version &&
+      textarea()?.value.trim() === "/copy" &&
+      images.count() === 0;
+    copying = true;
+    let failure = "Could not load the answer to copy.";
+    try {
+      const response = await fetch(
+        `/sessions/${sessionId}/last-assistant-text`,
+        { signal },
+      );
+      if (!response.ok) throw new Error("Answer lookup failed");
+      const text = await response.text();
+      if (!current()) return;
+      if (!text) {
+        showToast("No answer to copy yet.", "warning");
+        return;
+      }
+      failure = "Could not reach the clipboard.";
+      await navigator.clipboard.writeText(text);
+      if (!current()) return;
+      showToast("Answer copied.", "info");
+      // Clear only this command, never attachments added while copying.
+      drafts.clear(version);
+    } catch {
+      if (current()) showToast(failure);
+    } finally {
+      copying = false;
+    }
+  }
+
+  /** These commands never submit a model prompt. */
   function runLocalBuiltin(value: string): boolean {
     if (images.count() > 0) return false;
     if (value === "/session") {
@@ -238,26 +273,7 @@ function mountComposer(form: HTMLElement, signal: AbortSignal): void {
       return true;
     }
     if (value === "/copy") {
-      const text = lastAnswer();
-      if (text === "") {
-        showToast("No answer to copy yet.", "warning");
-        return true;
-      } else {
-        void navigator.clipboard
-          .writeText(text)
-          .then(() => {
-            showToast("Answer copied.", "info");
-            if (
-              !signal.aborted &&
-              textarea()?.value.trim() === value &&
-              images.count() === 0
-            )
-              clearComposer();
-          })
-          .catch(() => {
-            showToast("Could not reach the clipboard.");
-          });
-      }
+      void copyAnswer();
       return true;
     }
     return false;
@@ -337,7 +353,14 @@ function mountComposer(form: HTMLElement, signal: AbortSignal): void {
     (event) => {
       const area = textarea();
       if (!area || event.target !== area) return;
-      if (composing || event.isComposing) return;
+      // oxlint-disable-next-line typescript/no-deprecated -- IMEs can report 229 without isComposing.
+      if (composing || event.isComposing || event.keyCode === 229) return;
+      const sendNow = isSendShortcut(event);
+      // An IME confirmation must not complete a menu or run an exact command.
+      if (sendNow && Date.now() - compositionEndedAt < COMPOSITION_GRACE_MS) {
+        event.preventDefault();
+        return;
+      }
 
       const empty = area.value.trim() === "";
       if (
@@ -362,16 +385,14 @@ function mountComposer(form: HTMLElement, signal: AbortSignal): void {
       }
 
       // A fully typed built-in runs on Enter instead of completing the menu.
-      const sendNow = isSendShortcut(event);
       if (sendNow && exactBuiltin(area.value) !== undefined) {
         event.preventDefault();
         submit(event.altKey ? "followUp" : "steer");
         return;
       }
-      if (slash.handleKey(event)) return;
-      if (at.handleKey(event)) return;
+      if (slash.handleKey(event, sendNow)) return;
+      if (at.handleKey(event, sendNow)) return;
       if (sendNow) {
-        if (Date.now() - compositionEndedAt < COMPOSITION_GRACE_MS) return;
         event.preventDefault();
         submit(event.altKey ? "followUp" : "steer");
         return;

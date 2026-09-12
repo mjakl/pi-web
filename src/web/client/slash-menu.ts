@@ -1,6 +1,6 @@
 import { slashQuery } from "@core/composer";
 import { type MenuEndpoints, replaceRange } from "./editor.ts";
-import { createMenu, type Menu } from "./menu.ts";
+import { createMenu, handleMenuKey, type Menu } from "./menu.ts";
 
 // Typing `/` opens the command menu. The list and its ranking are rendered by
 // the server; the browser owns only which key does what.
@@ -10,7 +10,7 @@ const DEBOUNCE_MS = 80;
 export type SlashMenu = {
   refresh(): void;
   close(): void;
-  handleKey(event: KeyboardEvent): boolean;
+  handleKey(event: KeyboardEvent, completeOnEnter: boolean): boolean;
 };
 
 export function setUpSlashMenu(
@@ -87,32 +87,8 @@ export function setUpSlashMenu(
     close: () => {
       menu.close();
     },
-    handleKey(event) {
-      if (!menu.isOpen()) return false;
-      switch (event.key) {
-        case "ArrowDown":
-        case "ArrowUp":
-          event.preventDefault();
-          menu.move(event.key === "ArrowDown" ? 1 : -1);
-          return true;
-        case "Escape":
-          event.preventDefault();
-          menu.close();
-          return true;
-        case "Tab":
-          event.preventDefault();
-          menu.applyActive();
-          return true;
-        case "Enter": {
-          // Enter completes the highlighted entry; with nothing to complete
-          // it falls through and sends, and Shift+Enter is a newline.
-          if (event.shiftKey || !menu.applyActive()) return false;
-          event.preventDefault();
-          return true;
-        }
-        default:
-          return false;
-      }
+    handleKey(event, completeOnEnter) {
+      return handleMenuKey(menu, event, completeOnEnter);
     },
   };
 }

@@ -18,6 +18,13 @@ import {
 export function transcriptRoutes(app: WebApp, ctx: RouteContext): void {
   const { deps, page, guard } = ctx;
 
+  app.get("/sessions/:id/last-assistant-text", async (c) => {
+    const id = c.req.param("id");
+    if (!isSessionId(id)) return c.notFound();
+    c.header("Cache-Control", "no-store");
+    return c.text((await deps.workspace.lastAssistantText(id)) ?? "");
+  });
+
   app.get("/sessions/:id/export", async (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
