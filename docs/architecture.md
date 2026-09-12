@@ -261,12 +261,12 @@ composition root and the only importer of Pi adapters.
   there is no toggle, because pi-web has none.
 - **Notifications key off the agent's own idle, not off the turn ending.**
   `src/core/turn-completion.ts` is pi-web's rule: a run has to have started, and
-  the session has to be idle when it settles. A stop, an aborted turn or a shell
-  command on its own never notifies. The adapter turns that into a `completed`
-  runtime event; the server sends one Web Push from it, and the session stream
-  sends `done` to the page, which plays the tone and — only when nobody is
-  looking at the tab — shows a notification. The service worker shows its own
-  only when no window is visible, so a reader never gets both.
+  the session has to be idle when it settles. A stop, an abort before the model
+  answered, or a shell command on its own never notifies. The adapter turns that
+  into a `completed` runtime event; the server sends one Web Push from it, and
+  the session stream sends `done` to the page, which plays the tone and — only
+  when nobody is looking at the tab — shows a notification. The service worker
+  shows its own only when no window is visible, so a reader never gets both.
 - **The service worker is generated, not shipped.** Its precache list has to
   name this build's hashed asset URLs, so `src/web/pwa.ts` writes the script and
   `/sw.js` serves it uncached with the asset hash as its version. It caches
