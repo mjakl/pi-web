@@ -252,6 +252,9 @@ export type ModelPick = {
   /** A live session applies a pick at once; `/new` only records it. */
   sessionId?: string;
   cwd?: string;
+  /** New-session defaults are display-only until deliberately chosen. */
+  explicitModel?: boolean;
+  thinkingOverride?: ThinkingLevel;
   /** A running turn locks the selector, as pi-web does. */
   disabled?: boolean;
 };
@@ -320,6 +323,7 @@ function pickAttributes(pick: ModelPick, value: string) {
   const cwd = encodeURIComponent(pick.cwd ?? "");
   return {
     "hx-get": `/workspaces/model-selector?cwd=${cwd}&model=${model}`,
+    "hx-include": "[name='thinking']",
     ...target,
   };
 }
@@ -340,7 +344,18 @@ function ReasoningField({ pick }: { pick: ModelPick }) {
   return (
     <label class="composer-thinking-field">
       <span>Change reasoning level</span>
-      <select name="thinking" disabled={pick.disabled === true} {...value}>
+      {pick.sessionId === undefined ? (
+        <input
+          type="hidden"
+          name="thinking"
+          value={pick.thinkingOverride ?? ""}
+        />
+      ) : null}
+      <select
+        name={pick.sessionId === undefined ? "display-thinking" : "thinking"}
+        disabled={pick.disabled === true}
+        {...value}
+      >
         {/* pi-web keeps "auto" in the list whatever the model offers, and
             selects it while nothing is pinned (ChatInput.tsx L1759-L1768). */}
         <option value="auto" selected={pick.level === undefined}>
@@ -402,7 +417,7 @@ export function ModelSelector({
         <input
           type="hidden"
           name="model"
-          value={current ? modelValue(current) : ""}
+          value={pick.explicitModel && current ? modelValue(current) : ""}
         />
       ) : null}
       <button
@@ -628,6 +643,7 @@ export function Composer({
         sessionId === undefined ? "/sessions" : `/sessions/${sessionId}/prompt`
       }
       hx-encoding="multipart/form-data"
+      hx-sync="this:drop"
       hx-target="#toasts"
       hx-swap="beforeend"
       {...(sessionId === undefined ? {} : { "data-session-id": sessionId })}

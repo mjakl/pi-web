@@ -4,6 +4,7 @@ import {
   type SlashCommand,
 } from "@core/composer";
 import type { DialogAnswer } from "@core/extension-ui";
+import type { StartupChoice } from "@core/models";
 import { isBashOutputPath } from "@core/path-access";
 import type {
   ImageAttachment,
@@ -83,26 +84,20 @@ export function liveUseCases({
 
   return {
     /**
-     * Start a session in `cwd` and send the first prompt. An explicit model
+     * Create a session in `cwd` without dispatching input. An explicit model
      * or reasoning level starts it there and, when Pi honours the choice,
      * becomes the default for the next session — so the listing is stale
      * afterwards.
      */
-    async startSession(
+    async createSession(
       cwd: string,
-      text: string,
-      input?: PromptInput,
-      startup: {
-        model?: { provider: string; modelId: string };
-        thinkingLevel?: ThinkingLevel;
-      } = {},
+      startup: StartupChoice = {},
     ): Promise<string> {
       if (!(await folderAvailable(cwd))) {
         throw new Error(unavailableFolderMessage(cwd));
       }
       const live = await deps.runtime.open({ cwd, ...startup });
       if (startup.model || startup.thinkingLevel) deps.models.invalidate(cwd);
-      await live.prompt(text, input);
       return live.id;
     },
 

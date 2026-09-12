@@ -2,6 +2,16 @@ import { createFakeWorld, userEntry } from "@adapters/fake/index";
 import { createWorkspace } from "@core/workspace";
 import { describe, expect, it } from "vitest";
 
+async function sendFirst(
+  workspace: ReturnType<typeof createWorkspace>,
+  cwd: string,
+  text: string,
+) {
+  const id = await workspace.createSession(cwd);
+  await workspace.send(id, text);
+  return id;
+}
+
 const settle = (ms: number) =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms);
@@ -11,7 +21,7 @@ describe("workspace over the fake runtime", () => {
   it("streams a turn and settles it into the transcript", async () => {
     const world = createFakeWorld({ delayMs: 2, reply: () => "one two three" });
     const workspace = createWorkspace(world);
-    const id = await workspace.startSession("/tmp/project", "hi");
+    const id = await sendFirst(workspace, "/tmp/project", "hi");
 
     const during = await workspace.viewSession(id);
     expect(during?.status?.running).toBe(true);
@@ -42,9 +52,9 @@ describe("workspace over the fake runtime", () => {
   it("shows one project at a time and marks live sessions", async () => {
     const world = createFakeWorld({ delayMs: 2 });
     const workspace = createWorkspace(world);
-    await workspace.startSession("/repo/a", "x");
+    await sendFirst(workspace, "/repo/a", "x");
     await settle(30);
-    await workspace.startSession("/repo/b", "y");
+    await sendFirst(workspace, "/repo/b", "y");
     await settle(30);
 
     const sidebar = await workspace.sidebar();
@@ -64,7 +74,7 @@ describe("workspace over the fake runtime", () => {
   it("does not re-render a settled turn when something else happens", async () => {
     const world = createFakeWorld({ delayMs: 2, reply: () => "answer" });
     const workspace = createWorkspace(world);
-    const id = await workspace.startSession("/tmp/project", "hi");
+    const id = await sendFirst(workspace, "/tmp/project", "hi");
     await settle(50);
 
     // A star, a rename, an extension status: all of them are `activity`, and
@@ -82,7 +92,7 @@ describe("workspace over the fake runtime", () => {
   it("reads another branch of a running session from the runtime", async () => {
     const world = createFakeWorld({ delayMs: 2, reply: () => "answer" });
     const workspace = createWorkspace(world);
-    const id = await workspace.startSession("/tmp/project", "first");
+    const id = await sendFirst(workspace, "/tmp/project", "first");
     await settle(50);
     const first = (await workspace.viewSession(id))?.items[0]?.entryId ?? "";
     // A live session owns its file; reading it from disk could serve a branch
@@ -99,7 +109,7 @@ describe("workspace over the fake runtime", () => {
   it("forks a user message that is only images before that message", async () => {
     const world = createFakeWorld({ delayMs: 2 });
     const workspace = createWorkspace(world);
-    const id = await workspace.startSession("/tmp/project", "first");
+    const id = await sendFirst(workspace, "/tmp/project", "first");
     await settle(50);
     await workspace.send(id, "", {
       images: [{ data: "AAAA", mimeType: "image/png" }],
@@ -118,7 +128,7 @@ describe("workspace over the fake runtime", () => {
   it("recalls the queue with the images its messages carried", async () => {
     const world = createFakeWorld({ delayMs: 20, reply: () => "slow answer" });
     const workspace = createWorkspace(world);
-    const id = await workspace.startSession("/tmp/project", "first");
+    const id = await sendFirst(workspace, "/tmp/project", "first");
     await workspace.send(id, "second", {
       behavior: "followUp",
       images: [{ data: "AAAA", mimeType: "image/png" }],

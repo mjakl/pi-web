@@ -716,14 +716,15 @@ describe("web app", () => {
       received += decoder.decode(chunk.value);
     }
     await reader.cancel();
-    // The first push is the whole list, since the page has no row to swap,
-    // with the new row already running.
+    // Creation pushes the whole list before dispatch, since the page has no
+    // row yet. Its lazy row request reads the state after prompt admission.
     const list = received.slice(0, received.indexOf("\n\n"));
     expect(list).toContain(
       '<hx-partial hx-target="#session-list" hx-swap="innerHTML">',
     );
     expect(list).toContain('id="row-new-1"');
-    expect(list).toContain('data-status="Agent running…"');
+    const hydrated = await (await app.request("/sessions/new-1/row")).text();
+    expect(hydrated).toContain('data-status="Agent running…"');
     // The pushed rows are pending, and observe their own way into view.
     expect(list).toContain('hx-trigger="intersect once"');
     // The page the browser is sent to, rendered while the turn still runs,

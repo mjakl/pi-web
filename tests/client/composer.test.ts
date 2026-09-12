@@ -137,17 +137,17 @@ describe("sending", () => {
     expect(submits).toHaveLength(1);
   });
 
-  it("drops the stored draft when the text is sent", async () => {
+  it("keeps the stored draft until acceptance", async () => {
     localStorage.setItem("web-pi:draft:s1", "kept");
     page();
     const { setUpComposer } = await load();
     setUpComposer();
     expect(area().value).toBe("kept");
     keydown(area(), "Enter");
-    expect(localStorage.getItem("web-pi:draft:s1")).toBeNull();
+    expect(localStorage.getItem("web-pi:draft:s1")).toBe("kept");
   });
 
-  it("empties the composer only after a successful submission", async () => {
+  it("empties the composer only after an accepted submission", async () => {
     page();
     const { setUpComposer } = await load();
     setUpComposer();
@@ -158,7 +158,12 @@ describe("sending", () => {
     });
     expect(area().value).toBe("retry me");
     htmxEvent(byId("composer"), "htmx:after:request", {
-      ctx: { response: { status: 200 } },
+      ctx: {
+        response: {
+          status: 200,
+          headers: new Headers({ "X-Web-Pi-Submission": "accepted" }),
+        },
+      },
     });
     expect(area().value).toBe("");
     expect(primary().disabled).toBe(true);

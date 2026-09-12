@@ -192,24 +192,35 @@ export function setUpComposer(): void {
   function runLocalBuiltin(value: string): boolean {
     if (images.count() > 0) return false;
     if (value === "/session") {
-      document.querySelector<HTMLElement>("#stats-trigger")?.click();
+      const trigger = document.querySelector<HTMLElement>("#stats-trigger");
+      if (!sessionId || !trigger) {
+        showToast(
+          "Send a request first to view session statistics.",
+          "warning",
+        );
+        return true;
+      }
+      trigger.click();
       clearComposer();
       return true;
     }
     if (value === "/copy") {
       const text = lastAnswer();
-      if (text === "") showToast("No answer to copy yet.", "warning");
-      else {
+      if (text === "") {
+        showToast("No answer to copy yet.", "warning");
+        return true;
+      } else {
         void navigator.clipboard
           .writeText(text)
           .then(() => {
             showToast("Answer copied.", "info");
+            if (textarea()?.value.trim() === value && images.count() === 0)
+              clearComposer();
           })
           .catch(() => {
             showToast("Could not reach the clipboard.");
           });
       }
-      clearComposer();
       return true;
     }
     return false;
@@ -227,9 +238,6 @@ export function setUpComposer(): void {
     setBehavior(behavior);
     slash.close();
     at.close();
-    // Drop the stored draft now: a new session redirects before the response
-    // is handled, and the sent text must not come back as a draft there.
-    drafts.clear();
     form.requestSubmit();
   };
 
@@ -257,7 +265,6 @@ export function setUpComposer(): void {
     setBehavior(behavior);
     slash.close();
     at.close();
-    drafts.clear();
   });
   // The toolbar's own fields (the model filter, the reasoning select) are in
   // the form too; only the textarea is the draft.
@@ -325,9 +332,24 @@ export function setUpComposer(): void {
     // model pick, a queue recall — are inside the form and their requests
     // bubble through here too.
     if (event.target !== form) return;
-    const status = requestContext(event).response?.status;
-    // Preserve the existing HTTP-success contract, including 200 no-swap replies.
-    if (status !== undefined && status >= 200 && status < 300) clearComposer();
+    const response = requestContext(event).response;
+    // HTMX 4 fires this before HX-Redirect and the session-created trigger.
+    // Missing confirmation (including an ambiguous transport failure) keeps
+    // the draft; nothing here retries the request.
+    if (
+      response &&
+      response.status >= 200 &&
+      response.status < 300 &&
+      response.headers.get("X-Web-Pi-Submission") === "accepted"
+    )
+      clearComposer();
+  });
+
+  form.addEventListener("htmx:error", (event) => {
+    if (event.target !== form) return;
+    showToast(
+      "Could not confirm submission. Check the conversation before sending again.",
+    );
   });
 
   /**
@@ -460,6 +482,23 @@ function setUpModelMenu(): void {
     },
     true,
   );
+  document.body.addEventListener("change", (event) => {
+    const select = event.target;
+    if (
+      !(select instanceof HTMLSelectElement) ||
+      select.name !== "display-thinking"
+    )
+      return;
+    const selector = select.closest(".model-selector");
+    const override = selector?.querySelector<HTMLInputElement>(
+      'input[name="thinking"]',
+    );
+    if (override) override.value = select.value === "auto" ? "" : select.value;
+    const detail = selector?.querySelector(".composer-model-detail");
+    if (detail)
+      detail.textContent =
+        select.selectedOptions[0]?.textContent ?? select.value;
+  });
   document.body.addEventListener("input", (event) => {
     const filter = event.target;
     if (!(filter instanceof HTMLInputElement) || filter.id !== "model-filter") {

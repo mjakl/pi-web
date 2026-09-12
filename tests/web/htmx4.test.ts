@@ -155,7 +155,7 @@ describe("shipped HTMX 4 with the real browser client", () => {
   });
 
   it.each(["accepted", "HTTP 200 rejection"])(
-    "preserves the existing composer-clear contract for %s",
+    "requires explicit composer acceptance for %s",
     async (kind) => {
       const { document } = await open(
         page(composer),
@@ -164,17 +164,27 @@ describe("shipped HTMX 4 with the real browser client", () => {
             kind === "accepted"
               ? ""
               : `<div class="notice-shelf-item">Rejected</div>`,
+            {
+              headers:
+                kind === "accepted"
+                  ? { "X-Web-Pi-Submission": "accepted" }
+                  : {},
+            },
           ),
       );
       required(document.querySelector("button")).click();
       await eventually(() => {
-        expect(required(document.querySelector("textarea")).value).toBe("");
+        if (kind === "accepted") {
+          expect(required(document.querySelector("textarea")).value).toBe("");
+        } else {
+          expect(
+            required(document.getElementById("toasts")).textContent,
+          ).toContain("Rejected");
+          expect(required(document.querySelector("textarea")).value).toBe(
+            "draft",
+          );
+        }
       });
-      // Deliberate pre-existing bug: HTTP 200 application rejections also clear the draft.
-      if (kind !== "accepted")
-        expect(
-          required(document.getElementById("toasts")).textContent,
-        ).toContain("Rejected");
     },
   );
 

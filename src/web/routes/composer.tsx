@@ -44,83 +44,96 @@ import {
 export function composerRoutes(app: WebApp, ctx: RouteContext): void {
   const { deps, renderIntervalMs, warnTokens, guard } = ctx;
 
-  app.post("/sessions", async (c) => {
+  app.post("/sessions", (c) => submit(c));
+  app.post("/sessions/:id/prompt", (c) => {
+    const id = c.req.param("id");
+    return isSessionId(id) ? submit(c, id) : c.notFound();
+  });
+
+  function reject(c: Context, message: string): Response {
+    toastHeader(c, message);
+    return c.body(null, 200);
+  }
+
+  /** Classify before creating a session; both forms then use the same dispatch. */
+  async function submit(c: Context, existingId?: string): Promise<Response> {
     const form = await c.req.formData();
-    const cwd = field(form, "cwd");
     const submission = await readSubmission(form);
-    if ("error" in submission) {
-      toastHeader(c, submission.error);
-      return c.body(null, 200);
+    if ("error" in submission) return reject(c, submission.error);
+    const { text, images, behavior } = submission;
+    const cwd = field(form, "cwd");
+    if (existingId === undefined && !cwd) {
+      return reject(c, "Choose a working folder first.");
     }
-    if (!cwd || !submission.text) {
-      toastHeader(c, "A working folder and a first request are required.");
-      return c.body(null, 200);
+    if (!text && images.length === 0) return reject(c, "Type a request first.");
+    // An explicit local-only command must never become a model prompt, even
+    // when attachments would otherwise cancel shell mode.
+    if (text.startsWith("!!") && images.length > 0) {
+      return reject(c, "Remove attachments to run a local-only shell command.");
+    }
+    const shell = images.length === 0 ? bashCommand(text) : null;
+    if (images.length === 0 && text.startsWith("!") && !shell) {
+      return reject(c, "Type a shell command after ! or !!.");
+    }
+    const builtin =
+      images.length === 0
+        ? /^\/(compact|reload|name|clone|session|copy)(?:\s+([\s\S]*))?$/.exec(
+            text,
+          )
+        : null;
+    const name = builtin?.[1];
+    const argument = builtin?.[2]?.trim() ?? "";
+    if (name === "name" && !argument)
+      return reject(c, "Usage: /name <session name>");
+    if (name === "session" || name === "copy") {
+      return reject(c, `Use /${name} in an open session's composer.`);
+    }
+    if (existingId === undefined && (name === "compact" || name === "clone")) {
+      return reject(
+        c,
+        `/${name} needs an existing conversation. Send a request first.`,
+      );
     }
     const [provider, ...rest] = field(form, "model").split("/");
     const modelId = rest.join("/");
-    // "auto" is pi-web's word for leaving the level to Pi, and is not one of
-    // the levels the SDK takes.
-    // ponytail: picking "auto" again on a session that has a level set keeps
-    // the level; wire a real clear through the runtime if anyone asks.
     const thinking = field(form, "thinking");
     return guard(c, async () => {
-      const id = await deps.workspace.startSession(
-        cwd,
-        submission.text,
-        { images: submission.images },
-        {
+      const id =
+        existingId ??
+        (await deps.workspace.createSession(cwd, {
           ...(provider && modelId ? { model: { provider, modelId } } : {}),
           ...(isThinkingLevel(thinking) ? { thinkingLevel: thinking } : {}),
-        },
-      );
-      if (c.req.header("HX-Request") !== "true") {
-        return c.redirect(`/sessions/${id}`, 303);
+        }));
+      let response: Response;
+      if (shell) {
+        await deps.workspace.runBash(id, shell.command, shell.excluded);
+        response = c.body(null, 204);
+      } else if (name) {
+        response = await runBuiltin(c, id, name, argument);
+      } else {
+        await deps.workspace.send(id, text, { images, behavior });
+        response = c.body(null, 204);
       }
-      // The browser holds this session's draft under a provisional key.
+      // A 2xx toast can still reject input. Only completed dispatch grants
+      // acceptance, before HTMX follows a redirect or promotes the draft key.
+      c.header("X-Web-Pi-Submission", "accepted");
+      if (existingId !== undefined) {
+        response.headers.set("X-Web-Pi-Submission", "accepted");
+        return response;
+      }
+      if (c.req.header("HX-Request") !== "true")
+        return c.redirect(`/sessions/${id}`, 303);
+      const triggers = JSON.parse(
+        response.headers.get("HX-Trigger") ?? "{}",
+      ) as Record<string, unknown>;
       c.header(
         "HX-Trigger",
-        JSON.stringify({ "web-pi:session-created": { cwd, id } }),
+        JSON.stringify({ ...triggers, "web-pi:session-created": { cwd, id } }),
       );
       c.header("HX-Redirect", `/sessions/${id}`);
       return c.body(null, 200);
     });
-  });
-
-  /**
-   * One entry point for everything typed into the composer: built-in slash
-   * commands, `!` shell runs, and prompts with attachments. Built-ins are
-   * dispatched here rather than in the browser so a reload cannot lose them.
-   */
-  app.post("/sessions/:id/prompt", async (c) => {
-    const id = c.req.param("id");
-    if (!isSessionId(id)) return c.notFound();
-    const form = await c.req.formData();
-    const submission = await readSubmission(form);
-    if ("error" in submission) {
-      toastHeader(c, submission.error);
-      return c.body(null, 200);
-    }
-    const { text, images, behavior } = submission;
-    if (!text && images.length === 0) {
-      toastHeader(c, "Type a request first.");
-      return c.body(null, 200);
-    }
-    return guard(c, async () => {
-      if (images.length === 0) {
-        const shell = bashCommand(text);
-        if (shell) {
-          await deps.workspace.runBash(id, shell.command, shell.excluded);
-          return c.body(null, 204);
-        }
-        const builtin = /^\/(compact|reload|name|clone)(?:\s+([\s\S]*))?$/.exec(
-          text,
-        );
-        if (builtin) return runBuiltin(c, id, builtin[1] ?? "", builtin[2]);
-      }
-      await deps.workspace.send(id, text, { images, behavior });
-      return c.body(null, 204);
-    });
-  });
+  }
 
   async function runBuiltin(
     c: Context,
@@ -141,10 +154,6 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
         toastHeader(c, "Extensions, skills, and prompts reloaded.", "info");
         return c.body(null, 200);
       case "name":
-        if (argumentText === "") {
-          toastHeader(c, "Usage: /name <session name>");
-          return c.body(null, 200);
-        }
         await deps.workspace.rename(id, argumentText);
         toastHeader(c, `Renamed to "${argumentText}".`, "info");
         return c.body(null, 200);
@@ -309,20 +318,26 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
   app.get("/workspaces/model-selector", async (c) => {
     const cwd = c.req.query("cwd") ?? "";
     const picked = c.req.query("model") ?? "";
+    const thinking = c.req.query("thinking") ?? "";
     return guard(c, async () => {
       const view = await deps.workspace.newSession(cwd);
       const chosen = view.models.find(
         (model) => `${model.provider}/${model.id}` === picked,
       );
+      const thinkingOverride = isThinkingLevel(thinking) ? thinking : undefined;
+      const level =
+        thinkingOverride ??
+        chosen?.pin ??
+        (chosen ? undefined : view.thinkingLevel);
       return c.html(
         <ModelSelector
           pick={{
+            explicitModel: chosen !== undefined,
+            ...(thinkingOverride === undefined ? {} : { thinkingOverride }),
             models: view.models,
             current: chosen ?? view.model ?? null,
             levels: chosen?.thinkingLevels ?? view.model?.thinkingLevels ?? [],
-            ...(chosen || view.thinkingLevel === undefined
-              ? {}
-              : { level: view.thinkingLevel }),
+            ...(level === undefined ? {} : { level }),
             cwd: view.cwd,
           }}
         />,
