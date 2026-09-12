@@ -9,7 +9,8 @@ with three estimators. Every screen needed both a React component and an API
 route.
 
 web-pi removes the browser copy. Pi's session JSONL and the live `AgentSession`
-are the only state; the browser shows whatever the server last rendered.
+are the conversation state; the browser shows whatever the server last rendered.
+Browser-local drafts, selections, and preferences are separate from that model.
 
 ## Boundary and ports
 
@@ -258,7 +259,7 @@ composition root and the only importer of Pi adapters.
   strings is a lossier copy of the same data. A view therefore carries pi-web's
   class names and pi-web's inline styles, kebab-cased, and area agents add new
   rules only to `src/web/styles/areas/<area>.css` — one file per area, so two of
-  them never edit the same stylesheet. The browserslist floor is pi-web's
+  them never edit the same stylesheet. The declared web-pi browserslist floor is
   (chrome/edge ≥125, firefox ≥147, safari ≥26): native popovers, CSS anchor
   positioning, `@starting-style`, `:has()` and `field-sizing` are load-bearing,
   not progressive enhancement.
@@ -294,7 +295,7 @@ composition root and the only importer of Pi adapters.
 - **The package ships a bundle; the checkout runs the sources.** `just build`
   bundles `src/server.ts` and `src/cli.ts` with esbuild into `dist/`, leaving
   only the Pi SDK, `mammoth`, `web-push`, and `undici` external, so the
-  published `dependencies` are those four lines and a consumer install has no
+  published `dependencies` list the latter three and a consumer install has no
   toolchain in it. `just dev` and every test still run the TypeScript through
   `tsx`: tests that ran against `dist/` would test the bundler. The one check
   that does run against the package is `just smoke`
@@ -553,21 +554,17 @@ composition root and the only importer of Pi adapters.
   the round trip. That is Pi's own spelling and pi-web's behaviour; the UI says
   so in the button's title rather than pretending otherwise.
 
-## Not carried over yet
+## Remaining work
 
-pi-web features absent from this slice, roughly in order of value:
+[Behavior and remaining work](behavior.md) retains the unfinished port
+requirements: ANSI in tool cards, read-only historical branch browsing, explorer
+mutations and expanded-state persistence, and a running-session cap. These are
+not part of the documentation migration.
 
-1. Tool output in the transcript is preformatted text: ANSI is converted in the
-   extension shelf and the custom-UI panel, not in a tool card.
-2. The rail's branch marks move the session's leaf through `/navigate`, which
-   offers the prompt there for editing, rather than opening that branch
-   read-only. The explorer has no create, rename, delete or upload, and its
-   expanded state is not remembered across a reload. The branch-sync line is an
-   indicator, not a notice with a Retry button: nothing here can fail halfway.
-3. A running-session cap. Idle shutdown exists for drafts Pi never wrote to disk
-   (10 minutes, or immediately when the reader stops the turn), as in pi-web.
-4. No live token counter or tokens-per-second in the assistant header: the
-   number would be an estimate of an estimate, re-rendered ten times a second.
+Streaming token count and tokens per second are implemented. The runtime
+estimates tokens from streamed text and thinking, and reports a rate after more
+than 0.5 s when tokens are nonzero. The assistant header labels the count as
+estimated; completed provider usage and context accounting remain separate.
 
 ## Deliberately not carried over
 

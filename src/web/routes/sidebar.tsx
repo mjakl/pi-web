@@ -44,7 +44,7 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
    *
    * A session stays open across the worktrees of its own project and closes
    * when the selector moves to another one, as in pi-web (AppShell.tsx
-   * handleCwdChange; workspace-config.md §2.7): the reader lands on the
+   * handleCwdChange): the reader lands on the
    * new-session view under the folder just chosen, so the list, the chat,
    * the explorer and every page opened from here agree on the project.
    */

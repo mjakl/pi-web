@@ -1,0 +1,94 @@
+# Reproduce the README screenshots
+
+The five PNGs in `docs/images` are captured from the real Hono app, its built
+CSS and client bundle, and a fictional **Field Notes** project. Sessions use the
+existing in-memory fake world. Files and Git diffs come from a temporary Git
+repository. No model, credentials, installed extensions, or real session store
+are used.
+
+## Start the fixture
+
+From a development checkout with dependencies installed:
+
+```bash
+just screenshots
+```
+
+The command builds assets, then runs `scripts/screenshot-fixture.ts`. It binds
+only `127.0.0.1` on an OS-assigned port and prints the release-session URL. Do
+not use the normal server or port 30141. Stop with Ctrl+C; the fixture removes
+its temporary project. A forced kill may leave a `web-pi-screenshots-*`
+directory in the system temporary directory, containing only fictional files.
+
+The fixture has four sessions: `/sessions/release`, `/sessions/navigation`,
+`/sessions/tools`, and `/sessions/light`. Use sidebar links to move between
+them. All controls are the application's own controls, not screenshot-only
+markup.
+
+## Capture
+
+Use an already installed browser and agent-browser, or the same steps manually.
+Do not reuse an authenticated browser profile. For agent-browser, load its
+installed core guide first and use a dedicated session:
+
+```bash
+export AGENT_BROWSER_SESSION="$(agent-browser session id --scope worktree --prefix screenshots)"
+agent-browser skills get core
+agent-browser open http://127.0.0.1:<printed-port>/sessions/release
+agent-browser set viewport 1440 1000
+agent-browser snapshot -i
+```
+
+Set dark appearance through Settings → General. For scripted captures, the
+existing preference can be set before reloading:
+
+```bash
+agent-browser eval 'localStorage.setItem("pi-theme", "dark"); location.reload()'
+```
+
+Refresh the accessibility snapshot after navigation and lazy row loading, then
+use the current references. Wait for fonts, requested file content, Mermaid
+SVGs, and panel animations before capturing. For example:
+
+```bash
+agent-browser eval 'Promise.all(document.getAnimations().map(a => a.finished.catch(() => {}))).then(() => document.fonts.ready).then(() => true)'
+agent-browser screenshot docs/images/file-diff.png
+```
+
+Capture these states:
+
+- **file-diff.png**, 1440 × 1000, dark: Release checklist. Keep the sidebar
+  open, select the changed-files button above the explorer, then
+  **src/release.ts** in the fictional project. Keep its Diff tab visible at the
+  default 600 px panel width. Enter “Add a regression test for surrounding
+  whitespace.” without sending it.
+- **session-navigation.png**, 1440 × 1000, dark: Decisions worth keeping. Hide
+  the file panel and show the three requests, saved decision, sidebar star
+  counts, and conversation rail.
+- **session-tools.png**, 1440 × 1000, dark: Review the release helper. Open
+  Process details, then Subagent · reviewer. Keep Prompt, Run details, Raw
+  input, and Raw output collapsed beneath the rendered review.
+- **conversation-light.png**, 1440 × 1000, light: Plan the next release. Switch
+  appearance to light, then select Preview on the Mermaid block. Wait for the
+  diagram, not merely the Preview button response.
+- **mobile.png**, 390 × 844, dark: Release checklist with sidebar and file panel
+  closed and an empty composer. This is viewport emulation, not a device test.
+
+Use `agent-browser close` when finished and stop the fixture. Do not commit
+browser profiles, cookies, HAR files, or temporary session data. Relative
+timestamps and font rendering can vary by capture date and browser; this is a
+reproducible scenario fixture, not a pixel-comparison test suite.
+
+## Verification record
+
+The committed images were visually inspected after capture with local headless
+Chromium **153**. They show the current Hono diff, rail/stars, structured
+subagent result, rendered Mermaid diagram in light mode, and mobile composer.
+Desktop captures use 1440 × 1000; mobile uses 390 × 844. No public listener or
+external provider was used. These captures do not establish minimum-version
+Firefox, Safari, Edge, or physical-device compatibility.
+
+`just smoke` verifies that all five PNGs and the documentation linked by the
+installed README survive packing and consumer installation. It checks PNG
+signatures/dimensions and both product license notices; visual content is
+checked by inspecting the images, not by those file-presence assertions.

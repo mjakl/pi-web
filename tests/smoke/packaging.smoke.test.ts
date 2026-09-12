@@ -3,10 +3,18 @@ import { HTMX_SRC, HTMX_SSE_SRC } from "@web/HtmlLayout";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, it } from "vitest";
 
@@ -144,6 +152,50 @@ afterAll(async () => {
   }
   if (closed) await closed;
   if (base) rmSync(base, { recursive: true, force: true });
+});
+
+it("ships documentation links, screenshots, and both product license notices", () => {
+  const installed = join(base, "consumer", "node_modules", "web-pi");
+  const docs = join(installed, "docs");
+  const markdown = [
+    join(installed, "README.md"),
+    ...readdirSync(docs, { recursive: true, encoding: "utf8" })
+      .filter((path) => path.endsWith(".md"))
+      .map((path) => join(docs, path)),
+  ];
+  for (const file of markdown) {
+    const text = readFileSync(file, "utf8");
+    const targets = [
+      ...text.matchAll(/\]\(([^)]+)\)|<img\s[^>]*src="([^"]+)"/g),
+    ];
+    for (const match of targets) {
+      const target = match[1] ?? match[2] ?? "";
+      if (/^(?:https?:|#)/.test(target)) continue;
+      const path = target.split("#")[0] ?? "";
+      expect(
+        existsSync(resolve(dirname(file), path)),
+        `${file}: ${target}`,
+      ).toBe(true);
+    }
+  }
+  for (const image of [
+    "file-diff",
+    "session-navigation",
+    "session-tools",
+    "conversation-light",
+    "mobile",
+  ]) {
+    const png = readFileSync(join(docs, "images", `${image}.png`));
+    expect(png.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+    expect(png.readUInt32BE(16)).toBeGreaterThanOrEqual(390);
+    expect(png.readUInt32BE(20)).toBeGreaterThanOrEqual(800);
+  }
+  expect(readFileSync(join(installed, "LICENSE"), "utf8")).toContain(
+    "Copyright (c) 2026 Michael Jakl",
+  );
+  expect(readFileSync(join(installed, "LICENSE.pi-web"), "utf8")).toContain(
+    "Copyright (c) 2026 agegr",
+  );
 });
 
 it("reports its own version and the Pi it linked", () => {

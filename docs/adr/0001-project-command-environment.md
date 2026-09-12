@@ -19,7 +19,8 @@ commands look right and behave differently than they would in a terminal.
 `src/adapters/pi/bash-env.ts` sanitises the environment for both paths:
 
 - `PORT`, `NODE_ENV`, and every `WEB_PI_*` variable are removed (compared
-  case-insensitively on Windows, where variable names are).
+  case-insensitively on Windows, where variable names are). That helper behavior
+  does not imply Windows support: host Pi executable discovery is POSIX-only.
 - `<agentDir>/bin` is prepended to `PATH` when it is not already there, so tools
   an extension installed are found, as they are in Pi's terminal.
 - Everything else — `PATH`, Pi's own `PI_*` session metadata, per-command
@@ -35,10 +36,11 @@ shell override wins outright and keeps its own environment.
 
 ## Consequences
 
-A command run from web-pi behaves as it would in a terminal opened in the
-project. The cost is one inline extension and a wrapper around Pi's local shell
-backend; the alternative — documenting that `PORT` is taken — puts the surprise
-on the reader instead.
+Built-in shell execution no longer inherits these server-specific overrides. It
+still inherits the rest of the server environment; this is not a sandbox or a
+guarantee that every variable matches an interactive terminal. The cost is one
+inline extension and a wrapper around Pi's local shell backend; the alternative
+— documenting that `PORT` is taken — puts the surprise on the reader instead.
 
 This is web-pi's version of pi-web's ADR-0001. The rule is the same; the
 variables differ because there is no Next.js here.

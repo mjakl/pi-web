@@ -10,8 +10,8 @@ import { raw } from "hono/html";
 
 // pi-web's MessageView, SubagentToolCall, TurnWrittenFiles and the process
 // disclosure of ChatWindow, rendered on the server. Every class name and
-// inline style here is pi-web's own (components/MessageView.tsx, §4.3-§4.4 of
-// the UI map), so src/web/styles/globals.css applies unchanged. Where pi-web
+// inline style here is pi-web's own (components/MessageView.tsx), so
+// src/web/styles/globals.css applies unchanged. Where pi-web
 // expands a card from React state web-pi uses <details>, and the open-state
 // rules that replaces live in styles/areas/transcript.css.
 //

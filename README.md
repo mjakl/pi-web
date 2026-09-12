@@ -1,32 +1,120 @@
 # web-pi
 
-A server-rendered web interface for the
-[Pi coding agent](https://github.com/earendil-works/pi), built with Hono, Hono
-JSX and HTMX, styled by pi-web's own stylesheets. It reads the session files Pi
-already keeps under `~/.pi/agent` and runs live turns in-process through Pi's
-SDK, so the terminal and the browser are two views of the same sessions.
+**Your Pi conversations, project files, and changes in one workspace.**
 
-The server owns all UI state: pages and fragments are rendered on the server and
-swapped by HTMX, and one SSE stream per open session pushes re-rendered
-fragments while a turn runs. The browser keeps no copy of the conversation.
+Read an answer, review its diff, and write the next request with both still in
+view. web-pi gives the [Pi coding agent](https://github.com/earendil-works/pi) a
+server-rendered browser interface built with Hono, Hono JSX, and HTMX.
+
+It reads the session files Pi already keeps under `~/.pi/agent` and runs live
+turns in-process through Pi's SDK. History stays with Pi. Pages and fragments
+come from the server, with SSE updates while a turn runs; the browser keeps no
+second conversation model. Drafts and browser preferences still live locally.
+
+[Install and run](#install-and-run) ·
+[Explore the interface](#explore-the-interface) ·
+[Migration and deployment](docs/deployment.md)
+
+![A release-helper answer beside its working-tree diff and follow-up draft](docs/images/file-diff.png)
+
+_All screenshots show this Hono interface with fictional sessions and a
+temporary example project. [Reproduce them](docs/screenshots.md) from a
+checkout._
+
+## Explore the interface
+
+### Find the answer you wanted to keep
+
+Star a decision, explanation, or result. Sidebar counts show which sessions have
+stars; the desktop conversation rail takes you to prompts and starred answers.
+Hover over a prompt mark to preview it before jumping, including prompts in
+history that has not loaded yet. Stars are saved in the Pi session, and the
+session menu can clear them all.
+
+![Starred release decisions and the desktop conversation rail](docs/images/session-navigation.png)
+
+### Read the result, then inspect the process
+
+Keep process details collapsed while reading the answer. Expand reasoning, tool
+calls, command output, or a subagent result when you need the evidence. Subagent
+results include separate prompt, run-details, and raw-output disclosures.
+Subagent tools and orchestration come from your installed Pi extensions.
+
+![An expanded fictional subagent correctness review](docs/images/session-tools.png)
+
+### Discuss a plan in more than plain text
+
+Read formatted tables and highlighted code alongside the answer. Mermaid blocks
+switch between source and diagram preview. Choose light, dark, or system
+appearance in Settings.
+
+![A release plan and Mermaid diagram in light mode](docs/images/conversation-light.png)
+
+### Keep working on a smaller screen
+
+The mobile layout gives the conversation the screen. Open the sidebar and file
+panel when you need them. The composer keeps model and reasoning controls close
+to the request. An installable PWA supplies a separate app window, but live
+sessions still need a connection to the host.
+
+<img src="docs/images/mobile.png" width="360" alt="The release conversation and composer on an emulated mobile viewport" />
+
+_This is browser emulation, not a physical-device test. Read
+[Security](#security) before making the server reachable from another device._
+
+## What you can do
+
+- Browse, activate, stop, rename, export, fork, clone, and delete Pi sessions.
+  Rewind to an earlier request or navigate branches within a session.
+- Choose a model and reasoning level, attach images, use slash commands, compact
+  context, steer running work, or queue a follow-up.
+- Inspect token usage, context, active time, and estimated streaming tokens and
+  tokens per second. History pages backwards; tool results load when opened.
+- Browse project files, preview source and document formats, inspect Git diffs,
+  and insert file or line references into the composer.
+- Select existing folders and Git worktrees. Sessions remain readable when their
+  original working folder disappears. See [Worktrees](docs/worktrees.md).
+- Manage Pi skills and plugin packages globally or for a trusted project.
+  Receive completion notifications and extension input requests in the browser.
+
+web-pi does not manage Git worktrees or branches, configure provider accounts,
+add a separate subagent runtime, or update itself through the browser. Configure
+providers in the Pi terminal. The SDK resolves credentials for live sessions;
+web-pi has no credential-management page.
+
+This implementation reuses the visual design and applicable behavior of
+[mjakl/pi-web](https://github.com/mjakl/pi-web), a fork of
+[agegr/pi-web](https://github.com/agegr/pi-web). It is not a promise of complete
+feature or API parity. [Behavior and limitations](docs/behavior.md) describes
+what is retained and what remains unfinished.
 
 ## Install and run
 
-Install Pi first and keep it on your `PATH`. web-pi compiles and runs against
-that install rather than a pinned copy: it links `@earendil-works/*` to the `pi`
-you already have, so the CLI and the browser never disagree about the session
-format. Node 24 or newer is required.
+Use **Node 24 or newer**, with a separately installed `pi` on `PATH`. Host Pi
+executable discovery is POSIX-only; Windows is not currently supported.
+Configure a model provider in the Pi terminal before starting real turns.
 
-web-pi is not on npm. Build a tarball from a checkout and install that:
+web-pi links the host installation's `pi-coding-agent`, `pi-ai`,
+`pi-agent-core`, and `pi-tui` packages rather than installing a pinned SDK. A
+generic version-manager shim that is not inside Pi's package is rejected; use
+the manager's active tool PATH. web-pi does not require `pi-server`.
+
+web-pi is not on npm. From a checkout, install the development tools and build a
+tarball:
 
 ```bash
-just build && pnpm pack          # web-pi-<version>.tgz
+mise install
+pnpm install --frozen-lockfile   # pnpm 12.3.4; needs pi on PATH
+just doctor                    # reports the resolved Pi installation
+just build
+pnpm pack                      # web-pi-0.1.0.tgz
 npm install -g ./web-pi-0.1.0.tgz
-web-pi                           # http://127.0.0.1:30142
+web-pi                         # http://127.0.0.1:30142
 ```
 
-The `web-pi` bin relinks the Pi SDK into its own install whenever the links are
-missing or point at an older Pi, so upgrading Pi needs nothing but a restart.
+The installed bin relinks the SDK on startup. Keep its installation directory
+writable; after upgrading Pi, restart web-pi. Documentation and screenshots ship
+inside the tarball so these relative links also work in an installed package.
 
 | Flag               | Default                       |
 | ------------------ | ----------------------------- |
@@ -34,50 +122,61 @@ missing or point at an older Pi, so upgrading Pi needs nothing but a restart.
 | `--port <number>`  | `30142`, or `WEB_PI_PORT`     |
 | `--lan`            | bind `0.0.0.0`; read Security |
 | `--runtime <name>` | `pi`, or `fake` for a demo    |
-| `--help`           | the flags                     |
-| `--version`        | the web-pi and Pi versions    |
+| `--help`           | show flags                    |
+| `--version`        | show web-pi and Pi versions   |
 
 Environment: `WEB_PI_HOST`, `WEB_PI_PORT`, `WEB_PI_RUNTIME`,
-`WEB_PI_DEFAULT_CWD` (the folder new sessions start in, home by default),
-`PI_CODING_AGENT_DIR` (Pi's agent directory). Server-side HTTP honours
-`HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`.
+`WEB_PI_DEFAULT_CWD` (home by default), and `PI_CODING_AGENT_DIR` (defaults to
+Pi's agent directory). Server-side HTTP honors `HTTP_PROXY`, `HTTPS_PROXY`, and
+`NO_PROXY`.
 
-To run it as a service, see [docs/deployment.md](docs/deployment.md).
+Browser baseline: **Chrome/Edge 125+, Firefox 147+, Safari 26+**. Native
+popovers, CSS anchor positioning, `@starting-style`, `:has()`, and
+`field-sizing` are required, not optional enhancements. These are the declared
+support floors, not a claim that every minimum browser was exercised for this
+change.
 
 ## Security
 
-web-pi runs agent tools and project commands. It has no accounts, no login, and
-no built-in authentication, and it does not check the `Host` or `Origin` header.
-Keep it on `127.0.0.1` unless you have a trusted network or an external access
-layer in front of it; `--lan` prints a warning for the same reason.
+web-pi runs agent tools and project commands. It has no accounts, login, or
+built-in authentication, and does not check `Host` or `Origin` headers. Keep it
+on `127.0.0.1` unless you have a trusted network or an external access-control
+layer. `--lan` prints a warning for the same reason.
 
 Project resources can run local code. Extensions, skills, and other
-trust-requiring resources of a project stay dormant until you trust that
-project. Trust only repositories you wrote or have read.
+trust-requiring project resources stay dormant until you trust the project.
+Trust only repositories you control or have reviewed.
+
+File-content access goes through the server's allowed-root policy. The folder
+picker can list other readable directory names; selecting a folder grants access
+to it for the server process. This file boundary does not sandbox agent tools.
+See [Behavior](docs/behavior.md) and [Deployment](docs/deployment.md), including
+the restrictions on concurrent access to one session.
 
 ## Work on it
 
+After the checkout setup above:
+
 ```bash
-mise install
-pnpm install         # links the Pi SDK; needs `pi` on PATH
-just doctor          # which pi this checkout resolved
-just dev             # http://127.0.0.1:30142, with reload and asset watchers
+just dev              # http://127.0.0.1:30142, sources and asset watchers
+just qa               # format/fix, lint, typecheck, tests
+just ci               # non-fixing checks plus installed-package smoke
+just test-one tests/web
 ```
 
-`just dev` runs the TypeScript sources through `tsx` and watches the stylesheet
-and the client bundle. `just build` produces what the package ships — `dist/`
-from esbuild plus the built assets in `static/` — and `just start` serves it the
-way the installed bin does. Tests always run against the sources, never against
-`dist/`.
+`just build` writes the bundled server in `dist/` and built assets in `static/`.
+Tests run against sources; `just smoke` packs the build, installs it into a
+throwaway consumer, and serves a fictional session from the installed bin. After
+upgrading Pi, `just link-pi` or a recipe that runs code refreshes the links.
 
-After upgrading Pi, run `just link-pi` (or any `just` recipe) to repoint the
-links.
+Contributor guidance lives in `AGENTS.md` in the checkout, with `CLAUDE.md` as
+its symlink. Framework-independent workflows live in `.agents/skills`, with
+compatibility links under `.claude/skills`. See
+[Architecture](docs/architecture.md) for ownership and
+[Screenshots](docs/screenshots.md) for the capture fixture.
 
-## Checks
+## License
 
-`just qa` applies fixes then runs lint, typecheck, and tests. `just ci` runs the
-same without writing, plus `just smoke`, which packs the package, installs the
-tarball into a throwaway project, and serves a fixture session from it.
-`just test-one tests/web` runs a subset.
-
-See `AGENTS.md` for boundaries and `docs/architecture.md` for the design.
+[MIT](LICENSE), copyright Michael Jakl. Copied pi-web CSS, code, and adapted
+supporting material retain [pi-web's MIT notice](LICENSE.pi-web), copyright
+agegr. Preserved workflow skills carry their own licenses and provenance.
