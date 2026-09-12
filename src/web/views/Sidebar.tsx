@@ -154,7 +154,7 @@ export function RenameRow({ summary, metadata }: Row) {
   );
 }
 
-/** One sidebar row. Without metadata it loads its own when revealed. */
+/** One sidebar row. Without metadata it loads its own when scrolled into view. */
 export function SessionRow({
   summary,
   metadata,
@@ -176,7 +176,9 @@ export function SessionRow({
       {...(pending
         ? {
             "hx-get": `/sessions/${id}/row${activeId === undefined ? "" : `?active=${encodeURIComponent(activeId)}`}`,
-            "hx-trigger": "revealed",
+            // `intersect`, not `revealed`: htmx only re-checks `revealed` on
+            // window scroll, and #session-list scrolls on its own.
+            "hx-trigger": "intersect once",
             "hx-swap": "outerHTML",
           }
         : {})}

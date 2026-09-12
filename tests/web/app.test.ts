@@ -299,7 +299,9 @@ describe("web app", () => {
     const list = await (await app.request("/")).text();
     // The listing itself stays header-only: the row asks for its own counts.
     expect(list).toContain('hx-get="/sessions/s1/row"');
-    expect(list).toContain('hx-trigger="revealed"');
+    // An IntersectionObserver trigger: htmx's `revealed` only re-checks on
+    // window scroll, and #session-list scrolls on its own.
+    expect(list).toContain('hx-trigger="intersect once"');
     expect(list).not.toContain("msgs");
 
     const row = await (await app.request("/sessions/s1/row")).text();
@@ -307,6 +309,40 @@ describe("web app", () => {
     expect(row).toContain("2 msgs");
     expect(row).toContain("Activate");
     expect(row).toContain("Delete");
+    // The hydrated row replaces the pending one and asks for nothing more.
+    expect(row).not.toContain("hx-trigger=");
+    expect(row).not.toContain('hx-get="/sessions/s1/row"');
+    // A row whose session went away while it waited answers with a 404,
+    // which htmx leaves unswapped.
+    expect((await app.request("/sessions/gone/row")).status).toBe(404);
+  });
+
+  it("pages the list, and the next page's rows hydrate the same way", async () => {
+    const { app, world } = testApp();
+    for (let index = 0; index < 60; index += 1) {
+      const id = `p${String(index)}`;
+      world.store.set(id, {
+        summary: {
+          id,
+          cwd: "/repo/one",
+          createdAt: "2026-08-01T00:00:00.000Z",
+          modifiedAt: `2026-08-01T00:${String(index).padStart(2, "0")}:00.000Z`,
+          fileSize: 1,
+        },
+        entries: [userEntry(`${id}-u`, null, `prompt ${id}`)],
+      });
+    }
+    const page = await (await app.request("/")).text();
+    const sentinel = /hx-get="([^"]*\/sidebar\/rows[^"]*)"/.exec(page)?.[1];
+    expect(sentinel).toBeDefined();
+    expect(page).toContain("Loading more sessions…");
+    // The second page: pending rows with the same observer trigger.
+    const next = await (
+      await app.request((sentinel ?? "").replaceAll("&amp;", "&"))
+    ).text();
+    expect(next).toContain('hx-get="/sessions/p0/row"');
+    expect(next).toContain('hx-trigger="intersect once"');
+    expect(next).not.toContain("Loading more sessions…");
   });
 
   it("renames a session and answers with the row", async () => {
@@ -666,6 +702,8 @@ describe("web app", () => {
     expect(list).toContain('hx-swap-oob="innerHTML"');
     expect(list).toContain('id="row-new-1"');
     expect(list).toContain('data-status="Agent running…"');
+    // The pushed rows are pending, and observe their own way into view.
+    expect(list).toContain('hx-trigger="intersect once"');
     // The page the browser is sent to, rendered while the turn still runs,
     // shows the same row selected.
     const page = await (await app.request("/sessions/new-1")).text();
