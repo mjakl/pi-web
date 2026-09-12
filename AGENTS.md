@@ -130,7 +130,10 @@ a root through the allowed-root flow there, never a check in a route handler.
   in `src/adapters/fake/index.ts`; no Pi installation is needed. A new port
   method lands there in the same change, or every web test stops running.
 - Tests that write session files build them with `SessionManager` in a `mkdtemp`
-  directory and pass that as the agent directory.
+  directory and pass that as the agent directory. A test that loads skills or
+  starts a session goes through `tests/adapters/temp-agent.ts`, which also
+  points `HOME` at the temp root: the SDK reads `~/.agents/skills` from `HOME`
+  whatever agent directory it is given.
 - `tests/client` mounts the markup a view renders and dispatches DOM events at
   the client module; `setup.ts` fakes htmx and undoes every listener after each
   test. happy-dom has no layout, so a test that needs geometry sets it.

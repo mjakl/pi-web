@@ -1,26 +1,25 @@
 import { createPiProjectTrust } from "@adapters/pi/project-trust";
 import { createPiSkills } from "@adapters/pi/skills";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createTempAgent, type TempAgent } from "./temp-agent.ts";
 
 // The registry and update paths of the skills adapter, with fetch and npx
 // answered by the test: nothing here reaches skills.sh, GitHub, or npm, and
 // the global lock file is redirected through XDG_STATE_HOME into the temp
-// directory. Listing and the frontmatter toggle live in config-adapters.
+// directory, which is also HOME. Listing and the frontmatter toggle live in
+// config-adapters.
 
+let temp: TempAgent;
 let root: string;
 let agentDir: string;
 let project: string;
 const env = { ...process.env };
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "web-pi-skills-"));
-  agentDir = join(root, "agent");
-  project = join(root, "project");
-  await mkdir(agentDir, { recursive: true });
-  await mkdir(project, { recursive: true });
+  temp = await createTempAgent("web-pi-skills-");
+  ({ root, agentDir, project } = temp);
   process.env["XDG_STATE_HOME"] = join(root, "state");
   delete process.env["SKILLS_API_URL"];
   delete process.env["GITHUB_TOKEN"];
@@ -28,8 +27,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  await temp.dispose();
   process.env = { ...env };
-  await rm(root, { recursive: true, force: true });
 });
 
 const HASH_A = "a".repeat(40);
@@ -54,13 +53,15 @@ function fakeFetch(routes: Record<string, () => Response>) {
 }
 
 async function writeSkill(
-  scope: "global" | "project",
+  scope: "global" | "home" | "project",
   name: string,
 ): Promise<void> {
   const dir =
     scope === "global"
       ? join(agentDir, "skills", name)
-      : join(project, ".pi", "skills", name);
+      : scope === "home"
+        ? join(root, ".agents", "skills", name)
+        : join(project, ".pi", "skills", name);
   await mkdir(dir, { recursive: true });
   await writeFile(
     join(dir, "SKILL.md"),
@@ -88,6 +89,15 @@ const githubEntry = {
 };
 
 describe("listing", () => {
+  it("reads ~/.agents/skills from the test's HOME, never the developer's", async () => {
+    await writeSkill("global", "changelog");
+    await writeSkill("home", "from-home");
+    const listed = await createPiSkills({ agentDir }).list(project);
+    expect(
+      listed.skills.filter((s) => s.scope === "global").map((s) => s.name),
+    ).toEqual(["changelog", "from-home"]);
+  });
+
   it("annotates a global skill from the lock file XDG_STATE_HOME points at", async () => {
     await writeSkill("global", "changelog");
     await writeLock("global", { Changelog: githubEntry });

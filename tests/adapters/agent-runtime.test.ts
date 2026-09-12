@@ -200,6 +200,12 @@ describe("session commands", () => {
       join(h.agentDir, "skills", "tidy", "SKILL.md"),
       "---\nname: tidy\ndescription: Tidy up\ndisable-model-invocation: true\n---\nBody\n",
     );
+    // ~/.agents/skills is the harness's HOME, not the developer's.
+    await mkdir(join(h.root, ".agents", "skills", "home"), { recursive: true });
+    await writeFile(
+      join(h.root, ".agents", "skills", "home", "SKILL.md"),
+      "---\nname: home\ndescription: From home\n---\nBody\n",
+    );
     const session = await h.open();
     expect(session.commands()).toEqual(
       expect.arrayContaining([
@@ -213,6 +219,13 @@ describe("session commands", () => {
         },
       ]),
     );
+    expect(
+      session
+        .commands()
+        .filter((command) => command.source === "skill")
+        .map((command) => command.name)
+        .toSorted(),
+    ).toEqual(["skill:home", "skill:tidy"]);
     const tools = session.toolDefinitions();
     expect(tools.find((tool) => tool.name === "read")).toMatchObject({
       active: true,

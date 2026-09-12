@@ -20,15 +20,15 @@ import type {
   ExtensionAPI,
   InlineExtension,
 } from "@earendil-works/pi-coding-agent";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createTempAgent } from "./temp-agent.ts";
 
 // A real AgentSession driven offline: an inline extension registers a provider
 // whose streamSimple() plays scripted replies, so every SDK event the adapter
 // choreographs — partials, tool execution, compaction, abort — is the SDK's
-// own. Each harness owns a temp agent directory and working folder; nothing
-// here can reach ~/.pi/agent.
+// own. Each harness owns a temp agent directory, working folder and HOME;
+// nothing here can reach ~/.pi/agent or ~/.agents.
 
 export const PROVIDER = "scripted";
 export const MODEL_ID = "scripted-1";
@@ -245,11 +245,8 @@ export async function createHarness(
     draftIdleMs?: number;
   } = {},
 ) {
-  const root = await mkdtemp(join(tmpdir(), "web-pi-agent-"));
-  const agentDir = join(root, "agent");
-  const cwd = join(root, "project");
-  await mkdir(agentDir, { recursive: true });
-  await mkdir(cwd, { recursive: true });
+  const temp = await createTempAgent("web-pi-agent-");
+  const { root, agentDir, project: cwd } = temp;
   await writeFile(
     join(agentDir, "settings.json"),
     JSON.stringify({
@@ -323,7 +320,7 @@ export async function createHarness(
       for (const session of opened) {
         if (runtime.get(session.id)) await session.stop();
       }
-      await rm(root, { recursive: true, force: true });
+      await temp.dispose();
     },
   };
 }

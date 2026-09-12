@@ -3,36 +3,26 @@ import { createPiPackages } from "@adapters/pi/packages";
 import { createPiProjectTrust } from "@adapters/pi/project-trust";
 import { createPiProjectResources } from "@adapters/pi/resources";
 import { createPiSkills } from "@adapters/pi/skills";
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createTempAgent, type TempAgent } from "./temp-agent.ts";
 
 // Everything here writes: settings, trust, skill frontmatter. Each test gets
-// its own agent directory under the system temp folder, so a run can never
-// touch the reader's own `~/.pi/agent`.
+// its own agent directory and HOME under the system temp folder, so a run can
+// never touch the reader's own `~/.pi/agent` or `~/.agents`.
 
-let root: string;
+let temp: TempAgent;
 let agentDir: string;
 let project: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "web-pi-config-"));
-  agentDir = join(root, "agent");
-  project = join(root, "project");
-  await mkdir(agentDir, { recursive: true });
-  await mkdir(project, { recursive: true });
+  temp = await createTempAgent("web-pi-config-");
+  ({ agentDir, project } = temp);
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await temp.dispose();
 });
 
 describe("the directory browser", () => {
