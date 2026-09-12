@@ -129,6 +129,7 @@ describe("custom UI host", () => {
 
   it("closes a component whose input handler throws, and says why", () => {
     const host = createCustomUiHost();
+    const closed = vi.fn();
     const id = host.open(
       {
         render: () => ["x"],
@@ -137,9 +138,22 @@ describe("custom UI host", () => {
         },
       },
       40,
+      closed,
     );
     expect(host.input(id, "+")).toEqual({ failed: "boom" });
     expect(host.has(id)).toBe(false);
+    // Whoever waits on the UI hears that the host closed it.
+    expect(closed).toHaveBeenCalledOnce();
+  });
+
+  it("tells every open UI it was closed when all are closed at once", () => {
+    const host = createCustomUiHost();
+    const closed = vi.fn();
+    host.open({ render: () => ["a"] }, 40, closed);
+    host.open({ render: () => ["b"] }, 40, closed);
+    expect(host.closeAll()).toHaveLength(2);
+    expect(closed).toHaveBeenCalledTimes(2);
+    expect(host.frame()).toBeNull();
   });
 
   it("shows a failed render instead of losing the panel", () => {
