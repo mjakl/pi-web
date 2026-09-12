@@ -57,37 +57,49 @@ ended, for the one render that appends it to the log), `status`, `usage`, and
 runtime moves the boundary to the end of the branch, so the messages belong to
 `items` from then on and any later re-render — a star, a rename, an extension
 status — cannot put them on the page a second time. Page load, HTMX responses,
-and SSE events all render the same three views:
+and SSE events reuse the same views.
 
-- `#messages` receives settled turn items (`sse-swap="settled"`, `beforeend`),
-  with the re-rendered conversation rail riding along out of band;
-- `#turn` receives the whole current turn (`sse-swap="turn"`, `innerHTML`);
+The session stream sends unnamed HTML messages containing native HTMX 4
+`hx-partial` elements with explicit targets and swap modes:
+
+- `#messages` receives settled turn items (`beforeend`), with the re-rendered
+  conversation rail riding along out of band;
+- `#turn` receives the whole current turn (`innerHTML`);
 - `#status` receives model, state, queue, compaction, and the context badge;
-- `#shelf` receives the extension status line and widgets (`sse-swap="shelf"`),
-  and only when one of them actually changed, because it holds an open panel;
+- `#shelf` receives the extension status line and widgets (`outerHTML`), and
+  only when one of them actually changed, because it holds an open panel;
 - `#extension-dialog` receives the modal an extension is waiting on, and
   `#custom-ui` the panel around a terminal component — both only when the
   request itself changed, or a re-render would wipe what the reader typed;
   `#custom-frame` inside the panel takes every new frame, so the keyboard stays
   where it is;
-- `#toasts` receives notices (`sse-swap="notice"`, `beforeend`),
-  `#editor-insert` text an extension put in the composer, and `#session-done`
-  the id of a run that just finished.
+- `#toasts` receives notices (`beforeend`), and `#editor-insert` receives text
+  an extension put in the composer.
 
-The SSE endpoint coalesces activity into one re-render per 100 ms. Because the
-turn is re-rendered from the snapshot rather than patched from deltas, a missed
-event costs nothing: the next render is complete.
+Empty partials explicitly clear the current turn and closed extension UI. Named
+events carry semantic data in `event.detail.data`: `settled` follows the
+messages append and turn clear, and `done` carries the completed session ID.
+Client region effects use per-task `htmx:after:settle`, including OOB updates,
+rather than the request-source swap batch.
+
+The SSE endpoint coalesces activity into one re-render per 100 ms. A later
+activity render replaces the entire current turn. Reconnection does not replay
+missed settled turns or notices; that existing limitation remains. The bundled
+SSE extension has `pauseOnBackground: false` so hiding a tab does not introduce
+additional disconnects. Ordinary requests retain the previous unlimited timeout
+for compaction and package actions. Inherited 4xx/5xx no-swap rules preserve
+error toasts without replacing the requested region.
 
 A second stream, `GET /events`, belongs to the sidebar rather than to one
-session. It pushes a re-rendered row (`hx-swap-oob`) whenever a session of the
+session. It pushes a re-rendered row (`hx-partial`) whenever a session of the
 project on screen starts, finishes, or stops, the whole list when such a session
 appears that has no row yet, the project selector whenever the running counts
-change, and a `finished` event carrying the session id and its project. The
-browser turns that into an unread dot in `localStorage` — on the row when the
-session is listed, on the project when it is not; it replaces pi-web's 2.5 s
-polling. The stream reads the project cookie at connect time, and the selector,
-the list and the stream live in one `#project-nav` element, so switching project
-replaces all three and reconnects.
+change, and a named `finished` event carrying JSON with the session id and its
+project. The browser turns that into an unread dot in `localStorage` — on the
+row when the session is listed, on the project when it is not; it replaces
+pi-web's 2.5 s polling. The stream reads the project cookie at connect time, and
+the selector, the list and the stream live in one `#project-nav` element, so
+switching project replaces all three and reconnects.
 
 `src/core/transcript.ts` projects one branch into items, and `src/core/turns.ts`
 groups those items into turns, pages them, and writes the activity line. Every
@@ -331,14 +343,14 @@ composition root and the only importer of Pi adapters.
   entry in that session that references the file.
 - **The file panel is server-rendered; the browser keeps only the tabs.** Each
   directory is fetched when it is opened (`hx-get` per node), the changes list
-  and the tree re-render when a turn settles (`sse:settled`), and the viewer is
-  one fragment per mode. `src/web/client/files.ts` owns what the server cannot
-  know: the panel width (`pi-right-panel-width`), which paths are open, each
-  tab's mode, wrap and scroll position, the `EventSource` on the active tab, and
-  the text selection a line-range mention comes from. Syntax colouring for a
-  file happens on the server (`src/web/syntax.ts`, shared with the transcript's
-  browser-side highlighter), because a whole file has to be split into numbered
-  rows and highlight.js colours a block, not a line.
+  and the tree re-render when a turn settles (`settled from:body`), and the
+  viewer is one fragment per mode. `src/web/client/files.ts` owns what the
+  server cannot know: the panel width (`pi-right-panel-width`), which paths are
+  open, each tab's mode, wrap and scroll position, the `EventSource` on the
+  active tab, and the text selection a line-range mention comes from. Syntax
+  colouring for a file happens on the server (`src/web/syntax.ts`, shared with
+  the transcript's browser-side highlighter), because a whole file has to be
+  split into numbered rows and highlight.js colours a block, not a line.
 - **A settled tool call's body is fetched when it is opened.** A card is
   collapsed, so its arguments, output and diff do not have to be on the page:
   they arrive from `GET /sessions/:id/entries/:entryId/tool-result/:callId` on

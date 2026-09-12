@@ -120,21 +120,15 @@ function pageTitle(): string {
 }
 
 function setUpCompletion(): void {
-  document.body.addEventListener("htmx:afterSwap", (event) => {
+  document.body.addEventListener("done", (event) => {
+    const id = (event as CustomEvent<{ data?: unknown }>).detail?.data;
+    if (typeof id !== "string" || !id.trim()) return;
+    playDone();
+    if (unwatched()) notify(pageTitle(), "Task finished.", `web-pi:done:${id}`);
+  });
+  document.body.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.id === "session-done") {
-      playDone();
-      if (unwatched()) {
-        notify(
-          pageTitle(),
-          "Task finished.",
-          `web-pi:done:${target.textContent ?? ""}`,
-        );
-      }
-      target.replaceChildren();
-      return;
-    }
     // A dialog an extension just opened is the other thing worth interrupting
     // for: the turn is blocked until someone answers it.
     if (target.id === "extension-dialog" && target.querySelector("dialog")) {
@@ -156,20 +150,20 @@ function setUpCompletion(): void {
  * skips the one on screen, and so does this.
  */
 function setUpBackgroundCompletion(): void {
-  document
-    .getElementById("session-finished")
-    ?.addEventListener("htmx:afterSwap", (event) => {
-      const text = (event.target as HTMLElement).textContent?.trim() ?? "";
-      let finished: { id?: string } = {};
-      try {
-        finished = JSON.parse(text) as typeof finished;
-      } catch {
-        return;
-      }
-      const current =
-        document.querySelector("main")?.getAttribute("data-session-id") ?? "";
-      if (finished.id && finished.id !== current) playDone();
-    });
+  document.body.addEventListener("finished", (event) => {
+    const text = (event as CustomEvent<{ data?: unknown }>).detail?.data;
+    if (typeof text !== "string") return;
+    let finished: { id?: string } = {};
+    try {
+      finished = JSON.parse(text) as typeof finished;
+    } catch {
+      return;
+    }
+    if (!finished || typeof finished.id !== "string") return;
+    const current =
+      document.querySelector("main")?.getAttribute("data-session-id") ?? "";
+    if (finished.id && finished.id !== current) playDone();
+  });
 }
 
 // Which session was last open in which workspace. Switching project reopens

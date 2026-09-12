@@ -96,7 +96,7 @@ function setUpCustomUi(): void {
   });
   // A panel that has just appeared takes focus: it is the only thing on the
   // page that wants the keyboard.
-  document.body.addEventListener("htmx:afterSwap", (event) => {
+  document.body.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (target instanceof Element && target.id === "custom-ui") {
       document.getElementById("custom-frame")?.focus();
@@ -106,7 +106,7 @@ function setUpCustomUi(): void {
 
 /** `setEditorText` and `pasteToEditor`, both an insert at the cursor. */
 function setUpEditorInserts(): void {
-  document.body.addEventListener("htmx:afterSwap", (event) => {
+  document.body.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (!(target instanceof Element) || target.id !== "editor-insert") return;
     const text =
@@ -135,7 +135,7 @@ function setUpExtensionTitle(): void {
     const title = document.getElementById("extension-title")?.dataset["title"];
     if (title) document.title = title;
   };
-  document.body.addEventListener("htmx:afterSwap", (event) => {
+  document.body.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (target instanceof Element && target.id === "status") apply();
   });

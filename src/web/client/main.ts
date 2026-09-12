@@ -7,7 +7,9 @@ import { setUpSidebar } from "./sidebar.ts";
 import { setUpTranscript } from "./transcript.ts";
 import { setUpComposer } from "./composer.ts";
 import { setUpFiles } from "./files.ts";
+import { setUpRequestFields } from "./htmx.ts";
 
+setUpRequestFields();
 setUpShell();
 setUpSidebar();
 setUpTranscript();

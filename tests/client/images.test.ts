@@ -169,7 +169,7 @@ describe("where images come from", () => {
       `<span data-image="${btoa("png bytes")}" data-mime="image/png"></span>` +
       '<span data-image="" data-mime="image/png"></span>' +
       '<span data-image="%%%" data-mime="image/png"></span>';
-    htmxEvent(document.body, "htmx:oobAfterSwap");
+    htmxEvent(document.body, "htmx:after:settle");
     await flush();
     expect(images.count()).toBe(1);
     expect(input().files?.[0]?.name).toBe("recalled.png");

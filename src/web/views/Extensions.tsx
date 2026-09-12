@@ -191,7 +191,7 @@ export function ExtensionDialog({
   dialog: DialogRequest | null;
 }) {
   return (
-    <div id="extension-dialog" sse-swap="dialog" hx-swap="innerHTML">
+    <div id="extension-dialog">
       <ExtensionDialogBody sessionId={sessionId} dialog={dialog} />
     </div>
   );
@@ -244,8 +244,6 @@ export function CustomPanelBody({
         <pre
           id="custom-frame"
           style="margin:0; padding:14px; max-height:calc(min(760px, 100vh - 40px) - 48px); overflow:auto; background:var(--bg-panel); color:var(--text); font-family:var(--font-mono); font-size:13px; line-height:1.45; white-space:pre"
-          sse-swap="custom-frame"
-          hx-swap="innerHTML"
           tabindex={0}
           role="application"
           aria-label="Extension terminal UI"
@@ -265,7 +263,7 @@ export function CustomPanel({
   frame: CustomFrame | null;
 }) {
   return (
-    <div id="custom-ui" sse-swap="custom" hx-swap="innerHTML">
+    <div id="custom-ui">
       <CustomPanelBody sessionId={sessionId} frame={frame} />
     </div>
   );

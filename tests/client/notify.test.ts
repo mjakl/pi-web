@@ -36,17 +36,15 @@ function notifications(
 async function load(html = ""): Promise<void> {
   mount(
     `<main data-session-id="s1"><h1 data-page-title> Fix the tests </h1><div id="toasts"></div>` +
-      `<div id="session-done" hidden></div><div id="extension-dialog"></div>` +
-      `<div id="session-finished" hidden></div>${html}</main>`,
+      `<div id="session-stream"></div><div id="extension-dialog"></div>` +
+      `<div id="sidebar-stream"></div>${html}</main>`,
   );
   const { setUpNotifications } = await import("@web/client/notify");
   setUpNotifications();
 }
 
 function done(id = "s1"): void {
-  const target = byId("session-done");
-  target.textContent = id;
-  htmxEvent(target, "htmx:afterSwap");
+  htmxEvent(byId("session-stream"), "done", { data: id });
 }
 
 function unwatched(): void {
@@ -59,7 +57,6 @@ describe("the tone", () => {
     document.dispatchEvent(new Event("pointerdown"));
     done();
     expect(FakeAudioContext.played).toBe(2);
-    expect(byId("session-done").childNodes).toHaveLength(0);
   });
 
   it("stays quiet when the preference is off", async () => {
@@ -73,15 +70,15 @@ describe("the tone", () => {
   it("plays for a run that finished in another session, not for this one", async () => {
     await load();
     const finished = (id: string) => {
-      byId("session-finished").textContent = JSON.stringify({ id });
-      htmxEvent(byId("session-finished"), "htmx:afterSwap");
+      htmxEvent(byId("sidebar-stream"), "finished", {
+        data: JSON.stringify({ id, project: "/repo/one" }),
+      });
     };
     finished("s1");
     expect(FakeAudioContext.played).toBe(0);
     finished("s2");
     expect(FakeAudioContext.played).toBe(2);
-    byId("session-finished").textContent = "not json";
-    htmxEvent(byId("session-finished"), "htmx:afterSwap");
+    htmxEvent(byId("sidebar-stream"), "finished", { data: "not json" });
     expect(FakeAudioContext.played).toBe(2);
   });
 });
@@ -169,7 +166,7 @@ describe("the notification", () => {
     unwatched();
     byId("extension-dialog").innerHTML =
       "<dialog><h3>Pick a branch</h3></dialog>";
-    htmxEvent(byId("extension-dialog"), "htmx:afterSwap");
+    htmxEvent(byId("extension-dialog"), "htmx:after:settle");
     await flush();
     expect(FakeAudioContext.played).toBe(2);
     expect(notification.shown[0]).toEqual({
@@ -177,7 +174,7 @@ describe("the notification", () => {
       options: { body: "Pick a branch", tag: "web-pi:extension-ui" },
     });
     byId("extension-dialog").innerHTML = "";
-    htmxEvent(byId("extension-dialog"), "htmx:afterSwap");
+    htmxEvent(byId("extension-dialog"), "htmx:after:settle");
     expect(FakeAudioContext.played).toBe(2);
   });
 });

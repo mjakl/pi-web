@@ -82,7 +82,7 @@ export function ShelfBody({
   const line = status ? statusLine(status.statuses) : "";
   const widgets = status?.widgets ?? [];
   if (line === "" && widgets.length === 0) {
-    return <div id="shelf" sse-swap="shelf" hx-swap="outerHTML" hidden />;
+    return <div id="shelf" hidden />;
   }
   const changed = new Set(updated ?? []);
   // pi-web keeps the open panel in React state. The server re-renders this
@@ -96,8 +96,6 @@ export function ShelfBody({
     <div
       id="shelf"
       class={`extension-status-shelf${widgets.length > 0 ? " has-widgets" : ""}${line === "" ? "" : " has-status"}`}
-      sse-swap="shelf"
-      hx-swap="outerHTML"
     >
       {widgets.length === 0 ? null : (
         <>

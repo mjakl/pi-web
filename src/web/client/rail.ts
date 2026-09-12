@@ -1,3 +1,4 @@
+import type { Htmx } from "htmx.org";
 // The conversation rail's browser half: which mark the reader is next to,
 // the hover preview, click-or-drag to scroll, and the branch expansion.
 // Positions and marks come from the server; this only measures the transcript.
@@ -10,10 +11,6 @@ const LOCK_MS = 1600;
 const HOVER_MS = 180;
 /** pi-web's MINIMAP_WIDTH: past it the pointer is in the branch graph. */
 const RAIL_WIDTH = 36;
-
-type Htmx = {
-  ajax(verb: string, path: string, context: unknown): Promise<void>;
-};
 
 function htmx(): Htmx | undefined {
   return (globalThis as { htmx?: Htmx }).htmx;
@@ -124,7 +121,7 @@ export function setUpRail(): void {
     });
   };
   view.addEventListener("scroll", schedule, { passive: true });
-  document.body.addEventListener("htmx:afterSwap", schedule);
+  document.body.addEventListener("htmx:after:settle", schedule);
   // Opening a disclosure in the transcript moves the messages without a
   // scroll or a swap, so the reading line ends up beside a different mark.
   // pi-web watches the same two boxes (ChatMinimap.tsx, ResizeObserver).

@@ -114,7 +114,7 @@ export function setUpTheme(): void {
   });
   paintOptions(storedPreference());
   // Settings arrives as a fragment, so its radio group is painted on arrival.
-  document.body.addEventListener("htmx:afterSwap", () => {
+  document.body.addEventListener("htmx:after:settle", () => {
     paintOptions(storedPreference());
   });
 }

@@ -1,3 +1,4 @@
+import { requestContext } from "./htmx.ts";
 // The settings that belong to this browser rather than to Pi's configuration.
 // Every accessor treats storage as optional: a private window still gets a
 // working settings page.
@@ -77,7 +78,7 @@ const LAST_CWD_KEY = "web-pi:last-cwd";
  * honest: it still shows the folder the server actually opened.
  */
 export function setUpFolderMemory(): void {
-  document.body.addEventListener("htmx:afterSwap", (event) => {
+  document.body.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (!(target instanceof Element) || target.id !== "dialogs") return;
     const input = target.querySelector<HTMLInputElement>("#directory-path");
@@ -86,15 +87,15 @@ export function setUpFolderMemory(): void {
       input.value = remembered;
     }
   });
-  document.body.addEventListener("htmx:configRequest", (event) => {
-    const detail = (
-      event as CustomEvent<{
-        path?: string;
-        parameters?: Record<string, unknown>;
-      }>
-    ).detail;
-    if (detail.path !== "/workspaces/validate") return;
-    const cwd = detail.parameters?.["cwd"];
+  document.body.addEventListener("htmx:config:request", (event) => {
+    const { request } = requestContext(event);
+    if (
+      new URL(request.action, document.baseURI).pathname !==
+      "/workspaces/validate"
+    )
+      return;
+    const cwd =
+      request.body instanceof FormData ? request.body.get("cwd") : null;
     if (typeof cwd === "string" && cwd !== "") write(LAST_CWD_KEY, cwd);
   });
 }

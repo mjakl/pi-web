@@ -66,7 +66,7 @@ describe("theme", () => {
     const { setUpTheme } = await load();
     setUpTheme();
     mount(OPTIONS);
-    htmxEvent(document.body, "htmx:afterSwap");
+    htmxEvent(document.body, "htmx:after:settle");
     expect(
       document
         .querySelector('[data-theme-option="light"]')

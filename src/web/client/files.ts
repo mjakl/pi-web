@@ -1,3 +1,5 @@
+import type { Htmx } from "htmx.org";
+import { requestContext } from "./htmx.ts";
 import { buildAtInsertText } from "@core/composer";
 import { catppuccinIcon } from "@core/file-types";
 import { replaceRange, textarea } from "./editor.ts";
@@ -14,11 +16,6 @@ const MIN_WIDTH = 300;
 const MAX_WIDTH = 1200;
 
 const CATPPUCCIN_ROOT = "/static/icons/catppuccin";
-
-type Htmx = {
-  ajax(verb: string, path: string, context: unknown): Promise<void>;
-  process(element: Element): void;
-};
 
 function htmx(): Htmx | undefined {
   return (globalThis as { htmx?: Htmx }).htmx;
@@ -186,6 +183,7 @@ function loadViewer(path: string, mode?: string): void {
   const wanted = mode ?? state?.mode;
   if (wanted !== undefined && wanted !== "") query.set("mode", wanted);
   const target = document.getElementById("file-view");
+  if (!target) return;
   const id = (requestId += 1);
   void htmx()
     ?.ajax("GET", `/files/view?${query.toString()}`, {
@@ -675,18 +673,19 @@ export function setUpFiles(): void {
 
   // The explorer refreshes itself on every settled turn; keep the changed
   // files showing when that is what the reader asked for.
-  document.body.addEventListener("htmx:configRequest", (event) => {
-    const detail = (
-      event as CustomEvent<{ path?: string; parameters?: unknown }>
-    ).detail;
-    if (detail.path?.startsWith("/files/explorer") !== true) return;
-    if (showingChanges()) {
-      (detail.parameters as Record<string, string>)["changes"] = "1";
+  document.body.addEventListener("htmx:config:request", (event) => {
+    const { request } = requestContext(event);
+    if (
+      new URL(request.action, document.baseURI).pathname !== "/files/explorer"
+    )
+      return;
+    if (showingChanges() && request.body instanceof FormData) {
+      request.body.set("changes", "1");
     }
   });
 
   // A refreshed tree loses focus positions; the first row becomes the entry.
-  document.body.addEventListener("htmx:afterSwap", (event) => {
+  document.body.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.id === "file-explorer" || target.id === "file-tree") {

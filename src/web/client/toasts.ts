@@ -1,4 +1,4 @@
-// The notice shelf. Fragments arrive from the session stream (`sse-swap`),
+// The notice shelf. Fragments arrive from the session stream (`hx-partial`),
 // client-side failures arrive as a `web-pi:toast` HX-Trigger event, and both
 // land in the same list: at most five visible, five seconds each, paused
 // while the pointer rests on one.
@@ -100,7 +100,7 @@ export function setUpToasts(): void {
     );
   });
   // Server-rendered toasts are appended by htmx; give them the same timers.
-  document.body.addEventListener("htmx:afterSwap", (event) => {
+  document.body.addEventListener("htmx:after:settle", (event) => {
     const list = shelf();
     if (!list || event.target !== list) return;
     for (const child of [...list.children]) {

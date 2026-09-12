@@ -1,3 +1,4 @@
+import { Partial } from "@web/views/Partial";
 import { formatCompactCount, formatContextUsage } from "@core/context-usage";
 import type { ContextUsage } from "@core/context-usage";
 import type { LiveStatus } from "@core/ports";
@@ -182,7 +183,7 @@ function QueuePanel({
           hx-post={`/sessions/${sessionId}/queue/recall`}
           // The button sits inside the composer form; without this htmx would
           // post the draft and its attachments with the recall.
-          hx-params="none"
+          data-request-fields="none"
           hx-target="#composer-text"
           hx-swap="outerHTML"
         >
@@ -219,13 +220,15 @@ export function Status({
   view,
   model,
   oob,
+  partial,
 }: {
   view: SessionView;
   model?: boolean;
   oob?: boolean;
+  partial?: boolean;
 }) {
   const { status, summary } = view;
-  return (
+  const body = (
     <>
       <ModelScopeWarning warnings={view.modelWarnings} />
       {status ? (
@@ -269,6 +272,11 @@ export function Status({
       {status?.title ? (
         <span id="extension-title" hidden data-title={status.title} />
       ) : null}
+    </>
+  );
+  return (
+    <>
+      {partial === true ? <Partial target="#status">{body}</Partial> : body}
       {oob === true ? (
         <>
           <ContextReadout usage={view.usage} oob />

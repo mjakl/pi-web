@@ -66,7 +66,7 @@ function page(
       `<span id="project-activity" hidden></span></button>` +
       `<div id="sidebar-project-menu"></div>` +
       `<div id="session-list">${rows}</div>` +
-      `<div id="session-finished" hidden></div>` +
+      `<div id="sidebar-stream"></div>` +
       `</aside>`,
   );
 }
@@ -76,9 +76,9 @@ function indicator(id: string): HTMLElement {
 }
 
 function finished(id: string, project: string): void {
-  const target = byId("session-finished");
-  target.textContent = JSON.stringify({ id, project });
-  htmxEvent(target, "htmx:afterSwap");
+  htmxEvent(byId("sidebar-stream"), "finished", {
+    data: JSON.stringify({ id, project }),
+  });
 }
 
 describe("unread sessions", () => {
@@ -130,7 +130,7 @@ describe("unread sessions", () => {
     );
     byId("session-list").insertAdjacentHTML("beforeend", row("s3"));
     localStorage.setItem("web-pi:unread", JSON.stringify({ s2: "", s3: "" }));
-    htmxEvent(byId("row-s3"), "htmx:afterSwap");
+    htmxEvent(byId("row-s3"), "htmx:after:settle");
     expect(indicator("s3").classList.contains("session-indicator-unread")).toBe(
       true,
     );
@@ -266,7 +266,7 @@ describe("the explorer fold", () => {
     localStorage.setItem("pi-web:file-explorer:open", "false");
     await mounted();
     byId("sidebar").innerHTML = section;
-    htmxEvent(byId("sidebar"), "htmx:afterSwap");
+    htmxEvent(byId("sidebar"), "htmx:after:settle");
     expect(byId("explorer-toggle").getAttribute("aria-expanded")).toBe("false");
   });
 
@@ -305,7 +305,7 @@ describe("shortcuts", () => {
     setUpSidebar();
     keydown(document.body, "Meta", { metaKey: true });
     byId("row-s1").outerHTML = row("s1");
-    htmxEvent(byId("session-list"), "htmx:afterSwap");
+    htmxEvent(byId("session-list"), "htmx:after:settle");
     expect(query("#row-s1 .session-shortcut").textContent).toBe("⌘1");
   });
 
@@ -380,7 +380,7 @@ describe("row menus and the refresh button", () => {
     );
     const { setUpSidebar } = await load();
     setUpSidebar();
-    htmxEvent(byId("sidebar-refresh"), "htmx:afterRequest");
+    htmxEvent(byId("sidebar-refresh"), "htmx:after:request");
     expect(byId("sidebar-refresh").hasAttribute("data-done")).toBe(true);
     vi.advanceTimersByTime(2000);
     expect(byId("sidebar-refresh").hasAttribute("data-done")).toBe(false);
@@ -393,15 +393,16 @@ describe("folder memory", () => {
     document.body.insertAdjacentHTML("beforeend", '<div id="dialogs"></div>');
     const { setUpSidebar } = await load();
     setUpSidebar();
-    htmxEvent(document.body, "htmx:configRequest", {
-      path: "/workspaces/validate",
-      parameters: { cwd: "/home/me/deep/folder" },
+    const body = new FormData();
+    body.set("cwd", "/home/me/deep/folder");
+    htmxEvent(document.body, "htmx:config:request", {
+      ctx: { request: { action: "/workspaces/validate", body } },
     });
     expect(localStorage.getItem("web-pi:last-cwd")).toBe(
       "/home/me/deep/folder",
     );
     byId("dialogs").innerHTML = '<input id="directory-path" value="/home/me">';
-    htmxEvent(byId("dialogs"), "htmx:afterSwap");
+    htmxEvent(byId("dialogs"), "htmx:after:settle");
     expect(field("#directory-path").value).toBe("/home/me/deep/folder");
   });
 });

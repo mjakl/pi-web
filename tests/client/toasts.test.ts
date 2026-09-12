@@ -94,10 +94,10 @@ describe("toasts", () => {
       { length: 6 },
       (_, index) => `<div class="notice-shelf-item">s${String(index)}</div>`,
     ).join("");
-    htmxEvent(list, "htmx:afterSwap");
+    htmxEvent(list, "htmx:after:settle");
     expect(cards()).toHaveLength(5);
     expect(cards().every((card) => card.dataset["timed"] === "1")).toBe(true);
-    htmxEvent(list, "htmx:afterSwap");
+    htmxEvent(list, "htmx:after:settle");
     vi.advanceTimersByTime(5_000);
     expect(cards()).toHaveLength(0);
   });

@@ -81,7 +81,7 @@ function primary(): HTMLButtonElement {
 
 function running(on: boolean): void {
   byId("session-state").toggleAttribute("data-running", on);
-  htmxEvent(byId("status"), "htmx:afterSwap");
+  htmxEvent(byId("status"), "htmx:after:settle");
 }
 
 describe("sending", () => {
@@ -153,9 +153,13 @@ describe("sending", () => {
     setUpComposer();
     type(area(), "retry me");
     keydown(area(), "Enter");
-    htmxEvent(byId("composer"), "htmx:afterRequest", { successful: false });
+    htmxEvent(byId("composer"), "htmx:after:request", {
+      ctx: { response: { status: 500 } },
+    });
     expect(area().value).toBe("retry me");
-    htmxEvent(byId("composer"), "htmx:afterRequest", { successful: true });
+    htmxEvent(byId("composer"), "htmx:after:request", {
+      ctx: { response: { status: 200 } },
+    });
     expect(area().value).toBe("");
     expect(primary().disabled).toBe(true);
   });
@@ -165,7 +169,9 @@ describe("sending", () => {
     const { setUpComposer } = await load();
     setUpComposer();
     type(area(), "still here");
-    htmxEvent(byId("attach-image"), "htmx:afterRequest", { successful: true });
+    htmxEvent(byId("attach-image"), "htmx:after:request", {
+      ctx: { response: { status: 200 } },
+    });
     expect(area().value).toBe("still here");
   });
 
@@ -476,7 +482,7 @@ describe("mentions and hints", () => {
     setUpComposer();
     const fresh = area();
     fresh.value = "recalled text";
-    htmxEvent(query(".composer-surface"), "htmx:afterSwap");
+    htmxEvent(query(".composer-surface"), "htmx:after:settle");
     expect(primary().disabled).toBe(false);
   });
 
@@ -602,7 +608,7 @@ describe("the extension shelf", () => {
     expect(byId("widget-panel-1").hidden).toBe(false);
     // The stream re-renders the strip with every panel closed.
     byId("shelf").outerHTML = SHELF;
-    htmxEvent(document.body, "htmx:afterSwap");
+    htmxEvent(document.body, "htmx:after:settle");
     expect(byId("widget-panel-1").hidden).toBe(false);
     expect(query('[data-widget="b"]').getAttribute("aria-expanded")).toBe(
       "true",

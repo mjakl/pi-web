@@ -39,7 +39,7 @@ describe("following the tail", () => {
     view.dispatchEvent(new Event("scroll"));
     expect(byId("jump-to-latest").hidden).toBe(false);
     setGeometry(view, { scrollHeight: 2400 });
-    htmxEvent(byId("turn"), "htmx:afterSwap");
+    htmxEvent(byId("turn"), "htmx:after:settle");
     expect(view.scrollTop).toBe(1000);
   });
 
@@ -52,9 +52,9 @@ describe("following the tail", () => {
     expect(byId("jump-to-latest").hidden).toBe(true);
     setGeometry(view, { scrollHeight: 2400 });
     byId("messages").insertAdjacentHTML("beforeend", '<div id="card"></div>');
-    htmxEvent(byId("card"), "htmx:afterSwap");
+    htmxEvent(byId("card"), "htmx:after:settle");
     expect(view.scrollTop).toBe(1500);
-    htmxEvent(byId("messages"), "htmx:afterSwap");
+    htmxEvent(byId("messages"), "htmx:after:settle");
     expect(view.scrollTop).toBe(2400);
   });
 
@@ -62,9 +62,11 @@ describe("following the tail", () => {
     const view = await load('<div class="load-earlier"></div>');
     view.scrollTop = 100;
     view.dispatchEvent(new Event("scroll"));
-    htmxEvent(query(".load-earlier"), "htmx:beforeSwap");
+    htmxEvent(document.body, "htmx:before:swap", {
+      tasks: [{ target: query(".load-earlier") }],
+    });
     setGeometry(view, { scrollHeight: 3000 });
-    htmxEvent(byId("messages"), "htmx:afterSwap");
+    htmxEvent(byId("messages"), "htmx:after:settle");
     expect(view.scrollTop).toBe(1100);
   });
 
@@ -148,7 +150,7 @@ describe("highlighting", () => {
     );
     byId("turn").innerHTML =
       '<pre><code class="language-ts">streaming</code></pre>';
-    htmxEvent(byId("turn"), "htmx:afterSwap");
+    htmxEvent(byId("turn"), "htmx:after:settle");
     const [typed, unknown] =
       document.querySelectorAll<HTMLElement>("#messages code");
     expect(typed?.dataset["highlighted"]).toBe("1");

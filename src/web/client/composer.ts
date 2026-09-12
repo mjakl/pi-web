@@ -15,6 +15,7 @@ import {
   textarea,
 } from "./editor.ts";
 import { setUpImages } from "./images.ts";
+import { requestContext } from "./htmx.ts";
 import { setUpSlashMenu } from "./slash-menu.ts";
 import { showToast } from "./toasts.ts";
 
@@ -319,14 +320,14 @@ export function setUpComposer(): void {
     }
   });
 
-  form.addEventListener("htmx:afterRequest", (event) => {
+  form.addEventListener("htmx:after:request", (event) => {
     // Only the form's own submission empties it. The toolbar's buttons — a
     // model pick, a queue recall — are inside the form and their requests
     // bubble through here too.
     if (event.target !== form) return;
-    const detail = (event as CustomEvent<{ successful?: boolean }>).detail;
-    // A rejected submission keeps its text: the reader retries or edits it.
-    if (detail.successful === true) clearComposer();
+    const status = requestContext(event).response?.status;
+    // Preserve the existing HTTP-success contract, including 200 no-swap replies.
+    if (status !== undefined && status >= 200 && status < 300) clearComposer();
   });
 
   /**
@@ -356,7 +357,7 @@ export function setUpComposer(): void {
     if (note) note.textContent = running ? "Agent running" : "";
     syncAction();
   };
-  document.body.addEventListener("htmx:afterSwap", (swap) => {
+  document.body.addEventListener("htmx:after:settle", (swap) => {
     const target = swap.target;
     if (!(target instanceof Element)) return;
     if (target.closest("#status")) mirrorRunning();
@@ -555,8 +556,8 @@ function setUpShelf(): void {
     open = open === key ? null : key;
     paint();
   });
-  document.body.addEventListener("htmx:afterSwap", (event) => {
-    // An outerHTML swap reports the parent, so look for the strip either way.
+  document.body.addEventListener("htmx:after:settle", (event) => {
+    // The shelf can arrive on its own or inside a larger owner subtree.
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.id === "shelf" || target.querySelector("#shelf")) paint();

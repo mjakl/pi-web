@@ -96,28 +96,27 @@ function setUpUnread(): void {
   const ids = unreadIds();
   if (ids.delete(currentSessionId())) storeUnread(ids);
   paintUnread();
-  // The global stream drops the id and project of every session whose turn
-  // just ended.
-  document
-    .getElementById("session-finished")
-    ?.addEventListener("htmx:afterSwap", (event) => {
-      const text = (event.target as HTMLElement).textContent?.trim() ?? "";
-      let finished: { id?: string; project?: string } = {};
-      try {
-        finished = JSON.parse(text) as typeof finished;
-      } catch {
-        return;
-      }
-      const id = finished.id ?? "";
-      if (!id || id === currentSessionId()) return;
-      const pending = unreadIds();
-      pending.set(id, finished.project ?? "");
-      storeUnread(pending);
-      paintUnread();
-    });
+  // The global stream announces the id and project of each finished session.
+  document.body.addEventListener("finished", (event) => {
+    const text = (event as CustomEvent<{ data?: unknown }>).detail?.data;
+    if (typeof text !== "string") return;
+    let finished: { id?: string; project?: string } = {};
+    try {
+      finished = JSON.parse(text) as typeof finished;
+    } catch {
+      return;
+    }
+    if (!finished || typeof finished.id !== "string") return;
+    const id = finished.id;
+    if (!id || id === currentSessionId()) return;
+    const pending = unreadIds();
+    pending.set(id, finished.project ?? "");
+    storeUnread(pending);
+    paintUnread();
+  });
   // Rows arrive lazily and out of band; a streaming turn swaps ten times a
   // second and must not drag the whole sidebar through this.
-  document.body.addEventListener("htmx:afterSwap", (event) => {
+  document.body.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (target instanceof Element && target.closest("#sidebar")) paintUnread();
   });
@@ -221,7 +220,7 @@ function setUpExplorerFold(): void {
   });
   // A whole-page swap brings the section back in its server-rendered,
   // open state.
-  document.body.addEventListener("htmx:afterSwap", (event) => {
+  document.body.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (target instanceof Element && target.querySelector("#explorer-toggle")) {
       paint();
@@ -233,7 +232,7 @@ function setUpExplorerFold(): void {
 function setUpSidebarRefresh(): void {
   const button = document.getElementById("sidebar-refresh");
   if (!button) return;
-  button.addEventListener("htmx:afterRequest", () => {
+  button.addEventListener("htmx:after:request", () => {
     button.setAttribute("data-done", "");
     setTimeout(() => {
       button.removeAttribute("data-done");
@@ -364,7 +363,7 @@ function setUpShortcuts(): void {
   });
   // A row swapped in while the modifier is held arrives with its badge
   // hidden and unnumbered, and the rows after it have all moved down one.
-  document.body.addEventListener("htmx:afterSwap", (event) => {
+  document.body.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (modifier === null || !(target instanceof Element)) return;
     if (target.closest("#sidebar")) paint();

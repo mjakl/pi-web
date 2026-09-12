@@ -14,6 +14,7 @@ import {
   SessionRow,
   SessionRows,
 } from "@web/views/Sidebar";
+import { Partial } from "@web/views/Partial";
 import { BrowsePane, DirectoryPicker, FolderList } from "@web/views/Workspace";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
@@ -307,14 +308,18 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
                 (row) => row.id === event.sessionId,
               );
               await stream.writeSSE({
-                event: "rows",
                 data: await html(
                   known && event.type !== "opened" ? (
-                    <SessionRow {...found} oob />
+                    <Partial
+                      target={`#row-${event.sessionId}`}
+                      swap="outerHTML"
+                    >
+                      <SessionRow {...found} />
+                    </Partial>
                   ) : (
                     <SessionList
                       view={view}
-                      oob
+                      partial
                       {...(activeId === undefined ? {} : { activeId })}
                     />
                   ),
@@ -327,14 +332,14 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
             if (signature !== badges) {
               badges = signature;
               await stream.writeSSE({
-                event: "rows",
                 data: await html(
-                  <ProjectSelect
-                    view={view}
-                    cwd={cwd}
-                    oob
-                    {...(deps.home === undefined ? {} : { home: deps.home })}
-                  />,
+                  <Partial target="#project-picker" swap="outerHTML">
+                    <ProjectSelect
+                      view={view}
+                      cwd={cwd}
+                      {...(deps.home === undefined ? {} : { home: deps.home })}
+                    />
+                  </Partial>,
                 ),
               });
             }

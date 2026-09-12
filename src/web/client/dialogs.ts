@@ -1,3 +1,4 @@
+import { settledContent } from "./htmx.ts";
 // Dialogs arrive as server-rendered `<dialog open>` elements, which already
 // show without script. This upgrades them to real modals: backdrop, focus
 // trap, top layer, and focus restore, all from the platform.
@@ -38,8 +39,9 @@ export function dialogOpen(): boolean {
 
 export function setUpDialogs(): void {
   upgradeDialogs();
-  document.body.addEventListener("htmx:afterSwap", (event) => {
+  document.body.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (target instanceof Element) upgradeDialogs(target);
+    for (const element of settledContent(event)) upgradeDialogs(element);
   });
 }

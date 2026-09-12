@@ -284,7 +284,7 @@ describe("per-tab state", () => {
     click(query("[data-wrap-toggle]"));
     // A mode button is an hx-get that swaps #file-view on its own.
     byId("file-view").innerHTML = viewer("a.ts", "diff");
-    htmxEvent(byId("file-view"), "htmx:afterSwap");
+    htmxEvent(byId("file-view"), "htmx:after:settle");
     expect(query(".file-source-view").classList.contains("is-wrapped")).toBe(
       true,
     );
@@ -429,7 +429,7 @@ describe("the explorer tree", () => {
     page({ tree: TREE, changes: 0 });
     const { setUpFiles } = await load();
     setUpFiles();
-    htmxEvent(byId("file-tree"), "htmx:afterSwap");
+    htmxEvent(byId("file-tree"), "htmx:after:settle");
     expect(item("/repo/one/src").tabIndex).toBe(0);
   });
 });
@@ -450,12 +450,11 @@ describe("changed files and search", () => {
         swap: "outerHTML",
       },
     );
-    const parameters: Record<string, string> = {};
-    htmxEvent(byId("file-tree"), "htmx:configRequest", {
-      path: "/files/explorer",
-      parameters,
+    const body = new FormData();
+    htmxEvent(byId("file-tree"), "htmx:config:request", {
+      ctx: { request: { action: "/files/explorer", body } },
     });
-    expect(parameters).toEqual({ changes: "1" });
+    expect(body.get("changes")).toBe("1");
     click(toggle);
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
     expect(ajaxUrls().at(-1)).toBe("/files/explorer?session=s1");
@@ -467,11 +466,11 @@ describe("changed files and search", () => {
     setUpFiles();
     const toggle = byId("explorer-changes-toggle");
     toggle.setAttribute("aria-pressed", "true");
-    htmxEvent(byId("file-tree"), "htmx:afterSwap");
+    htmxEvent(byId("file-tree"), "htmx:after:settle");
     expect(toggle.hidden).toBe(false);
     expect(toggle.title).toBe("2 changed files");
     byId("file-tree").dataset["changes"] = "0";
-    htmxEvent(byId("file-tree"), "htmx:afterSwap");
+    htmxEvent(byId("file-tree"), "htmx:after:settle");
     expect(toggle.hidden).toBe(true);
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
   });
@@ -523,7 +522,7 @@ describe("media", () => {
     const audio = query("audio");
     Object.defineProperty(audio, "duration", { value: 125.4 });
     Object.defineProperty(audio, "readyState", { value: 1 });
-    htmxEvent(byId("file-view"), "htmx:afterSwap");
+    htmxEvent(byId("file-view"), "htmx:after:settle");
     expect(query(".file-viewer-measured").textContent).toBe("2:05");
   });
 });

@@ -5,8 +5,8 @@ import type { Context } from "hono";
 import { raw } from "hono/html";
 import type { PropsWithChildren } from "hono/jsx";
 
-export const HTMX_SRC = "/static/vendor/htmx.min-2.0.10.js";
-export const HTMX_SSE_SRC = "/static/vendor/htmx-ext-sse.min-2.2.4.js";
+export const HTMX_SRC = "/static/vendor/htmx.min-4.0.0.js";
+export const HTMX_SSE_SRC = "/static/vendor/hx-sse.min-4.0.0.js";
 
 // pi-web's pre-paint script (app/layout.tsx:L79), verbatim except for the
 // storage key coming from the module both halves share. The class has to be on
@@ -33,6 +33,16 @@ export function HtmlLayout(
           content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
         />
         <meta name="google" content="notranslate" />
+        {/* Keep streams connected in hidden tabs. Compaction and package actions
+            also retain v2's unlimited request time rather than v4's 60 seconds. */}
+        <meta
+          name="htmx-config"
+          content={JSON.stringify({
+            extensions: "sse",
+            sse: { pauseOnBackground: false },
+            defaultTimeout: 0,
+          })}
+        />
         {/* The real one is "<folder> - Pi Web", set by the shell module from
             the folder on the page: only the browser knows which page won. */}
         <title>Pi Web</title>
@@ -76,6 +86,10 @@ export function HtmlLayout(
         <script type="module" src={assets.js}></script>
       </head>
       <body
+        {...{
+          "hx-status:4xx:inherited": "swap:none",
+          "hx-status:5xx:inherited": "swap:none",
+        }}
         translate="no"
         class="notranslate"
         data-mermaid-src={assets.mermaid}

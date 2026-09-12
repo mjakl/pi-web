@@ -1,3 +1,4 @@
+import { settledContent, swapTasks } from "./htmx.ts";
 import { codeText, highlightIn } from "./highlight.ts";
 import { setUpImagePreview } from "./images.ts";
 import { setUpMermaid } from "./mermaid.ts";
@@ -119,16 +120,19 @@ export function setUpTranscript(): void {
   // A prepended page must not move the text under the reader's eyes: keep the
   // distance to the bottom, which the new content does not change.
   let anchor: number | null = null;
-  document.body.addEventListener("htmx:beforeSwap", (event) => {
-    const target = event.target;
+  document.body.addEventListener("htmx:before:swap", (event) => {
+    const tasks = swapTasks(event) as { target: Element | string }[];
     if (
-      target instanceof HTMLElement &&
-      target.classList.contains("load-earlier")
+      tasks.some(({ target }) => {
+        const element =
+          typeof target === "string" ? document.querySelector(target) : target;
+        return element?.classList.contains("load-earlier");
+      })
     ) {
       anchor = view.scrollHeight - view.scrollTop;
     }
   });
-  document.body.addEventListener("htmx:afterSwap", (event) => {
+  document.body.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     // Only the log and the running turn move the reader to the tail. A tool
     // card fetching its own body must leave the scroll position alone.
@@ -142,6 +146,7 @@ export function setUpTranscript(): void {
       view.scrollTop = view.scrollHeight;
     }
     if (target instanceof Element) highlightIn(target);
+    for (const element of settledContent(event)) highlightIn(element);
     sync();
   });
 

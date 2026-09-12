@@ -429,13 +429,13 @@ export function Shell({
           style="flex:1; overflow:hidden; position:relative"
           data-session-id={activeId}
           data-cwd={cwd}
-          hx-ext="sse"
-          sse-connect={activeId ? `/sessions/${activeId}/events` : undefined}
+          hx-sse:connect={activeId ? `/sessions/${activeId}/events` : undefined}
+          hx-swap="none"
         >
           {children}
           {/* pi-web floats notices over the transcript, clear of the rail. */}
           <div class="chat-notices">
-            <div id="toasts" sse-swap="notice" hx-swap="beforeend" />
+            <div id="toasts" />
           </div>
           <DialogHost />
         </main>
@@ -668,7 +668,7 @@ export function SessionPage({
                     </button>
                   </div>
                 ) : null}
-                <div id="messages" sse-swap="settled" hx-swap="beforeend">
+                <div id="messages">
                   {view.hasMore && view.oldestId !== undefined ? (
                     <LoadEarlier
                       sessionId={summary.id}
@@ -678,7 +678,7 @@ export function SessionPage({
                   ) : null}
                   <Items items={view.items} actions={actions} />
                 </div>
-                <div id="turn" sse-swap="turn" hx-swap="innerHTML">
+                <div id="turn">
                   <TurnFragment
                     items={view.turn}
                     actions={actions}
@@ -731,9 +731,7 @@ export function SessionPage({
         dialog={view.status?.dialog ?? null}
       />
       {/* Text an extension asked to put in the composer arrives here. */}
-      <div id="editor-insert" sse-swap="editor" hx-swap="innerHTML" hidden />
-      {/* One line of JSON per finished run: the tone and notifications. */}
-      <div id="session-done" sse-swap="done" hx-swap="innerHTML" hidden />
+      <div id="editor-insert" hidden />
     </Shell>
   );
 }

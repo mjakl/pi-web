@@ -117,13 +117,24 @@ export function type(
   field.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-/** An htmx lifecycle event, bubbling from the swapped element. */
+/** Request events bubble from the source; per-task settle events from the changed region. */
 export function htmxEvent(
   target: EventTarget,
   name: string,
   detail: unknown = {},
 ): CustomEvent {
-  const event = new CustomEvent(name, { bubbles: true, detail });
+  const event = new CustomEvent(name, {
+    bubbles: true,
+    detail:
+      name === "htmx:after:settle"
+        ? {
+            task: { target },
+            newContent: target instanceof Element ? [...target.children] : [],
+            settleTasks: [],
+            ...(detail as object),
+          }
+        : detail,
+  });
   target.dispatchEvent(event);
   return event;
 }

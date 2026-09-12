@@ -156,7 +156,7 @@ describe("the top bar", () => {
     expect(system.getAttribute("aria-pressed")).toBe("false");
     expect(tools.getAttribute("aria-pressed")).toBe("true");
     host.innerHTML = '<div class="tool-definitions-item"></div>';
-    htmxEvent(host, "htmx:afterSwap");
+    htmxEvent(host, "htmx:after:settle");
     expect(tools.hasAttribute("data-panel-loaded")).toBe(true);
     const again = click(tools);
     expect(again.defaultPrevented).toBe(true);

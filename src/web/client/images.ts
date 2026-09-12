@@ -143,10 +143,8 @@ export function setUpImages(changed: () => void): Attachments {
   });
   // Images a recall took back out of the queue arrive as base64 in a hidden
   // element; they become Files again so the next send carries them. The
-  // fragment rides out of band, and htmx announces those with their own
-  // event, not with htmx:afterSwap.
-  // htmx names the elements it settled, not the out-of-band target, so this
-  // asks the holder itself whether a recall just filled it.
+  // fragment rides out of band. Every swap task emits a settle event;
+  // draining the holder makes repeated events harmless.
   const drainRecalled = (): void => {
     const target = document.getElementById("recalled-images");
     if (!target?.firstElementChild) return;
@@ -169,8 +167,7 @@ export function setUpImages(changed: () => void): Attachments {
     target.replaceChildren();
     if (recalled.length > 0) add(recalled);
   };
-  document.body.addEventListener("htmx:oobAfterSwap", drainRecalled);
-  document.body.addEventListener("htmx:afterSwap", drainRecalled);
+  document.body.addEventListener("htmx:after:settle", drainRecalled);
 
   return {
     add,

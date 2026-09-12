@@ -23,6 +23,7 @@ import {
   dialogSignature,
 } from "@web/views/Extensions";
 import { type ItemActions, Items, TurnFragment } from "@web/views/Items";
+import { Partial } from "@web/views/Partial";
 import { Rail } from "@web/views/Rail";
 import { ShelfBody, changedWidgets, shelfSignature } from "@web/views/Shelf";
 import { Status, turnBusy } from "@web/views/Status";
@@ -387,24 +388,30 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
           // The rail rides along out of band: a settled turn is the only
           // thing that adds marks to it.
           await stream.writeSSE({
-            event: "settled",
             data: await html(
               <>
-                <Items items={view.settledTurn} actions={actions} />
+                <Partial target="#messages" swap="beforeend">
+                  <Items items={view.settledTurn} actions={actions} />
+                </Partial>
                 <Rail view={view} oob />
               </>,
             ),
           });
-          await stream.writeSSE({ event: "turn", data: "" });
+          await stream.writeSSE({
+            data: await html(<Partial target="#turn" />),
+          });
+          // Native SSE awaits each HTML swap before dispatching the next event.
+          await stream.writeSSE({ event: "settled", data: id });
         } else {
           await stream.writeSSE({
-            event: "turn",
             data: await html(
-              <TurnFragment
-                items={view.turn}
-                actions={actions}
-                status={view.status}
-              />,
+              <Partial target="#turn">
+                <TurnFragment
+                  items={view.turn}
+                  actions={actions}
+                  status={view.status}
+                />
+              </Partial>,
             ),
           });
         }
@@ -418,19 +425,21 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
         const modelChanged = nextModel !== model;
         model = nextModel;
         await stream.writeSSE({
-          event: "status",
-          data: await html(<Status view={view} model={modelChanged} oob />),
+          data: await html(
+            <Status view={view} model={modelChanged} oob partial />,
+          ),
         });
         const signature = shelfSignature(view.status);
         if (signature !== shelf) {
           shelf = signature;
           await stream.writeSSE({
-            event: "shelf",
             data: await html(
-              <ShelfBody
-                status={view.status}
-                updated={changedWidgets(widgetLines, view.status)}
-              />,
+              <Partial target="#shelf" swap="outerHTML">
+                <ShelfBody
+                  status={view.status}
+                  updated={changedWidgets(widgetLines, view.status)}
+                />
+              </Partial>,
             ),
           });
         }
@@ -438,12 +447,13 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
         if (nextDialog !== dialog) {
           dialog = nextDialog;
           await stream.writeSSE({
-            event: "dialog",
             data: await html(
-              <ExtensionDialogBody
-                sessionId={id}
-                dialog={view.status?.dialog ?? null}
-              />,
+              <Partial target="#extension-dialog">
+                <ExtensionDialogBody
+                  sessionId={id}
+                  dialog={view.status?.dialog ?? null}
+                />
+              </Partial>,
             ),
           });
         }
@@ -452,31 +462,43 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
           custom = panel?.id ?? "";
           frame = "";
           await stream.writeSSE({
-            event: "custom",
-            data: await html(<CustomPanelBody sessionId={id} frame={panel} />),
+            data: await html(
+              <Partial target="#custom-ui">
+                <CustomPanelBody sessionId={id} frame={panel} />
+              </Partial>,
+            ),
           });
         }
         const nextFrame = customSignature(panel);
         if (nextFrame !== frame) {
           frame = nextFrame;
           await stream.writeSSE({
-            event: "custom-frame",
-            data: await html(<CustomFrameBody frame={panel} />),
+            data: await html(
+              <Partial target="#custom-frame">
+                <CustomFrameBody frame={panel} />
+              </Partial>,
+            ),
           });
         }
         // Text an extension asked to put in the composer, and a title it set.
         for (const text of view.status?.editorText ?? []) {
           await stream.writeSSE({
-            event: "editor",
-            data: await html(<span data-insert={text} />),
+            data: await html(
+              <Partial target="#editor-insert">
+                <span data-insert={text} />
+              </Partial>,
+            ),
           });
         }
         // Notices are drained by the snapshot: send them once, as toasts.
         const notices = view.status?.notices ?? [];
         if (notices.length > 0) {
           await stream.writeSSE({
-            event: "notice",
-            data: await html(<Toasts notices={notices} />),
+            data: await html(
+              <Partial target="#toasts" swap="beforeend">
+                <Toasts notices={notices} />
+              </Partial>,
+            ),
           });
         }
       };

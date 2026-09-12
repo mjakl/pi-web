@@ -162,7 +162,7 @@ function setUpTopPanels(): void {
   };
   // What a panel answered decides its icon's colour, as the session state
   // does in pi-web: a prompt or an active tool tints the tab's icon.
-  host.addEventListener("htmx:afterSwap", () => {
+  host.addEventListener("htmx:after:settle", () => {
     const open = buttons.find(
       (button) => button.getAttribute("aria-pressed") === "true",
     );

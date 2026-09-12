@@ -1,4 +1,5 @@
 import { assistantEntry } from "@adapters/fake/index";
+import { HTMX_SRC, HTMX_SSE_SRC } from "@web/HtmlLayout";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
@@ -175,6 +176,21 @@ it("serves the built assets and the manifest", async () => {
   expect(manifest.status).toBe(200);
   const described = (await manifest.json()) as { name?: string };
   expect(described.name).toBe("web-pi");
+  for (const path of [HTMX_SRC, HTMX_SSE_SRC]) {
+    const vendor = await fetch(`${origin}${path}`);
+    expect(vendor.status).toBe(200);
+    expect(vendor.headers.get("content-type")).toContain("javascript");
+    expect((await vendor.text()).length).toBeGreaterThan(1000);
+  }
+  for (const path of [
+    "/static/vendor/htmx.min-2.0.10.js",
+    "/static/vendor/htmx-ext-sse.min-2.2.4.js",
+  ]) {
+    expect((await fetch(`${origin}${path}`)).status).toBe(404);
+  }
+  const worker = await fetch(`${origin}/sw.js`);
+  expect(worker.status).toBe(200);
+  expect(await worker.text()).not.toContain("htmx.min-2.0.10.js");
 });
 
 it("opens the session stream without starting a turn", async () => {

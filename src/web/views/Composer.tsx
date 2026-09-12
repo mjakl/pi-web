@@ -312,7 +312,7 @@ function pickAttributes(pick: ModelPick, value: string) {
     return {
       // The button sits inside the composer form: without this htmx would
       // post the draft and its attachments along with the pick.
-      "hx-params": "none",
+      "data-request-fields": "none",
       "hx-post": `/sessions/${pick.sessionId}/model?model=${model}`,
       ...target,
     };
@@ -333,7 +333,7 @@ function ReasoningField({ pick }: { pick: ModelPick }) {
       : {
           "hx-post": `/sessions/${pick.sessionId}/model?model=${encodeURIComponent(modelValue(current))}`,
           "hx-trigger": "change",
-          "hx-params": "thinking",
+          "data-request-fields": "thinking",
           "hx-target": "closest .model-selector",
           "hx-swap": "outerHTML",
         };
@@ -540,7 +540,7 @@ function MoreControls({ sessionId }: { sessionId?: string }) {
             type="button"
             class="menu-item composer-stop"
             hx-post={`/sessions/${sessionId}/abort`}
-            hx-params="none"
+            data-request-fields="none"
             hx-swap="none"
           >
             Stop agent
@@ -656,9 +656,7 @@ export function Composer({
         />
         {/* pi-web's banners and queue panel live here, above the surface and
             inside the 820px column; the session stream re-renders them. */}
-        {/* hx-target is inherited, and the form's points at the toast list:
-            without this the stream's status fragments would pile up there. */}
-        <div id="status" sse-swap="status" hx-target="this" hx-swap="innerHTML">
+        <div id="status">
           {status}
           {start ? <ModelScopeWarning warnings={start.modelWarnings} /> : null}
         </div>

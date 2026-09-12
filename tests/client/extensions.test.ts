@@ -121,7 +121,7 @@ describe("the custom-UI panel", () => {
   it("takes focus when a panel arrives", async () => {
     await load('<div id="custom-ui"></div>');
     byId("custom-ui").innerHTML = '<div id="custom-frame" tabindex="0"></div>';
-    htmxEvent(byId("custom-ui"), "htmx:afterSwap");
+    htmxEvent(byId("custom-ui"), "htmx:after:settle");
     expect(document.activeElement).toBe(byId("custom-frame"));
   });
 });
@@ -133,7 +133,7 @@ describe("what an extension writes into the page", () => {
     );
     const insert = (value: string) => {
       byId("editor-insert").innerHTML = `<span data-insert="${value}"></span>`;
-      htmxEvent(byId("editor-insert"), "htmx:afterSwap");
+      htmxEvent(byId("editor-insert"), "htmx:after:settle");
     };
     insert("first");
     expect(area().value).toBe("first");
@@ -152,10 +152,10 @@ describe("what an extension writes into the page", () => {
     expect(document.title).toBe("Deploying");
     byId("status").innerHTML =
       '<span id="extension-title" data-title="Done"></span>';
-    htmxEvent(byId("status"), "htmx:afterSwap");
+    htmxEvent(byId("status"), "htmx:after:settle");
     expect(document.title).toBe("Done");
     byId("status").innerHTML = "";
-    htmxEvent(byId("status"), "htmx:afterSwap");
+    htmxEvent(byId("status"), "htmx:after:settle");
     expect(document.title).toBe("Done");
   });
 });

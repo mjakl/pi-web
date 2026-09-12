@@ -5,6 +5,7 @@ import {
   sessionTitle,
   type SessionSummary,
 } from "@core/sessions";
+import { Partial } from "@web/views/Partial";
 import type { SidebarView } from "@core/workspace";
 import { shortPath } from "@core/workspaces";
 import {
@@ -330,17 +331,15 @@ export function SessionList({
   view,
   activeId,
   oob,
+  partial,
 }: {
   view: SidebarView;
   activeId?: string;
   oob?: boolean;
+  partial?: boolean;
 }) {
-  return (
-    <div
-      id="session-list"
-      style="flex:1 1 auto; overflow-y:auto; padding:0; min-height:80px"
-      {...(oob === true ? { "hx-swap-oob": "innerHTML" } : {})}
-    >
+  const body = (
+    <>
       {view.sessions.length === 0 ? (
         <div style="padding:16px 14px; color:var(--text-muted); font-size:12px">
           No sessions found
@@ -350,6 +349,17 @@ export function SessionList({
         view={view}
         {...(activeId === undefined ? {} : { activeId })}
       />
+    </>
+  );
+  return partial === true ? (
+    <Partial target="#session-list">{body}</Partial>
+  ) : (
+    <div
+      id="session-list"
+      style="flex:1 1 auto; overflow-y:auto; padding:0; min-height:80px"
+      {...(oob === true ? { "hx-swap-oob": "innerHTML" } : {})}
+    >
+      {body}
     </div>
   );
 }
@@ -684,22 +694,12 @@ export function ProjectNav({
     <div
       id="project-nav"
       style="display:flex; min-height:0; flex:1 1 0; flex-direction:column"
-      hx-ext="sse"
-      sse-connect={`/events${view.selected === undefined ? "" : `?project=${encodeURIComponent(view.selected)}`}`}
-      sse-swap="rows"
+      hx-sse:connect={`/events${view.selected === undefined ? "" : `?project=${encodeURIComponent(view.selected)}`}`}
       hx-swap="none"
     >
       <SessionList
         view={view}
         {...(activeId === undefined ? {} : { activeId })}
-      />
-      {/* Filled by the global stream with the session whose turn just
-          finished; src/web/client/sidebar.ts turns that into an unread dot. */}
-      <div
-        id="session-finished"
-        sse-swap="finished"
-        hx-swap="innerHTML"
-        hidden
       />
     </div>
   );
@@ -817,7 +817,7 @@ function ExplorerSection({
           class="explorer"
           data-cwd={cwd}
           hx-get={explorerUrl}
-          hx-trigger="revealed, sse:settled"
+          hx-trigger="revealed, settled from:body"
           hx-swap="innerHTML"
         />
       </div>

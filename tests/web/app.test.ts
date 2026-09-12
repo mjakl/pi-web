@@ -278,10 +278,26 @@ describe("web app", () => {
       received += decoder.decode(chunk.value);
     }
     await reader.cancel();
-    expect(received).toContain("event: turn");
+    expect(received).toContain(
+      'data: <hx-partial hx-target="#turn" hx-swap="innerHTML">',
+    );
     expect(received).toContain("alpha beta");
-    expect(received).toContain("event: status");
-    expect(received).toMatch(/event: settled\ndata: <section class="turn"/);
+    expect(received).toContain(
+      '<hx-partial hx-target="#status" hx-swap="innerHTML">',
+    );
+    expect(received).toContain(
+      'data: <hx-partial hx-target="#messages" hx-swap="beforeend"><section class="turn"',
+    );
+    const clear =
+      'data: <hx-partial hx-target="#turn" hx-swap="innerHTML"></hx-partial>';
+    expect(received).toContain(clear);
+    expect(received.indexOf(clear)).toBeLessThan(
+      received.indexOf("event: settled\n"),
+    );
+    expect(received).toContain("event: settled\ndata: s1");
+    expect(received).not.toMatch(
+      /event: (turn|status|shelf|dialog|custom|editor|notice)\n/,
+    );
     // pi-web's streaming header: the model, the running token estimate, and
     // the rate, in its three fixed columns. web-pi gets both from the
     // runtime instead of a meter in the browser.
@@ -662,8 +678,13 @@ describe("web app", () => {
     }
     await reader.cancel();
     // Opening the session re-renders the list; finishing swaps just its row.
-    expect(received).toContain("event: rows");
-    expect(received).toContain('hx-swap-oob="true"');
+    expect(received).toContain(
+      'data: <hx-partial hx-target="#row-s1" hx-swap="outerHTML">',
+    );
+    expect(received).toContain(
+      '<hx-partial hx-target="#project-picker" hx-swap="outerHTML">',
+    );
+    expect(received).not.toContain("event: rows");
     expect(received).toContain('id="row-s1"');
     // The finished marker names the project, so the selector can badge it.
     expect(received).toContain('data: {"id":"s1","project":"/repo/one"}');
@@ -698,8 +719,9 @@ describe("web app", () => {
     // The first push is the whole list, since the page has no row to swap,
     // with the new row already running.
     const list = received.slice(0, received.indexOf("\n\n"));
-    expect(list).toContain('id="session-list"');
-    expect(list).toContain('hx-swap-oob="innerHTML"');
+    expect(list).toContain(
+      '<hx-partial hx-target="#session-list" hx-swap="innerHTML">',
+    );
     expect(list).toContain('id="row-new-1"');
     expect(list).toContain('data-status="Agent running…"');
     // The pushed rows are pending, and observe their own way into view.
@@ -737,7 +759,10 @@ describe("web app", () => {
         headers: { cookie: "web-pi-project=/repo/one" },
       })
     ).text();
-    expect(page).toContain('sse-connect="/events?project=%2Frepo%2Fone"');
+    expect(page).toContain('hx-sse:connect="/events?project=%2Frepo%2Fone"');
+    expect(page).not.toContain("sse-swap=");
+    expect(page).not.toContain('hx-ext="sse"');
+    expect(page).not.toContain("hx-params=");
 
     const res = await app.request("/events?project=%2Frepo%2Fone");
     const reader = res.body?.getReader();
@@ -1056,7 +1081,7 @@ describe("the sidebar", () => {
     // An unselected row keeps the transparent bar and no tint.
     const start = html.indexOf('id="row-s1"');
     // s1 is the last row of this project, so the list's end bounds the slice.
-    const other = html.slice(start, html.indexOf('id="session-finished"'));
+    const other = html.slice(start, html.indexOf('id="explorer-section"'));
     expect(other).toContain("border-left:2px solid transparent");
     expect(other).not.toContain("background:var(--bg-selected)");
 
@@ -1254,9 +1279,7 @@ describe("the composer, as pi-web draws it", () => {
     expect(composer).toContain("bottom:calc(100% + 8px)");
     expect(composer).toContain("max-height:min(48vh, 400px)");
     // The stream swaps into the status div, not into the form's toast target.
-    expect(composer).toContain(
-      'id="status" sse-swap="status" hx-target="this"',
-    );
+    expect(composer).toContain('id="status"');
   });
 
   it("groups the slash menu the way pi-web does", async () => {
@@ -1314,7 +1337,7 @@ describe("the composer, as pi-web draws it", () => {
     expect(selector).toContain("autofocus");
     order(selector, ['data-provider="fake"', 'data-provider="other"']);
     // A pick is a request of its own: none of the composer's fields ride along.
-    expect(selector).toContain('hx-params="none"');
+    expect(selector).toContain('data-request-fields="none"');
     expect(selector).toContain("/sessions/s1/model?model=fake%2Fm0");
     expect(selector).toContain('hx-target="closest .model-selector"');
   });
@@ -1385,7 +1408,8 @@ describe("the composer, as pi-web draws it", () => {
       "and then this",
     ]);
     // The recall must not post the draft and its attachments with it.
-    expect(status).toContain('hx-params="none"');
+    expect(status).toContain('data-request-fields="none"');
+    expect(status).toContain('data-request-fields="thinking"');
   });
 });
 
@@ -1497,7 +1521,9 @@ describe("conversation rail, shelf, and written files", () => {
       received += decoder.decode(chunk.value);
     }
     await reader.cancel();
-    expect(received).toContain("event: shelf");
+    expect(received).toContain(
+      '<hx-partial hx-target="#shelf" hx-swap="outerHTML">',
+    );
     expect(received).toContain('<span style="color:#13703a">main</span>');
     expect(received).toContain('<span style="font-weight:600">Open</span>');
     // pi-web's shelf: the trigger row, the status line, and the panel of the
@@ -1780,7 +1806,7 @@ describe("transcript rendering", () => {
     if (!reader) throw new Error("no body");
     let received = "";
     const decoder = new TextDecoder();
-    while (!received.includes("event: notice")) {
+    while (!received.includes('hx-target="#toasts"')) {
       const chunk = await reader.read();
       if (chunk.done) break;
       received += decoder.decode(chunk.value);
@@ -2030,7 +2056,7 @@ describe("phase 8 fixes", () => {
     if (!reader) throw new Error("no body");
     let received = "";
     const decoder = new TextDecoder();
-    while (!received.includes("event: status")) {
+    while (!received.includes('hx-target="#status"')) {
       const chunk = await reader.read();
       if (chunk.done) break;
       received += decoder.decode(chunk.value);

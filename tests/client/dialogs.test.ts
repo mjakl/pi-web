@@ -59,10 +59,10 @@ describe("dialogs", () => {
   it("upgrades dialogs that arrive by swap, whether the target is one or holds one", async () => {
     await load('<div id="dialogs"></div>');
     byId("dialogs").innerHTML = '<dialog id="d" data-modal open></dialog>';
-    htmxEvent(byId("dialogs"), "htmx:afterSwap");
+    htmxEvent(byId("dialogs"), "htmx:after:settle");
     expect(dialog("d").dataset["upgraded"]).toBe("1");
     byId("dialogs").innerHTML = '<dialog id="e" data-modal open></dialog>';
-    htmxEvent(byId("e"), "htmx:afterSwap");
+    htmxEvent(byId("e"), "htmx:after:settle");
     expect(dialog("e").dataset["upgraded"]).toBe("1");
     expect(document.querySelectorAll("dialog[open]")).toHaveLength(1);
   });

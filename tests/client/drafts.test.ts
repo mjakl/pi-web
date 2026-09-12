@@ -71,6 +71,25 @@ describe("drafts", () => {
     expect(localStorage.getItem("web-pi:draft:s7")).toBe("second");
   });
 
+  it("does not resurrect a sent draft when session-created follows request completion", async () => {
+    const drafts = await load(null, "/repo/new");
+    drafts.save("sent prompt");
+    vi.advanceTimersByTime(300);
+    drafts.save("pending write");
+    drafts.clear();
+    document.body.dispatchEvent(
+      new CustomEvent("web-pi:session-created", {
+        detail: { cwd: "/repo/new", id: "s7" },
+      }),
+    );
+    vi.advanceTimersByTime(300);
+    expect(localStorage.getItem("web-pi:draft:new:/repo/new")).toBeNull();
+    expect(localStorage.getItem("web-pi:draft:s7")).toBeNull();
+    drafts.save("next prompt");
+    vi.advanceTimersByTime(300);
+    expect(localStorage.getItem("web-pi:draft:s7")).toBe("next prompt");
+  });
+
   it("survives a browser that refuses storage", async () => {
     blockStorage();
     const drafts = await load("s1", "/repo");
