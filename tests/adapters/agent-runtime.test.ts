@@ -3,7 +3,7 @@ import { STAR_TYPE } from "@core/session-entries";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CONTEXT_WINDOW,
@@ -54,6 +54,11 @@ describe("opening", () => {
     expect(snapshot.summary.live).toBe(true);
     expect(h.runtime.get(session.id)).toBe(session);
     expect(announced).toEqual([{ type: "opened", sessionId: session.id }]);
+    // The file belongs to the agent directory the runtime was given, not to
+    // whatever PI_CODING_AGENT_DIR or ~/.pi/agent says.
+    expect(dirname(dirname(snapshot.summary.filePath ?? ""))).toBe(
+      join(h.agentDir, "sessions"),
+    );
     // Nothing is on disk until Pi persists a message: this is a draft.
     expect(existsSync(snapshot.summary.filePath ?? "")).toBe(false);
   });

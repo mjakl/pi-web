@@ -41,7 +41,7 @@ import {
 } from "./bash-env.ts";
 import { createExtensionUi } from "./extension-ui.ts";
 import { projectTrustReloadOptions } from "./project-trust.ts";
-import type { PiSessionCatalog } from "./session-catalog.ts";
+import { defaultSessionDir, type PiSessionCatalog } from "./session-catalog.ts";
 
 /** Streaming tool arguments kept for the card; the entry holds the rest. */
 const PARTIAL_ARGUMENT_CHARS = 4096;
@@ -843,12 +843,18 @@ export function createPiAgentRuntime(options: {
     },
     async open(target) {
       if ("cwd" in target) {
-        return start(SessionManager.create(target.cwd), {
-          ...(target.model === undefined ? {} : { model: target.model }),
-          ...(target.thinkingLevel === undefined
-            ? {}
-            : { thinkingLevel: target.thinkingLevel }),
-        });
+        return start(
+          SessionManager.create(
+            target.cwd,
+            defaultSessionDir(options.agentDir, target.cwd),
+          ),
+          {
+            ...(target.model === undefined ? {} : { model: target.model }),
+            ...(target.thinkingLevel === undefined
+              ? {}
+              : { thinkingLevel: target.thinkingLevel }),
+          },
+        );
       }
       const existing = live.get(target.sessionId);
       if (existing) return existing;

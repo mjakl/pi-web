@@ -1,6 +1,9 @@
 import { assistantEntry } from "@adapters/fake/index";
 import { exportSessionHtml } from "@adapters/pi/session-export";
-import { createPiSessionCatalog } from "@adapters/pi/session-catalog";
+import {
+  createPiSessionCatalog,
+  defaultSessionDir,
+} from "@adapters/pi/session-catalog";
 import {
   branchToNewFile,
   removeSessionFile,
@@ -173,6 +176,22 @@ describe("session file edits", () => {
 });
 
 describe("Pi session catalog", () => {
+  it("stores a new session where the host Pi's SessionManager would", () => {
+    // The SDK reads its default store from PI_CODING_AGENT_DIR and keeps the
+    // cwd encoding private, so this is the one test that sets the variable:
+    // it pins the mirrored encoding to whatever Pi is on PATH.
+    const previous = process.env["PI_CODING_AGENT_DIR"];
+    process.env["PI_CODING_AGENT_DIR"] = root;
+    try {
+      expect(defaultSessionDir(root, cwd)).toBe(
+        SessionManager.create(cwd).getSessionDir(),
+      );
+    } finally {
+      if (previous === undefined) delete process.env["PI_CODING_AGENT_DIR"];
+      else process.env["PI_CODING_AGENT_DIR"] = previous;
+    }
+  });
+
   it("streams row metadata that matches the in-memory derivation", async () => {
     const manager = makeSession(["hello world", "again"]);
     const answers = manager

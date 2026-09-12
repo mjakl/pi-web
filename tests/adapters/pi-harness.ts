@@ -258,11 +258,6 @@ export async function createHarness(
       ...options.settings,
     }),
   );
-  // New sessions land in the SDK's default store for the agent directory Pi
-  // itself resolves, so that has to be this temp one for the test's lifetime.
-  const previousAgentDir = process.env["PI_CODING_AGENT_DIR"];
-  process.env["PI_CODING_AGENT_DIR"] = agentDir;
-
   const scripts: Script[] = [];
   const calls: {
     context: Context;
@@ -322,20 +317,12 @@ export async function createHarness(
     ): Promise<LiveSession> {
       const session = await runtime.open(target);
       opened.push(session);
-      const file = session.snapshot().summary.filePath;
-      if (file !== undefined && !file.startsWith(root)) {
-        await session.stop();
-        throw new Error(`session file escaped the temp store: ${file}`);
-      }
       return session;
     },
     async dispose(): Promise<void> {
       for (const session of opened) {
         if (runtime.get(session.id)) await session.stop();
       }
-      if (previousAgentDir === undefined)
-        delete process.env["PI_CODING_AGENT_DIR"];
-      else process.env["PI_CODING_AGENT_DIR"] = previousAgentDir;
       await rm(root, { recursive: true, force: true });
     },
   };
