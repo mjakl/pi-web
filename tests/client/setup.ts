@@ -5,7 +5,7 @@
 // the module registry is reset so module-level state starts over too.
 
 import { afterEach, beforeEach, vi } from "vitest";
-import { device, installFakeHtmx } from "./helpers.ts";
+import { device, FakeAudioContext, installFakeHtmx } from "./helpers.ts";
 
 // --- Popover API (absent from happy-dom 20) --------------------------------
 // Only what the modules observe: the toggle events, with their `newState`.
@@ -103,9 +103,11 @@ function clearAttributes(element: Element): void {
 // No test reaches the network: a request nothing answered gets an empty
 // reply. A test that wants to see requests stubs `fetch` on top of this.
 globalThis.fetch = () => Promise.resolve(new Response(""));
+Object.assign(globalThis, { AudioContext: FakeAudioContext });
 
 beforeEach(() => {
   vi.resetModules();
+  FakeAudioContext.played = 0;
   installFakeHtmx();
   // Timers are faked by default so a debounce a test set going cannot fire
   // into the next test; a test that needs the clock to move advances it.
@@ -132,4 +134,7 @@ afterEach(() => {
   });
   window.innerWidth = 1024;
   window.innerHeight = 768;
+  // A detached happy-dom window never navigates: `location.assign` only
+  // rewrites the URL, which is what a test asserts on, and this puts it back.
+  history.replaceState(null, "", "/");
 });

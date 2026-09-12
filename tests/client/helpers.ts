@@ -1,7 +1,7 @@
 // What the client tests share: the page, the events the modules listen for,
 // and the fake htmx that records what the modules asked it to do.
 
-import { type Mock, vi } from "vitest";
+import { type Mock, onTestFinished, vi } from "vitest";
 
 export type FakeHtmx = {
   ajax: Mock<(verb: string, path: string, context: unknown) => Promise<void>>;
@@ -158,6 +158,87 @@ export function json(body: unknown, status = 200): Response {
 
 export function text(body: string, status = 200): Response {
   return new Response(body, { status });
+}
+
+/**
+ * A private window: every storage call throws. Replaces the global, because
+ * happy-dom's storage proxy caches the methods it has handed out, so a spy
+ * on `Storage.prototype` outlives the test.
+ */
+export function blockStorage(): void {
+  const refuse = () => {
+    throw new Error("storage is blocked");
+  };
+  vi.stubGlobal("localStorage", {
+    getItem: refuse,
+    setItem: refuse,
+    removeItem: refuse,
+    clear: refuse,
+  });
+}
+
+/**
+ * The Web Audio API, which happy-dom lacks: enough for the completion tone.
+ * `played` counts the notes started since the last reset.
+ */
+export class FakeAudioContext {
+  static played = 0;
+  state: "running" | "suspended" = "running";
+  currentTime = 0;
+  destination = {};
+  resume(): Promise<void> {
+    this.state = "running";
+    return Promise.resolve();
+  }
+  createGain(): { gain: Record<string, () => void>; connect(): object } {
+    const gain = {
+      setValueAtTime: () => {},
+      linearRampToValueAtTime: () => {},
+      exponentialRampToValueAtTime: () => {},
+    };
+    return { gain, connect: () => ({}) };
+  }
+  createOscillator(): {
+    type: string;
+    frequency: { value: number };
+    connect(target: { connect(next: unknown): object }): object;
+    start(): void;
+    stop(): void;
+  } {
+    return {
+      type: "sine",
+      frequency: { value: 0 },
+      connect: (target) => target,
+      start: () => {
+        FakeAudioContext.played += 1;
+      },
+      stop: () => {},
+    };
+  }
+}
+
+export type FakeServiceWorker = {
+  register: Mock<(src: string, options: unknown) => Promise<unknown>>;
+  getRegistration: Mock<() => Promise<unknown>>;
+};
+
+/**
+ * `navigator.serviceWorker`, which happy-dom lacks, answering
+ * `getRegistration()` with what the test hands in. Gone after the test.
+ */
+export function serviceWorker(registration: unknown): FakeServiceWorker {
+  const fake: FakeServiceWorker = {
+    register: vi.fn(() => Promise.resolve(registration)),
+    getRegistration: vi.fn(() => Promise.resolve(registration)),
+  };
+  Object.defineProperty(navigator, "serviceWorker", {
+    value: fake,
+    configurable: true,
+  });
+  onTestFinished(() => {
+    Reflect.deleteProperty(navigator, "serviceWorker");
+  });
+  return fake;
 }
 
 type Device = {
