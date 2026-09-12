@@ -2,6 +2,10 @@ import type { Htmx, HtmxRequestCtx } from "htmx.org";
 import { requestContext } from "./htmx.ts";
 import { setUpRegion } from "./lifecycle.ts";
 import { closeMobileSidebar } from "./shell.ts";
+import {
+  cancelSessionInputFocus,
+  requestSessionInputFocus,
+} from "./session-input-focus.ts";
 import { showToast } from "./toasts.ts";
 
 function htmx(): Htmx {
@@ -35,6 +39,7 @@ export function navigationIntent(): number {
 export function setUpNavigation(): void {
   let latest: HtmxRequestCtx | undefined;
   let cancel: (() => void) | undefined;
+  let focusRedirect: string | undefined;
   const admitted = new WeakMap<HtmxRequestCtx, number>();
   const navigations = new WeakSet<HtmxRequestCtx>();
   // Qualify the initial new-chat history entry by folder, before leaving it.
@@ -78,6 +83,8 @@ export function setUpNavigation(): void {
     closeMobileSidebar();
     const main = document.querySelector<HTMLElement>("main");
     intent += 1;
+    cancelSessionInputFocus();
+    focusRedirect = undefined;
     const canceledHistory =
       latest?.request.headers["HX-History-Restore-Request"] === "true";
     cancel?.();
@@ -133,8 +140,23 @@ export function setUpNavigation(): void {
       return;
     }
     const url = new URL(ctx.request.action, location.href);
+    const body = ctx.request.body;
+    const text = body instanceof FormData ? body.get("text") : null;
+    const cloneCommand =
+      /^\/sessions\/[^/]+\/prompt$/.test(url.pathname) &&
+      body instanceof FormData &&
+      typeof text === "string" &&
+      /^\/clone(?:\s|$)/.test(text.trim()) &&
+      !body
+        .getAll("images[]")
+        .some((file) => file instanceof File && file.size > 0);
+    const createsSession =
+      url.pathname === "/sessions" ||
+      /^\/sessions\/[^/]+\/(fork|clone)$/.test(url.pathname) ||
+      cloneCommand;
     if (
       sessionTarget(ctx) ||
+      createsSession ||
       (url.pathname === "/sidebar" &&
         (url.searchParams.has("cwd") || url.searchParams.has("project"))) ||
       url.pathname === "/workspaces/validate" ||
@@ -142,6 +164,13 @@ export function setUpNavigation(): void {
         `/sessions/${document.querySelector<HTMLElement>("main[data-session-id]")?.dataset["sessionId"] ?? ""}/delete` ||
       /^\/sessions\/[^/]+\/(fork|rewind|navigate|clone)$/.test(url.pathname)
     ) {
+      // HX-Location continues the same opening operation, including any
+      // interaction that canceled focus while session creation was loading.
+      if (url.href !== focusRedirect) {
+        cancelSessionInputFocus();
+        if (sessionTarget(ctx) || createsSession) requestSessionInputFocus();
+      }
+      focusRedirect = undefined;
       if (sessionTarget(ctx)) closeMobileSidebar();
       cancel?.();
       // Native history uses an external signal, not the normal request's
@@ -192,6 +221,15 @@ export function setUpNavigation(): void {
     "htmx:before:swap",
   ])
     document.addEventListener(name, rejectObsolete);
+  document.addEventListener("htmx:before:response", (event) => {
+    const ctx = requestContext(event);
+    if (event.defaultPrevented || ctx !== latest) return;
+    const locationHeader = ctx.response?.headers.get("HX-Location");
+    if (!locationHeader) return;
+    // Our sessionLocation route helper sends the JSON form of HX-Location.
+    const destination = JSON.parse(locationHeader) as { path: string };
+    focusRedirect = new URL(destination.path, location.href).href;
+  });
   // A canceled body read skips after:request. Clear its already-read HX
   // headers before HTMX's finally trigger, and suppress stale form errors.
   document.addEventListener(
@@ -204,6 +242,7 @@ export function setUpNavigation(): void {
   document.addEventListener("htmx:error", (event) => {
     const ctx = requestContext(event);
     if (ctx !== latest || ctx.request.signal.aborted) return;
+    cancelSessionInputFocus();
     history.replaceState(history.state, "", displayedUrl());
     showToast(
       "Could not open that conversation. Your current conversation is still here.",
@@ -212,6 +251,7 @@ export function setUpNavigation(): void {
   document.addEventListener("htmx:after:request", (event) => {
     const ctx = requestContext(event);
     if (ctx === latest && ctx.response && ctx.response.status >= 400) {
+      cancelSessionInputFocus();
       event.preventDefault();
       ctx.push = false;
       ctx.replace = false;

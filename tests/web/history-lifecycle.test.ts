@@ -121,12 +121,18 @@ it.each([
         `#entry-u2 [hx-post$="/${action}"]`,
       ),
     );
+    if (action === "fork") button.focus();
     button.click();
     await expect
       .poll(() => browser.document.querySelector("#composer") !== before)
       .toBe(true);
     const area = required(browser.document.querySelector("textarea"));
     expect(area.value).toBe(text);
+    if (action === "fork") {
+      await expect.poll(() => browser.document.activeElement).toBe(area);
+      expect(area.selectionStart).toBe(text.length);
+      expect(area.selectionEnd).toBe(text.length);
+    }
     const input = required(
       browser.document.querySelector<HTMLInputElement>("#image-input"),
     );

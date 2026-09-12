@@ -533,6 +533,7 @@ it("keeps the shell and other drafts when cloning or deleting the displayed sess
     `htmx.ajax('POST','/sessions/s1/clone',{source:'#row-s1',target:'#row-s1',swap:'none'})`,
   );
   await displayed(b, "copy-1");
+  await expect.poll(() => b.document.activeElement?.id).toBe("composer-text");
   expect(b.document.querySelector("#session-sidebar")).toBe(shell);
   expect(b.document.querySelector("#file-panel")).toBe(panel);
   click(b, "s1");
@@ -678,3 +679,94 @@ it("does not let an old submit navigate while the reader's newer choice is loadi
   }
   await displayed(b, "s2");
 });
+
+it("autofocuses the restored draft through real sidebar and native history navigation", async () => {
+  const b = await fixture();
+  const focused = () => b.document.activeElement?.id;
+  await expect.poll(focused).toBe("composer-text");
+  draft(b, "draft one");
+  b.document.querySelector<HTMLElement>("#row-s2 a")?.focus();
+  click(b, "s2");
+  await displayed(b, "s2");
+  await expect.poll(focused).toBe("composer-text");
+  draft(b, "draft two");
+  b.window.history.back();
+  await displayed(b, "s1");
+  await expect.poll(focused).toBe("composer-text");
+  const input = b.document.querySelector<HTMLTextAreaElement>("#composer-text");
+  expect(input?.value).toBe("draft one");
+  expect(input?.selectionStart).toBe(9);
+  expect(input?.selectionEnd).toBe(9);
+  b.window.history.forward();
+  await displayed(b, "s2");
+  await expect.poll(focused).toBe("composer-text");
+  expect(text(b)).toBe("draft two");
+});
+
+it("does not steal focus after interaction while a real session request loads", async () => {
+  const release = Promise.withResolvers<undefined>();
+  let requested = false;
+  const b = await fixture((transport) => async (request) => {
+    if (new URL(request.url).pathname === "/sessions/s2") {
+      requested = true;
+      await release.promise;
+    }
+    return transport(request);
+  });
+  click(b, "s2");
+  try {
+    await expect.poll(() => requested).toBe(true);
+    b.document.querySelector<HTMLElement>("#row-s3 a")?.focus();
+  } finally {
+    release.resolve(undefined);
+  }
+  await displayed(b, "s2");
+  await new Promise<void>((resolve) =>
+    b.window.requestAnimationFrame(() => {
+      resolve();
+    }),
+  );
+  expect(b.document.activeElement).toBe(b.document.querySelector("#row-s3 a"));
+});
+
+it.each([false, true])(
+  "clone command preserves autofocus cancellation during creation: %s",
+  async (interact) => {
+    const release = Promise.withResolvers<undefined>();
+    let posted = false;
+    const b = await fixture((transport) => async (request) => {
+      if (new URL(request.url).pathname === "/sessions/s1/prompt") {
+        posted = true;
+        await release.promise;
+      }
+      return transport(request);
+    });
+    await b.workspace.send("s1", "seed");
+    await expect
+      .poll(() => b.document.querySelector("#messages")?.textContent)
+      .toContain("Fixture answer");
+    draft(b, "/clone");
+    const send = b.document.querySelector<HTMLElement>(
+      ".composer-action-primary",
+    );
+    send?.focus();
+    send?.click();
+    try {
+      await expect.poll(() => posted).toBe(true);
+      if (interact) b.document.querySelector<HTMLElement>("#row-s3 a")?.focus();
+    } finally {
+      release.resolve(undefined);
+    }
+    await displayed(b, "copy-1");
+    if (!interact)
+      await expect
+        .poll(() => b.document.activeElement?.id)
+        .toBe("composer-text");
+    await new Promise<void>((resolve) =>
+      b.window.requestAnimationFrame(() => {
+        resolve();
+      }),
+    );
+    expect(b.document.activeElement?.id === "composer-text").toBe(!interact);
+  },
+);
