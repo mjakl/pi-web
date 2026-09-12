@@ -16,7 +16,7 @@ import { type FileScope, type FileView, ForbiddenPath } from "./views.ts";
 const TEXT_LIMIT = 256 * 1024;
 const MEDIA_LIMIT = 10 * 1024 * 1024;
 
-export function fileUseCases({ deps, authorize, cwdOf, summaryOf }: Shared) {
+export function fileUseCases({ deps, authorize, cwdOf }: Shared) {
   /**
    * The folder a completion request may list. Defaults to the session's own,
    * and anything else goes through the same containment policy as the file
@@ -26,10 +26,14 @@ export function fileUseCases({ deps, authorize, cwdOf, summaryOf }: Shared) {
     id: string,
     directory: string | undefined,
   ): Promise<string> {
-    const summary = await summaryOf(id);
-    if (!summary) throw new ForbiddenPath("Unknown session");
-    if (directory === undefined || directory === "") return summary.cwd;
-    await authorize(directory, { sessionId: id, listing: true });
+    const cwd = await cwdOf(id);
+    if (cwd === "") throw new ForbiddenPath("Unknown session");
+    if (directory === undefined || directory === "") return cwd;
+    await authorize(directory, {
+      sessionId: id,
+      sessionCwd: cwd,
+      listing: true,
+    });
     return directory;
   }
 
@@ -38,15 +42,10 @@ export function fileUseCases({ deps, authorize, cwdOf, summaryOf }: Shared) {
    * one the folder comes from the page, so it goes through the same
    * containment check every other path does before it is listed.
    */
-  async function scopeCwd(scope: FileScope): Promise<string> {
-    if (scope.sessionId !== undefined) {
-      const cwd = await cwdOf(scope.sessionId);
-      if (cwd === "") throw new FileAccessError("Unknown session", 404);
-      return cwd;
-    }
+  async function resolveScopeCwd(scope: FileScope): Promise<string> {
+    if (scope.sessionId !== undefined) return cwdOf(scope.sessionId);
     const cwd = scope.cwd ?? "";
-    if (cwd === "") throw new FileAccessError("Unknown folder", 404);
-    await authorize(cwd, { listing: true });
+    if (cwd !== "") await authorize(cwd, { listing: true });
     return cwd;
   }
 
@@ -58,7 +57,7 @@ export function fileUseCases({ deps, authorize, cwdOf, summaryOf }: Shared) {
    */
   async function viewCwd(scope: FileScope): Promise<string> {
     try {
-      return await scopeCwd(scope);
+      return await resolveScopeCwd(scope);
     } catch {
       return "";
     }
@@ -99,18 +98,31 @@ export function fileUseCases({ deps, authorize, cwdOf, summaryOf }: Shared) {
       return children.filter((entry) => directoryWithin(cwd, entry.path));
     },
 
-    /** Children of one directory, for the explorer's lazy tree. */
-    async listDirectory(
-      sessionId: string | undefined,
-      path: string,
-    ): Promise<{ path: string; entries: DirEntry[] }> {
-      await authorize(path, { sessionId, listing: true });
-      return { path, entries: await deps.files.list(path) };
-    },
-
-    /** What the working tree changed, for the panel's changes section. */
-    async gitChanges(scope: FileScope): Promise<GitStatus> {
-      return deps.git.status(await scopeCwd(scope));
+    /** Resolve the explorer's folder once for Git and directory authorization. */
+    async fileTree(
+      scope: FileScope,
+      options: { path?: string; changes?: boolean } = {},
+    ): Promise<
+      | {
+          cwd: string;
+          status: GitStatus;
+          entries: DirEntry[];
+          changes: boolean;
+        }
+      | undefined
+    > {
+      const cwd = await resolveScopeCwd(scope);
+      if (cwd === "") return undefined;
+      const status = await deps.git.status(cwd);
+      const changes = options.changes === true && status.files.length > 0;
+      if (changes) return { cwd, status, entries: [], changes };
+      const path = options.path ?? cwd;
+      await authorize(path, {
+        sessionId: scope.sessionId,
+        sessionCwd: cwd,
+        listing: true,
+      });
+      return { cwd, status, entries: await deps.files.list(path), changes };
     },
 
     /**
@@ -121,7 +133,11 @@ export function fileUseCases({ deps, authorize, cwdOf, summaryOf }: Shared) {
     async fileView(scope: FileScope, path: string): Promise<FileView> {
       const { sessionId } = scope;
       const cwd = await viewCwd(scope);
-      const info = await authorize(path, { sessionId, allowMissing: true });
+      const info = await authorize(path, {
+        sessionId,
+        sessionCwd: cwd,
+        allowMissing: true,
+      });
       const status = cwd === "" ? null : await deps.git.status(cwd);
       const change = status ? changeFor(status, path) : undefined;
       if (info === undefined) {
@@ -226,10 +242,15 @@ export function fileUseCases({ deps, authorize, cwdOf, summaryOf }: Shared) {
       scope: FileScope,
       query: string,
       limit = 50,
-    ): Promise<FileEntry[]> {
-      const index = await deps.files.index(await scopeCwd(scope));
+    ): Promise<
+      { cwd: string; status: GitStatus; matches: FileEntry[] } | undefined
+    > {
+      const cwd = await resolveScopeCwd(scope);
+      if (cwd === "") return undefined;
+      const status = await deps.git.status(cwd);
+      const index = await deps.files.index(cwd);
       const entries = index.files.map((path) => ({ path, isDir: false }));
-      return filterFileEntries(entries, query, limit);
+      return { cwd, status, matches: filterFileEntries(entries, query, limit) };
     },
 
     /** `@` completion before a session exists, containment enforced. */

@@ -3,13 +3,15 @@ import {
   createFakeWorld,
   userEntry,
 } from "@adapters/fake/index";
+import { createPiSessionCatalog } from "@adapters/pi/session-catalog";
 import { createWorkspace } from "@core/workspace";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { createWebApp } from "@web/app";
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 // The file routes against a real checkout: a temporary Git repository is
 // simpler than a fake file system, and it is the only way a diff means
@@ -183,6 +185,125 @@ describe("explorer", () => {
       await app.request("/files/search?session=s1&q=")
     ).text();
     expect(cleared).toContain('data-name="notes.md"');
+  });
+});
+
+describe("stored-session file requests", () => {
+  let agentDir = "";
+  let sessionId = "";
+  let catalog: ReturnType<typeof createPiSessionCatalog>;
+  let storedApp: ReturnType<typeof createWebApp>;
+
+  beforeAll(async () => {
+    agentDir = await mkdtemp(join(tmpdir(), "web-pi-panel-agent-"));
+    const manager = SessionManager.create(
+      repo,
+      join(agentDir, "sessions", "fixture"),
+    );
+    manager.appendMessage({
+      role: "user",
+      content: `look at ${join(outside, "secret.txt")}`,
+      timestamp: 1,
+    });
+    const answer = assistantEntry("answer", null, "done", 100);
+    if (answer.type !== "message" || answer.message.role !== "assistant") {
+      throw new Error("Expected assistant message");
+    }
+    manager.appendMessage(answer.message);
+    manager.appendSessionInfo("Stored panel");
+    sessionId = manager.getSessionId();
+    catalog = createPiSessionCatalog({ agentDir });
+    const world = createFakeWorld();
+    storedApp = createWebApp({
+      workspace: createWorkspace({ ...world, sessions: catalog }),
+      staticRoot: "/nonexistent",
+      defaultCwd: repo,
+    });
+  });
+
+  afterAll(async () => {
+    await rm(agentDir, { recursive: true, force: true });
+  });
+
+  it.each([
+    ["tree", "&path=", 'data-name="main.ts"'],
+    ["explorer", "", 'data-name="src"'],
+    ["explorer", "&changes=1", "file-explorer-change-row"],
+    ["search", "&q=main", 'data-name="main.ts"'],
+    ["search", "&q=", 'data-name="src"'],
+    ["view", "&path=", "const"],
+  ])(
+    "resolves %s%s with one folder lookup, without opening the transcript",
+    async (route, suffix, expected) => {
+      const folder = vi.spyOn(catalog, "folder");
+      const read = vi.spyOn(catalog, "read");
+      const open = vi.spyOn(SessionManager, "open");
+      try {
+        const path =
+          route === "view" ? join(repo, "src", "main.ts") : join(repo, "src");
+        const query = suffix.endsWith("path=")
+          ? suffix + encodeURIComponent(path)
+          : suffix;
+        const response = await storedApp.request(
+          `/files/${route}?session=${sessionId}${query}`,
+        );
+        expect(response.status).toBe(200);
+        expect(await response.text()).toContain(expected);
+        expect(folder).toHaveBeenCalledTimes(1);
+        expect(read).not.toHaveBeenCalled();
+        expect(open).not.toHaveBeenCalled();
+      } finally {
+        vi.restoreAllMocks();
+      }
+    },
+  );
+
+  it("uses the live folder even when the session has no catalog file", async () => {
+    const world = createFakeWorld();
+    const live = await world.runtime.open({ cwd: repo });
+    const liveApp = createWebApp({
+      workspace: createWorkspace({ ...world, sessions: catalog }),
+      staticRoot: "/nonexistent",
+      defaultCwd: repo,
+    });
+    const folder = vi.spyOn(catalog, "folder");
+    const read = vi.spyOn(catalog, "read");
+    try {
+      const response = await liveApp.request(
+        `/files/tree?session=${live.id}&path=${encodeURIComponent(join(repo, "src"))}`,
+      );
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('data-name="main.ts"');
+      expect(folder).not.toHaveBeenCalled();
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      await live.stop();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("still reads the transcript for an outside file, but never grants directory listings or symlink escapes", async () => {
+    const read = vi.spyOn(catalog, "read");
+    try {
+      const request = (route: string, path: string) =>
+        storedApp.request(
+          `/files/${route}?session=${sessionId}&path=${encodeURIComponent(path)}`,
+        );
+      const referenced = await request("view", join(outside, "secret.txt"));
+      expect(referenced.status).toBe(200);
+      expect(await referenced.text()).toContain("not yours");
+      expect(read).toHaveBeenCalledTimes(1);
+      read.mockClear();
+      expect((await request("tree", outside)).status).toBe(403);
+      expect((await request("tree", join(repo, "escape"))).status).toBe(403);
+      expect(read).not.toHaveBeenCalled();
+      expect((await request("view", join(outside, "secret2.txt"))).status).toBe(
+        403,
+      );
+      expect(read).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });
 

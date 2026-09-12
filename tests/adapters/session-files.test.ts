@@ -191,6 +191,49 @@ describe("session file edits", () => {
 });
 
 describe("Pi session catalog", () => {
+  it("reads the current folder without opening or rewriting the transcript", async () => {
+    const manager = makeSession(["folder lookup"]);
+    manager.appendSessionInfo("Name still comes from the transcript");
+    const file = fileOf(manager);
+    // SessionManager.open would append a newline to this synthetic fixture.
+    writeFileSync(file, readFileSync(file, "utf8").trimEnd());
+    const before = readFileSync(file, "utf8");
+    const catalog = createPiSessionCatalog({ agentDir: root });
+    const open = vi.spyOn(SessionManager, "open");
+    expect(await catalog.folder(manager.getSessionId())).toBe(cwd);
+    expect(open).not.toHaveBeenCalled();
+    expect(readFileSync(file, "utf8")).toBe(before);
+
+    const newline = before.indexOf("\n");
+    const header = JSON.parse(before.slice(0, newline)) as Record<
+      string,
+      unknown
+    >;
+    writeFileSync(
+      file,
+      JSON.stringify({ ...header, cwd: "/repo/moved" }) + before.slice(newline),
+    );
+    expect(await catalog.folder(manager.getSessionId())).toBe("/repo/moved");
+    expect((await catalog.read(manager.getSessionId()))?.summary.name).toBe(
+      "Name still comes from the transcript",
+    );
+    rmSync(file);
+    expect(await catalog.folder(manager.getSessionId())).toBeUndefined();
+    expect(await catalog.folder("unknown")).toBeUndefined();
+  });
+
+  it("does not trust a remembered path with a malformed or mismatched header", async () => {
+    const manager = makeSession(["header"]);
+    const file = fileOf(manager);
+    const catalog = createPiSessionCatalog({ agentDir: root });
+    await catalog.list();
+    writeFileSync(file, "not json\n");
+    expect(await catalog.folder(manager.getSessionId())).toBeUndefined();
+    const other = makeSession(["other"]);
+    writeFileSync(file, readFileSync(fileOf(other)));
+    expect(await catalog.folder(manager.getSessionId())).toBeUndefined();
+  });
+
   it("stores a new session where the host Pi's SessionManager would", () => {
     // The SDK reads its default store from PI_CODING_AGENT_DIR and keeps the
     // cwd encoding private, so this is the one test that sets the variable:

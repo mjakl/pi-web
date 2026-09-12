@@ -257,6 +257,13 @@ export function createPiSessionCatalog(options: {
       paths.set(id, filePath);
     },
 
+    async folder(id) {
+      const filePath = await pathOf(id);
+      if (!filePath) return undefined;
+      const header = readHeader(filePath);
+      return header?.id === id ? header.cwd : undefined;
+    },
+
     async read(id, leafId): Promise<SessionRead | undefined> {
       const filePath = await pathOf(id);
       if (!filePath) return undefined;

@@ -3,9 +3,9 @@
 
 import { extensionOf, mimeOf } from "@core/file-types";
 import { FileAccessError } from "@core/path-access";
-import { type GitChangeFile } from "@core/ports";
+import { type GitStatus } from "@core/ports";
 import { isSessionId } from "@core/sessions";
-import { type FileScope, type Workspace } from "@core/workspace";
+import { type FileScope } from "@core/workspace";
 import {
   Explorer,
   ExplorerError,
@@ -52,56 +52,30 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
     return cwd === "" ? {} : { cwd };
   }
 
-  async function treeContext(scope: FileScope): Promise<
-    | {
-        context: TreeContext;
-        status: Awaited<ReturnType<Workspace["gitChanges"]>>;
-      }
-    | undefined
-  > {
-    const cwd =
-      scope.sessionId === undefined
-        ? scope.cwd
-        : await deps.workspace.sessionFolder(scope.sessionId);
-    if (cwd === undefined || cwd === "") return undefined;
-    const status = await deps.workspace.gitChanges(scope);
-    const changes = new Map<string, GitChangeFile>(
-      status.files.map((file) => [file.path, file]),
-    );
+  function treeContext(
+    scope: FileScope,
+    found: { cwd: string; status: GitStatus },
+  ): TreeContext {
     return {
-      context: {
-        ...(scope.sessionId === undefined
-          ? {}
-          : { sessionId: scope.sessionId }),
-        cwd,
-        changes,
-      },
-      status,
+      ...(scope.sessionId === undefined ? {} : { sessionId: scope.sessionId }),
+      cwd: found.cwd,
+      changes: new Map(found.status.files.map((file) => [file.path, file])),
     };
   }
 
   app.get("/files/explorer", async (c) => {
     const scope = scopeParameter(c);
     try {
-      const found = await treeContext(scope);
+      const found = await deps.workspace.fileTree(scope, {
+        changes: c.req.query("changes") === "1",
+      });
       if (!found) return await c.notFound();
-      // The sidebar's changed-files toggle asks for the same fragment with
-      // the changes list in place of the tree, as pi-web swaps the two. With
-      // nothing changed there is no list to show, so the tree stays.
-      const changes =
-        c.req.query("changes") === "1" && found.status.files.length > 0;
-      const listing = changes
-        ? { entries: [] }
-        : await deps.workspace.listDirectory(
-            scope.sessionId,
-            found.context.cwd,
-          );
       return await c.html(
         <Explorer
-          context={found.context}
+          context={treeContext(scope, found)}
           status={found.status}
-          entries={listing.entries}
-          changes={changes}
+          entries={found.entries}
+          changes={found.changes}
         />,
       );
     } catch (error) {
@@ -120,14 +94,13 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
     const depth = Number(c.req.query("depth") ?? "1");
     if (!Number.isInteger(depth) || depth < 0) return c.notFound();
     try {
-      const found = await treeContext(scope);
+      const found = await deps.workspace.fileTree(scope, { path });
       if (!found) return await c.notFound();
-      const listing = await deps.workspace.listDirectory(scope.sessionId, path);
       return await c.html(
         <TreeNodes
-          context={found.context}
+          context={treeContext(scope, found)}
           directory={path}
-          entries={listing.entries}
+          entries={found.entries}
           depth={depth}
         />,
       );
@@ -141,27 +114,24 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
     const scope = scopeParameter(c);
     const query = (c.req.query("q") ?? "").slice(0, 500).trim();
     try {
-      const found = await treeContext(scope);
-      if (!found) return await c.notFound();
       if (query === "") {
-        const listing = await deps.workspace.listDirectory(
-          scope.sessionId,
-          found.context.cwd,
-        );
+        const found = await deps.workspace.fileTree(scope);
+        if (!found) return await c.notFound();
         return await c.html(
           <Explorer
-            context={found.context}
+            context={treeContext(scope, found)}
             status={found.status}
-            entries={listing.entries}
+            entries={found.entries}
             changes={false}
           />,
         );
       }
-      const matches = await deps.workspace.searchFiles(scope, query);
+      const found = await deps.workspace.searchFiles(scope, query);
+      if (!found) return await c.notFound();
       return await c.html(
         <SearchResults
-          context={found.context}
-          matches={matches.map((entry) => entry.path)}
+          context={treeContext(scope, found)}
+          matches={found.matches.map((entry) => entry.path)}
         />,
       );
     } catch (error) {
