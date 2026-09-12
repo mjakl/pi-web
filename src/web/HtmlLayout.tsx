@@ -83,7 +83,9 @@ export function HtmlLayout(
         <link rel="apple-touch-icon" href={ICONS.apple} sizes="180x180" />
         <script>{raw(THEME_SCRIPT)}</script>
         <link rel="stylesheet" href={assets.css} />
-        <script src={HTMX_SRC} defer></script>
+        {/* Core must see readyState=loading, so initialization waits for the
+            deferred SSE extension and module client at DOMContentLoaded. */}
+        <script src={HTMX_SRC}></script>
         <script src={HTMX_SSE_SRC} defer></script>
         <script type="module" src={assets.js}></script>
       </head>

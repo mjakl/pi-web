@@ -48,6 +48,8 @@ export type SessionView = {
   turn: TranscriptItem[];
   /** Last settled raw entry, including invisible entries; empty is root. */
   settledCursor: string;
+  /** The delivered cursor left the canonical branch; replace, do not append. */
+  resetTranscript: boolean;
   status: LiveStatus | null;
   usage: ContextUsage;
   /** Cumulative token totals of the whole session, for the top-bar readout. */

@@ -343,7 +343,22 @@ describe("pageItems", () => {
 
   it("refuses an entry that is not on this branch", () => {
     expect(() => pageItems(items, { before: "nope" })).toThrow(RangeError);
-    expect(() => pageItems(items, { after: "nope" })).toThrow(RangeError);
+  });
+
+  it("marks a missing settled cursor as a bounded replacement, including an empty branch", () => {
+    expect(pageItems(items, { after: "gone", tail: 2 })).toEqual({
+      items: items.slice(-2),
+      hasMore: true,
+      oldestId: "u3",
+      reset: true,
+    });
+    expect(pageItems([], { after: "gone" })).toEqual({
+      items: [],
+      hasMore: false,
+      oldestId: undefined,
+      reset: true,
+    });
+    expect(pageItems(items, { after: "a3" }).reset).toBe(false);
   });
 });
 

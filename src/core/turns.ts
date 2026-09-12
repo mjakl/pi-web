@@ -310,15 +310,24 @@ export function pageItems(
     /** The branch's entry ids, root first, for counting the tail in entries. */
     entryIds?: readonly string[];
   } = {},
-): { items: TranscriptItem[]; hasMore: boolean; oldestId: string | undefined } {
+): {
+  items: TranscriptItem[];
+  hasMore: boolean;
+  oldestId: string | undefined;
+  reset: boolean;
+} {
+  let reset = false;
   if (options.after !== undefined) {
     const ids = options.entryIds ?? items.map((item) => item.entryId);
     const cursor = options.after === "" ? -1 : ids.indexOf(options.after);
-    if (options.after !== "" && cursor === -1)
-      throw new RangeError("Unknown settled cursor for this branch");
-    const missing = new Set(ids.slice(cursor + 1));
-    const page = items.filter((item) => missing.has(item.entryId));
-    return { items: page, hasMore: false, oldestId: page[0]?.entryId };
+    reset = options.after !== "" && cursor === -1;
+    if (!reset) {
+      const missing = new Set(ids.slice(cursor + 1));
+      const page = items.filter((item) => missing.has(item.entryId));
+      return { items: page, hasMore: false, oldestId: page[0]?.entryId, reset };
+    }
+    // A rewrite removed the delivered cursor. Return a fresh bounded page,
+    // explicitly marked for replacement, never append the new branch to it.
   }
   const tail = Math.min(Math.max(options.tail ?? PAGE_SIZE, 1), PAGE_MAX);
   let end = items.length;
@@ -354,6 +363,7 @@ export function pageItems(
     items: page,
     hasMore: start > 0,
     oldestId: page[0]?.entryId,
+    reset,
   };
 }
 

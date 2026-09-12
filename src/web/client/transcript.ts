@@ -1,4 +1,4 @@
-import { settledContent, swapTasks } from "./htmx.ts";
+import { requestContext, settledContent, swapTasks } from "./htmx.ts";
 import { codeText, highlightIn } from "./highlight.ts";
 import { setUpImagePreview } from "./images.ts";
 import { setUpMermaid } from "./mermaid.ts";
@@ -90,6 +90,21 @@ export function setUpTranscript(): void {
   setUpImagePreview();
   setUpCopy();
   setUpMermaid();
+  // Native cleanup removes triggers, but does not abort ordinary requests.
+  // A rewritten transcript must not keep fetching or accept a late old page.
+  document.addEventListener("htmx:before:cleanup", (event) => {
+    const owner = event.target;
+    if (owner instanceof Element && owner.closest("#log"))
+      owner.dispatchEvent(new Event("htmx:abort"));
+  });
+  document.addEventListener("htmx:before:response", (event) => {
+    const { sourceElement, request } = requestContext(event);
+    if (
+      sourceElement.closest("#log") &&
+      (!sourceElement.isConnected || request.signal.aborted)
+    )
+      event.preventDefault();
+  });
   setUpRegion("#log", mountTranscript);
 }
 

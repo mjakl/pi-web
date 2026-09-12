@@ -111,6 +111,23 @@ older loaded pages, or replaying completion sounds and notices. The usual
 cursor bypass the tail limit. This replaces the runtime's last-settled-turn
 slot, not the transport's retry policy.
 
+If a navigation or rewind removes that cursor from the active branch, the
+projection marks its fresh bounded page as a replacement. The stream replaces
+`.chat-body` through the same `Transcript` view used for initial pages,
+including its `#log`, pagination, live tail and rail column, and sends the
+matching status and fresh cursor. The old scroller's lifecycle is disposed,
+along with the old rail column's interaction state. Transcript cleanup aborts
+ordinary HTMX requests and rejects late responses from detached sources, so an
+old pagination request cannot insert the discarded branch again. Other
+projection failures show an error toast and end that stream instead of being
+mistaken for a missing cursor or followed by a completion notification.
+
+The core HTMX script is parser-blocking so it sees `readyState=loading` and
+initializes on `DOMContentLoaded`. The SSE extension stays deferred and the
+client stays a module; both finish before that event. Deferring core as well
+would let its initialization timer run before a delayed extension registers,
+leaving the first stream without a trigger.
+
 The bundled SSE extension has `pauseOnBackground: false` so hiding a tab does
 not introduce additional disconnects. The client starts each owner through its
 native `web-pi:sse-start` trigger after installing failure handlers. Before the

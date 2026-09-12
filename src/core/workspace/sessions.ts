@@ -107,6 +107,7 @@ export function sessionUseCases({
       ...(options.leaf === undefined ? {} : { leaf: options.leaf }),
       turn: turn.items,
       settledCursor: settledBranch.at(-1)?.id ?? "",
+      resetTranscript: page.reset,
       status,
       tokens: sessionStats(snapshot.entries).tokens,
       usage: contextUsage({
@@ -171,6 +172,7 @@ export function sessionUseCases({
       ...(options.leaf === undefined ? {} : { leaf: options.leaf }),
       turn: [],
       settledCursor: stored.branch.at(-1)?.id ?? "",
+      resetTranscript: page.reset,
       status: null,
       tokens: sessionStats(stored.entries).tokens,
       // pi-web reads context usage off the running agent, so a session

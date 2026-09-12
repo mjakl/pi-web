@@ -40,6 +40,10 @@ describe("shipped HTMX 4 with the real browser client", () => {
       defaultCwd: "/repo",
     });
     const shell = await (await app.request("/new")).text();
+    // Guards the rendered loading contract. Only a real browser can prove
+    // parser/DCL ordering when the deferred scripts arrive late.
+    expect(shell).toContain(`<script src="${HTMX_SRC}"></script>`);
+    expect(shell).toContain(`<script src="${HTMX_SSE_SRC}" defer=""></script>`);
     // Keep the real head configuration and body inheritance. The test loads
     // scripts itself and does not need the page's long-lived sidebar stream.
     const markup = shell

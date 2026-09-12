@@ -27,6 +27,7 @@ import { Partial } from "@web/views/Partial";
 import { Rail } from "@web/views/Rail";
 import { ShelfBody, changedWidgets, shelfSignature } from "@web/views/Shelf";
 import { Status, turnBusy } from "@web/views/Status";
+import { Transcript } from "@web/views/Transcript";
 import { type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import {
@@ -427,19 +428,29 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
           id: `settled=${encodeURIComponent(view.settledCursor)}`,
           data: await html(
             <>
-              {view.items.length > 0 ? (
-                <Partial target="#messages" swap="beforeend">
-                  <Items items={view.items} actions={actions} />
+              {view.resetTranscript ? (
+                <Partial target=".chat-body" swap="outerHTML">
+                  <Transcript view={view} />
                 </Partial>
+              ) : (
+                <>
+                  {view.items.length > 0 ? (
+                    <Partial target="#messages" swap="beforeend">
+                      <Items items={view.items} actions={actions} />
+                    </Partial>
+                  ) : null}
+                  <Partial target="#turn" swap="innerMorph">
+                    <TurnFragment
+                      items={view.turn}
+                      actions={actions}
+                      status={view.status}
+                    />
+                  </Partial>
+                </>
+              )}
+              {reconciled && !view.resetTranscript ? (
+                <Rail view={view} oob />
               ) : null}
-              <Partial target="#turn" swap="innerMorph">
-                <TurnFragment
-                  items={view.turn}
-                  actions={actions}
-                  status={view.status}
-                />
-              </Partial>
-              {reconciled ? <Rail view={view} oob /> : null}
               <Status view={view} model={modelChanged} oob partial />
             </>,
           ),
@@ -522,6 +533,30 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
         }
       };
 
+      let aborted = false;
+      const fail = async (error: unknown) => {
+        if (aborted) return;
+        aborted = true;
+        try {
+          await stream.writeSSE({
+            data: await html(
+              <Partial target="#toasts" swap="beforeend">
+                <Toasts
+                  notices={[
+                    {
+                      level: "error",
+                      message: `Live updates failed: ${errorText(error)}`,
+                    },
+                  ]}
+                />
+              </Partial>,
+            ),
+          });
+        } finally {
+          ended.resolve(undefined);
+          await stream.close();
+        }
+      };
       let timer: ReturnType<typeof setTimeout> | undefined;
       let queue: Promise<void> = Promise.resolve();
       const enqueue = (kind: "activity" | "turn_done") => {
@@ -529,9 +564,7 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
           .then(async () => {
             await render(kind);
           })
-          .catch(() => {
-            // A closed stream ends rendering; the abort handler cleans up.
-          });
+          .catch(fail);
       };
       /**
        * The agent finished a run and went idle. The browser decides what to
@@ -541,13 +574,10 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
       const announceDone = () => {
         queue = queue
           .then(async () => {
-            await stream.writeSSE({ event: "done", data: id });
+            if (!aborted) await stream.writeSSE({ event: "done", data: id });
           })
-          .catch(() => {
-            // A closed stream ends rendering; the abort handler cleans up.
-          });
+          .catch(fail);
       };
-      let aborted = false;
       stream.onAbort(() => {
         aborted = true;
         ended.resolve(undefined);
@@ -591,9 +621,7 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
           .then(async () => {
             await stream.write(": ping\n\n");
           })
-          .catch(() => {
-            ended.resolve(undefined);
-          });
+          .catch(fail);
       }, 30_000);
       await ended.promise;
       clearInterval(heartbeat);

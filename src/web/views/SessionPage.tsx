@@ -9,7 +9,6 @@ import type { SessionStats } from "@core/session-entries";
 import type { NewSessionView, SessionView, SidebarView } from "@core/workspace";
 import { Composer, DropZone } from "./Composer.tsx";
 import { FilePanelBody } from "./Files.tsx";
-import { Rail } from "./Rail.tsx";
 import { CustomPanel, ExtensionDialog } from "./Extensions.tsx";
 import { Shelf } from "./Shelf.tsx";
 import {
@@ -17,7 +16,6 @@ import {
   CloseIcon,
   HamburgerIcon,
   HistoryIcon,
-  JumpToLatestIcon,
   MoreDotsIcon,
   PanelLeftIcon,
   PanelRightIcon,
@@ -27,19 +25,13 @@ import {
   TokenArrowIcon,
   WrenchIcon,
 } from "./icons.tsx";
-import {
-  type ItemActions,
-  Items,
-  LoadEarlier,
-  TurnFragment,
-} from "./Items.tsx";
+import { Transcript } from "./Transcript.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import {
   compactDisabled,
   CompactButton,
   ContextReadout,
   Status,
-  turnBusy,
 } from "./Status.tsx";
 import { DialogHost, MissingFolderNotice, TrustBadge } from "./Dialogs.tsx";
 
@@ -588,17 +580,6 @@ export function NewSessionPage({
   );
 }
 
-/** The stored name, else the opening request, else the id. */
-function pageTitle(view: SessionView): string {
-  const name = view.summary.name?.trim();
-  if (name) return name;
-  const first = [...view.items, ...view.turn].find(
-    (item) => item.kind === "user",
-  );
-  const opening = first?.text.replaceAll(/\s+/g, " ").trim().slice(0, 60);
-  return opening === undefined || opening === "" ? view.summary.id : opening;
-}
-
 export function SessionPage({
   sidebar,
   view,
@@ -617,17 +598,9 @@ export function SessionPage({
   overlay?: unknown;
 }) {
   const { summary } = view;
-  const leafId = view.leaves.find((leaf) => leaf.current)?.id;
   // A session whose folder is gone stays readable: only the actions that
   // would run the agent in it disappear.
   const missingFolder = summary.cwdAvailable === false;
-  const actions: ItemActions = {
-    sessionId: summary.id,
-    cwd: summary.cwd,
-    starred: view.starred,
-    ...(view.otherBranch || missingFolder ? { readOnly: true } : {}),
-    ...(turnBusy(view.status) ? { busy: true } : {}),
-  };
   return (
     <Shell
       sidebar={sidebar}
@@ -655,72 +628,7 @@ export function SessionPage({
         style="--expanded-conversation-rail-width:36px"
       >
         <DropZone />
-        <div class="chat-body">
-          <div id="log" class="chat-scroll">
-            <div class="chat-scroll-content">
-              <div class="chat-transcript">
-                <span hidden data-page-title>
-                  {pageTitle(view)}
-                </span>
-                {view.otherBranch ? (
-                  <div class="branch-sync-notice" role="status">
-                    <span>
-                      Viewing another branch of this session, read only.
-                    </span>
-                    <button
-                      type="button"
-                      class="history-action"
-                      hx-post={`/sessions/${summary.id}/navigate`}
-                      hx-vals={JSON.stringify({ entryId: leafId })}
-                      hx-target="body"
-                      hx-swap="innerHTML"
-                    >
-                      Continue from here
-                    </button>
-                  </div>
-                ) : null}
-                <div id="messages">
-                  {view.hasMore && view.oldestId !== undefined ? (
-                    <LoadEarlier
-                      sessionId={summary.id}
-                      before={view.oldestId}
-                      {...(view.leaf === undefined ? {} : { leaf: view.leaf })}
-                    />
-                  ) : null}
-                  <Items items={view.items} actions={actions} />
-                </div>
-                <div id="turn">
-                  <TurnFragment
-                    items={view.turn}
-                    actions={actions}
-                    status={view.status}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            id="jump-to-latest"
-            class="chat-jump-to-latest"
-            aria-label="Jump to latest"
-            title="Jump to latest"
-            hidden
-          >
-            <JumpToLatestIcon />
-          </button>
-          {/* The rail column of pi-web's two-column chat body. pi-web puts
-              the surface on the element itself (§5), not in a class. */}
-          <div
-            id="rail-column"
-            class="chat-minimap"
-            role="navigation"
-            aria-label="Conversation paths"
-            style="width:36px; flex-shrink:0; position:relative; cursor:pointer; user-select:none; border-left:1px solid var(--border); background:var(--bg-panel)"
-          >
-            <Rail view={view} />
-          </div>
-        </div>
+        <Transcript view={view} />
         <footer class="chat-composer">
           {missingFolder ? (
             <MissingFolderNotice />
