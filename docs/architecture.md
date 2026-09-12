@@ -33,6 +33,21 @@ Internal interfaces, all consumers in this repository. Defined in
 compaction, retries, queue, extension notices) stays inside; callers only read a
 snapshot and receive `activity`, `turn_done`, and `stopped`.
 
+`runBash()` resolves when the session admits the command, before execution
+finishes, so a new session can expose its URL and Stop control immediately. The
+adapter owns the completion promise, reports later failures through notices, and
+saves real `bashExecution` entries before `turn_done`. Pi normally defers its
+first JSONL write until an assistant reply; shell-only sessions use pi-web's
+exclusive initial flush and then return to SDK appends. `!!` entries retain
+`excludeFromContext`; no assistant message is invented. Stopping a session
+aborts its shell and awaits settlement before disposal.
+
+The model menu and new-session startup share SDK scope resolution. Startup
+applies the effective model and reasoning pin without passing them to
+`startupWrites` as user choices. Only deliberate overrides reach that unchanged
+persistence rule. Project trust still gates project settings, and existing
+conversations retain SDK model/reasoning restoration.
+
 `src/core/workspace/` is the inbound port: `createWorkspace(deps)` in
 `src/core/workspace/index.ts` composes one flat `Workspace` object from four
 use-case families that never import each other —

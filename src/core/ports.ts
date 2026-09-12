@@ -340,6 +340,7 @@ export type LiveSession = {
   customInput(requestId: string, data: string): void;
   /** Empties the queue and hands the messages back for the composer. */
   clearQueue(): QueuedMessage[];
+  /** Resolves on admission; settlement and later errors arrive through the snapshot/events. */
   runBash(command: string, excludeFromContext: boolean): Promise<void>;
   abortBash(): void;
   subscribe(listener: (event: LiveEvent) => void): () => void;

@@ -7,8 +7,48 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { statSync } from "node:fs";
 import { join } from "node:path";
+import { projectTrustReloadOptions } from "./project-trust.ts";
 
 const CACHE_TTL_MS = 60_000;
+
+/** The menu and session startup must resolve the same scope and reasoning pins. */
+export async function resolveModelListing(
+  runtime: ModelRuntime,
+  settings: SettingsManager,
+): Promise<ModelListing> {
+  const available = await runtime.getAvailable();
+  const describe = (model: (typeof available)[number]): ModelOption => ({
+    provider: model.provider,
+    id: model.id,
+    name: model.name,
+    contextWindow: model.contextWindow,
+    reasoning: model.reasoning,
+    ...(model.reasoning
+      ? { thinkingLevels: thinkingChoices(model.thinkingLevelMap) }
+      : {}),
+  });
+  const provider = settings.getDefaultProvider();
+  const model = settings.getDefaultModel();
+  const preferred =
+    provider !== undefined && model !== undefined
+      ? { preferred: { provider, id: model } }
+      : {};
+  const patterns = (settings.getEnabledModels() ?? [])
+    .map((pattern) => pattern.trim())
+    .filter((pattern) => pattern !== "");
+  if (patterns.length === 0) {
+    return { models: available.map(describe), warnings: [], ...preferred };
+  }
+  const scope = await resolveModelScopeWithDiagnostics(patterns, runtime);
+  const warnings = scope.diagnostics.map((diagnostic) => diagnostic.message);
+  const scoped = scope.scopedModels.map((entry) => ({
+    ...describe(entry.model),
+    ...(entry.thinkingLevel === undefined ? {} : { pin: entry.thinkingLevel }),
+  }));
+  return scoped.length === 0
+    ? { models: available.map(describe), warnings, ...preferred }
+    : { models: scoped, warnings, ...preferred };
+}
 
 /**
  * Credentials and model metadata are edited in the Pi terminal, never here,
@@ -50,42 +90,10 @@ export function createPiModelCatalog(options: {
       authPath: join(options.agentDir, "auth.json"),
       modelsPath: join(options.agentDir, "models.json"),
     });
-    const available = await runtime.getAvailable();
-    const describe = (model: (typeof available)[number]): ModelOption => ({
-      provider: model.provider,
-      id: model.id,
-      name: model.name,
-      contextWindow: model.contextWindow,
-      reasoning: model.reasoning,
-      ...(model.reasoning
-        ? { thinkingLevels: thinkingChoices(model.thinkingLevelMap) }
-        : {}),
-    });
     const settings = SettingsManager.create(cwd, options.agentDir);
-    const provider = settings.getDefaultProvider();
-    const model = settings.getDefaultModel();
-    const preferred =
-      provider !== undefined && model !== undefined
-        ? { preferred: { provider, id: model } }
-        : {};
-    const patterns = (settings.getEnabledModels() ?? [])
-      .map((pattern) => pattern.trim())
-      .filter((pattern) => pattern !== "");
-    if (patterns.length === 0) {
-      return { models: available.map(describe), warnings: [], ...preferred };
-    }
-    const scope = await resolveModelScopeWithDiagnostics(patterns, runtime);
-    const warnings = scope.diagnostics.map((diagnostic) => diagnostic.message);
-    // `provider/*:high` pins a reasoning level for every model it matched.
-    const scoped = scope.scopedModels.map((entry) => ({
-      ...describe(entry.model),
-      ...(entry.thinkingLevel === undefined
-        ? {}
-        : { pin: entry.thinkingLevel }),
-    }));
-    return scoped.length === 0
-      ? { models: available.map(describe), warnings, ...preferred }
-      : { models: scoped, warnings, ...preferred };
+    const trust = projectTrustReloadOptions(cwd, options.agentDir);
+    if (trust) settings.setProjectTrusted(await trust.resolveProjectTrust());
+    return resolveModelListing(runtime, settings);
   }
 
   return {

@@ -1,10 +1,4 @@
 import { createFakeWorld, FAKE_MODEL } from "@adapters/fake/index";
-import {
-  initialModel,
-  initialThinking,
-  startupWrites,
-  type StartupChoice,
-} from "@core/models";
 import { createWorkspace } from "@core/workspace";
 import { createWebApp } from "@web/app";
 import type {
@@ -283,7 +277,7 @@ describe("composer acceptance through shipped HTMX and real routes", () => {
 
 describe("explicit startup choices from the rendered form", () => {
   it.each(["untouched", "shown model", "model", "thinking", "both", "auto"])(
-    "persists only deliberate choices: %s",
+    "submits only deliberate overrides to the runtime: %s",
     async (choice) => {
       const { app, world, openSpy } = fixture();
       const scoped = {
@@ -300,32 +294,8 @@ describe("explicit startup choices from the rendered form", () => {
       };
       world.models.list = () =>
         Promise.resolve({ models: [scoped, other], warnings: [] });
-      const writes: StartupChoice[] = [];
-      const effective: StartupChoice[] = [];
-      const runtime = required(openSpy.getMockImplementation());
-      // Record admission at the runtime port using the unchanged persistence
-      // rule. SDK/settings-file behavior is covered by agent-runtime.test.ts.
-      openSpy.mockImplementation(async (target) => {
-        if (!("cwd" in target)) throw new Error("Expected a new session");
-        const model = required(
-          initialModel(
-            [scoped, other],
-            target.model
-              ? { provider: target.model.provider, id: target.model.modelId }
-              : undefined,
-          ),
-        );
-        const resolved = {
-          model: { provider: model.provider, modelId: model.id },
-          thinkingLevel:
-            target.thinkingLevel ?? required(initialThinking(model)),
-          supportsThinking: true,
-        };
-        effective.push(resolved);
-        const write = startupWrites(target, resolved);
-        if (Object.keys(write).length) writes.push(write);
-        return runtime(target);
-      });
+      // Effective selection and disk writes are exercised through the real
+      // adapter in composer-runtime.test.ts, never synthesized by this fake.
       const browser = await openComposer(app, true);
       expect(
         browser.document.querySelector(".composer-model-detail")?.textContent,
@@ -366,28 +336,11 @@ describe("explicit startup choices from the rendered form", () => {
       const body = await required(posts(browser)[0]).formData();
       expect(body.get("model")).toBe(modelChosen ? `fake/${modelId}` : "");
       expect(body.get("thinking")).toBe(thinkingChosen ? "medium" : "");
-      expect(effective).toEqual([
-        expect.objectContaining({
-          model: { provider: "fake", modelId },
-          thinkingLevel: thinkingChosen
-            ? "medium"
-            : otherChosen
-              ? "low"
-              : "high",
-        }),
-      ]);
-      expect(writes).toEqual(
-        modelChosen || thinkingChosen
-          ? [
-              {
-                ...(modelChosen
-                  ? { model: { provider: "fake", modelId } }
-                  : {}),
-                ...(thinkingChosen ? { thinkingLevel: "medium" } : {}),
-              },
-            ]
-          : [],
-      );
+      expect(openSpy).toHaveBeenCalledExactlyOnceWith({
+        cwd: "/repo",
+        ...(modelChosen ? { model: { provider: "fake", modelId } } : {}),
+        ...(thinkingChosen ? { thinkingLevel: "medium" } : {}),
+      });
     },
   );
 });

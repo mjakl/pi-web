@@ -77,6 +77,7 @@ export function createProjectBashExtension(options: {
   cwd: string;
   agentDir: string;
   settings: SettingsManager;
+  operations?: BashOperations;
 }): InlineExtension {
   return {
     name: EXTENSION_NAME,
@@ -86,10 +87,12 @@ export function createProjectBashExtension(options: {
       const shellPath = options.settings.getShellPath();
       pi.registerTool(
         createBashToolDefinition(options.cwd, {
-          operations: createProjectBashOperations({
-            agentDir: options.agentDir,
-            ...(shellPath === undefined ? {} : { shellPath }),
-          }),
+          operations:
+            options.operations ??
+            createProjectBashOperations({
+              agentDir: options.agentDir,
+              ...(shellPath === undefined ? {} : { shellPath }),
+            }),
           ...(prefix === undefined ? {} : { commandPrefix: prefix }),
           ...(shellPath === undefined ? {} : { shellPath }),
         }),

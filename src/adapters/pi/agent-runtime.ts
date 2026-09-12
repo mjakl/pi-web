@@ -17,7 +17,12 @@ import type {
   ThinkingLevel,
 } from "@core/ports";
 import type { DialogAnswer } from "@core/extension-ui";
-import { startupWrites } from "@core/models";
+import {
+  initialModel,
+  initialThinking,
+  startupWrites,
+  type StartupChoice,
+} from "@core/models";
 import { createCompletionTracker } from "@core/turn-completion";
 import { toolParameters } from "@core/tools";
 import { estimateTokens, streamedText, toolProgress } from "@core/transcript";
@@ -27,13 +32,14 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import {
   type AgentSession,
   type AgentSessionEvent,
+  type BashOperations,
   createAgentSessionFromServices,
   createAgentSessionServices,
   type InlineExtension,
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, writeFileSync } from "node:fs";
 import {
   createProjectBashExtension,
   createProjectBashOperations,
@@ -41,6 +47,7 @@ import {
 } from "./bash-env.ts";
 import { createExtensionUi } from "./extension-ui.ts";
 import { projectTrustReloadOptions } from "./project-trust.ts";
+import { resolveModelListing } from "./model-catalog.ts";
 import { defaultSessionDir, type PiSessionCatalog } from "./session-catalog.ts";
 
 /** Streaming tool arguments kept for the card; the entry holds the rest. */
@@ -53,6 +60,24 @@ type Partial = Extract<AgentMessage, { role: "assistant" }>;
 
 /** Below this much of a message, a rate says more about the first chunk. */
 const MIN_RATE_SECONDS = 0.5;
+
+/** Pi defers the first file until an assistant reply; shell-only turns need it too. */
+function persistShellSession(manager: SessionManager): void {
+  const file = manager.getSessionFile();
+  if (!file || existsSync(file)) return;
+  const header = manager.getHeader();
+  if (!header) throw new Error("Session header is missing");
+  writeFileSync(
+    file,
+    `${[header, ...manager.getEntries()].map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+    {
+      encoding: "utf8",
+      flag: "wx",
+    },
+  );
+  // Match pi-web's flush: subsequent SDK appends must not recreate the file.
+  (manager as unknown as { flushed: boolean }).flushed = true;
+}
 
 class PiLiveSession implements LiveSession {
   readonly id: string;
@@ -69,6 +94,8 @@ class PiLiveSession implements LiveSession {
   private compaction: LiveStatus["compaction"] = null;
   private compactionError: LiveStatus["compactionError"] = null;
   private bash: { command: string; output: string } | undefined;
+  private bashTask: Promise<void> | undefined;
+  private pendingPrompts = 0;
   private readonly statuses = new Map<string, string>();
   private readonly widgets = new Map<string, ExtensionWidget>();
   private readonly tools = new Map<string, RunningTool>();
@@ -84,16 +111,22 @@ class PiLiveSession implements LiveSession {
   private readonly inner: AgentSession;
   private readonly agentDir: string;
   private readonly shellPath: string | undefined;
+  private readonly bashOperations: BashOperations | undefined;
   private readonly onStop: () => void;
 
   constructor(
     inner: AgentSession,
-    options: { agentDir: string; shellPath?: string },
+    options: {
+      agentDir: string;
+      shellPath?: string;
+      bashOperations?: BashOperations;
+    },
     onStop: () => void,
   ) {
     this.inner = inner;
     this.agentDir = options.agentDir;
     this.shellPath = options.shellPath;
+    this.bashOperations = options.bashOperations;
     this.onStop = onStop;
     this.id = inner.sessionId;
     this.turnStart = inner.sessionManager.getBranch().length;
@@ -352,7 +385,7 @@ class PiLiveSession implements LiveSession {
     return {
       running: this.inner.isStreaming,
       compacting: this.compacting,
-      bashRunning: this.inner.isBashRunning,
+      bashRunning: this.bash !== undefined || this.inner.isBashRunning,
       streaming: this.streamingRate(),
       model: option,
       thinkingLevel: this.inner.thinkingLevel,
@@ -397,6 +430,13 @@ class PiLiveSession implements LiveSession {
   }
 
   prompt(text: string, input: PromptInput = {}): Promise<void> {
+    if (this.bash || this.inner.isBashRunning) {
+      return Promise.reject(
+        new Error(
+          "Cannot send a prompt while a shell command is running. Stop it first.",
+        ),
+      );
+    }
     if (this.inner.isStreaming) {
       if (input.images && input.images.length > 0) {
         this.queuedImages.set(text, input.images);
@@ -407,6 +447,7 @@ class PiLiveSession implements LiveSession {
     }
     // The SDK's prompt() resolves when the whole run ends; the caller only
     // needs to know the prompt was accepted, so settle on preflight instead.
+    this.pendingPrompts += 1;
     return new Promise((resolve, reject) => {
       this.inner
         .prompt(text, {
@@ -424,14 +465,21 @@ class PiLiveSession implements LiveSession {
             if (ok) resolve();
           },
         })
-        .then(resolve, (error: unknown) => {
-          this.notices.push({
-            level: "error",
-            message: error instanceof Error ? error.message : String(error),
-          });
-          this.emit({ type: "turn_done" });
-          reject(error instanceof Error ? error : new Error(String(error)));
-        });
+        .then(
+          () => {
+            this.pendingPrompts -= 1;
+            resolve();
+          },
+          (error: unknown) => {
+            this.pendingPrompts -= 1;
+            this.notices.push({
+              level: "error",
+              message: error instanceof Error ? error.message : String(error),
+            });
+            this.emit({ type: "turn_done" });
+            reject(error instanceof Error ? error : new Error(String(error)));
+          },
+        );
     });
   }
 
@@ -612,28 +660,54 @@ class PiLiveSession implements LiveSession {
     return mergeQueue(fromSdk, mirrored);
   }
 
-  /** `!cmd` in the composer. Output streams through `bash_execution_update`. */
-  async runBash(command: string, excludeFromContext: boolean): Promise<void> {
-    if (!this.inner.isStreaming) {
-      this.turnStart = this.inner.sessionManager.getBranch().length;
+  /** Resolves on admission, like prompt(); this session owns the whole shell run. */
+  runBash(command: string, excludeFromContext: boolean): Promise<void> {
+    if (this.busy || this.compacting || this.pendingPrompts > 0) {
+      return Promise.reject(
+        new Error(
+          "Cannot run a shell command while the session is busy. Stop the current run first.",
+        ),
+      );
     }
-    this.bash = { command, output: "" };
-    this.emit({ type: "activity" });
-    try {
-      await this.inner.executeBash(command, undefined, {
-        excludeFromContext,
-        operations: createProjectBashOperations({
-          agentDir: this.agentDir,
-          ...(this.shellPath === undefined
-            ? {}
-            : { shellPath: this.shellPath }),
-        }),
+    if (!command.trim())
+      return Promise.reject(new Error("Type a shell command first."));
+    const operations =
+      this.bashOperations ??
+      createProjectBashOperations({
+        agentDir: this.agentDir,
+        ...(this.shellPath === undefined ? {} : { shellPath: this.shellPath }),
       });
-    } finally {
-      this.bash = undefined;
-      this.endTurn();
-      this.emit({ type: "turn_done" });
-    }
+    this.turnStart = this.inner.sessionManager.getBranch().length;
+    this.bash = { command, output: "" };
+    // executeBash has no SDK preflight callback. Validation and reserving the
+    // session above are admission; executor/persistence failures are later
+    // failures, reported on the now-navigable session, never automatic retries.
+    this.bashTask = this.inner
+      .executeBash(command, undefined, { excludeFromContext, operations })
+      .then(() => {
+        try {
+          persistShellSession(this.inner.sessionManager);
+        } catch (error) {
+          throw new Error(
+            `Could not save shell result: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error },
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        this.notices.push({
+          level: "error",
+          message: `Shell command failed: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      })
+      .finally(() => {
+        this.bash = undefined;
+        this.bashTask = undefined;
+        this.endTurn();
+        this.emit({ type: "turn_done" });
+      });
+    this.emit({ type: "activity" });
+    return Promise.resolve();
   }
 
   abortBash(): void {
@@ -648,7 +722,11 @@ class PiLiveSession implements LiveSession {
   }
 
   get busy(): boolean {
-    return this.inner.isStreaming || this.inner.isBashRunning;
+    return (
+      this.bash !== undefined ||
+      this.inner.isStreaming ||
+      this.inner.isBashRunning
+    );
   }
 
   subscribe(listener: (event: LiveEvent) => void): () => void {
@@ -657,6 +735,8 @@ class PiLiveSession implements LiveSession {
   }
 
   async stop(): Promise<void> {
+    this.inner.abortBash();
+    await this.bashTask;
     this.unsubscribe();
     this.run.cancel();
     this.ui.dispose();
@@ -677,7 +757,7 @@ class PiLiveSession implements LiveSession {
  */
 async function persistStartup(
   settings: SettingsManager,
-  explicit: { model?: { provider: string; modelId: string } },
+  explicit: StartupChoice,
   session: AgentSession,
 ): Promise<void> {
   const model = session.model;
@@ -708,6 +788,8 @@ export function createPiAgentRuntime(options: {
   catalog: PiSessionCatalog;
   /** Loaded into every session besides the user's own; tests script a provider through one. */
   extensions?: InlineExtension[];
+  /** Inject the shell backend for offline hosts and tests. */
+  bashOperations?: BashOperations;
   draftIdleMs?: number;
 }): AgentRuntime {
   const draftIdleMs = options.draftIdleMs ?? DRAFT_IDLE_MS;
@@ -718,12 +800,6 @@ export function createPiAgentRuntime(options: {
   function announce(event: RuntimeEvent): void {
     for (const watcher of watchers) watcher(event);
   }
-
-  /** How a new session may be started: on a model the reader picked. */
-  type StartupChoice = {
-    model?: { provider: string; modelId: string };
-    thinkingLevel?: ThinkingLevel;
-  };
 
   async function start(
     manager: SessionManager,
@@ -743,6 +819,9 @@ export function createPiAgentRuntime(options: {
             cwd,
             agentDir: options.agentDir,
             settings: settingsManager,
+            ...(options.bashOperations
+              ? { operations: options.bashOperations }
+              : {}),
           }),
           ...(options.extensions ?? []),
         ],
@@ -750,19 +829,52 @@ export function createPiAgentRuntime(options: {
       },
       ...(trust ? { resourceLoaderReloadOptions: trust } : {}),
     });
-    const wanted = startup.model
+    // The SDK does not apply enabledModels at construction. Resolve the same
+    // effective selection the menu shows, without treating it as a preference
+    // override. Existing transcripts retain the SDK's restoration authority.
+    let effective: StartupChoice = {};
+    if (manager.buildSessionContext().messages.length === 0) {
+      const listing = await resolveModelListing(
+        services.modelRuntime,
+        settingsManager,
+      );
+      const requested = startup.model;
+      const selected = initialModel(
+        listing.models,
+        requested
+          ? { provider: requested.provider, id: requested.modelId }
+          : listing.preferred,
+      );
+      if (
+        requested &&
+        (selected?.provider !== requested.provider ||
+          selected.id !== requested.modelId)
+      ) {
+        throw new Error(
+          `Model is not available in the enabled scope: ${requested.provider}/${requested.modelId}`,
+        );
+      }
+      const thinkingLevel = startup.thinkingLevel ?? initialThinking(selected);
+      effective = {
+        ...(selected
+          ? { model: { provider: selected.provider, modelId: selected.id } }
+          : {}),
+        ...(thinkingLevel === undefined ? {} : { thinkingLevel }),
+      };
+    }
+    const wanted = effective.model
       ? services.modelRuntime.getModel(
-          startup.model.provider,
-          startup.model.modelId,
+          effective.model.provider,
+          effective.model.modelId,
         )
       : undefined;
     const { session } = await createAgentSessionFromServices({
       services,
       sessionManager: manager,
       ...(wanted ? { model: wanted } : {}),
-      ...(startup.thinkingLevel === undefined
+      ...(effective.thinkingLevel === undefined
         ? {}
-        : { thinkingLevel: startup.thinkingLevel }),
+        : { thinkingLevel: effective.thinkingLevel }),
     });
     await persistStartup(settingsManager, startup, session);
     const id = session.sessionId;
@@ -772,6 +884,9 @@ export function createPiAgentRuntime(options: {
       {
         agentDir: options.agentDir,
         ...(shellPath === undefined ? {} : { shellPath }),
+        ...(options.bashOperations
+          ? { bashOperations: options.bashOperations }
+          : {}),
       },
       () => {
         live.delete(id);

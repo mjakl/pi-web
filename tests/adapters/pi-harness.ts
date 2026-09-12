@@ -17,6 +17,7 @@ import {
   type ToolCall,
 } from "@earendil-works/pi-ai";
 import type {
+  BashOperations,
   ExtensionAPI,
   InlineExtension,
 } from "@earendil-works/pi-coding-agent";
@@ -242,6 +243,7 @@ export async function createHarness(
   options: {
     extensions?: InlineExtension[];
     settings?: Record<string, unknown>;
+    bashOperations?: BashOperations;
     draftIdleMs?: number;
   } = {},
 ) {
@@ -291,12 +293,16 @@ export async function createHarness(
     agentDir,
     catalog,
     extensions: [provider, ...(options.extensions ?? [])],
+    bashOperations: options.bashOperations ?? {
+      exec: () =>
+        Promise.reject(
+          new Error("Unexpected shell execution in an offline test"),
+        ),
+    },
     ...(options.draftIdleMs === undefined
       ? {}
       : { draftIdleMs: options.draftIdleMs }),
   });
-  const opened: LiveSession[] = [];
-
   return {
     root,
     agentDir,
@@ -312,12 +318,10 @@ export async function createHarness(
     async open(
       target: Parameters<AgentRuntime["open"]>[0] = { cwd },
     ): Promise<LiveSession> {
-      const session = await runtime.open(target);
-      opened.push(session);
-      return session;
+      return runtime.open(target);
     },
     async dispose(): Promise<void> {
-      for (const session of opened) {
+      for (const session of runtime.live()) {
         if (runtime.get(session.id)) await session.stop();
       }
       await temp.dispose();

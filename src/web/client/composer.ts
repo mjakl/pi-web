@@ -125,11 +125,13 @@ export function setUpComposer(): void {
     const running = form.hasAttribute("data-running");
     const action: Action = !running
       ? "send"
-      : filled
-        ? altHeld
-          ? "followup"
-          : "steer"
-        : "stop";
+      : form.hasAttribute("data-bash-running")
+        ? "stop"
+        : filled
+          ? altHeld
+            ? "followup"
+            : "steer"
+          : "stop";
     if (button.dataset["action"] !== action) {
       button.dataset["action"] = action;
       const svg = button.querySelector("svg");
@@ -359,7 +361,9 @@ export function setUpComposer(): void {
    */
   const mirrorRunning = (): void => {
     const state = document.querySelector("#session-state");
-    const running = state?.hasAttribute("data-running") === true;
+    const running =
+      state?.hasAttribute("data-running") === true ||
+      state?.hasAttribute("data-bash-running") === true;
     form.toggleAttribute("data-running", running);
     form.toggleAttribute(
       "data-bash-running",

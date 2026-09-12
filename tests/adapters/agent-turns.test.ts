@@ -192,15 +192,38 @@ describe("a turn", () => {
   });
 
   it("runs a shell command as its own turn, without a completion", async () => {
-    h = await createHarness();
+    h = await createHarness({
+      bashOperations: {
+        exec: async (command, _cwd, options) => {
+          await Promise.resolve();
+          options.onData(
+            Buffer.from(command === "first shell" ? "shell-out" : "started"),
+          );
+          if (command === "pending shell") {
+            await new Promise<void>((resolve) => {
+              options.signal?.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+          }
+          return { exitCode: 0 };
+        },
+      },
+    });
     const session = await h.open();
     const events = record(session);
-    const running = session.runBash("echo shell-out", false);
+    const settled = next(session, "turn_done");
+    const admitted = session.runBash("first shell", false);
     expect(session.snapshot().bash).toEqual({
-      command: "echo shell-out",
+      command: "first shell",
       output: "",
     });
-    await running;
+    await admitted;
+    await settled;
     const snapshot = session.snapshot();
     expect(snapshot.bash).toBeUndefined();
     expect(events).toContain("turn_done");
@@ -208,15 +231,16 @@ describe("a turn", () => {
     const items = projectTranscript(snapshot.branch).items;
     expect(items.at(-1)).toMatchObject({
       kind: "bash",
-      command: "echo shell-out",
+      command: "first shell",
       output: expect.stringContaining("shell-out") as string,
     });
 
-    const slow = session.runBash("echo started; sleep 30", true);
+    const stopped = next(session, "turn_done");
+    await session.runBash("pending shell", true);
     await until(session, (s) => (s.bash?.output ?? "").includes("started"));
     expect(session.snapshot().status.bashRunning).toBe(true);
     session.abortBash();
-    await slow;
+    await stopped;
     expect(
       projectTranscript(session.snapshot().branch).items.at(-1),
     ).toMatchObject({ kind: "bash", cancelled: true, excluded: true });
