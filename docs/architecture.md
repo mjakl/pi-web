@@ -33,10 +33,20 @@ Internal interfaces, all consumers in this repository. Defined in
 compaction, retries, queue, extension notices) stays inside; callers only read a
 snapshot and receive `activity`, `turn_done`, and `stopped`.
 
-`src/core/workspace.ts` is the inbound port. Every route calls it and renders
-the returned `SessionView`. The fake world in `src/adapters/fake/index.ts`
-implements every outbound port in memory; web tests and `WEB_PI_RUNTIME=fake`
-use it.
+`src/core/workspace/` is the inbound port: `createWorkspace(deps)` in
+`src/core/workspace/index.ts` composes one flat `Workspace` object from four
+use-case families that never import each other —
+`src/core/workspace/sessions.ts` (the sidebar, one session's page, and the edits
+Pi's `SessionManager` writes), `src/core/workspace/live.ts` (the running agent
+and what only its entries can answer), `src/core/workspace/files.ts` (the file
+panel and `@` completion) and `src/core/workspace/config.ts` (folder choice,
+`/new`, trust, skills, packages). `src/core/workspace/deps.ts` holds the
+`WorkspaceDeps` ports and the internals more than one family needs (session
+lookup and decoration, folder availability, `authorize`), and
+`src/core/workspace/views.ts` the view types a page renders. Every route calls
+the workspace and renders the returned `SessionView`. The fake world in
+`src/adapters/fake/index.ts` implements every outbound port in memory; web tests
+and `WEB_PI_RUNTIME=fake` use it.
 
 ## One rendering of UI state
 
@@ -82,8 +92,13 @@ replaces all three and reconnects.
 `src/core/transcript.ts` projects one branch into items, and `src/core/turns.ts`
 groups those items into turns, pages them, and writes the activity line. Every
 transcript fragment — a page load, an earlier page, the settled turn appended to
-the log, the running turn — renders through the one `Items` view in
-`src/web/views/Items.tsx`; the running turn renders flat and everything else
+the log, the running turn — renders through the one `Items` view, which
+`src/web/views/Items.tsx` re-exports from `src/web/views/transcript/`: one
+module per item kind (`user.tsx`, `assistant.tsx`, `tools.tsx`, `subagent.tsx`,
+`notes.tsx`), `shared.tsx` for what they all use (Markdown, the copy button,
+times, images, history actions) and `turns.tsx` for the grouping, the pages and
+the running turn. The markup is pinned by `tests/web/transcript-items.test.tsx`
+against a rendered fixture; the running turn renders flat and everything else
 renders grouped.
 
 `src/core/session-entries.ts` derives everything a session's raw entries imply:
@@ -301,7 +316,7 @@ composition root and the only importer of Pi adapters.
   fragment. Everything else the composer opens — the slash menu, the queue
   panel, the notice shelf — is server-rendered HTML.
 - **One containment policy, in one function.** `authorize` in
-  `src/core/workspace.ts` answers every file request the same way, and
+  `src/core/workspace/deps.ts` answers every file request the same way, and
   `src/core/path-access.ts` holds the rules it applies: a lexical check before
   any file system call, then the same check on the resolved path against the
   resolved roots. The roots are the open session's folder and the repository it
