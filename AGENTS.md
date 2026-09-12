@@ -55,7 +55,9 @@ src/web        Hono routes, JSX views, HTMX/SSE delivery, client bundle, the
                generated service worker and manifest. routes/, views/ and
                client/ are split one module per area of the screen — sidebar,
                shell, transcript, composer, files — so five ports can run at
-               once; routes/shared.ts holds what they all need
+               once; routes/shared.ts holds what they all need, and
+               views/transcript/ holds the transcript's views one module per
+               item kind behind the views/Items.tsx barrel
 src/web/styles pi-web's stylesheets, verbatim, plus areas/<area>.css
 src/container.ts  the only file that wires adapters into the core
 src/server.ts  process entrypoint; src/cli.ts the flags and startup behind the
