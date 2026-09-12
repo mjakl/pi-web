@@ -361,6 +361,7 @@ function SessionStatsButton({
 export function Shell({
   sidebar,
   activeId,
+  settledCursor,
   cwd,
   home,
   usage,
@@ -373,6 +374,7 @@ export function Shell({
 }: {
   sidebar: SidebarView;
   activeId?: string;
+  settledCursor?: string;
   /** The folder on screen: the document title is built from it. */
   cwd?: string;
   /** The reader's home folder: the workspace pill shortens paths with it. */
@@ -430,7 +432,11 @@ export function Shell({
           style="flex:1; overflow:hidden; position:relative"
           data-session-id={activeId}
           data-cwd={cwd}
-          hx-sse:connect={activeId ? `/sessions/${activeId}/events` : undefined}
+          hx-sse:connect={
+            activeId
+              ? `/sessions/${activeId}/events?after=${encodeURIComponent(settledCursor ?? "")}`
+              : undefined
+          }
           hx-trigger="web-pi:sse-start"
           hx-swap="none"
         >
@@ -626,6 +632,7 @@ export function SessionPage({
     <Shell
       sidebar={sidebar}
       activeId={summary.id}
+      settledCursor={view.settledCursor}
       cwd={summary.cwd}
       usage={view.usage}
       {...(home === undefined ? {} : { home })}

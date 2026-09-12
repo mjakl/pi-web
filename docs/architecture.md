@@ -66,20 +66,23 @@ and `WEB_PI_RUNTIME=fake` use it.
 ## One rendering of UI state
 
 `SessionView` holds `items` (settled conversation), `turn` (the current turn,
-including the in-progress assistant message), `settledTurn` (the turn that just
-ended, for the one render that appends it to the log), `status`, `usage`, and
-`models`. A turn is handed over exactly once: when the agent settles, the
-runtime moves the boundary to the end of the branch, so the messages belong to
-`items` from then on and any later re-render — a star, a rename, an extension
-status — cannot put them on the page a second time. Page load, HTMX responses,
-and SSE events reuse the same views.
+including the in-progress assistant message), `settledCursor` (the last settled
+raw entry ID, or empty at the root), `status`, `usage`, and `models`. Settlement
+moves the runtime boundary to the end of the branch. History and the live tail
+come from that same snapshot and never overlap. Page load, HTMX responses, and
+SSE events reuse the same views.
 
 The session stream sends unnamed HTML messages containing native HTMX 4
 `hx-partial` elements with explicit targets and swap modes:
 
-- `#messages` receives settled turn items (`beforeend`), with the re-rendered
-  conversation rail riding along out of band;
-- `#turn` receives the whole current turn (`innerHTML`);
+- `#messages` receives canonical items after the delivered settled cursor
+  (`beforeend`), with the re-rendered conversation rail riding along out of
+  band;
+- `#turn` receives the current turn (`innerMorph`), keyed by entry and tool-call
+  IDs. Partial assistant messages use their message timestamp until Pi assigns
+  an entry ID. Morphing ignores `open`, so disclosure choices survive changing
+  content. Completed tool bodies use `hx-morph-skip`: their immutable result,
+  fetched full output, selection, local scroll and resources stay in place;
 - `#status` receives model, state, queue, compaction, and the context badge;
 - `#shelf` receives the extension status line and widgets (`outerHTML`), and
   only when one of them actually changed, because it holds an open panel;
@@ -97,19 +100,27 @@ messages append and turn clear, and `done` carries the completed session ID.
 Client region effects use per-task `htmx:after:settle`, including OOB updates,
 rather than the request-source swap batch.
 
-The SSE endpoint coalesces activity into one re-render per 100 ms. A later
-activity render replaces the entire current turn. Reconnection does not replay
-missed settled turns or notices; that existing limitation remains. The bundled
-SSE extension has `pauseOnBackground: false` so hiding a tab does not introduce
-additional disconnects. The client starts each owner through its native
-`web-pi:sse-start` trigger after installing failure handlers. Before the first
-SSE connection, network failures and HTTP 408, 429, 500, 502, 503, and 504 get
-five retries, delayed by 500, 1,000, 2,000, 4,000, and 8,000 ms. Other non-SSE
-responses or six failed attempts show a toast asking the reader to reload.
-Removing an owner cancels its pending startup; after connection, the bundled
-extension alone handles reconnection. Ordinary requests retain the previous
-unlimited timeout for compaction and package actions. Inherited 4xx/5xx no-swap
-rules preserve error toasts without replacing the requested region.
+The SSE endpoint coalesces activity into one re-render per 100 ms. Every render
+reconciles canonical history after the delivered cursor, then morphs the live
+tail and updates status in the same HTML frame. The initial stream URL carries
+the page's settled cursor. Each frame sets `id: settled=<cursor>`; the bundled
+extension returns it as `Last-Event-ID` on reconnect. Recovery covers any number
+of missed settlements without resending already delivered history, discarding
+older loaded pages, or replaying completion sounds and notices. The usual
+50-entry backwards pagination is unchanged; only missing entries after the
+cursor bypass the tail limit. This replaces the runtime's last-settled-turn
+slot, not the transport's retry policy.
+
+The bundled SSE extension has `pauseOnBackground: false` so hiding a tab does
+not introduce additional disconnects. The client starts each owner through its
+native `web-pi:sse-start` trigger after installing failure handlers. Before the
+first SSE connection, network failures and HTTP 408, 429, 500, 502, 503, and 504
+get five retries, delayed by 500, 1,000, 2,000, 4,000, and 8,000 ms. Other
+non-SSE responses or six failed attempts show a toast asking the reader to
+reload. Removing an owner cancels its pending startup; after connection, the
+bundled extension alone handles reconnection. Ordinary requests retain the
+previous unlimited timeout for compaction and package actions. Inherited 4xx/5xx
+no-swap rules preserve error toasts without replacing the requested region.
 
 A second stream, `GET /events`, belongs to the sidebar rather than to one
 session. It pushes a re-rendered row (`hx-partial`) whenever a session of the

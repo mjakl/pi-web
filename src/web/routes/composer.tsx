@@ -378,6 +378,7 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
     if (!isSessionId(id)) return c.notFound();
     const thresholds = warnTokens(c);
     return streamSSE(c, async (stream) => {
+      const ended = Promise.withResolvers<undefined>();
       // The shelf holds open panels, so it is only re-sent when an extension
       // actually changed a status or a widget.
       let shelf = "";
@@ -390,8 +391,19 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
       let custom = "";
       let frame = "";
       const widgetLines = new Map<string, string>();
+      // The browser advances Last-Event-ID only through received SSE frames.
+      // The page supplies the initial cursor, including for startup retries.
+      const lastEventId = c.req.header("Last-Event-ID");
+      let cursor = lastEventId?.startsWith("settled=")
+        ? decodeURIComponent(lastEventId.slice("settled=".length))
+        : (c.req.query("after") ?? "");
       const render = async (kind: "activity" | "turn_done") => {
-        const view = await deps.workspace.viewSession(id, thresholds);
+        if (aborted) return;
+        const view = await deps.workspace.viewSession(id, {
+          ...thresholds,
+          after: cursor,
+        });
+        if (aborted) return;
         if (!view) return;
         const actions: ItemActions = {
           sessionId: id,
@@ -399,37 +411,6 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
           starred: view.starred,
           ...(turnBusy(view.status) ? { busy: true } : {}),
         };
-        if (kind === "turn_done") {
-          // The rail rides along out of band: a settled turn is the only
-          // thing that adds marks to it.
-          await stream.writeSSE({
-            data: await html(
-              <>
-                <Partial target="#messages" swap="beforeend">
-                  <Items items={view.settledTurn} actions={actions} />
-                </Partial>
-                <Rail view={view} oob />
-              </>,
-            ),
-          });
-          await stream.writeSSE({
-            data: await html(<Partial target="#turn" />),
-          });
-          // Native SSE awaits each HTML swap before dispatching the next event.
-          await stream.writeSSE({ event: "settled", data: id });
-        } else {
-          await stream.writeSSE({
-            data: await html(
-              <Partial target="#turn">
-                <TurnFragment
-                  items={view.turn}
-                  actions={actions}
-                  status={view.status}
-                />
-              </Partial>,
-            ),
-          });
-        }
         const pick = modelPick(view);
         const nextModel = JSON.stringify([
           pick.current,
@@ -439,11 +420,34 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
         ]);
         const modelChanged = nextModel !== model;
         model = nextModel;
+        const reconciled = cursor !== view.settledCursor;
+        // One snapshot and one frame: never clear a missed answer without its
+        // canonical replacement, or clear a newer turn on a delayed turn_done.
         await stream.writeSSE({
+          id: `settled=${encodeURIComponent(view.settledCursor)}`,
           data: await html(
-            <Status view={view} model={modelChanged} oob partial />,
+            <>
+              {view.items.length > 0 ? (
+                <Partial target="#messages" swap="beforeend">
+                  <Items items={view.items} actions={actions} />
+                </Partial>
+              ) : null}
+              <Partial target="#turn" swap="innerMorph">
+                <TurnFragment
+                  items={view.turn}
+                  actions={actions}
+                  status={view.status}
+                />
+              </Partial>
+              {reconciled ? <Rail view={view} oob /> : null}
+              <Status view={view} model={modelChanged} oob partial />
+            </>,
           ),
         });
+        cursor = view.settledCursor;
+        // Native SSE awaits the complete HTML frame before semantic events.
+        if (reconciled || kind === "turn_done")
+          await stream.writeSSE({ event: "settled", data: id });
         const signature = shelfSignature(view.status);
         if (signature !== shelf) {
           shelf = signature;
@@ -546,6 +550,7 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
       let aborted = false;
       stream.onAbort(() => {
         aborted = true;
+        ended.resolve(undefined);
       });
       const listener = (event: { type: string }) => {
         if (event.type === "activity") {
@@ -561,12 +566,19 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
         } else if (event.type === "completed") {
           announceDone();
         } else {
-          void stream.close();
+          // A stopped runtime can have persisted its final entries just before
+          // removal. Reconcile that boundary before allowing reconnection.
+          enqueue("turn_done");
+          queue = queue.then(async () => {
+            await stream.close();
+            ended.resolve(undefined);
+          });
         }
       };
       // A page for a stored session opens its stream before any runtime
-      // exists; wait for the first prompt to create one instead of closing.
+      // exists; reconcile it, then wait for the first prompt to create one.
       let unsubscribe = deps.workspace.subscribe(id, listener);
+      if (!unsubscribe) enqueue("activity");
       while (!unsubscribe && !aborted) {
         await sleep(500);
         unsubscribe = deps.workspace.subscribe(id, listener);
@@ -574,22 +586,17 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
       if (!unsubscribe) return;
       // The client may have missed activity between page render and connect.
       enqueue("activity");
-      let heartbeat: ReturnType<typeof setInterval> | undefined;
-      await new Promise<void>((resolve) => {
-        heartbeat = setInterval(() => {
-          queue = queue
-            .then(async () => {
-              await stream.write(": ping\n\n");
-            })
-            .catch(() => {
-              resolve();
-            });
-        }, 30_000);
-        stream.onAbort(() => {
-          resolve();
-        });
-      });
-      if (heartbeat) clearInterval(heartbeat);
+      const heartbeat = setInterval(() => {
+        queue = queue
+          .then(async () => {
+            await stream.write(": ping\n\n");
+          })
+          .catch(() => {
+            ended.resolve(undefined);
+          });
+      }, 30_000);
+      await ended.promise;
+      clearInterval(heartbeat);
       if (timer) clearTimeout(timer);
       unsubscribe();
     });

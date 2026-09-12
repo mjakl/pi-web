@@ -41,6 +41,8 @@ export function HtmlLayout(
             extensions: "sse",
             sse: { pauseOnBackground: false },
             defaultTimeout: 0,
+            // Disclosure choices belong to the reader, including while a tool changes.
+            morphIgnore: ["data-htmx-powered", "open"],
           })}
         />
         {/* The real one is "<folder> - Pi Web", set by the shell module from

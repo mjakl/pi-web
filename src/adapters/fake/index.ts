@@ -349,7 +349,6 @@ class FakeLiveSession implements LiveSession {
   /** When the message now streaming started, for its tokens-per-second. */
   private partialStart: number | null = null;
   private turnStart: number;
-  private settledTurn: { start: number; end: number } | null = null;
   /** A scripted tool call whose arguments are still streaming in. */
   private partialArguments: Record<string, string> | undefined;
   private running = false;
@@ -402,11 +401,9 @@ class FakeLiveSession implements LiveSession {
     for (const listener of this.listeners) listener(event);
   }
 
-  /** The turn is over: the boundary moves, the range it covered is kept. */
+  /** Everything up to here is now canonical settled history. */
   private endTurn(): void {
-    const end = branchOf(this.stored).length;
-    this.settledTurn = { start: Math.min(this.turnStart, end), end };
-    this.turnStart = end;
+    this.turnStart = branchOf(this.stored).length;
   }
 
   private nextId(): string {
@@ -441,7 +438,6 @@ class FakeLiveSession implements LiveSession {
       branch,
       entries: [...this.stored.entries],
       turnStart: this.turnStart,
-      settledTurn: this.settledTurn,
       ...(this.partialArguments === undefined
         ? {}
         : { partialArguments: this.partialArguments }),
@@ -858,7 +854,6 @@ class FakeLiveSession implements LiveSession {
     if (!entry) throw new Error("Select an existing conversation message");
     this.stored.leafId = targetId;
     this.turnStart = branchOf(this.stored).length;
-    this.settledTurn = null;
     this.emit({ type: "activity" });
     return Promise.resolve(userMessageText(entry));
   }

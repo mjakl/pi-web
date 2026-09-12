@@ -24,6 +24,8 @@ export type ViewOptions = {
   leaf?: string;
   /** How many settled items the page holds. */
   tail?: number;
+  /** Reconcile entries after the last rendered settled entry; empty is root. */
+  after?: string;
   /** Page backwards from an entry already on screen. */
   before?: string;
   /** Widen the page until this entry is part of it. */
@@ -42,14 +44,10 @@ export type SessionView = {
   oldestId?: string;
   /** The branch being viewed, so paging requests stay on it. */
   leaf?: string;
-  /** The current (or just finished) turn, re-rendered while streaming. */
+  /** The current turn, re-rendered while streaming. */
   turn: TranscriptItem[];
-  /**
-   * The turn that just ended, for the one render that appends it to the log.
-   * Empty at every other moment: once handed over it belongs to `items`, so a
-   * later re-render cannot put the same messages on the page twice.
-   */
-  settledTurn: TranscriptItem[];
+  /** Last settled raw entry, including invisible entries; empty is root. */
+  settledCursor: string;
   status: LiveStatus | null;
   usage: ContextUsage;
   /** Cumulative token totals of the whole session, for the top-bar readout. */

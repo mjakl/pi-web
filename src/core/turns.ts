@@ -303,12 +303,23 @@ export function pageItems(
   items: readonly TranscriptItem[],
   options: {
     tail?: number;
+    /** Reconcile only entries after this settled cursor; empty means root. */
+    after?: string;
     before?: string;
     through?: string;
     /** The branch's entry ids, root first, for counting the tail in entries. */
     entryIds?: readonly string[];
   } = {},
 ): { items: TranscriptItem[]; hasMore: boolean; oldestId: string | undefined } {
+  if (options.after !== undefined) {
+    const ids = options.entryIds ?? items.map((item) => item.entryId);
+    const cursor = options.after === "" ? -1 : ids.indexOf(options.after);
+    if (options.after !== "" && cursor === -1)
+      throw new RangeError("Unknown settled cursor for this branch");
+    const missing = new Set(ids.slice(cursor + 1));
+    const page = items.filter((item) => missing.has(item.entryId));
+    return { items: page, hasMore: false, oldestId: page[0]?.entryId };
+  }
   const tail = Math.min(Math.max(options.tail ?? PAGE_SIZE, 1), PAGE_MAX);
   let end = items.length;
   if (options.before !== undefined) {

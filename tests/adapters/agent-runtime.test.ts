@@ -38,7 +38,6 @@ describe("opening", () => {
     const snapshot = session.snapshot();
     expect(messages(session)).toEqual([]);
     expect(snapshot.turnStart).toBe(snapshot.branch.length);
-    expect(snapshot.settledTurn).toBeNull();
     expect(snapshot.partial).toBeUndefined();
     expect(snapshot.status.running).toBe(false);
     expect(snapshot.status.model).toMatchObject({
@@ -176,7 +175,7 @@ describe("session commands", () => {
     // Moving the leaf to the question offers its text and drops the answer.
     expect(await session.navigateTree(user?.id ?? "")).toBe("q");
     expect(messages(session)).toEqual([]);
-    expect(session.snapshot().settledTurn).toBeNull();
+    expect(session.snapshot().turnStart).toBe(session.snapshot().branch.length);
   });
 
   it("lists commands from extensions, prompts, and skills, and the tools", async () => {

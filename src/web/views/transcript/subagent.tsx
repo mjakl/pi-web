@@ -36,16 +36,18 @@ function SubagentStatusView({ status }: { status: keyof typeof STATUS_GLYPH }) {
 }
 
 function SubagentDisclosure({
+  id,
   label,
   class: className,
   children,
 }: {
+  id?: string;
   label: unknown;
   class: string;
   children?: unknown;
 }) {
   return (
-    <details class={className}>
+    <details id={id} class={className}>
       <summary>
         <span class="subagent-summary-label">{label}</span>
         <span class="subagent-chevron" style="display:flex">
@@ -187,6 +189,7 @@ export function Subagent({
   const raw = call.result?.text ?? "";
   return (
     <SubagentDisclosure
+      id={`tool-${encodeURIComponent(call.id)}`}
       class="subagent-card"
       label={
         <span class="subagent-header">

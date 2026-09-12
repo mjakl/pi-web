@@ -88,7 +88,6 @@ class PiLiveSession implements LiveSession {
   /** Attachments of messages waiting in the SDK's queue, keyed by their text. */
   private readonly queuedImages = new Map<string, ImageAttachment[]>();
   private turnStart: number;
-  private settledTurn: { start: number; end: number } | null = null;
   private compacting = false;
   private queue: QueuedMessage[] = [];
   private compaction: LiveStatus["compaction"] = null;
@@ -310,14 +309,9 @@ class PiLiveSession implements LiveSession {
     }
   }
 
-  /**
-   * The turn is over: everything up to here is settled history, and the range
-   * it covered is kept for the render that appends it to the log.
-   */
+  /** Everything up to here is now canonical settled history. */
   private endTurn(): void {
-    const end = this.inner.sessionManager.getBranch().length;
-    this.settledTurn = { start: Math.min(this.turnStart, end), end };
-    this.turnStart = end;
+    this.turnStart = this.inner.sessionManager.getBranch().length;
   }
 
   private emit(event: LiveEvent): void {
@@ -419,7 +413,6 @@ class PiLiveSession implements LiveSession {
       branch: this.inner.sessionManager.getBranch(),
       entries: this.inner.sessionManager.getEntries(),
       turnStart: this.turnStart,
-      settledTurn: this.settledTurn,
       ...(this.partialArguments.size > 0
         ? { partialArguments: Object.fromEntries(this.partialArguments) }
         : {}),
@@ -539,7 +532,6 @@ class PiLiveSession implements LiveSession {
       ...(summarize === undefined ? {} : { summarize }),
     });
     this.turnStart = this.inner.sessionManager.getBranch().length;
-    this.settledTurn = null;
     this.emit({ type: "activity" });
     return result;
   }

@@ -54,9 +54,8 @@ export function sessionUseCases({
     options: ViewOptions,
   ): SessionView {
     const snapshot = live.snapshot();
-    // `turnStart` moves to the end of the branch the moment the agent settles,
-    // so a settled turn is part of the log and only the settled-turn render
-    // still sees it.
+    // Settlement moves the boundary, so canonical history and the live tail
+    // always come from the same snapshot and never overlap.
     const settledBranch = snapshot.branch.slice(0, snapshot.turnStart);
     const settled = projectTranscript(settledBranch);
     const page = pageItems(settled.items, {
@@ -88,14 +87,6 @@ export function sessionUseCases({
         timestamp: new Date().toISOString(),
       });
     }
-    const settledTurn = snapshot.settledTurn
-      ? projectTranscript(
-          snapshot.branch.slice(
-            snapshot.settledTurn.start,
-            snapshot.settledTurn.end,
-          ),
-        ).items
-      : [];
     const { status } = snapshot;
     // This view is what delivers notices and extension composer text; nothing
     // else may consume them.
@@ -107,7 +98,6 @@ export function sessionUseCases({
     fillCompactions(summary.id, snapshot.entries, [
       ...page.items,
       ...turn.items,
-      ...settledTurn,
     ]);
     return {
       summary,
@@ -116,7 +106,7 @@ export function sessionUseCases({
       ...(page.oldestId === undefined ? {} : { oldestId: page.oldestId }),
       ...(options.leaf === undefined ? {} : { leaf: options.leaf }),
       turn: turn.items,
-      settledTurn,
+      settledCursor: settledBranch.at(-1)?.id ?? "",
       status,
       tokens: sessionStats(snapshot.entries).tokens,
       usage: contextUsage({
@@ -180,7 +170,7 @@ export function sessionUseCases({
       ...(page.oldestId === undefined ? {} : { oldestId: page.oldestId }),
       ...(options.leaf === undefined ? {} : { leaf: options.leaf }),
       turn: [],
-      settledTurn: [],
+      settledCursor: stored.branch.at(-1)?.id ?? "",
       status: null,
       tokens: sessionStats(stored.entries).tokens,
       // pi-web reads context usage off the running agent, so a session

@@ -229,7 +229,9 @@ export function ToolBody({
       ? null
       : trimmedDiff(result.patch, budgeted ? MAX_DIFF_ROWS : Infinity);
   return (
-    <div class="tool-result">
+    <div class="tool-result" hx-morph-skip={result ? true : undefined}>
+      {/* A completed result is immutable. Keep fetched full output and its DOM
+          resources when the enclosing live message morphs. */}
       {showInput ? (
         <pre
           style={`margin:0; padding:8px 10px; color:var(--text-muted); font-size:12px; line-height:1.5; overflow:auto; background:var(--bg-subtle); border-top:1px solid ${
@@ -305,6 +307,7 @@ export function ToolCard({
       : undefined;
   return (
     <details
+      id={`tool-${encodeURIComponent(call.id)}`}
       class="transcript-details tool-card"
       data-tool={call.name}
       style={`border-radius:7px; overflow:hidden; font-size:12px; border:1px solid ${

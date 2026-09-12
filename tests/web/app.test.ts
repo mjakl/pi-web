@@ -6,7 +6,7 @@ import {
 } from "@adapters/fake/index";
 import { createWorkspace } from "@core/workspace";
 import { createWebApp } from "@web/app";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 function testApp(options: Parameters<typeof createFakeWorld>[0] = {}) {
   const world = createFakeWorld({
@@ -266,7 +266,7 @@ describe("web app", () => {
     });
     expect(prompt.status).toBe(204);
 
-    const res = await app.request("/sessions/s1/events");
+    const res = await app.request("/sessions/s1/events?after=a1");
     expect(res.headers.get("content-type")).toContain("text/event-stream");
     const reader = res.body?.getReader();
     if (!reader) throw new Error("no body");
@@ -279,7 +279,7 @@ describe("web app", () => {
     }
     await reader.cancel();
     expect(received).toContain(
-      'data: <hx-partial hx-target="#turn" hx-swap="innerHTML">',
+      '<hx-partial hx-target="#turn" hx-swap="innerMorph">',
     );
     expect(received).toContain("alpha beta");
     expect(received).toContain(
@@ -289,7 +289,7 @@ describe("web app", () => {
       'data: <hx-partial hx-target="#messages" hx-swap="beforeend"><section class="turn"',
     );
     const clear =
-      'data: <hx-partial hx-target="#turn" hx-swap="innerHTML"></hx-partial>';
+      '<hx-partial hx-target="#turn" hx-swap="innerMorph"></hx-partial>';
     expect(received).toContain(clear);
     expect(received.indexOf(clear)).toBeLessThan(
       received.indexOf("event: settled\n"),
@@ -1800,7 +1800,7 @@ describe("transcript rendering", () => {
   });
 
   it("renders a tool call as pi-web's tinted card", async () => {
-    const { app } = testApp({
+    const { app, world } = testApp({
       script: (): ScriptedStep[] => [
         { tool: "read", arguments: { path: "/repo/one/a.ts" }, result: "ok" },
         { text: "done" },
@@ -1809,7 +1809,9 @@ describe("transcript rendering", () => {
     const form = new FormData();
     form.set("text", "look");
     await app.request("/sessions/s1/prompt", { method: "POST", body: form });
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await expect
+      .poll(() => world.runtime.get("s1")?.snapshot().status.running)
+      .toBe(false);
     const page = await (await app.request("/sessions/s1")).text();
     expect(page).toContain("border:1px solid rgba(34,197,94,0.25)");
     expect(page).toContain("background:rgba(34,197,94,0.04)");
@@ -1925,20 +1927,31 @@ describe("transcript rendering", () => {
   });
 
   it("names the running tool while a turn works", async () => {
-    const { app } = testApp({
-      delayMs: 40,
-      script: (): ScriptedStep[] => [
-        { tool: "bash", arguments: { command: "ls" }, progress: ["scanning"] },
-        { text: "done" },
-      ],
-    });
-    const form = new FormData();
-    form.set("text", "run it");
-    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(await (await app.request("/sessions/s1")).text()).toContain(
-      "Running bash... scanning",
-    );
+    // Hold the scripted tool in its progress phase, independent of CI load.
+    vi.useFakeTimers();
+    try {
+      const { app } = testApp({
+        delayMs: 40,
+        script: (): ScriptedStep[] => [
+          {
+            tool: "bash",
+            arguments: { command: "ls" },
+            progress: ["scanning"],
+          },
+          { text: "done" },
+        ],
+      });
+      const form = new FormData();
+      form.set("text", "run it");
+      await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(await (await app.request("/sessions/s1")).text()).toContain(
+        "Running bash... scanning",
+      );
+      await vi.runAllTimersAsync();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("pages a long transcript and prepends the page before it", async () => {

@@ -281,12 +281,6 @@ export type LiveSnapshot = {
    * settled history and a re-render after the turn cannot show it twice.
    */
   turnStart: number;
-  /**
-   * The turn that just ended, as a range into `branch`. It survives the next
-   * prompt, so the one render that appends it to the log gets the right
-   * messages even when it runs after that prompt has started.
-   */
-  settledTurn: { start: number; end: number } | null;
   /** Arguments still streaming in, by index in the partial message's content. */
   partialArguments?: Record<string, string>;
   /** In-progress assistant message while streaming. */

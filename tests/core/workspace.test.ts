@@ -30,12 +30,11 @@ describe("workspace over the fake runtime", () => {
     await settle(50);
     const after = await workspace.viewSession(id);
     expect(after?.status?.running).toBe(false);
-    // A settled turn belongs to the log: it is handed over once, as
-    // `settledTurn`, and a later re-render must not repeat it in `turn`.
-    expect(after?.settledTurn.map((item) => item.kind)).toEqual([
-      "user",
-      "assistant",
-    ]);
+    // Reconciliation after the delivered cursor must never repeat the turn.
+    expect(
+      (await workspace.viewSession(id, { after: after?.settledCursor ?? "" }))
+        ?.items,
+    ).toEqual([]);
     expect(after?.turn).toEqual([]);
     expect(after?.items.map((item) => item.kind)).toEqual([
       "user",

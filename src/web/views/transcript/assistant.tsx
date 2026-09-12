@@ -172,7 +172,16 @@ export function AssistantMessage({
   return (
     <div
       class="message-row"
-      {...(item.processHalf ? {} : { id: `entry-${item.entryId}` })}
+      {...(item.processHalf
+        ? {}
+        : {
+            // Pi assigns the persisted entry ID at message_end. Until then the
+            // message's own timestamp distinguishes successive partial messages.
+            id:
+              item.entryId === "partial"
+                ? `entry-partial-${String(Date.parse(item.timestamp))}`
+                : `entry-${item.entryId}`,
+          })}
       data-role="assistant"
       style="margin-bottom:16px"
     >

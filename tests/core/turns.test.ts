@@ -330,8 +330,20 @@ describe("pageItems", () => {
     expect(page.items[0]?.entryId).toBe("a1");
   });
 
+  it("reconciles after an invisible raw entry without applying the backwards tail limit", () => {
+    const entryIds = ["u1", "a1", "result1", "u2", "a2", "u3", "a3"];
+    expect(
+      pageItems(items, { after: "result1", entryIds, tail: 1 }).items.map(
+        (item) => item.entryId,
+      ),
+    ).toEqual(["u2", "a2", "u3", "a3"]);
+    expect(pageItems(items, { after: "a3", entryIds }).items).toEqual([]);
+    expect(pageItems(items, { after: "", entryIds }).items).toEqual(items);
+  });
+
   it("refuses an entry that is not on this branch", () => {
     expect(() => pageItems(items, { before: "nope" })).toThrow(RangeError);
+    expect(() => pageItems(items, { after: "nope" })).toThrow(RangeError);
   });
 });
 

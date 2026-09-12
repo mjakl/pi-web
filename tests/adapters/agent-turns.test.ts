@@ -68,10 +68,6 @@ describe("a turn", () => {
     expect(settled.partial).toBeUndefined();
     expect(settled.status.running).toBe(false);
     expect(settled.status.streaming).toBeNull();
-    expect(settled.settledTurn).toEqual({
-      start: streaming.turnStart,
-      end: settled.branch.length,
-    });
     expect(settled.turnStart).toBe(settled.branch.length);
     expect(lastAssistant(session).usage).toMatchObject({
       input: 120,

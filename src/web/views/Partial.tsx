@@ -7,7 +7,7 @@ export function Partial({
   children,
 }: {
   target: string;
-  swap?: "innerHTML" | "outerHTML" | "beforeend";
+  swap?: "innerHTML" | "outerHTML" | "beforeend" | "innerMorph";
   children?: Child;
 }) {
   return (
