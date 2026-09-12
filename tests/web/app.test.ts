@@ -2240,9 +2240,13 @@ describe("phase 8 fixes", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 150));
     const page = await (await app.request("/sessions/s1")).text();
-    expect(page).toContain("<dl");
-    expect(page).toContain("<dt>Agent</dt>");
+    expect(page).not.toContain("<dt>Agent</dt>");
     expect(page).toContain("explorer");
+    const body = await (await app.request(deferredUrl(page))).text();
+    expect(body).toContain("<dl");
+    expect(body).toContain("<dt>Agent</dt>");
+    expect(body).toContain("look around");
+    expect(body).toContain("fake-1");
   });
 
   it("shows the post-compaction estimate on the card", async () => {

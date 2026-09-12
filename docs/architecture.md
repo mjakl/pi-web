@@ -82,8 +82,10 @@ The session stream sends unnamed HTML messages containing native HTMX 4
 - `#turn` receives the current turn (`innerMorph`), keyed by entry and tool-call
   IDs. Partial assistant messages use their message timestamp until Pi assigns
   an entry ID. Morphing ignores `open`, so disclosure choices survive changing
-  content. Completed tool bodies use `hx-morph-skip`: their immutable result,
-  fetched full output, selection, local scroll and resources stay in place;
+  content. Completed ordinary tools and subagents send body placeholders, not
+  their arguments or results. Opening a card fetches its body through the same
+  endpoint used by stored turns. `hx-morph-skip` keeps both pending requests and
+  loaded bodies in place, including full output, selection and local scroll;
 - `#status` receives model, state, queue, compaction, and the context badge;
 - `#shelf` receives the extension status line and widgets (`outerHTML`), and
   only when one of them actually changed, because it holds an open panel;
@@ -475,13 +477,19 @@ composition root and the only importer of Pi adapters.
   colouring for a file happens on the server (`src/web/syntax.ts`, shared with
   the transcript's browser-side highlighter), because a whole file has to be
   split into numbered rows and highlight.js colours a block, not a line.
-- **A settled tool call's body is fetched when it is opened.** A card is
-  collapsed, so its arguments, output and diff do not have to be on the page:
-  they arrive from `GET /sessions/:id/entries/:entryId/tool-result/:callId` on
-  the first toggle, cut to 16 KB of text and 200 diff rows, with a button that
-  asks for the rest. A real session page went from 1.05 MB to 480 KB. The
-  running turn keeps its bodies inline, because it is re-rendered from the
-  snapshot every 100 ms.
+- **Completed tool bodies are fetched when opened, including in the live turn.**
+  `GET /sessions/:id/entries/:entryId/tool-result/:callId` renders the
+  arguments, output and diff of an ordinary tool, cut to 16 KB of text and 200
+  diff rows, with a button for the rest. The same endpoint renders a subagent's
+  results, prompts, run details and raw payloads without truncation. Initial
+  pages, stored turns and every live frame carry only a placeholder for these
+  bodies. An open card fetches automatically when its running call completes;
+  closed cards wait for an opening toggle. HTMX drops duplicate requests while
+  one is pending, and a failed fetch can be retried by closing and reopening the
+  card. Loaded bodies survive later live morphs without another render or
+  transfer. Unfinished tool arguments, subagent progress and partial thinking
+  remain inline and continue updating. Settlement still appends fresh
+  stored-turn cards and clears the live tail.
 - **Project commands run in the project's environment.** See
   [ADR 0001](adr/0001-project-command-environment.md).
 - **The chosen folder is a cookie, and validating it is what grants access.**

@@ -60,6 +60,150 @@ export async function streamingFixture() {
     });
     if (notify) emit("turn_done");
   };
+  const richRunningTools = (bodyChars = 24_000) => {
+    const body = "z".repeat(bodyChars);
+    const user = userEntry(
+      "rich-user",
+      snapshot.branch.at(-1)?.id ?? null,
+      "exercise deferred tools",
+    );
+    const assistant = assistantEntry("rich-tools", user.id, "", 100);
+    if (assistant.type !== "message" || assistant.message.role !== "assistant")
+      throw new Error("Invalid rich assistant fixture");
+    assistant.message.content = [
+      { type: "thinking", thinking: "settled setup reasoning" },
+      {
+        type: "toolCall",
+        id: "call-rich-ordinary",
+        name: "read",
+        arguments: {
+          path: "large.txt",
+          payload: `ordinary-input-body:${body}`,
+        },
+      },
+      {
+        type: "toolCall",
+        id: "call-rich-subagent",
+        name: "subagent",
+        arguments: {
+          calls: [
+            {
+              agent: "explore",
+              prompt: `subagent-raw-prompt:${body}`,
+              cwd: "/fixture",
+            },
+            { agent: "reviewer", prompt: "check the result" },
+          ],
+        },
+      },
+      {
+        type: "toolCall",
+        id: "call-rich-unfinished",
+        name: "bash",
+        arguments: { command: "still-running" },
+      },
+    ];
+    const ordinaryResult: SessionEntry = {
+      type: "message",
+      id: "rich-ordinary-result",
+      parentId: assistant.id,
+      timestamp: new Date().toISOString(),
+      message: {
+        role: "toolResult",
+        toolCallId: "call-rich-ordinary",
+        toolName: "read",
+        content: [{ type: "text", text: `ordinary-output-body:${body}` }],
+        isError: false,
+        timestamp: Date.now(),
+      },
+    };
+    const subagentResult: SessionEntry = {
+      type: "message",
+      id: "rich-subagent-result",
+      parentId: ordinaryResult.id,
+      timestamp: new Date().toISOString(),
+      message: {
+        role: "toolResult",
+        toolCallId: "call-rich-subagent",
+        toolName: "subagent",
+        content: [{ type: "text", text: `subagent-raw-result:${body}` }],
+        details: {
+          kind: "pi-subagent",
+          results: [
+            {
+              agent: "explore",
+              exitCode: 0,
+              model: "fixture/explorer",
+              session: { cwd: "/fixture" },
+              messages: [
+                {
+                  role: "assistant",
+                  content: [
+                    { type: "text", text: `subagent-run-output:${body}` },
+                  ],
+                },
+              ],
+            },
+            {
+              agent: "reviewer",
+              exitCode: 1,
+              processError: true,
+              stderr: "representative failure",
+              messages: [],
+            },
+          ],
+        },
+        isError: false,
+        timestamp: Date.now(),
+      },
+    };
+    const branch = [
+      ...snapshot.branch,
+      user,
+      assistant,
+      ordinaryResult,
+      subagentResult,
+    ];
+    const partial = assistantEntry("unused", subagentResult.id, "", 100);
+    if (partial.type !== "message" || partial.message.role !== "assistant")
+      throw new Error("Invalid rich partial fixture");
+    partial.message.content = [
+      { type: "thinking", thinking: "partial thinking" },
+      { type: "text", text: "partial answer text" },
+    ];
+    update({
+      branch,
+      entries: branch,
+      partial: partial.message,
+      status: {
+        ...snapshot.status,
+        running: true,
+        tools: [{ id: "call-rich-unfinished", name: "bash" }],
+      },
+    });
+  };
+  const completeRichUnfinished = () => {
+    const result: SessionEntry = {
+      type: "message",
+      id: "rich-unfinished-result",
+      parentId: snapshot.branch.at(-1)?.id ?? null,
+      timestamp: new Date().toISOString(),
+      message: {
+        role: "toolResult",
+        toolCallId: "call-rich-unfinished",
+        toolName: "bash",
+        content: [{ type: "text", text: "unfinished tool completed" }],
+        isError: false,
+        timestamp: Date.now(),
+      },
+    };
+    const branch = [...snapshot.branch, result];
+    update({
+      branch,
+      entries: branch,
+      status: { ...snapshot.status, running: true, tools: [] },
+    });
+  };
   const runningTools = () => {
     const user = userEntry(
       "running-user",
@@ -122,6 +266,8 @@ export async function streamingFixture() {
     update,
     finish,
     runningTools,
+    richRunningTools,
+    completeRichUnfinished,
     resetSnapshotReads() {
       snapshotReads = 0;
     },
