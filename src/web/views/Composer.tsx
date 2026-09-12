@@ -278,14 +278,10 @@ export function modelPick(view: SessionView): ModelPick {
     // A session nothing is running for still offers the levels its model
     // knows, as pi-web's picker does from the model list alone.
     levels: status?.thinkingLevels ?? current?.thinkingLevels ?? [],
-    // Nothing is running, so the level is the one the branch last switched to,
-    // else the one an `enabledModels` pattern pinned for this model. That is
-    // what pi-web puts beside the name before a turn (session-reader.ts
-    // `getSessionSettings`); neither reads "auto", as it does there.
     ...(status === null
-      ? (view.thinking ?? current?.pin) === undefined
+      ? view.thinking === undefined
         ? {}
-        : { level: view.thinking ?? current?.pin }
+        : { level: view.thinking }
       : { level: status.thinkingLevel }),
     sessionId: view.summary.id,
     disabled: status?.running === true || status?.compacting === true,
@@ -296,14 +292,12 @@ function modelValue(model: ModelOption): string {
   return `${model.provider}/${model.id}`;
 }
 
-/**
- * The reasoning level shown beside the model name, and inside the menu. pi-web
- * shows it on every chat, naming the provider's own label when the level maps
- * to one and "auto" while Pi is left to decide (ChatInput.tsx L1734).
- */
+/** The effective level, using the provider's label when it has one. */
 function levelLabel(pick: ModelPick): string {
+  if (!pick.current) return "Model unavailable";
+  if (!pick.current.reasoning) return "off";
   const choice = pick.levels.find((entry) => entry.level === pick.level);
-  return choice?.label ?? pick.level ?? "auto";
+  return choice?.label ?? pick.level ?? "Model unavailable";
 }
 
 /** Where a pick goes, as htmx attributes: the same swap in both places. */
@@ -355,15 +349,19 @@ function ReasoningField({ pick }: { pick: ModelPick }) {
       ) : null}
       <select
         name={pick.sessionId === undefined ? "display-thinking" : "thinking"}
-        disabled={pick.disabled === true}
+        disabled={pick.disabled === true || !current?.reasoning}
+        data-unavailable={!current?.reasoning ? "" : undefined}
         {...value}
       >
-        {/* pi-web keeps "auto" in the list whatever the model offers, and
-            selects it while nothing is pinned (ChatInput.tsx L1759-L1768). */}
-        <option value="auto" selected={pick.level === undefined}>
-          auto
-        </option>
-        {pick.levels.map((choice) => (
+        {current === null ? (
+          <option value="" selected>
+            Model unavailable
+          </option>
+        ) : null}
+        {(current && !current.reasoning
+          ? [{ level: "off", label: "off" }]
+          : pick.levels
+        ).map((choice) => (
           <option value={choice.level} selected={choice.level === pick.level}>
             {choice.label}
           </option>

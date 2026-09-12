@@ -275,7 +275,7 @@ describe("composer acceptance through shipped HTMX and real routes", () => {
 });
 
 describe("explicit startup choices from the rendered form", () => {
-  it.each(["untouched", "shown model", "model", "thinking", "both", "auto"])(
+  it.each(["untouched", "shown model", "model", "thinking", "both"])(
     "submits only deliberate overrides to the runtime: %s",
     async (choice) => {
       const { app, world, openSpy } = fixture();
@@ -305,8 +305,9 @@ describe("explicit startup choices from the rendered form", () => {
             ".composer-thinking-field select",
           ),
         );
-      if (choice === "thinking" || choice === "both" || choice === "auto") {
-        reasoning().value = choice === "auto" ? "auto" : "medium";
+      expect(reasoning().querySelector('option[value="auto"]')).toBeNull();
+      if (choice === "thinking" || choice === "both") {
+        reasoning().value = "medium";
         reasoning().dispatchEvent(
           new browser.window.Event("change", { bubbles: true }),
         );

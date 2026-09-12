@@ -465,7 +465,7 @@ function mountComposer(form: HTMLElement, signal: AbortSignal): void {
     for (const control of selector?.querySelectorAll<
       HTMLButtonElement | HTMLSelectElement
     >("#model-trigger, .composer-thinking-field select") ?? []) {
-      control.disabled = locked;
+      control.disabled = locked || control.hasAttribute("data-unavailable");
     }
     const note = form.querySelector<HTMLElement>("#composer-running-note");
     if (note) note.textContent = running ? "Agent running" : "";
@@ -601,7 +601,7 @@ function setUpModelMenu(): void {
     const override = selector?.querySelector<HTMLInputElement>(
       'input[name="thinking"]',
     );
-    if (override) override.value = select.value === "auto" ? "" : select.value;
+    if (override) override.value = select.value;
     const detail = selector?.querySelector(".composer-model-detail");
     if (detail)
       detail.textContent =

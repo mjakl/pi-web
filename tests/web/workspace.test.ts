@@ -705,10 +705,27 @@ describe("tool definitions and the system prompt", () => {
 });
 
 describe("the new-session model picker", () => {
-  it("offers the model's own reasoning levels, plus auto", async () => {
+  it("shows Model unavailable instead of inventing a reasoning level", async () => {
+    const { app } = testApp({ models: [] });
+    const page = await (await app.request("/new")).text();
+    expect(page).toContain(
+      'class="composer-model-detail">Model unavailable</span>',
+    );
+    expect(page).toContain('<select name="display-thinking" disabled');
+    expect(page).toContain(
+      '<option value="" selected="">Model unavailable</option>',
+    );
+    expect(page).not.toContain('<option value="auto"');
+  });
+
+  it("shows the effective default and offers only concrete reasoning levels", async () => {
     const { app } = testApp();
     const page = await (await app.request("/new")).text();
-    expect(page).toContain('<option value="auto" selected="">auto</option>');
+    expect(page).not.toContain('<option value="auto"');
+    expect(page).toContain(
+      '<option value="medium" selected="">balanced</option>',
+    );
+    expect(page).toContain('name="thinking" value=""');
     // From the catalog's own list for this model, not a hard-coded one.
     expect(page).toContain("balanced");
     expect(page).not.toContain('value="xhigh"');

@@ -322,23 +322,26 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
     const picked = c.req.query("model") ?? "";
     const thinking = c.req.query("thinking") ?? "";
     return guard(c, async () => {
-      const view = await deps.workspace.newSession(cwd);
-      const chosen = view.models.find(
-        (model) => `${model.provider}/${model.id}` === picked,
-      );
+      const [provider, ...rest] = picked.split("/");
+      const modelId = rest.join("/");
       const thinkingOverride = isThinkingLevel(thinking) ? thinking : undefined;
-      const level =
-        thinkingOverride ??
-        chosen?.pin ??
-        (chosen ? undefined : view.thinkingLevel);
+      const view = await deps.workspace.newSession(cwd, {
+        ...(provider && modelId ? { model: { provider, modelId } } : {}),
+        ...(thinkingOverride === undefined
+          ? {}
+          : { thinkingLevel: thinkingOverride }),
+      });
+      const chosen =
+        view.model && `${view.model.provider}/${view.model.id}` === picked;
+      const level = view.thinkingLevel;
       return c.html(
         <ModelSelector
           pick={{
-            explicitModel: chosen !== undefined,
+            explicitModel: !!chosen,
             ...(thinkingOverride === undefined ? {} : { thinkingOverride }),
             models: view.models,
-            current: chosen ?? view.model ?? null,
-            levels: chosen?.thinkingLevels ?? view.model?.thinkingLevels ?? [],
+            current: view.model ?? null,
+            levels: view.model?.thinkingLevels ?? [],
             ...(level === undefined ? {} : { level }),
             cwd: view.cwd,
           }}

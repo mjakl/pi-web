@@ -183,9 +183,18 @@ export function sessionUseCases({
       usage: contextUsage({ tokens: null, contextWindow: null }),
       models: listing.models,
       ...(model === undefined ? {} : { model }),
-      ...(transcript.lastThinking !== null &&
-      isThinkingLevel(transcript.lastThinking)
-        ? { thinking: transcript.lastThinking }
+      ...(model
+        ? {
+            thinking: await deps.models.resolveThinking(
+              stored.summary.cwd,
+              model,
+              transcript.lastThinking !== null &&
+                isThinkingLevel(transcript.lastThinking)
+                ? transcript.lastThinking
+                : undefined,
+              true,
+            ),
+          }
         : {}),
       modelWarnings: listing.warnings,
       starred,

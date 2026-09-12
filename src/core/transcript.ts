@@ -689,6 +689,9 @@ export function projectTranscript(branch: readonly SessionEntry[]): Transcript {
         });
         break;
       }
+      case "model_change":
+        lastModel = { provider: entry.provider, id: entry.modelId };
+        break;
       case "thinking_level_change":
         lastThinking = entry.thinkingLevel;
         break;

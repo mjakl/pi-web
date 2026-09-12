@@ -1,4 +1,7 @@
-import { thinkingChoices } from "@core/models";
+import {
+  clampThinkingLevel,
+  getSupportedThinkingLevels,
+} from "@earendil-works/pi-ai";
 import type { ModelCatalog, ModelListing, ModelOption } from "@core/ports";
 import {
   ModelRuntime,
@@ -23,9 +26,10 @@ export async function resolveModelListing(
     name: model.name,
     contextWindow: model.contextWindow,
     reasoning: model.reasoning,
-    ...(model.reasoning
-      ? { thinkingLevels: thinkingChoices(model.thinkingLevelMap) }
-      : {}),
+    thinkingLevels: getSupportedThinkingLevels(model).map((level) => ({
+      level,
+      label: model.thinkingLevelMap?.[level] ?? level,
+    })),
   });
   const provider = settings.getDefaultProvider();
   const model = settings.getDefaultModel();
@@ -82,10 +86,10 @@ export function createPiModelCatalog(options: {
 }): ModelCatalog {
   const cache = new Map<
     string,
-    { expiresAt: number; stamp: string; listing: Promise<ModelListing> }
+    { expiresAt: number; stamp: string; state: ReturnType<typeof load> }
   >();
 
-  async function load(cwd: string): Promise<ModelListing> {
+  async function load(cwd: string) {
     const runtime = await ModelRuntime.create({
       authPath: join(options.agentDir, "auth.json"),
       modelsPath: join(options.agentDir, "models.json"),
@@ -93,24 +97,49 @@ export function createPiModelCatalog(options: {
     const settings = SettingsManager.create(cwd, options.agentDir);
     const trust = projectTrustReloadOptions(cwd, options.agentDir);
     if (trust) settings.setProjectTrusted(await trust.resolveProjectTrust());
-    return resolveModelListing(runtime, settings);
+    return {
+      runtime,
+      settings,
+      listing: await resolveModelListing(runtime, settings),
+    };
+  }
+
+  function stateFor(cwd: string) {
+    const stamp = agentConfigStamp(options.agentDir);
+    const hit = cache.get(cwd);
+    if (hit && hit.expiresAt > Date.now() && hit.stamp === stamp) {
+      return hit.state;
+    }
+    const state = load(cwd);
+    cache.set(cwd, {
+      stamp,
+      expiresAt: Date.now() + CACHE_TTL_MS,
+      state,
+    });
+    state.catch(() => cache.delete(cwd));
+    return state;
   }
 
   return {
-    list(cwd) {
-      const stamp = agentConfigStamp(options.agentDir);
-      const hit = cache.get(cwd);
-      if (hit && hit.expiresAt > Date.now() && hit.stamp === stamp) {
-        return hit.listing;
-      }
-      const listing = load(cwd);
-      cache.set(cwd, {
-        stamp,
-        expiresAt: Date.now() + CACHE_TTL_MS,
-        listing,
-      });
-      listing.catch(() => cache.delete(cwd));
-      return listing;
+    async list(cwd) {
+      return (await stateFor(cwd)).listing;
+    },
+    async resolveThinking(cwd, option, level, continuing = false) {
+      const { runtime, settings } = await stateFor(cwd);
+      const model = runtime.getModel(option.provider, option.id);
+      if (!model)
+        throw new Error(`Model unavailable: ${option.provider}/${option.id}`);
+      const requested =
+        level ??
+        (continuing
+          ? undefined
+          : (option.pin ??
+            settings.getModelThinkingLevel(model.provider, model.id)));
+      // Pi's SDK startup fallback is medium (the constant is not exported).
+      return clampThinkingLevel(
+        model,
+        requested ?? settings.getDefaultThinkingLevel() ?? "medium",
+      );
     },
     invalidate(cwd) {
       if (cwd === undefined) cache.clear();

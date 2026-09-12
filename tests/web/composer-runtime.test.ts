@@ -129,6 +129,205 @@ const post = (app: App, cwd: string, text: string, id?: string) =>
   });
 
 describe("production startup from the rendered composer", () => {
+  it.each([
+    { name: "SDK fallback", settings: {}, expected: "medium" },
+    {
+      name: "global default",
+      settings: { defaultThinkingLevel: "low" },
+      expected: "low",
+    },
+    {
+      name: "per-model default",
+      settings: {
+        defaultThinkingLevel: "low",
+        modelThinkingLevels: { [`${PROVIDER}/${MODEL_2}`]: "high" },
+      },
+      expected: "high",
+    },
+    {
+      name: "unsupported default",
+      settings: { defaultThinkingLevel: "xhigh" },
+      expected: "high",
+    },
+  ])(
+    "previews $name without turning it into an override",
+    async ({ settings, expected }) => {
+      const { app, h } = await fixture();
+      const file = join(h.agentDir, "settings.json");
+      const original = JSON.stringify({
+        defaultProvider: PROVIDER,
+        defaultModel: MODEL_2,
+        ...settings,
+      });
+      await writeFile(file, original);
+      await writeFile(
+        join(h.cwd, ".pi", "settings.json"),
+        JSON.stringify({ enabledModels: [`${PROVIDER}/${MODEL_2}`] }),
+      );
+      const browser = await composer(app);
+      const select = required(
+        browser.document.querySelector<HTMLSelectElement>(
+          ".composer-thinking-field select",
+        ),
+      );
+      expect(
+        select.querySelector("option[selected]")?.getAttribute("value"),
+      ).toBe(expected);
+      expect(select.querySelector('option[value="auto"]')).toBeNull();
+      expect(select.querySelector('option[value="xhigh"]')).toBeNull();
+      expect(select.querySelector('option[value="max"]')).toBeNull();
+      expect(
+        browser.document
+          .querySelector('input[name="thinking"]')
+          ?.getAttribute("value"),
+      ).toBe("");
+      expect(
+        browser.document.querySelector(".composer-model-detail")?.textContent,
+      ).toBe(expected);
+      await post(app, h.cwd, "/name inherited default");
+      expect(
+        required(h.runtime.live()[0]).snapshot().status.thinkingLevel,
+      ).toBe(expected);
+      expect(await readFile(file, "utf8")).toBe(original);
+      expect(h.calls).toHaveLength(0);
+    },
+  );
+
+  it("previews an unsupported explicit choice at its clamped level but preserves the override", async () => {
+    const { app, h } = await fixture();
+    const html = await (
+      await app.request(
+        `/workspaces/model-selector?cwd=${encodeURIComponent(h.cwd)}&model=${PROVIDER}/${MODEL_2}&thinking=max`,
+      )
+    ).text();
+    expect(html).toContain('<option value="high" selected="">high</option>');
+    expect(html).toContain('name="thinking" value="max"');
+    expect(html).not.toContain('<option value="max"');
+    expect(html).not.toContain('<option value="auto"');
+  });
+
+  it.each([
+    {
+      saved: "low" as const,
+      expected: "low",
+      replyModel: MODEL_2,
+      restoredModel: MODEL_2,
+    },
+    {
+      saved: "max" as const,
+      expected: "high",
+      replyModel: MODEL_2,
+      restoredModel: MODEL_2,
+    },
+    {
+      saved: undefined,
+      expected: "low",
+      replyModel: MODEL_2,
+      restoredModel: MODEL_2,
+    },
+    {
+      saved: "high" as const,
+      expected: "high",
+      replyModel: MODEL_ID,
+      restoredModel: MODEL_2,
+    },
+    {
+      saved: "off" as const,
+      expected: "off",
+      replyModel: MODEL_2,
+      restoredModel: MODEL_ID,
+    },
+  ])(
+    "restores $restoredModel at $expected after a $replyModel reply (saved $saved)",
+    async ({ saved, expected, replyModel, restoredModel }) => {
+      const { app, h } = await fixture();
+      await writeFile(
+        join(h.cwd, ".pi", "settings.json"),
+        JSON.stringify({
+          enabledModels: [
+            `${PROVIDER}/${MODEL_2}:high`,
+            `${PROVIDER}/${MODEL_ID}`,
+          ],
+        }),
+      );
+      const manager = SessionManager.create(
+        h.cwd,
+        join(h.agentDir, "sessions", "saved"),
+      );
+      manager.appendModelChange(PROVIDER, replyModel);
+      manager.appendMessage({
+        role: "user",
+        content: "saved",
+        timestamp: Date.now(),
+      });
+      manager.appendMessage({
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+        api: "openai-completions",
+        provider: PROVIDER,
+        model: replyModel,
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: "stop",
+        timestamp: Date.now(),
+      });
+      manager.appendModelChange(PROVIDER, restoredModel);
+      if (saved !== undefined) manager.appendThinkingLevelChange(saved);
+      const id = manager.getSessionId();
+      for (const active of [false, true]) {
+        if (active) await h.open({ sessionId: id });
+        const browser = await composer(app, id);
+        expect(
+          browser.document
+            .querySelector('[role="option"][aria-selected="true"]')
+            ?.getAttribute("hx-post"),
+        ).toContain(
+          `model=${encodeURIComponent(`${PROVIDER}/${restoredModel}`)}`,
+        );
+        expect(
+          browser.document.querySelector<HTMLSelectElement>(
+            ".composer-thinking-field select",
+          )?.disabled,
+        ).toBe(restoredModel === MODEL_ID);
+        expect(
+          browser.document
+            .querySelector(".composer-thinking-field option[selected]")
+            ?.getAttribute("value"),
+        ).toBe(expected);
+        expect(
+          browser.document.querySelector(".composer-model-detail")?.textContent,
+        ).toBe(expected);
+      }
+    },
+  );
+
+  it("renders Pi's selected level after live model and reasoning switches", async () => {
+    const { app, h } = await fixture();
+    const live = await h.open();
+    const response = await app.request(
+      `/sessions/${live.id}/model?model=${PROVIDER}/${MODEL_2}`,
+      { method: "POST", body: new URLSearchParams({ thinking: "max" }) },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain(
+      '<option value="high" selected="">high</option>',
+    );
+    expect(live.snapshot().status.thinkingLevel).toBe("high");
+    const switched = await app.request(
+      `/sessions/${live.id}/model?model=${PROVIDER}/${MODEL_ID}`,
+      { method: "POST" },
+    );
+    expect(switched.status).toBe(200);
+    expect(await switched.text()).toContain('<select name="thinking" disabled');
+    expect(live.snapshot().status.thinkingLevel).toBe("off");
+  });
+
   it("keeps untrusted project settings out of both the menu and startup", async () => {
     const { app, h } = await fixture();
     new ProjectTrustStore(h.agentDir).set(h.cwd, false);
@@ -138,7 +337,17 @@ describe("production startup from the rendered composer", () => {
     ).toMatch(/^Global model/);
     expect(
       browser.document.querySelector(".composer-model-detail")?.textContent,
-    ).not.toBe("high");
+    ).toBe("off");
+    const select = required(
+      browser.document.querySelector<HTMLSelectElement>(
+        ".composer-thinking-field select",
+      ),
+    );
+    expect(select.disabled).toBe(true);
+    expect(select.value).toBe("off");
+    expect(Array.from(select.options, (option) => option.value)).toEqual([
+      "off",
+    ]);
     const response = await post(app, h.cwd, "/name untrusted");
     expect(response.headers.get("X-Web-Pi-Submission")).toBe("accepted");
     expect(required(h.runtime.live()[0]).snapshot().status).toMatchObject({

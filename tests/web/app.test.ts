@@ -2402,11 +2402,13 @@ describe("the shell chrome, on every route", () => {
     expect(index.headers.get("set-cookie")).toContain("web-pi-session=;");
   });
 
-  it("names the reasoning level beside the model, as pi-web does", async () => {
+  it("shows why no reasoning level is available when the folder is unusable", async () => {
     const { app } = testApp();
     const html = await (await app.request("/new")).text();
     const chip = html.slice(html.indexOf('id="model-trigger"'));
-    expect(chip).toContain('<span class="composer-model-detail">auto</span>');
+    expect(chip).toContain(
+      '<span class="composer-model-detail">Model unavailable</span>',
+    );
   });
 
   it("reads a stored session's reasoning level off its own branch", async () => {

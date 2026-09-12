@@ -1,4 +1,4 @@
-import type { ModelOption, ThinkingChoice, ThinkingLevel } from "./ports.ts";
+import type { ModelOption, ThinkingLevel } from "./ports.ts";
 
 // Which model a new session starts on, and which of those choices are written
 // back to Pi's settings as the new default.
@@ -19,19 +19,6 @@ export function isThinkingLevel(value: string): value is ThinkingLevel {
   return (THINKING_LEVELS as string[]).includes(value);
 }
 
-/**
- * The reasoning levels a model actually offers. Pi's `thinkingLevelMap` marks
- * an unsupported level with `null` and gives the others the name the provider
- * uses; a missing map means the model takes every level as it comes.
- */
-export function thinkingChoices(
-  map: Partial<Record<string, string | null>> | undefined,
-): ThinkingChoice[] {
-  return THINKING_LEVELS.filter((level) => map?.[level] !== null).map(
-    (level) => ({ level, label: map?.[level] ?? level }),
-  );
-}
-
 /** The configured default when it is still in scope, else the first model. */
 export function initialModel(
   models: readonly ModelOption[],
@@ -46,11 +33,7 @@ export function initialModel(
   return match ?? models[0];
 }
 
-/**
- * The reasoning level a model starts on: its `enabledModels` pin, else none
- * at all. pi-web leaves an unpinned model on "auto", which is Pi deciding,
- * not a level of its own (useAgentSession.ts L2600).
- */
+/** Only pass a scope pin to startup; unpinned models inherit Pi's defaults. */
 export function initialThinking(
   model: ModelOption | undefined,
 ): ThinkingLevel | undefined {

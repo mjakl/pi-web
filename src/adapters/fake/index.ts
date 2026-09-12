@@ -1165,6 +1165,12 @@ export function createFakeWorld(
           models: options.models ?? [FAKE_MODEL],
           warnings: [],
         }),
+      resolveThinking: (_cwd, model, level, continuing) =>
+        Promise.resolve(
+          model.reasoning
+            ? (level ?? (continuing ? undefined : model.pin) ?? "medium")
+            : "off",
+        ),
       invalidate: () => undefined,
     },
     projects: {

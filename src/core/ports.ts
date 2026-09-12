@@ -389,6 +389,13 @@ export type ModelListing = {
 
 export type ModelCatalog = {
   list(cwd: string): Promise<ModelListing>;
+  /** Preview Pi's effective level without opening a session or writing defaults. */
+  resolveThinking(
+    cwd: string,
+    model: ModelOption,
+    level?: ThinkingLevel,
+    continuing?: boolean,
+  ): Promise<ThinkingLevel>;
   /** After a trust grant or a settings write, the cached listing is stale. */
   invalidate(cwd?: string): void;
 };

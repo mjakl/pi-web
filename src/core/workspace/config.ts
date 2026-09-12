@@ -3,7 +3,7 @@ import {
   rankCommands,
   type SlashCommand,
 } from "@core/composer";
-import { initialModel, initialThinking } from "@core/models";
+import { initialModel, type StartupChoice } from "@core/models";
 import type { PackagesView, PackageScope } from "@core/packages";
 import { FileAccessError, isAbsolutePath, samePath } from "@core/path-access";
 import type {
@@ -111,7 +111,10 @@ export function configUseCases({
     },
 
     /** What `/new` renders: models and trust for the chosen folder. */
-    async newSession(cwd: string): Promise<NewSessionView> {
+    async newSession(
+      cwd: string,
+      choice: StartupChoice = {},
+    ): Promise<NewSessionView> {
       const [available, trust] = await Promise.all([
         folderAvailable(cwd),
         deps.trust.status(cwd).catch(() => ({
@@ -134,7 +137,12 @@ export function configUseCases({
       const listing = usable
         ? await modelsFor(cwd)
         : { models: [], warnings: [] };
-      const model = initialModel(listing.models, listing.preferred);
+      const model =
+        listing.models.find(
+          (option) =>
+            option.provider === choice.model?.provider &&
+            option.id === choice.model?.modelId,
+        ) ?? initialModel(listing.models, listing.preferred);
       return {
         cwd,
         available,
@@ -143,9 +151,15 @@ export function configUseCases({
         models: listing.models,
         modelWarnings: listing.warnings,
         model,
-        ...(initialThinking(model) === undefined
-          ? {}
-          : { thinkingLevel: initialThinking(model) }),
+        ...(model
+          ? {
+              thinkingLevel: await deps.models.resolveThinking(
+                cwd,
+                model,
+                choice.thinkingLevel,
+              ),
+            }
+          : {}),
         trust,
       };
     },
