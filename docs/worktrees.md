@@ -1,16 +1,19 @@
 # Worktrees in web-pi
 
-web-pi discovers existing Git worktrees and lets you choose their folders.
+web-pi groups sessions by project and lets you choose existing working folders.
 Create, remove, and prune worktrees with Git or another tool. web-pi does not
 perform those operations or change a worktree's branch.
 
 ## Choose a working folder
 
-Open the project picker in the sidebar and expand a repository to see its
-working folders. The original checkout and linked worktrees are equal choices. A
-bare repository identifies the group, but its bare directory is not offered as a
-working checkout. A repository subdirectory keeps its own project identity.
-Ordinary folders are available through **Custom path…**.
+Open the project picker in the sidebar and expand a repository to see folders
+represented by its known sessions. This list is derived from session history,
+not a fresh Git worktree scan. For a newly created worktree without a session,
+use **Custom path…** and select its folder. Ordinary folders use the same flow.
+
+Sessions in the original checkout and linked worktrees can share a project
+group, including worktrees backed by a bare repository. A repository
+subdirectory keeps its own project identity.
 
 Choosing another worktree in the same project changes where the **next new
 session** starts. An already displayed session stays open with its original
@@ -25,10 +28,16 @@ on restart; the new-session route validates the chosen folder again.
 
 ## Changes made by other tools
 
-The folder route probes Git when requested, rather than polling in the
-background. Reopen the picker or expand the repository to refresh the list.
-Discovery reads worktree metadata, not every checkout's files. Missing,
-prunable, and bare entries are excluded from selectable working folders.
+Reopening the picker or expanding a repository does not discover worktrees
+created by another tool. The picker fetches its session-derived list once per
+mounted menu; expanding a group only reveals its existing choices. Use **Custom
+path…** to select a new working folder.
+
+The separate `GET /workspaces/folders` route performs fresh Git discovery when
+requested, but no current picker control calls it. That endpoint reads worktree
+metadata rather than checkout files, and filters missing, prunable, and bare
+entries. Those filtering guarantees do not apply to the session-derived picker,
+which can retain a missing folder because its history still exists.
 
 web-pi records observed folder-to-repository associations in
 `web-worktree-projects.json` inside the Pi agent directory. This keeps history
@@ -57,8 +66,8 @@ These routes serve the browser workflow, not the old Next.js JSON API:
   `/sidebar/workspaces` route in this implementation.
 - `GET /sidebar?project=<root>&cwd=<folder>` selects a project/folder through
   HTMX; a same-project worktree choice can retain the open session.
-- `GET /workspaces/folders?cwd=<directory>` renders a project's worktree
-  choices.
+- `GET /workspaces/folders?cwd=<directory>` renders freshly discovered Git
+  worktree choices. It is not wired into the current picker UI.
 - `GET /workspaces/picker` opens the custom-folder dialog.
 - `GET /workspaces/browse?path=<directory>` renders directory names without
   granting file-content access.
