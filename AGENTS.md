@@ -2,8 +2,8 @@
 
 web-pi is a server-rendered browser interface for the Pi coding agent: Hono
 renders HTML, HTMX swaps fragments, and one SSE stream per open session pushes
-re-rendered fragments while a turn runs. The server owns all UI state; the
-browser holds none.
+re-rendered fragments while a turn runs. The server owns the conversation model;
+the browser keeps drafts and presentation preferences, not a second transcript.
 
 ## Working agreement
 
@@ -30,7 +30,9 @@ browser holds none.
 - `dependencies` are only what stays external in `dist/server.js` (the Pi SDK,
   `mammoth`, `web-push`, `undici`); everything else esbuild bundles and belongs
   in `devDependencies`. Changing either list means running `just smoke`.
-- `CLAUDE.md` is a symlink to this file.
+- `CLAUDE.md` is a symlink to this file. Repository workflow skills live in
+  `.agents/skills/`; `.claude/skills/` contains compatibility symlinks, not
+  copies. Keep each skill's references, license, and provenance with it.
 
 ## Layout and boundaries
 
@@ -103,8 +105,8 @@ inspiration:
   are pi-web's own files. **Never edit them.** They are re-copied when pi-web
   changes.
 - Markup carries pi-web's class names and pi-web's inline styles (camelCase to
-  kebab, numbers to px), so those stylesheets apply unchanged. The UI map in the
-  porting notes names the class of every region; when it names one, use it.
+  kebab, numbers to px), so those stylesheets apply unchanged. Follow the
+  existing owner view and its stylesheet when choosing a region's classes.
 - There is no utility framework. A `class="flex gap-2 text-sm"` is a bug: reach
   for the pi-web class, or an inline style with the values pi-web uses.
 - New rules go in `src/web/styles/areas/<area>.css`, the one stylesheet an area
@@ -122,7 +124,8 @@ accounting. Shell commands run with a sanitised environment; read
 
 Every file request goes through `authorize` in `src/core/workspace/deps.ts`; add
 a root through the allowed-root flow there, never a check in a route handler.
-`docs/specs/files-git.md` is the behaviour it mirrors.
+Read `docs/behavior.md` before changing file behavior and `docs/worktrees.md`
+before changing folder selection or worktree discovery.
 
 ## Validation
 

@@ -17,7 +17,7 @@ import {
   WarningTriangleIcon,
 } from "./icons.tsx";
 
-// pi-web's ChatInput (components/ChatInput.tsx, §6 of the UI map): one 820px
+// pi-web's ChatInput (components/ChatInput.tsx): one 820px
 // column holding the banners, the queue panel, the 24px-radius surface and its
 // toolbar. The server renders the composer and every menu it opens; the client
 // bundle owns only the keyboard, the local file index, and the image previews,

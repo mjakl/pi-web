@@ -51,6 +51,10 @@ build: link-pi build-css build-js
 start: build
     node dist/server.js
 
+# DOCS: Serve fictional screenshot sessions on an ephemeral loopback port
+screenshots: build
+    node --import tsx scripts/screenshot-fixture.ts
+
 # LINT: Formatting, lint, and types
 lint: link-pi typecheck
     pnpm exec oxfmt --check .

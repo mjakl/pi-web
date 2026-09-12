@@ -6,11 +6,8 @@ import { join } from "node:path";
 const roots = ["AGENTS.md", "README.md", "docs"];
 const pattern = /`((?:src|tests|scripts|docs|static)\/[\w./-]+)`/g;
 
-// docs/specs quotes pi-web paths; they are not claims about this checkout.
-const skipped = ["docs/specs"];
-
 function* markdownFiles(path: string): Generator<string> {
-  if (!existsSync(path) || skipped.includes(path)) return;
+  if (!existsSync(path)) return;
   if (statSync(path).isDirectory()) {
     for (const child of readdirSync(path))
       yield* markdownFiles(join(path, child));

@@ -2,8 +2,8 @@
  * Every icon pi-web draws, copied from its components: same viewBox, same
  * stroke width, same path data. pi-web has no icon library — each icon is a
  * hand-written SVG — so this file is the whole inventory, and the one place an
- * area may take an icon from. Numbers in the comments are the rows of the icon
- * inventory in the UI map.
+ * area may take an icon from. Comment numbers retain the original port's
+ * inventory numbering.
  *
  * All of them are `fill: none; stroke: currentColor` with round caps and joins
  * unless the source says otherwise, so colour and hover come from the button
