@@ -6,15 +6,7 @@ import { HTMX_SRC, HTMX_SSE_SRC } from "@web/HtmlLayout";
 
 const client = buildSync({
   stdin: {
-    contents: `
-      import { setUpRequestFields } from './src/web/client/htmx.ts';
-      import { setUpComposer } from './src/web/client/composer.ts';
-      import { setUpToasts } from './src/web/client/toasts.ts';
-      import { setUpDialogs } from './src/web/client/dialogs.ts';
-      import { setUpSidebar } from './src/web/client/sidebar.ts';
-      import { setUpSseStartup } from './src/web/client/sse.ts';
-      setUpRequestFields(); setUpComposer(); setUpToasts(); setUpDialogs(); setUpSidebar(); setUpSseStartup();
-    `,
+    contents: `import './src/web/client/main.ts';`,
     resolveDir: process.cwd(),
   },
   bundle: true,

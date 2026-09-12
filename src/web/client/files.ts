@@ -3,6 +3,7 @@ import { requestContext } from "./htmx.ts";
 import { buildAtInsertText } from "@core/composer";
 import { catppuccinIcon } from "@core/file-types";
 import { replaceRange, textarea } from "./editor.ts";
+import { setUpRegion } from "./lifecycle.ts";
 import { setUpResize } from "./resize.ts";
 
 // The files area's browser half: how wide it is, which tabs are open, where
@@ -272,9 +273,12 @@ function closeTab(path: string): void {
 // --- Live watch ----------------------------------------------------------
 
 let stream: EventSource | null = null;
+let watchController: AbortController | null = null;
 let watching: string | null = null;
 
 function disconnectWatch(): void {
+  watchController?.abort();
+  watchController = null;
   stream?.close();
   stream = null;
   watching = null;
@@ -312,18 +316,32 @@ function connectWatch(): void {
   const query = new URLSearchParams({ path: active, session: sessionId() });
   const source = new EventSource(`/files/watch?${query.toString()}`);
   stream = source;
-  source.addEventListener("connected", () => {
-    showWatching(true);
-  });
-  source.addEventListener("change", () => {
-    if (active !== null) {
-      saveActiveState();
-      loadViewer(active);
-    }
-  });
-  source.addEventListener("error", () => {
-    showWatching(false);
-  });
+  watchController = new AbortController();
+  const { signal } = watchController;
+  source.addEventListener(
+    "connected",
+    () => {
+      showWatching(true);
+    },
+    { signal },
+  );
+  source.addEventListener(
+    "change",
+    () => {
+      if (active !== null) {
+        saveActiveState();
+        loadViewer(active);
+      }
+    },
+    { signal },
+  );
+  source.addEventListener(
+    "error",
+    () => {
+      showWatching(false);
+    },
+    { signal },
+  );
 }
 
 // --- Line ranges ---------------------------------------------------------
@@ -522,21 +540,20 @@ function syncChangesToggle(): void {
 
 // --- Resizing ------------------------------------------------------------
 
-function setUpPanelResize(): void {
-  const handle = document.querySelector<HTMLElement>(
-    ".right-panel-resize-handle",
+function mountPanelResize(handle: HTMLElement, signal: AbortSignal): void {
+  setUpResize(
+    {
+      handle,
+      storageKey: WIDTH_KEY,
+      property: "--right-panel-width",
+      min: MIN_WIDTH,
+      max: maxWidth,
+      fallback: defaultWidth,
+      // Anchored to the right edge: the width is the distance to it.
+      widthAt: (clientX) => innerWidth - clientX,
+    },
+    signal,
   );
-  if (!handle) return;
-  setUpResize({
-    handle,
-    storageKey: WIDTH_KEY,
-    property: "--right-panel-width",
-    min: MIN_WIDTH,
-    max: maxWidth,
-    fallback: defaultWidth,
-    // Anchored to the right edge: the width is the distance to it.
-    widthAt: (clientX) => innerWidth - clientX,
-  });
 }
 
 /**
@@ -555,7 +572,6 @@ function describeMedia(root: ParentNode): void {
       }
     };
     if (image.complete) size();
-    else image.addEventListener("load", size, { once: true });
   }
   const audio = root.querySelector("audio");
   if (audio) {
@@ -566,29 +582,60 @@ function describeMedia(root: ParentNode): void {
       slot.textContent = `${String(minutes)}:${String(seconds % 60).padStart(2, "0")}`;
     };
     if (audio.readyState > 0) length();
-    else audio.addEventListener("loadedmetadata", length, { once: true });
   }
 }
 
 export function setUpFiles(): void {
-  if (!panel()) return;
-  setUpPanelResize();
-  document.body.dataset["filePanel"] = "closed";
-
-  document
-    .getElementById("file-panel-toggle")
-    ?.addEventListener("click", () => {
-      setOpen(!isOpen());
-    });
-  document.getElementById("file-panel-close")?.addEventListener("click", () => {
+  setUpRegion("#file-panel", (_owner, signal) => {
+    tabs.clear();
+    active = null;
+    renderTabs();
+    emptyViewer();
     setOpen(false);
+    signal.addEventListener(
+      "abort",
+      () => {
+        requestId += 1;
+        disconnectWatch();
+        tabs.clear();
+        active = null;
+      },
+      { once: true },
+    );
   });
+  setUpRegion(".right-panel-resize-handle", mountPanelResize);
+  for (const type of ["load", "loadedmetadata"]) {
+    document.addEventListener(
+      type,
+      (event) => {
+        const target = event.target;
+        if (
+          !(
+            target instanceof HTMLImageElement ||
+            target instanceof HTMLAudioElement
+          )
+        )
+          return;
+        const root = target.closest("#file-view .file-viewer-shell");
+        if (root) describeMedia(root);
+      },
+      true,
+    );
+  }
 
   // Anything carrying a path opens the viewer: a transcript link, a
   // written-file chip, a tool call's path, a changes row, a tree row.
-  document.body.addEventListener("click", (event) => {
+  document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
+    if (target.closest("#file-panel-toggle")) {
+      setOpen(!isOpen());
+      return;
+    }
+    if (target.closest("#file-panel-close")) {
+      setOpen(false);
+      return;
+    }
     const tab = target.closest<HTMLElement>(".file-tab");
     if (tab) {
       const path = tab.dataset["path"] ?? "";
@@ -640,14 +687,14 @@ export function setUpFiles(): void {
   });
 
   // The mention button must not steal the selection it is about to quote.
-  document.body.addEventListener("pointerdown", (event) => {
+  document.addEventListener("pointerdown", (event) => {
     if ((event.target as Element | null)?.closest("[data-mention-file]")) {
       event.preventDefault();
     }
   });
 
   // Middle click closes a tab, as it does in a browser.
-  document.body.addEventListener("auxclick", (event) => {
+  document.addEventListener("auxclick", (event) => {
     if (event.button !== 1) return;
     const tab = (event.target as Element | null)?.closest<HTMLElement>(
       ".file-tab",
@@ -657,7 +704,7 @@ export function setUpFiles(): void {
     closeTab(tab.dataset["path"] ?? "");
   });
 
-  document.body.addEventListener("keydown", (event) => {
+  document.addEventListener("keydown", (event) => {
     const search = document.getElementById("file-search");
     if (event.key === "Escape" && event.target === search) {
       if (search instanceof HTMLInputElement) {
@@ -673,7 +720,7 @@ export function setUpFiles(): void {
 
   // The explorer refreshes itself on every settled turn; keep the changed
   // files showing when that is what the reader asked for.
-  document.body.addEventListener("htmx:config:request", (event) => {
+  document.addEventListener("htmx:config:request", (event) => {
     const { request } = requestContext(event);
     if (
       new URL(request.action, document.baseURI).pathname !== "/files/explorer"
@@ -685,7 +732,7 @@ export function setUpFiles(): void {
   });
 
   // A refreshed tree loses focus positions; the first row becomes the entry.
-  document.body.addEventListener("htmx:after:settle", (event) => {
+  document.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.id === "file-explorer" || target.id === "file-tree") {
@@ -697,7 +744,7 @@ export function setUpFiles(): void {
   });
 
   // A viewer that scrolls records where it is, so switching tabs comes back.
-  document.body.addEventListener(
+  document.addEventListener(
     "scroll",
     (event) => {
       const target = event.target;

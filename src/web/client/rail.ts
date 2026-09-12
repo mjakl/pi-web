@@ -1,4 +1,5 @@
 import type { Htmx } from "htmx.org";
+import { setUpRegion } from "./lifecycle.ts";
 // The conversation rail's browser half: which mark the reader is next to,
 // the hover preview, click-or-drag to scroll, and the branch expansion.
 // Positions and marks come from the server; this only measures the transcript.
@@ -17,8 +18,8 @@ function htmx(): Htmx | undefined {
 }
 
 /** The marks on the branch being read, in transcript order. */
-function rows(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>("#rail .minimap-row")];
+function rows(rail: HTMLElement): HTMLElement[] {
+  return [...rail.querySelectorAll<HTMLElement>("#rail .minimap-row")];
 }
 
 /**
@@ -27,12 +28,13 @@ function rows(): HTMLElement[] {
  * Y while dragging — and returns null for a mark that does not take part.
  */
 function nearestRow(
+  rail: HTMLElement,
   target: number,
   at: (row: HTMLElement) => number | null,
 ): HTMLElement | undefined {
   let best: HTMLElement | undefined;
   let bestDistance = Number.POSITIVE_INFINITY;
-  for (const row of rows()) {
+  for (const row of rows(rail)) {
     const position = at(row);
     if (position === null) continue;
     const distance = Math.abs(position - target);
@@ -44,9 +46,11 @@ function nearestRow(
   return best;
 }
 
-function entryOf(row: HTMLElement): HTMLElement | null {
+function entryOf(view: HTMLElement, row: HTMLElement): HTMLElement | null {
   const id = row.dataset["minimapEntryId"];
-  return id === undefined ? null : document.getElementById(`entry-${id}`);
+  return id === undefined
+    ? null
+    : view.querySelector<HTMLElement>(`#${CSS.escape(`entry-${id}`)}`);
 }
 
 /** Distance from the top of the scroller, whatever the offset parents are. */
@@ -59,7 +63,12 @@ function topOf(view: HTMLElement, element: HTMLElement): number {
 }
 
 export function setUpRail(): void {
-  const view = document.getElementById("log");
+  // Tracking belongs to the scroller. Replacing it must also rebind the rail,
+  // while ordinary swaps inside the persistent rail column keep its state.
+  setUpRegion("#log", mountRail);
+}
+
+function mountRail(view: HTMLElement, signal: AbortSignal): void {
   // The column stays put; the rail inside it is re-rendered from the server
   // whenever a turn settles, so every listener lives on the column.
   const rail = document.getElementById("rail-column");
@@ -81,8 +90,8 @@ export function setUpRail(): void {
   const track = () => {
     if (Date.now() < lockedUntil) return;
     light(
-      nearestRow(view.scrollTop + view.clientHeight * TARGET, (row) => {
-        const entry = entryOf(row);
+      nearestRow(rail, view.scrollTop + view.clientHeight * TARGET, (row) => {
+        const entry = entryOf(view, row);
         return entry === null ? null : topOf(view, entry);
       }),
     );
@@ -94,7 +103,7 @@ export function setUpRail(): void {
    * The width is inline there too, so it has to be inline here.
    */
   const expand = (open: boolean) => {
-    const layer = document.getElementById("rail");
+    const layer = rail.querySelector<HTMLElement>("#rail");
     if (!layer || layer.dataset["branched"] !== "true") return;
     const width = layer.dataset["graphWidth"] ?? "36";
     rail.classList.add("has-branches");
@@ -110,18 +119,18 @@ export function setUpRail(): void {
     if (!open) rail.scrollLeft = 0;
   };
 
-  let scheduled = false;
+  let scheduled: number | undefined;
   const schedule = () => {
-    if (scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(() => {
-      scheduled = false;
+    if (signal.aborted || !view.isConnected || scheduled !== undefined) return;
+    scheduled = requestAnimationFrame(() => {
+      scheduled = undefined;
+      if (signal.aborted || !view.isConnected) return;
       track();
       expand(rail.classList.contains("is-expanded"));
     });
   };
-  view.addEventListener("scroll", schedule, { passive: true });
-  document.body.addEventListener("htmx:after:settle", schedule);
+  view.addEventListener("scroll", schedule, { passive: true, signal });
+  document.addEventListener("htmx:after:settle", schedule, { signal });
   // Opening a disclosure in the transcript moves the messages without a
   // scroll or a swap, so the reading line ends up beside a different mark.
   // pi-web watches the same two boxes (ChatMinimap.tsx, ResizeObserver).
@@ -139,7 +148,7 @@ export function setUpRail(): void {
   const jump = (row: HTMLElement, behavior: ScrollBehavior) => {
     lockedUntil = Date.now() + LOCK_MS;
     light(row);
-    const entry = entryOf(row);
+    const entry = entryOf(view, row);
     if (entry) {
       view.scrollTo({
         top: topOf(view, entry) - view.clientHeight * TARGET,
@@ -157,7 +166,8 @@ export function setUpRail(): void {
     void htmx()
       ?.ajax("GET", through, { target: sentinel, swap: "outerHTML" })
       .then(() => {
-        const loaded = entryOf(row);
+        if (signal.aborted || !view.isConnected) return;
+        const loaded = entryOf(view, row);
         if (loaded) {
           view.scrollTo({
             top: topOf(view, loaded) - view.clientHeight * TARGET,
@@ -180,53 +190,90 @@ export function setUpRail(): void {
   // Pressing anywhere in the strip jumps to the nearest mark and starts a
   // drag; a mark on another branch is left to htmx, which posts /navigate.
   let dragging = false;
+  let captured: number | undefined;
   const follow = (clientY: number, behavior: ScrollBehavior) => {
-    const best = nearestRow(clientY, (row) => {
+    const best = nearestRow(rail, clientY, (row) => {
       const box = row.getBoundingClientRect();
       return box.top + box.height / 2;
     });
     if (best) jump(best, behavior);
   };
-  rail.addEventListener("pointerdown", (event) => {
-    const target = event.target as HTMLElement;
-    if (event.button !== 0 || target.closest("[data-branch]")) return;
-    if (!onStrip(event.clientX)) return;
-    dragging = true;
-    follow(event.clientY, smooth());
-    try {
-      rail.setPointerCapture(event.pointerId);
-    } catch {
-      // A pointer that is no longer active cannot be captured; the press
-      // still counts as a jump.
-    }
-  });
-  rail.addEventListener("pointermove", (event) => {
-    if (dragging) follow(event.clientY, "auto");
-  });
+  rail.addEventListener(
+    "pointerdown",
+    (event) => {
+      const target = event.target as HTMLElement;
+      if (event.button !== 0 || target.closest("[data-branch]")) return;
+      if (!onStrip(event.clientX)) return;
+      dragging = true;
+      follow(event.clientY, smooth());
+      try {
+        rail.setPointerCapture(event.pointerId);
+        captured = event.pointerId;
+      } catch {
+        // A pointer that is no longer active cannot be captured; the press
+        // still counts as a jump.
+      }
+    },
+    { signal },
+  );
+  rail.addEventListener(
+    "pointermove",
+    (event) => {
+      if (dragging) follow(event.clientY, "auto");
+    },
+    { signal },
+  );
   const release = (event: PointerEvent) => {
     if (!dragging) return;
     dragging = false;
+    captured = undefined;
     if (rail.hasPointerCapture(event.pointerId)) {
       rail.releasePointerCapture(event.pointerId);
     }
   };
-  rail.addEventListener("pointerup", release);
-  rail.addEventListener("pointercancel", release);
+  rail.addEventListener("pointerup", release, { signal });
+  rail.addEventListener("pointercancel", release, { signal });
 
-  rail.addEventListener("pointerenter", () => {
-    expand(true);
-  });
-  rail.addEventListener("focusin", () => {
-    expand(true);
-  });
-  rail.addEventListener("pointerleave", () => {
-    expand(false);
-  });
-  rail.addEventListener("focusout", (event) => {
-    if (!rail.contains(event.relatedTarget as Node | null)) expand(false);
-  });
+  rail.addEventListener(
+    "pointerenter",
+    () => {
+      expand(true);
+    },
+    { signal },
+  );
+  rail.addEventListener(
+    "focusin",
+    () => {
+      expand(true);
+    },
+    { signal },
+  );
+  rail.addEventListener(
+    "pointerleave",
+    () => {
+      expand(false);
+    },
+    { signal },
+  );
+  rail.addEventListener(
+    "focusout",
+    (event) => {
+      if (!rail.contains(event.relatedTarget as Node | null)) expand(false);
+    },
+    { signal },
+  );
 
-  const preview = setUpPreview();
+  const preview = setUpPreview(signal);
+  signal.addEventListener(
+    "abort",
+    () => {
+      resize.disconnect();
+      if (scheduled !== undefined) cancelAnimationFrame(scheduled);
+      if (captured !== undefined && rail.hasPointerCapture(captured))
+        rail.releasePointerCapture(captured);
+    },
+    { once: true },
+  );
   /** pi-web enlarges the mark nearest the pointer, and previews that one. */
   const hover = (row: HTMLElement | undefined) => {
     if (row === near) return;
@@ -235,30 +282,38 @@ export function setUpRail(): void {
     near = row;
     preview(row);
   };
-  rail.addEventListener("pointermove", (event) => {
-    // pi-web previews a branch mark from the mark itself, so the whole
-    // expanded rail is a hover target, not just the 36px strip.
-    const branch = (event.target as HTMLElement).closest<HTMLElement>(
-      ".minimap-branch",
-    );
-    if (branch) {
-      hover(branch);
-      return;
-    }
-    if (!onStrip(event.clientX)) {
+  rail.addEventListener(
+    "pointermove",
+    (event) => {
+      // pi-web previews a branch mark from the mark itself, so the whole
+      // expanded rail is a hover target, not just the 36px strip.
+      const branch = (event.target as HTMLElement).closest<HTMLElement>(
+        ".minimap-branch",
+      );
+      if (branch) {
+        hover(branch);
+        return;
+      }
+      if (!onStrip(event.clientX)) {
+        hover(undefined);
+        return;
+      }
+      hover(
+        nearestRow(rail, event.clientY, (row) => {
+          const box = row.getBoundingClientRect();
+          return box.top + box.height / 2;
+        }),
+      );
+    },
+    { signal },
+  );
+  rail.addEventListener(
+    "pointerleave",
+    () => {
       hover(undefined);
-      return;
-    }
-    hover(
-      nearestRow(event.clientY, (row) => {
-        const box = row.getBoundingClientRect();
-        return box.top + box.height / 2;
-      }),
-    );
-  });
-  rail.addEventListener("pointerleave", () => {
-    hover(undefined);
-  });
+    },
+    { signal },
+  );
 
   expand(false);
   schedule();
@@ -268,7 +323,9 @@ export function setUpRail(): void {
  * pi-web's MessagePreviewPopover: the prompt's first 100 characters, left of
  * the mark, with the arrow pointing back at it.
  */
-function setUpPreview(): (row: HTMLElement | undefined) => void {
+function setUpPreview(
+  signal: AbortSignal,
+): (row: HTMLElement | undefined) => void {
   const popover = document.createElement("div");
   popover.className = "message-preview-popover";
   popover.hidden = true;
@@ -307,7 +364,16 @@ function setUpPreview(): (row: HTMLElement | undefined) => void {
     () => {
       popover.hidden = true;
     },
-    { passive: true, capture: true },
+    { passive: true, capture: true, signal },
+  );
+
+  signal.addEventListener(
+    "abort",
+    () => {
+      if (timer !== undefined) clearTimeout(timer);
+      popover.remove();
+    },
+    { once: true },
   );
 
   return (row) => {
@@ -321,6 +387,7 @@ function setUpPreview(): (row: HTMLElement | undefined) => void {
     const message = mark?.dataset["preview"];
     if (!mark || message === undefined || message === "") return;
     timer = setTimeout(() => {
+      if (signal.aborted || !mark.isConnected) return;
       text.textContent = message;
       popover.hidden = false;
       place(mark);

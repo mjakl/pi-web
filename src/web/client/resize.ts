@@ -21,7 +21,7 @@ export type ResizeHandle = {
   widthAt(clientX: number): number;
 };
 
-export function setUpResize(spec: ResizeHandle): void {
+export function setUpResize(spec: ResizeHandle, signal: AbortSignal): void {
   const clamp = (width: number): number =>
     Math.min(spec.max(), Math.max(spec.min, Math.round(width)));
 
@@ -59,42 +59,63 @@ export function setUpResize(spec: ResizeHandle): void {
 
   apply(stored(), false);
 
-  let dragging = false;
-  spec.handle.addEventListener("pointerdown", (event) => {
-    dragging = true;
-    spec.handle.setPointerCapture(event.pointerId);
-    event.preventDefault();
-  });
-  spec.handle.addEventListener("pointermove", (event) => {
-    if (dragging) apply(spec.widthAt(event.clientX), false);
-  });
+  let pointer: number | null = null;
+  const cancel = (): void => {
+    if (pointer === null) return;
+    if (spec.handle.hasPointerCapture(pointer))
+      spec.handle.releasePointerCapture(pointer);
+    pointer = null;
+  };
+  signal.addEventListener("abort", cancel, { once: true });
+  spec.handle.addEventListener(
+    "pointerdown",
+    (event) => {
+      pointer = event.pointerId;
+      spec.handle.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    },
+    { signal },
+  );
+  spec.handle.addEventListener(
+    "pointermove",
+    (event) => {
+      if (pointer !== null) apply(spec.widthAt(event.clientX), false);
+    },
+    { signal },
+  );
   const release = (event: PointerEvent): void => {
-    if (!dragging) return;
-    dragging = false;
-    spec.handle.releasePointerCapture(event.pointerId);
+    if (pointer === null || pointer !== event.pointerId) return;
+    cancel();
     apply(current(), true);
   };
-  spec.handle.addEventListener("pointerup", release);
-  spec.handle.addEventListener("pointercancel", release);
-  spec.handle.addEventListener("blur", () => {
-    dragging = false;
-  });
-  spec.handle.addEventListener("dblclick", () => {
-    apply(spec.fallback(), true);
-  });
-  spec.handle.addEventListener("keydown", (event) => {
-    const step = event.shiftKey ? SHIFT_STEP : KEY_STEP;
-    // The handle is on the side the panel grows from, so which arrow widens
-    // it is the caller's business: `widthAt` already knows the direction.
-    const grow = spec.widthAt(0) > spec.widthAt(1) ? "ArrowLeft" : "ArrowRight";
-    const width = current();
-    if (event.key === grow) apply(width + step, true);
-    else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      apply(width - step, true);
-    } else if (event.key === "Home") apply(spec.min, true);
-    else if (event.key === "End") apply(spec.max(), true);
-    else if (event.key === "Enter") apply(spec.fallback(), true);
-    else return;
-    event.preventDefault();
-  });
+  spec.handle.addEventListener("pointerup", release, { signal });
+  spec.handle.addEventListener("pointercancel", release, { signal });
+  spec.handle.addEventListener("blur", cancel, { signal });
+  spec.handle.addEventListener(
+    "dblclick",
+    () => {
+      apply(spec.fallback(), true);
+    },
+    { signal },
+  );
+  spec.handle.addEventListener(
+    "keydown",
+    (event) => {
+      const step = event.shiftKey ? SHIFT_STEP : KEY_STEP;
+      // The handle is on the side the panel grows from, so which arrow widens
+      // it is the caller's business: `widthAt` already knows the direction.
+      const grow =
+        spec.widthAt(0) > spec.widthAt(1) ? "ArrowLeft" : "ArrowRight";
+      const width = current();
+      if (event.key === grow) apply(width + step, true);
+      else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        apply(width - step, true);
+      } else if (event.key === "Home") apply(spec.min, true);
+      else if (event.key === "End") apply(spec.max(), true);
+      else if (event.key === "Enter") apply(spec.fallback(), true);
+      else return;
+      event.preventDefault();
+    },
+    { signal },
+  );
 }

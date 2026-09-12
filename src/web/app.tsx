@@ -1,4 +1,5 @@
 import { parseWarnTokens, WARN_TOKENS_COOKIE } from "@core/context-usage";
+import type { ImageAttachment } from "@core/ports";
 import type { SidebarView } from "@core/workspace";
 import { staticAssets } from "@web/assets";
 import { honoFactory } from "@web/hono";
@@ -94,6 +95,7 @@ export function createWebApp(deps: WebDeps) {
     c: Context,
     id: string,
     draft?: string,
+    images: ImageAttachment[] = [],
   ): Promise<Response> {
     const [sidebar, view] = await Promise.all([
       sidebarOf(c, id),
@@ -108,6 +110,7 @@ export function createWebApp(deps: WebDeps) {
         sidebar={sidebar}
         view={view}
         draft={draft}
+        images={images}
         {...(deps.home === undefined ? {} : { home: deps.home })}
       />,
     );

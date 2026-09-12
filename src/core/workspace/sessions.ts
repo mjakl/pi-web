@@ -2,6 +2,7 @@ import { conversationRail, hasBranches } from "@core/conversation-rail";
 import { contextUsage, type ContextUsage } from "@core/context-usage";
 import { isThinkingLevel } from "@core/models";
 import type {
+  EditableMessage,
   LiveSession,
   ModelListing,
   RuntimeEvent,
@@ -379,7 +380,7 @@ export function sessionUseCases({
     async fork(
       id: string,
       entryId: string,
-    ): Promise<{ id: string; text: string }> {
+    ): Promise<{ id: string } & EditableMessage> {
       await requireFolder(id);
       return deps.sessions.fork(id, entryId);
     },
@@ -390,7 +391,7 @@ export function sessionUseCases({
     },
 
     /** Shuts the runtime down first: nothing may append during the rewrite. */
-    async rewind(id: string, entryId: string): Promise<string> {
+    async rewind(id: string, entryId: string): Promise<EditableMessage> {
       await requireFolder(id);
       await stop(id);
       return deps.sessions.rewind(id, entryId);

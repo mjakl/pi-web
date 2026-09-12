@@ -1,5 +1,10 @@
 import { pathKey } from "@core/path-access";
-import { readStars, STAR_TYPE, userMessageText } from "@core/session-entries";
+import type { EditableMessage } from "@core/ports";
+import {
+  editableUserMessage,
+  readStars,
+  STAR_TYPE,
+} from "@core/session-entries";
 import type {
   FileEntry,
   SessionEntry,
@@ -117,23 +122,21 @@ const KEPT_AFTER_REWIND = new Set([
  * preferences (name, model, thinking level, stars on kept entries) recorded
  * later. Returns the removed message so the composer can offer it again.
  */
-export function rewindSessionFile(filePath: string, entryId: string): string {
+export function rewindSessionFile(
+  filePath: string,
+  entryId: string,
+): EditableMessage {
   const lines = readFileSync(filePath, "utf8").split("\n").filter(Boolean);
   const parsed = lines.map((line) => JSON.parse(line) as FileEntry);
   const entries = parsed.slice(1) as SessionEntry[];
   const index = entries.findIndex((entry) => entry.id === entryId);
   const target = entries[index];
-  if (
-    index < 0 ||
-    !target ||
-    target.type !== "message" ||
-    target.message.role !== "user"
-  ) {
+  const removed = target && editableUserMessage(target);
+  if (!target || !removed) {
     throw new Error("Rewind requires an existing user message");
   }
   const kept = entries.slice(0, index);
   const keptIds = new Set(kept.map((entry) => entry.id));
-  const removed = userMessageText(target) ?? "";
 
   let parentId = target.parentId;
   const tail: SessionEntry[] = [];

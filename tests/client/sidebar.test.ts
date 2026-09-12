@@ -81,6 +81,56 @@ function finished(id: string, project: string): void {
   });
 }
 
+describe("sidebar replacement", () => {
+  it("clears the destination unread badge and keeps delegated completion and row selection working", async () => {
+    page({ current: "s1" });
+    const { setUpSidebar } = await load();
+    setUpSidebar();
+    finished("s2", "/repo/one");
+    const replacement = document.createElement("body");
+    replacement.innerHTML = document.body.innerHTML.replace(
+      'data-session-id="s1"',
+      'data-session-id="s2"',
+    );
+    document.body.replaceWith(replacement);
+    htmxEvent(document.body, "htmx:after:process");
+    htmxEvent(document.body, "htmx:after:process");
+    expect(indicator("s2").classList.contains("session-indicator-unread")).toBe(
+      false,
+    );
+    finished("s1", "/repo/one");
+    expect(indicator("s1").classList.contains("session-indicator-unread")).toBe(
+      true,
+    );
+    const select = vi.spyOn(query("#row-s1 a"), "click");
+    click(byId("row-s1"));
+    expect(select).toHaveBeenCalledOnce();
+  });
+
+  it("releases refresh feedback timers and restores the explorer fold on replacement", async () => {
+    mount(
+      '<aside id="sidebar"><button id="sidebar-refresh"></button><button id="explorer-toggle" aria-expanded="true"></button></aside>',
+    );
+    const { setUpSidebar } = await load();
+    setUpSidebar();
+    const oldButton = byId("sidebar-refresh");
+    click(byId("explorer-toggle"));
+    htmxEvent(oldButton, "htmx:after:request");
+    const replacement = document.createElement("body");
+    replacement.innerHTML = document.body.innerHTML;
+    document.body.replaceWith(replacement);
+    htmxEvent(document.body, "htmx:after:process");
+    htmxEvent(document.body, "htmx:after:process");
+    expect(byId("explorer-toggle").getAttribute("aria-expanded")).toBe("false");
+    click(byId("explorer-toggle"));
+    expect(byId("explorer-toggle").getAttribute("aria-expanded")).toBe("true");
+    htmxEvent(byId("sidebar-refresh"), "htmx:after:request");
+    vi.advanceTimersByTime(2000);
+    expect(oldButton.hasAttribute("data-done")).toBe(true);
+    expect(byId("sidebar-refresh").hasAttribute("data-done")).toBe(false);
+  });
+});
+
 describe("unread sessions", () => {
   it("marks a session that finished elsewhere and stores it", async () => {
     page({ current: "s1" });
@@ -266,6 +316,7 @@ describe("the explorer fold", () => {
     localStorage.setItem("pi-web:file-explorer:open", "false");
     await mounted();
     byId("sidebar").innerHTML = section;
+    htmxEvent(byId("sidebar"), "htmx:after:process");
     htmxEvent(byId("sidebar"), "htmx:after:settle");
     expect(byId("explorer-toggle").getAttribute("aria-expanded")).toBe("false");
   });

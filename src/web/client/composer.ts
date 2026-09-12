@@ -8,12 +8,12 @@ import {
 import { setUpAtCompletion } from "./at-complete.ts";
 import { setUpDrafts } from "./drafts.ts";
 import {
-  composerForm,
   menuEndpoints,
   replaceRange,
   setComposerValue,
   textarea,
 } from "./editor.ts";
+import { setUpRegion } from "./lifecycle.ts";
 import { setUpImages } from "./images.ts";
 import { requestContext } from "./htmx.ts";
 import { setUpSlashMenu } from "./slash-menu.ts";
@@ -81,12 +81,11 @@ function lastAnswer(): string {
   return answers[answers.length - 1]?.textContent?.trim() ?? "";
 }
 
-export function setUpComposer(): void {
-  const form = composerForm();
-  if (!form) return;
-  const sessionId = form.dataset["sessionId"] ?? null;
-  const cwd = form.dataset["cwd"] ?? null;
+let composerSetUp = false;
 
+export function setUpComposer(): void {
+  if (composerSetUp) return;
+  composerSetUp = true;
   // The file panel's `@` buttons put a path into the composer.
   document.body.addEventListener("click", (event) => {
     const chip = (event.target as HTMLElement).closest<HTMLElement>(
@@ -102,13 +101,27 @@ export function setUpComposer(): void {
     replaceRange(area, caret, area.selectionEnd, insert.text, insert.caret);
   });
 
-  const endpoints = menuEndpoints(form);
-  const slash = setUpSlashMenu(endpoints);
-  const at = setUpAtCompletion(endpoints);
-  const images = setUpImages(() => {
-    shellHint(textarea()?.value ?? "");
-    syncAction();
-  });
+  setUpModelMenu();
+  setUpShelf();
+  setUpRegion("#composer", mountComposer);
+}
+
+function mountComposer(form: HTMLElement, signal: AbortSignal): void {
+  const textarea = () =>
+    form.querySelector<HTMLTextAreaElement>("#composer-text");
+  const sessionId = form.dataset["sessionId"] ?? null;
+  const cwd = form.dataset["cwd"] ?? null;
+  const endpoints = menuEndpoints(form as HTMLFormElement);
+  const slash = setUpSlashMenu(endpoints, form, signal);
+  const at = setUpAtCompletion(endpoints, form, signal);
+  const images = setUpImages(
+    () => {
+      shellHint(textarea()?.value ?? "");
+      syncAction();
+    },
+    form,
+    signal,
+  );
 
   /**
    * pi-web's primary button: send when idle, steer or follow-up while a turn
@@ -142,7 +155,7 @@ export function setUpComposer(): void {
     button.dataset["behavior"] = action === "followup" ? "followUp" : "steer";
     button.disabled = !running && !filled;
   };
-  const drafts = setUpDrafts(sessionId, cwd, textarea);
+  const drafts = setUpDrafts(sessionId, cwd, textarea, signal);
 
   let cycle: number | null = null;
   let compositionEndedAt = 0;
@@ -157,7 +170,7 @@ export function setUpComposer(): void {
   }
 
   function shellHint(value: string): void {
-    const hint = document.querySelector<HTMLElement>("#shell-hint");
+    const hint = form.querySelector<HTMLElement>("#shell-hint");
     if (!hint) return;
     const shell = images.count() === 0 ? bashCommand(value) : null;
     hint.hidden = shell === null;
@@ -216,7 +229,11 @@ export function setUpComposer(): void {
           .writeText(text)
           .then(() => {
             showToast("Answer copied.", "info");
-            if (textarea()?.value.trim() === value && images.count() === 0)
+            if (
+              !signal.aborted &&
+              textarea()?.value.trim() === value &&
+              images.count() === 0
+            )
               clearComposer();
           })
           .catch(() => {
@@ -240,119 +257,147 @@ export function setUpComposer(): void {
     setBehavior(behavior);
     slash.close();
     at.close();
-    form.requestSubmit();
+    (form as HTMLFormElement).requestSubmit();
   };
 
   // The primary button goes through the same path as the keyboard: the
   // delivery mode is a hidden field, and a built-in that never leaves the
   // browser must not be posted as a prompt. With nothing to send while a turn
   // runs, the same button stops the agent instead.
-  form.addEventListener("click", (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLElement>(
-      "[data-behavior]",
-    );
-    if (button?.dataset["action"] === "stop") {
-      event.preventDefault();
-      abortTurn();
-      return;
-    }
-    const behavior = button?.dataset["behavior"];
-    if (behavior !== "steer" && behavior !== "followUp") return;
-    const area = textarea();
-    if (area && runLocalBuiltin(area.value.trim())) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    setBehavior(behavior);
-    slash.close();
-    at.close();
-  });
-  // The toolbar's own fields (the model filter, the reasoning select) are in
-  // the form too; only the textarea is the draft.
-  form.addEventListener("input", (event) => {
-    if (event.target === textarea()) onInput();
-  });
-  form.addEventListener("compositionstart", () => {
-    composing = true;
-  });
-  form.addEventListener("compositionend", () => {
-    composing = false;
-    compositionEndedAt = Date.now();
-  });
-
-  form.addEventListener("keydown", (event) => {
-    const area = textarea();
-    if (!area || event.target !== area) return;
-    if (composing || event.isComposing) return;
-
-    const empty = area.value.trim() === "";
-    if (
-      (event.key === "ArrowUp" || event.key === "ArrowDown") &&
-      (cycle !== null || (event.key === "ArrowUp" && empty))
-    ) {
-      const past = history();
-      if (past.length > 0) {
+  form.addEventListener(
+    "click",
+    (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLElement>(
+        "[data-behavior]",
+      );
+      if (button?.dataset["action"] === "stop") {
         event.preventDefault();
-        slash.close();
-        at.close();
-        const step = cycleHistory(
-          past,
-          cycle,
-          event.key === "ArrowUp" ? "up" : "down",
-        );
-        cycle = step.cycle;
-        setComposerValue(area, step.text);
-        cycle = step.cycle;
+        abortTurn();
         return;
       }
-    }
+      const behavior = button?.dataset["behavior"];
+      if (behavior !== "steer" && behavior !== "followUp") return;
+      const area = textarea();
+      if (area && runLocalBuiltin(area.value.trim())) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      setBehavior(behavior);
+      slash.close();
+      at.close();
+    },
+    { signal },
+  );
+  // The toolbar's own fields (the model filter, the reasoning select) are in
+  // the form too; only the textarea is the draft.
+  form.addEventListener(
+    "input",
+    (event) => {
+      if (event.target === textarea()) onInput();
+    },
+    { signal },
+  );
+  form.addEventListener(
+    "compositionstart",
+    () => {
+      composing = true;
+    },
+    { signal },
+  );
+  form.addEventListener(
+    "compositionend",
+    () => {
+      composing = false;
+      compositionEndedAt = Date.now();
+    },
+    { signal },
+  );
 
-    // A fully typed built-in runs on Enter instead of completing the menu.
-    const sendNow = isSendShortcut(event);
-    if (sendNow && exactBuiltin(area.value) !== undefined) {
-      event.preventDefault();
-      submit(event.altKey ? "followUp" : "steer");
-      return;
-    }
-    if (slash.handleKey(event)) return;
-    if (at.handleKey(event)) return;
-    if (sendNow) {
-      if (Date.now() - compositionEndedAt < COMPOSITION_GRACE_MS) return;
-      event.preventDefault();
-      submit(event.altKey ? "followUp" : "steer");
-      return;
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      abortTurn();
-    }
-  });
+  form.addEventListener(
+    "keydown",
+    (event) => {
+      const area = textarea();
+      if (!area || event.target !== area) return;
+      if (composing || event.isComposing) return;
 
-  form.addEventListener("htmx:after:request", (event) => {
-    // Only the form's own submission empties it. The toolbar's buttons — a
-    // model pick, a queue recall — are inside the form and their requests
-    // bubble through here too.
-    if (event.target !== form) return;
-    const response = requestContext(event).response;
-    // HTMX 4 fires this before HX-Redirect and the session-created trigger.
-    // Missing confirmation (including an ambiguous transport failure) keeps
-    // the draft; nothing here retries the request.
-    if (
-      response &&
-      response.status >= 200 &&
-      response.status < 300 &&
-      response.headers.get("X-Web-Pi-Submission") === "accepted"
-    )
-      clearComposer();
-  });
+      const empty = area.value.trim() === "";
+      if (
+        (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+        (cycle !== null || (event.key === "ArrowUp" && empty))
+      ) {
+        const past = history();
+        if (past.length > 0) {
+          event.preventDefault();
+          slash.close();
+          at.close();
+          const step = cycleHistory(
+            past,
+            cycle,
+            event.key === "ArrowUp" ? "up" : "down",
+          );
+          cycle = step.cycle;
+          setComposerValue(area, step.text);
+          cycle = step.cycle;
+          return;
+        }
+      }
 
-  form.addEventListener("htmx:error", (event) => {
-    if (event.target !== form) return;
-    showToast(
-      "Could not confirm submission. Check the conversation before sending again.",
-    );
-  });
+      // A fully typed built-in runs on Enter instead of completing the menu.
+      const sendNow = isSendShortcut(event);
+      if (sendNow && exactBuiltin(area.value) !== undefined) {
+        event.preventDefault();
+        submit(event.altKey ? "followUp" : "steer");
+        return;
+      }
+      if (slash.handleKey(event)) return;
+      if (at.handleKey(event)) return;
+      if (sendNow) {
+        if (Date.now() - compositionEndedAt < COMPOSITION_GRACE_MS) return;
+        event.preventDefault();
+        submit(event.altKey ? "followUp" : "steer");
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        abortTurn();
+      }
+    },
+    { signal },
+  );
+
+  form.addEventListener(
+    "htmx:after:request",
+    (event) => {
+      // Only the form's own submission empties it. The toolbar's buttons — a
+      // model pick, a queue recall — are inside the form and their requests
+      // bubble through here too.
+      if (event.target !== form) return;
+      const response = requestContext(event).response;
+      // HTMX 4 fires this before HX-Redirect and the session-created trigger.
+      // Missing confirmation (including an ambiguous transport failure) keeps
+      // the draft; nothing here retries the request.
+      if (
+        response &&
+        response.status >= 200 &&
+        response.status < 300 &&
+        response.headers.get("X-Web-Pi-Submission") === "accepted"
+      )
+        clearComposer();
+    },
+    { signal },
+  );
+
+  form.addEventListener(
+    "htmx:error",
+    (event) => {
+      if (event.target !== form) return;
+      showToast(
+        "Could not confirm submission. Check the conversation before sending again.",
+      );
+    },
+    { signal },
+  );
 
   /**
    * The state of the session, as the stream last reported it, mirrored onto
@@ -372,25 +417,29 @@ export function setUpComposer(): void {
     // pi-web locks the selector while a turn or a compaction runs. The server
     // renders that too, but only when the pick itself changed.
     const locked = running || state?.hasAttribute("data-compacting") === true;
-    const selector = document.querySelector("#model-selector");
+    const selector = form.querySelector("#model-selector");
     selector?.classList.toggle("is-disabled", locked);
     for (const control of selector?.querySelectorAll<
       HTMLButtonElement | HTMLSelectElement
     >("#model-trigger, .composer-thinking-field select") ?? []) {
       control.disabled = locked;
     }
-    const note = document.querySelector<HTMLElement>("#composer-running-note");
+    const note = form.querySelector<HTMLElement>("#composer-running-note");
     if (note) note.textContent = running ? "Agent running" : "";
     syncAction();
   };
-  document.body.addEventListener("htmx:after:settle", (swap) => {
-    const target = swap.target;
-    if (!(target instanceof Element)) return;
-    if (target.closest("#status")) mirrorRunning();
-    // A recall or a rewind hands back a new textarea, and replacing an
-    // element fires no input event: the button and the hint would go stale.
-    if (target.contains(textarea())) onInput();
-  });
+  document.body.addEventListener(
+    "htmx:after:settle",
+    (swap) => {
+      const target = swap.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("#status")) mirrorRunning();
+      // A recall or a rewind hands back a new textarea, and replacing an
+      // element fires no input event: the button and the hint would go stale.
+      if (target.contains(textarea())) onInput();
+    },
+    { signal },
+  );
 
   // Alt is held down, not clicked: pi-web watches the key itself so the icon
   // changes before the press lands.
@@ -406,37 +455,49 @@ export function setUpComposer(): void {
     altHeld = false;
     syncAction();
   };
-  addEventListener("keydown", modifier);
-  addEventListener("keyup", modifier);
-  addEventListener("blur", clearModifier);
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) clearModifier();
-  });
+  addEventListener("keydown", modifier, { signal });
+  addEventListener("keyup", modifier, { signal });
+  addEventListener("blur", clearModifier, { signal });
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (document.hidden) clearModifier();
+    },
+    { signal },
+  );
 
-  setUpModelMenu();
-  setUpDropZone(images);
-  setUpShelf();
+  setUpDropZone(images, signal);
   mirrorRunning();
   onInput();
-  focusComposer();
+  focusComposer(textarea(), signal);
 }
 
 /**
  * pi-web hands the composer the caret once per opened session, on a pointer
  * device only, and never over something the reader is already using
- * (hooks/useSessionInputFocus.ts). One page load here is one opened session.
+ * (hooks/useSessionInputFocus.ts). A replaced composer owns its own focus frame.
  */
-function focusComposer(): void {
+function focusComposer(
+  area: HTMLTextAreaElement | null,
+  signal: AbortSignal,
+): void {
   if (matchMedia("(max-width: 640px), (pointer: coarse)").matches) return;
   if (document.querySelector("dialog[open]")) return;
   const active = document.activeElement;
   if (active !== null && active !== document.body) return;
-  const area = textarea();
   if (!area || area.disabled) return;
-  requestAnimationFrame(() => {
+  const frame = requestAnimationFrame(() => {
+    if (signal.aborted || !area.isConnected) return;
     area.focus({ preventScroll: true });
     area.setSelectionRange(area.value.length, area.value.length);
   });
+  signal.addEventListener(
+    "abort",
+    () => {
+      cancelAnimationFrame(frame);
+    },
+    { once: true },
+  );
 }
 
 const COMPOSER_MENUS = new Set(["model-menu", "composer-controls"]);
@@ -513,35 +574,61 @@ function setUpModelMenu(): void {
 }
 
 /** pi-web's drop overlay: the whole chat window takes an image (§4.1). */
-function setUpDropZone(images: { add(files: readonly File[]): void }): void {
+function setUpDropZone(
+  images: { add(files: readonly File[]): void },
+  signal: AbortSignal,
+): void {
   const pane = document.querySelector(".chat-window");
   const zone = pane?.querySelector<HTMLElement>(".chat-drop-zone");
   if (!pane || !zone) return;
   let depth = 0;
+  signal.addEventListener(
+    "abort",
+    () => {
+      zone.hidden = true;
+    },
+    { once: true },
+  );
   const show = (open: boolean): void => {
     depth = open ? depth : 0;
     zone.hidden = !open;
   };
-  pane.addEventListener("dragenter", (event) => {
-    if (!(event as DragEvent).dataTransfer?.types.includes("Files")) return;
-    depth += 1;
-    show(true);
-  });
-  pane.addEventListener("dragover", (event) => {
-    if (!(event as DragEvent).dataTransfer?.types.includes("Files")) return;
-    event.preventDefault();
-  });
-  pane.addEventListener("dragleave", () => {
-    depth -= 1;
-    if (depth <= 0) show(false);
-  });
-  pane.addEventListener("drop", (event) => {
-    const files = [...((event as DragEvent).dataTransfer?.files ?? [])];
-    show(false);
-    if (files.length === 0) return;
-    event.preventDefault();
-    images.add(files);
-  });
+  pane.addEventListener(
+    "dragenter",
+    (event) => {
+      if (!(event as DragEvent).dataTransfer?.types.includes("Files")) return;
+      depth += 1;
+      show(true);
+    },
+    { signal },
+  );
+  pane.addEventListener(
+    "dragover",
+    (event) => {
+      if (!(event as DragEvent).dataTransfer?.types.includes("Files")) return;
+      event.preventDefault();
+    },
+    { signal },
+  );
+  pane.addEventListener(
+    "dragleave",
+    () => {
+      depth -= 1;
+      if (depth <= 0) show(false);
+    },
+    { signal },
+  );
+  pane.addEventListener(
+    "drop",
+    (event) => {
+      const files = [...((event as DragEvent).dataTransfer?.files ?? [])];
+      show(false);
+      if (files.length === 0) return;
+      event.preventDefault();
+      images.add(files);
+    },
+    { signal },
+  );
 }
 
 /**

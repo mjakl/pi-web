@@ -162,3 +162,27 @@ describe("highlighting", () => {
     expect(query("#turn code").dataset["highlighted"]).toBeUndefined();
   });
 });
+
+describe("transcript owner replacement", () => {
+  it("initializes a replacement log and stops listening to the old owner", async () => {
+    const old = await load();
+    const oldJump = byId("jump-to-latest");
+    mount(
+      '<main><div id="log"><div id="messages"></div><div id="turn"></div></div><button id="jump-to-latest" hidden></button></main>',
+    );
+    const view = byId("log");
+    setGeometry(view, { scrollHeight: 3000, clientHeight: 500 });
+    htmxEvent(document.body, "htmx:after:process");
+    expect(view.scrollTop).toBe(3000);
+    old.scrollTop = 500;
+    old.dispatchEvent(new Event("scroll"));
+    expect(oldJump.hidden).toBe(true);
+    view.scrollTop = 1500;
+    view.dispatchEvent(new Event("scroll"));
+    expect(byId("jump-to-latest").hidden).toBe(false);
+    htmxEvent(byId("turn"), "htmx:after:settle");
+    expect(view.scrollTop).toBe(1500);
+    htmxEvent(byId("messages"), "htmx:after:process");
+    expect(view.scrollTop).toBe(1500);
+  });
+});

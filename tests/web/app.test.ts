@@ -409,6 +409,56 @@ describe("web app", () => {
     expect(world.store.get(id)?.entries).toHaveLength(2);
   });
 
+  it.each([
+    { action: "fork", text: "" },
+    { action: "fork", text: "  Explain\n\t<b>this</b>  " },
+    { action: "rewind", text: "" },
+    { action: "rewind", text: "  Explain\n\t<b>this</b>  " },
+  ])(
+    "restores images into the $action response with draft '$text' only once",
+    async ({ action, text }) => {
+      const { app, world } = testApp();
+      const stored = world.store.get("s1");
+      if (!stored) throw new Error("missing session");
+      const prompt = userEntry("u2", "a1", "");
+      if (prompt.type !== "message") throw new Error("missing message");
+      prompt.message = {
+        role: "user",
+        timestamp: 3,
+        content: [
+          ...(text ? [{ type: "text" as const, text }] : []),
+          { type: "image", data: "AAEC/w==", mimeType: "image/png" },
+          { type: "image", data: "//79AA==", mimeType: "image/jpeg" },
+        ],
+      };
+      stored.entries.push(prompt, assistantEntry("a2", "u2", "later", 4));
+      stored.leafId = "a2";
+      const original = structuredClone(stored.entries);
+      const form = new FormData();
+      form.set("entryId", "u2");
+      const res = await app.request(`/sessions/s1/${action}`, {
+        method: "POST",
+        body: form,
+        headers: { "HX-Request": "true" },
+      });
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain(
+        `${text.replace("<b>", "&lt;b&gt;").replace("</b>", "&lt;/b&gt;")}</textarea>`,
+      );
+      expect(html).toContain(
+        '<div id="recalled-images" hidden=""><span data-image="AAEC/w==" data-mime="image/png"></span><span data-image="//79AA==" data-mime="image/jpeg"></span></div>',
+      );
+      expect(html.match(/id="recalled-images"/g)).toHaveLength(1);
+      const destination = res.headers.get("hx-push-url") ?? "";
+      if (action === "fork") expect(stored.entries).toEqual(original);
+      else
+        expect(stored.entries.map((entry) => entry.id)).toEqual(["u1", "a1"]);
+      const reloaded = await (await app.request(destination)).text();
+      expect(reloaded).not.toContain("data-image=");
+    },
+  );
+
   it("switches branch read-only and offers to continue from it", async () => {
     const { app, world } = testApp();
     const stored = world.store.get("s1");

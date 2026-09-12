@@ -1,3 +1,4 @@
+import { setUpRegion } from "./lifecycle.ts";
 import { requestContext } from "./htmx.ts";
 // The settings that belong to this browser rather than to Pi's configuration.
 // Every accessor treats storage as optional: a private window still gets a
@@ -41,31 +42,37 @@ export function setSwitch(element: Element, on: boolean): void {
 }
 
 export function setUpPreferences(): void {
-  const sound = document.querySelector<HTMLButtonElement>("#sound-toggle");
-  if (sound) {
+  setUpRegion("#sound-toggle", (sound, signal) => {
     setSwitch(sound, soundEnabled());
-    sound.addEventListener("click", () => {
-      const on = !switchOn(sound);
-      setSwitch(sound, on);
-      write(SOUND_KEY, on ? "true" : "false");
-    });
-  }
+    sound.addEventListener(
+      "click",
+      () => {
+        const on = !switchOn(sound);
+        setSwitch(sound, on);
+        write(SOUND_KEY, on ? "true" : "false");
+      },
+      { signal },
+    );
+  });
   // The context-warning threshold is the one browser preference the server
   // reads: it colours a badge the server renders, so it lives in a cookie
   // rather than in localStorage, and the input arrives already filled in.
-  const warnTokens =
-    document.querySelector<HTMLInputElement>("#dumb-zone-tokens");
-  if (warnTokens) {
+  setUpRegion("#dumb-zone-tokens", (warnTokens, signal) => {
+    if (!(warnTokens instanceof HTMLInputElement)) return;
     const previous = warnTokens.value;
-    warnTokens.addEventListener("change", () => {
-      const value = Number(warnTokens.value);
-      if (!Number.isSafeInteger(value) || value <= 0) {
-        warnTokens.value = previous;
-        return;
-      }
-      document.cookie = `${WARN_TOKENS_COOKIE}=${String(value)}; path=/; max-age=31536000; samesite=lax`;
-    });
-  }
+    warnTokens.addEventListener(
+      "change",
+      () => {
+        const value = Number(warnTokens.value);
+        if (!Number.isSafeInteger(value) || value <= 0) {
+          warnTokens.value = previous;
+          return;
+        }
+        document.cookie = `${WARN_TOKENS_COOKIE}=${String(value)}; path=/; max-age=31536000; samesite=lax`;
+      },
+      { signal },
+    );
+  });
 }
 
 const LAST_CWD_KEY = "web-pi:last-cwd";
@@ -78,7 +85,7 @@ const LAST_CWD_KEY = "web-pi:last-cwd";
  * honest: it still shows the folder the server actually opened.
  */
 export function setUpFolderMemory(): void {
-  document.body.addEventListener("htmx:after:settle", (event) => {
+  document.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (!(target instanceof Element) || target.id !== "dialogs") return;
     const input = target.querySelector<HTMLInputElement>("#directory-path");
@@ -87,7 +94,7 @@ export function setUpFolderMemory(): void {
       input.value = remembered;
     }
   });
-  document.body.addEventListener("htmx:config:request", (event) => {
+  document.addEventListener("htmx:config:request", (event) => {
     const { request } = requestContext(event);
     if (
       new URL(request.action, document.baseURI).pathname !==

@@ -1,6 +1,7 @@
 import { assistantEntry, userEntry } from "@adapters/fake/index";
 import {
   branchLeaves,
+  editableUserMessage,
   readStars,
   rowMetadata,
   sessionStats,
@@ -8,6 +9,76 @@ import {
 } from "@core/session-entries";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
+
+describe("editable history messages", () => {
+  it("preserves text whitespace and both stored image shapes in order", () => {
+    const entry = userEntry("u1", null, "");
+    if (entry.type !== "message") throw new Error("missing message");
+    entry.message = {
+      role: "user",
+      timestamp: 1,
+      content: [
+        { type: "text", text: "  first\n\tline " },
+        { type: "image", data: "AAEC/w==", mimeType: "image/png" },
+        { type: "text", text: " second  " },
+        {
+          type: "image",
+          source: {
+            type: "base64",
+            data: "//79AA==",
+            media_type: "image/jpeg",
+          },
+        },
+        {
+          type: "image",
+          source: { type: "url", url: "https://example.test/image.png" },
+        },
+        { type: "image", data: 42, mimeType: "image/png" },
+      ] as never,
+    };
+    expect(editableUserMessage(entry)).toEqual({
+      text: "  first\n\tline \n second  ",
+      images: [
+        { data: "AAEC/w==", mimeType: "image/png" },
+        { data: "//79AA==", mimeType: "image/jpeg" },
+      ],
+    });
+    expect(
+      editableUserMessage(userEntry("plain", null, "  raw\n\ttext  ")),
+    ).toEqual({
+      text: "  raw\n\ttext  ",
+      images: [],
+    });
+  });
+
+  it.each(["assistant", "toolResult", "custom"])(
+    "never recalls %s content",
+    (role) => {
+      const entry = {
+        ...userEntry("not-user", null, ""),
+        message: {
+          role,
+          content: [
+            { type: "text", text: "secret" },
+            { type: "image", data: "AAAA", mimeType: "image/png" },
+          ],
+        },
+      } as unknown as SessionEntry;
+      expect(editableUserMessage(entry)).toBeUndefined();
+    },
+  );
+
+  it("does not inspect data belonging to a non-message entry", () => {
+    const entry = {
+      type: "custom",
+      data: {
+        role: "user",
+        content: [{ type: "image", data: "AAAA", mimeType: "image/png" }],
+      },
+    } as unknown as SessionEntry;
+    expect(editableUserMessage(entry)).toBeUndefined();
+  });
+});
 
 function star(
   id: string,

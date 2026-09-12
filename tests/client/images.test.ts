@@ -177,6 +177,51 @@ describe("where images come from", () => {
   });
 });
 
+describe("image owner cleanup", () => {
+  it("restores large historical images byte-for-byte without downscaling", async () => {
+    await load();
+    const bytes = "x".repeat(1024 * 1024 + 1);
+    byId("recalled-images").innerHTML =
+      `<span data-image="${btoa(bytes)}" data-mime="image/png"></span>`;
+    const bitmap = vi.fn();
+    vi.stubGlobal("createImageBitmap", bitmap);
+    const { setUpImages } = await import("@web/client/images");
+    const images = setUpImages(vi.fn(), byId("composer"));
+    expect(images.count()).toBe(1);
+    expect(await input().files?.[0]?.text()).toBe(bytes);
+    expect(bitmap).not.toHaveBeenCalled();
+  });
+
+  it("revokes previews and ignores compression completing after disposal", async () => {
+    await load();
+    const { setUpImages } = await import("@web/client/images");
+    const controller = new AbortController();
+    const changed = vi.fn();
+    const images = setUpImages(changed, byId("composer"), controller.signal);
+    images.add([image("visible.png")]);
+    await flush();
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    let finish = () => {};
+    vi.stubGlobal(
+      "createImageBitmap",
+      () =>
+        new Promise((resolve) => {
+          finish = () => {
+            resolve({ width: 1, height: 1, close: vi.fn() });
+          };
+        }),
+    );
+    images.add([image("pending.png", 1024 * 1024 + 1)]);
+    controller.abort();
+    expect(revoke).toHaveBeenCalledOnce();
+    changed.mockClear();
+    finish();
+    await flush();
+    expect(changed).not.toHaveBeenCalled();
+    expect(input().files).toHaveLength(1);
+  });
+});
+
 describe("downscaling", () => {
   it("leaves small files and GIFs alone", async () => {
     const bitmap = vi.fn();

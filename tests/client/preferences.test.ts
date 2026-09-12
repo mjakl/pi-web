@@ -1,6 +1,13 @@
 import { WARN_TOKENS_COOKIE } from "@core/context-usage";
 import { describe, expect, it } from "vitest";
-import { blockStorage, byId, click, field, mount } from "./helpers.ts";
+import {
+  blockStorage,
+  byId,
+  click,
+  field,
+  htmxEvent,
+  mount,
+} from "./helpers.ts";
 
 // The settings that belong to this browser: the completion tone in
 // localStorage, and the context-warning threshold in a cookie the server reads.
@@ -25,6 +32,23 @@ describe("the sound switch", () => {
     expect(soundEnabled()).toBe(false);
     click(byId("sound-toggle"));
     expect(localStorage.getItem("web-pi:sound")).toBe("true");
+  });
+
+  it("initializes replacement controls and detaches the old control", async () => {
+    await load(
+      '<button id="sound-toggle" role="switch" aria-checked="false"></button>',
+    );
+    const old = byId("sound-toggle");
+    const replacement = document.createElement("body");
+    replacement.innerHTML = document.body.innerHTML;
+    document.body.replaceWith(replacement);
+    htmxEvent(document.body, "htmx:after:process");
+    htmxEvent(document.body, "htmx:after:process");
+    click(old);
+    expect(localStorage.getItem("web-pi:sound")).toBeNull();
+    expect(byId("sound-toggle").getAttribute("aria-checked")).toBe("true");
+    click(byId("sound-toggle"));
+    expect(localStorage.getItem("web-pi:sound")).toBe("false");
   });
 
   it("still works for this page without storage", async () => {

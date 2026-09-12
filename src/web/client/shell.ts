@@ -3,6 +3,7 @@
 // document title. Everything here belongs to the shell area; the sidebar's
 // own behaviour is in sidebar.ts.
 
+import { setUpRegion } from "./lifecycle.ts";
 import { abortTurn } from "./composer.ts";
 import { dialogOpen, setUpDialogs } from "./dialogs.ts";
 import { setUpExtensions } from "./extensions.ts";
@@ -70,35 +71,29 @@ function setSidebarOpen(open: boolean): void {
  * The drawer starts closed on a phone. `.sidebar-mobile-pending` holds it off
  * screen until this runs, so the first paint never slides it away.
  */
-function setUpSidebar(): void {
-  const element = sidebar();
-  if (!element) return;
+function mountSidebar(element: HTMLElement): void {
   const mobile = matchMedia("(max-width: 640px)").matches;
   setSidebarOpen(!mobile);
   element.classList.remove("sidebar-mobile-pending");
   document
     .querySelector(".sidebar-overlay-backdrop")
     ?.classList.remove("sidebar-mobile-pending");
-  document.getElementById("sidebar-toggle")?.addEventListener("click", () => {
-    setSidebarOpen(!(sidebar()?.classList.contains("sidebar-open") ?? false));
-  });
-  document
-    .querySelector(".sidebar-overlay-backdrop")
-    ?.addEventListener("click", () => {
-      setSidebarOpen(false);
-    });
-  const handle = document.querySelector<HTMLElement>(".sidebar-resize-handle");
-  if (!handle) return;
-  setUpResize({
-    handle,
-    storageKey: SIDEBAR_WIDTH_KEY,
-    property: "--sidebar-width",
-    min: SIDEBAR_MIN,
-    max: () => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, innerWidth - 320)),
-    fallback: () => SIDEBAR_DEFAULT,
-    // Anchored to the left edge: the width is the pointer's own x.
-    widthAt: (clientX) => clientX,
-  });
+}
+
+function mountSidebarResize(handle: HTMLElement, signal: AbortSignal): void {
+  setUpResize(
+    {
+      handle,
+      storageKey: SIDEBAR_WIDTH_KEY,
+      property: "--sidebar-width",
+      min: SIDEBAR_MIN,
+      max: () => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, innerWidth - 320)),
+      fallback: () => SIDEBAR_DEFAULT,
+      // Anchored to the left edge: the width is the pointer's own x.
+      widthAt: (clientX) => clientX,
+    },
+    signal,
+  );
 }
 
 /**
@@ -110,27 +105,32 @@ function setUpSidebar(): void {
  * The narrow-phone toolbar: the three tabs live behind the "more" button and
  * slide in over the bar, as pi-web's `mobileToolbarMoreOpen` does.
  */
-function setUpMobileToolbar(): void {
-  const button = document.getElementById("mobile-toolbar-more");
+function mountMobileToolbar(button: HTMLElement, signal: AbortSignal): void {
   const tabs = document.getElementById("top-bar-tabs");
-  if (!button || !tabs) return;
+  if (!tabs) return;
   const closed = button.querySelector<HTMLElement>("[data-more-closed-icon]");
   const open = button.querySelector<HTMLElement>("[data-more-open-icon]");
-  button.addEventListener("click", () => {
-    const showing = !tabs.hasAttribute("data-open");
+  const paint = (showing: boolean): void => {
     tabs.toggleAttribute("data-open", showing);
     button.setAttribute("aria-expanded", String(showing));
     button.title = showing ? "Close" : "More controls";
     button.setAttribute("aria-label", showing ? "Close" : "More controls");
     if (closed) closed.hidden = showing;
     if (open) open.hidden = !showing;
-  });
+  };
+  paint(false);
+  button.addEventListener(
+    "click",
+    () => {
+      paint(!tabs.hasAttribute("data-open"));
+    },
+    { signal },
+  );
 }
 
-function setUpTopPanels(): void {
-  const host = document.getElementById("top-panel");
+function mountTopPanels(host: HTMLElement, signal: AbortSignal): void {
   const bar = document.getElementById("top-bar");
-  if (!host || !bar) return;
+  if (!bar) return;
   const buttons = [
     ...document.querySelectorAll<HTMLElement>("[data-top-panel]"),
   ];
@@ -143,8 +143,16 @@ function setUpTopPanels(): void {
     host.style.width = `${String(box.width)}px`;
     host.style.maxHeight = `calc(100dvh - ${String(box.bottom)}px)`;
   };
-  new ResizeObserver(place).observe(bar);
-  addEventListener("scroll", place, true);
+  const observer = new ResizeObserver(place);
+  observer.observe(bar);
+  signal.addEventListener(
+    "abort",
+    () => {
+      observer.disconnect();
+    },
+    { once: true },
+  );
+  addEventListener("scroll", place, { capture: true, signal });
   const paint = (open: string): void => {
     host.hidden = open === "";
     if (open !== "") place();
@@ -160,19 +168,24 @@ function setUpTopPanels(): void {
     host.replaceChildren();
     paint("");
   };
+  close();
   // What a panel answered decides its icon's colour, as the session state
   // does in pi-web: a prompt or an active tool tints the tab's icon.
-  host.addEventListener("htmx:after:settle", () => {
-    const open = buttons.find(
-      (button) => button.getAttribute("aria-pressed") === "true",
-    );
-    if (!open) return;
-    const loaded =
-      host.querySelector(".system-prompt-text, .tool-definitions-item") !==
-      null;
-    open.toggleAttribute("data-panel-loaded", loaded);
-  });
-  document.body.addEventListener(
+  host.addEventListener(
+    "htmx:after:settle",
+    () => {
+      const open = buttons.find(
+        (button) => button.getAttribute("aria-pressed") === "true",
+      );
+      if (!open) return;
+      const loaded =
+        host.querySelector(".system-prompt-text, .tool-definitions-item") !==
+        null;
+      open.toggleAttribute("data-panel-loaded", loaded);
+    },
+    { signal },
+  );
+  document.addEventListener(
     "click",
     (event) => {
       const target = event.target;
@@ -191,11 +204,15 @@ function setUpTopPanels(): void {
       }
       paint(button.dataset["topPanel"] ?? "");
     },
-    true,
+    { capture: true, signal },
   );
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !host.hidden) close();
-  });
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key === "Escape" && !host.hidden) close();
+    },
+    { signal },
+  );
 }
 
 function inTextEntry(target: EventTarget | null): boolean {
@@ -247,24 +264,37 @@ const COPIED_MS = 1400;
  * swap is a `hidden` flip rather than a text replacement.
  */
 function setUpSessionCopy(): void {
-  document.body.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const button = target.closest<HTMLElement>("[data-session-copy]");
-    const value = button?.dataset["sessionCopy"];
-    if (!button || value === undefined) return;
-    const idle = button.querySelector<HTMLElement>("[data-copy-idle]");
-    const done = button.querySelector<HTMLElement>("[data-copy-done]");
-    void navigator.clipboard.writeText(value).then(() => {
-      if (idle) idle.hidden = true;
-      if (done) done.hidden = false;
-      button.style.color = "var(--accent)";
-      setTimeout(() => {
-        if (idle) idle.hidden = false;
-        if (done) done.hidden = true;
-        button.style.color = "var(--text-dim)";
-      }, COPIED_MS);
-    }, noop);
+  setUpRegion("[data-session-copy]", (button, signal) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+      },
+      { once: true },
+    );
+    button.addEventListener(
+      "click",
+      () => {
+        const value = button.dataset["sessionCopy"];
+        if (value === undefined) return;
+        const idle = button.querySelector<HTMLElement>("[data-copy-idle]");
+        const done = button.querySelector<HTMLElement>("[data-copy-done]");
+        void navigator.clipboard.writeText(value).then(() => {
+          if (signal.aborted) return;
+          if (idle) idle.hidden = true;
+          if (done) done.hidden = false;
+          button.style.color = "var(--accent)";
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            if (idle) idle.hidden = false;
+            if (done) done.hidden = true;
+            button.style.color = "var(--text-dim)";
+          }, COPIED_MS);
+        }, noop);
+      },
+      { signal },
+    );
   });
 }
 
@@ -277,7 +307,7 @@ function noop(): void {
  * hidden field its form posts, and the install path beside it follows.
  */
 function setUpScopePickers(): void {
-  document.body.addEventListener("click", (event) => {
+  document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const option = target.closest<HTMLElement>("[data-scope]");
@@ -308,7 +338,7 @@ function setUpScopePickers(): void {
 
 /** The three example sources under the Add plugin form fill the field. */
 function setUpPluginExamples(): void {
-  document.body.addEventListener("click", (event) => {
+  document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const example = target.closest<HTMLElement>("[data-plugin-example]")
@@ -321,12 +351,13 @@ function setUpPluginExamples(): void {
 
 export function setUpShell(): void {
   setUpTheme();
-  setUpTitle();
+  setUpRegion("main", setUpTitle);
   setUpPreferences();
   setUpDialogs();
-  setUpSidebar();
-  setUpMobileToolbar();
-  setUpTopPanels();
+  setUpRegion("#session-sidebar", mountSidebar);
+  setUpRegion(".sidebar-resize-handle", mountSidebarResize);
+  setUpRegion("#mobile-toolbar-more", mountMobileToolbar);
+  setUpRegion("#top-panel", mountTopPanels);
   setUpShortcuts();
   setUpToasts();
   setUpViewport();
@@ -336,7 +367,13 @@ export function setUpShell(): void {
   setUpExtensions();
   setUpNotifications();
   setUpPush();
-  document.getElementById("page-refresh")?.addEventListener("click", () => {
-    location.reload();
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest("#page-refresh")) location.reload();
+    else if (target.closest("#sidebar-toggle")) {
+      setSidebarOpen(!(sidebar()?.classList.contains("sidebar-open") ?? false));
+    } else if (target.closest(".sidebar-overlay-backdrop"))
+      setSidebarOpen(false);
   });
 }

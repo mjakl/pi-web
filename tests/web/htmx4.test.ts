@@ -366,17 +366,22 @@ describe("shipped HTMX 4 with the real browser client", () => {
       () => stream.response,
     );
     const settled: string[] = [];
-    document.body.addEventListener("htmx:after:settle", (event) => {
-      const detail = (
-        event as unknown as CustomEvent<{ newContent: Element[] }>
-      ).detail;
-      for (const node of detail.newContent) {
-        if (node.nodeType === 1 && node.hasAttribute("data-inserted")) {
-          expect(node.isConnected).toBe(true);
-          settled.push(required(node.getAttribute("data-inserted")));
+    // Observe insertion before the full client consumes editor-insert payloads.
+    document.body.addEventListener(
+      "htmx:after:settle",
+      (event) => {
+        const detail = (
+          event as unknown as CustomEvent<{ newContent: Element[] }>
+        ).detail;
+        for (const node of detail.newContent) {
+          if (node.nodeType === 1 && node.hasAttribute("data-inserted")) {
+            expect(node.isConnected).toBe(true);
+            settled.push(required(node.getAttribute("data-inserted")));
+          }
         }
-      }
-    });
+      },
+      { capture: true },
+    );
     let done = "";
     let turnSettled = false;
     document.body.addEventListener("settled", () => {

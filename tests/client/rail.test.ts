@@ -3,6 +3,7 @@ import {
   byId,
   frame,
   htmx,
+  htmxEvent,
   mount,
   query,
   setGeometry,
@@ -230,5 +231,57 @@ describe("the branch graph", () => {
     pointer("pointerenter");
     expect(byId("rail-column").classList.contains("is-expanded")).toBe(false);
     expect(byId("rail-column").style.width).toBe("");
+  });
+});
+
+describe("rail owner replacement", () => {
+  it("rebinds the persistent rail when only its scroller is replaced", async () => {
+    const oldView = await load();
+    const oldScroll = vi.spyOn(oldView, "scrollTo");
+    const rail = byId("rail-column");
+    const markup = oldView.outerHTML;
+    oldView.outerHTML = markup;
+    const view = byId("log");
+    const scroll = vi.spyOn(view, "scrollTo");
+    setGeometry(view, { clientHeight: 500, scrollHeight: 4000 });
+    setRect(view, { top: 0, height: 500 });
+    setRect(byId("entry-a"), { top: 600 });
+    htmxEvent(view, "htmx:after:process");
+    pointer("pointerdown", { clientY: 15 });
+    expect(byId("rail-column")).toBe(rail);
+    expect(scroll).toHaveBeenCalledWith({
+      top: 450,
+      behavior: "smooth",
+    });
+    expect(oldScroll).not.toHaveBeenCalled();
+    expect(document.querySelectorAll(".message-preview-popover")).toHaveLength(
+      1,
+    );
+  });
+
+  it("removes the old preview and cancels its pending hover when the body changes", async () => {
+    await load();
+    pointer("pointermove", { clientY: 15 });
+    const oldRail = byId("rail-column");
+    const oldPopup = query(".message-preview-popover");
+    const markup = query(".chat-window").outerHTML;
+    mount(markup);
+    htmxEvent(document.body, "htmx:after:process");
+    expect(oldPopup.isConnected).toBe(false);
+    expect(document.querySelectorAll(".message-preview-popover")).toHaveLength(
+      1,
+    );
+    vi.advanceTimersByTime(200);
+    expect(oldPopup.hidden).toBe(true);
+    expect(query(".message-preview-popover").hidden).toBe(true);
+    oldRail.dispatchEvent(new PointerEvent("pointerenter"));
+    htmxEvent(byId("rail"), "htmx:after:process");
+    expect(document.querySelectorAll(".message-preview-popover")).toHaveLength(
+      1,
+    );
+    setRect(row("a"), { top: 10, height: 10 });
+    pointer("pointermove", { clientY: 15 });
+    vi.advanceTimersByTime(200);
+    expect(query(".message-preview-popover").hidden).toBe(false);
   });
 });

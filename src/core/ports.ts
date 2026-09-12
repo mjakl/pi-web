@@ -80,11 +80,11 @@ export type SessionCatalog = {
   remove(id: string): Promise<void>;
   setStar(id: string, targetId: string, starred: boolean): Promise<void>;
   /** New session file holding the path from root to `entryId`. */
-  fork(id: string, entryId: string): Promise<{ id: string; text: string }>;
+  fork(id: string, entryId: string): Promise<{ id: string } & EditableMessage>;
   /** New session file holding the path from root to a branch tip. */
   clone(id: string, leafId?: string): Promise<string>;
-  /** Removes a user message and everything after it. Returns its text. */
-  rewind(id: string, entryId: string): Promise<string>;
+  /** Removes a user message and everything after it. Returns it for editing. */
+  rewind(id: string, entryId: string): Promise<EditableMessage>;
   exportHtml(id: string): Promise<{ html: string; filename: string }>;
 };
 
@@ -161,6 +161,9 @@ export type Packages = {
 export type Notice = { level: "info" | "warning" | "error"; message: string };
 
 export type ImageAttachment = { data: string; mimeType: string };
+
+/** A historical user message restored to the composer, without display normalization. */
+export type EditableMessage = { text: string; images: ImageAttachment[] };
 
 export type QueuedMessage = {
   text: string;

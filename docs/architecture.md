@@ -317,7 +317,12 @@ composition root and the only importer of Pi adapters.
   clones are appends the SDK writes, so the CLI and web-pi never disagree about
   the format; stars are `pi-web:star` custom entries, the same ones pi-web
   reads. Only delete (re-parenting children) and rewind rewrite a file, because
-  the SDK cannot remove entries.
+  the SDK cannot remove entries. Fork and rewind return an `EditableMessage`
+  containing the selected user's text and images, extracted before any rewrite.
+  The replacement composer consumes images through the queue-recall slot,
+  without recompressing stored bytes. A restored-draft marker makes even empty
+  history text authoritative over localStorage. Images still do not persist as
+  drafts across reloads.
 - **HTML export spawns the Pi CLI**, as pi-web does: the SDK's exporter is
   behind the package export map. The exported page's recursive tree walks are
   rewritten as iterative ones, or a long session overflows the browser's stack;
@@ -340,6 +345,12 @@ composition root and the only importer of Pi adapters.
   theme, keyboard shortcuts) is bundled by esbuild into `static/client.js` and
   loaded as a module with a content hash in its URL. The only inline script is
   the two-line theme read in `<head>`, which has to run before the first paint.
+  Global delegated handlers install once. `client/lifecycle.ts` mounts stateful
+  regions on initial load and native HTMX `after:process`, keyed by owner node.
+  Replacing an owner aborts its listeners, requests and timers and disconnects
+  its observers. HTMX emits cleanup only for powered elements, so processing and
+  settlement also remove detached plain owners. Inner fragment swaps keep their
+  enclosing owner and its state; no whole-page setup rerun is needed.
 - **The composer's rules live in `src/core/composer.ts`**, and the client bundle
   imports them (esbuild resolves `@core` the same way tsconfig does). Slash
   ranking, `@`-token extraction, fuzzy scoring, insert text, history cycling,

@@ -1,3 +1,4 @@
+import type { EditableMessage } from "./ports.ts";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { SessionRowMetadata } from "./sessions.ts";
 
@@ -181,6 +182,37 @@ export type BranchLeaf = {
   timestamp: string;
   current: boolean;
 };
+
+/** Only user-authored content may become an editable draft, never tool output. */
+export function editableUserMessage(
+  entry: SessionEntry,
+): EditableMessage | undefined {
+  if (entry.type !== "message" || entry.message.role !== "user") return;
+  const { content } = entry.message;
+  if (typeof content === "string") return { text: content, images: [] };
+  const text: string[] = [];
+  const images: EditableMessage["images"] = [];
+  for (const value of content) {
+    const part = value as unknown as Record<string, unknown>;
+    if (!part || typeof part !== "object") continue;
+    if (part["type"] === "text" && typeof part["text"] === "string") {
+      text.push(part["text"]);
+    } else if (part["type"] === "image") {
+      // Pi writes flat blocks; older pi-web messages can use Anthropic's source shape.
+      const source = part["source"];
+      const nested =
+        source && typeof source === "object"
+          ? (source as Record<string, unknown>)
+          : undefined;
+      const data = part["data"] ?? nested?.["data"];
+      const mimeType = part["mimeType"] ?? nested?.["media_type"];
+      if (typeof data === "string" && typeof mimeType === "string") {
+        images.push({ data, mimeType });
+      }
+    }
+  }
+  return { text: text.join("\n"), images };
+}
 
 /** Plain text of a user message entry; undefined for anything else. */
 export function userMessageText(entry: SessionEntry): string | undefined {

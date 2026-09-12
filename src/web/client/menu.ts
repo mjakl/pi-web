@@ -13,8 +13,10 @@ export type Menu = {
 export function createMenu(
   id: string,
   apply: (item: HTMLElement) => void,
+  owner: ParentNode = document,
+  signal?: AbortSignal,
 ): Menu {
-  const element = document.getElementById(id);
+  const element = owner.querySelector<HTMLElement>(`#${id}`);
   if (!element) throw new Error(`Missing menu ${id}`);
 
   const items = (): HTMLElement[] => [
@@ -33,28 +35,37 @@ export function createMenu(
 
   let index = 0;
 
-  element.addEventListener("mousedown", (event) => {
-    const item = (event.target as HTMLElement).closest<HTMLElement>(
-      "[data-index]",
-    );
-    if (!item) return;
-    // Keep the caret in the textarea: the click must not move focus.
-    event.preventDefault();
-    apply(item);
-  });
-  element.addEventListener("mouseover", (event) => {
-    const item = (event.target as HTMLElement).closest<HTMLElement>(
-      "[data-index]",
-    );
-    if (!item) return;
-    index = Number(item.dataset["index"] ?? 0);
-    paint(index);
-  });
+  element.addEventListener(
+    "mousedown",
+    (event) => {
+      const item = (event.target as HTMLElement).closest<HTMLElement>(
+        "[data-index]",
+      );
+      if (!item) return;
+      // Keep the caret in the textarea: the click must not move focus.
+      event.preventDefault();
+      apply(item);
+    },
+    { signal },
+  );
+  element.addEventListener(
+    "mouseover",
+    (event) => {
+      const item = (event.target as HTMLElement).closest<HTMLElement>(
+        "[data-index]",
+      );
+      if (!item) return;
+      index = Number(item.dataset["index"] ?? 0);
+      paint(index);
+    },
+    { signal },
+  );
 
   return {
     element,
     isOpen: () => !element.hidden,
     render(html) {
+      if (signal?.aborted) return;
       element.innerHTML = html;
       element.hidden = false;
       index = 0;

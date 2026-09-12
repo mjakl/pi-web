@@ -62,5 +62,11 @@ export function setUpViewport(): void {
   for (const event of ["resize", "focusin", "focusout", "pageshow"] as const) {
     addEventListener(event, schedule);
   }
+  // Removing a focused field need not emit blur. Reconcile the keyboard pin
+  // when history brings in a new page, without reinstalling viewport hooks.
+  document.addEventListener("htmx:after:process", (event) => {
+    if (event.target instanceof Element && event.target.matches("body, main"))
+      schedule();
+  });
   update();
 }

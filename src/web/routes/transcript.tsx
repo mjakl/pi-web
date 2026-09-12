@@ -143,7 +143,7 @@ export function transcriptRoutes(app: WebApp, ctx: RouteContext): void {
     const form = await c.req.formData();
     return guard(c, async () => {
       const forked = await deps.workspace.fork(id, field(form, "entryId"));
-      return page(c, forked.id, forked.text);
+      return page(c, forked.id, forked.text, forked.images);
     });
   });
 
@@ -168,7 +168,7 @@ export function transcriptRoutes(app: WebApp, ctx: RouteContext): void {
     const form = await c.req.formData();
     return guard(c, async () => {
       const draft = await deps.workspace.rewind(id, field(form, "entryId"));
-      return page(c, id, draft);
+      return page(c, id, draft.text, draft.images);
     });
   });
 

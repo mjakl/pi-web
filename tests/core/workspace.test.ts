@@ -119,10 +119,26 @@ describe("workspace over the fake runtime", () => {
     const items = (await workspace.viewSession(id))?.items ?? [];
     const wordless = items.filter((item) => item.kind === "user").at(-1);
     const forked = await workspace.fork(id, wordless?.entryId ?? "");
+    expect(forked).toMatchObject({
+      text: "",
+      // The fake runtime records a thumbnail rather than the uploaded bytes.
+      images: [
+        {
+          data: "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+          mimeType: "image/gif",
+        },
+      ],
+    });
     const view = await workspace.viewSession(forked.id);
     expect(view?.items.map((item) => item.entryId)).not.toContain(
       wordless?.entryId,
     );
+    const recalled = await workspace.rewind(id, wordless?.entryId ?? "");
+    expect(recalled).toEqual({ text: "", images: forked.images });
+    expect(world.runtime.get(id)).toBeUndefined();
+    expect(
+      (await workspace.viewSession(id))?.items.map((item) => item.entryId),
+    ).not.toContain(wordless?.entryId);
   });
 
   it("recalls the queue with the images its messages carried", async () => {

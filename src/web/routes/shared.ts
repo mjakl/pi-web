@@ -41,7 +41,12 @@ export type RouteContext = {
   rememberProject: (c: Context, sidebar: SidebarView) => void;
   currentCwd: (c: Context, sidebar?: SidebarView) => string;
   warnTokens: (c: Context) => { warnTokens: number };
-  page: (c: Context, id: string, draft?: string) => Promise<Response>;
+  page: (
+    c: Context,
+    id: string,
+    draft?: string,
+    images?: ImageAttachment[],
+  ) => Promise<Response>;
   row: (c: Context, id: string) => Promise<Response>;
   guard: (c: Context, action: () => Promise<Response>) => Promise<Response>;
 };

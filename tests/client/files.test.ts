@@ -113,6 +113,79 @@ function ajaxUrls(): string[] {
   return htmx().ajax.mock.calls.map((call) => call[1]);
 }
 
+describe("file panel replacement", () => {
+  it("releases the old watcher and tabs, then binds the replacement without duplicate opens", async () => {
+    page();
+    const { openFile, setUpFiles } = await load();
+    setUpFiles();
+    openFile("old.ts");
+    await deliver(viewer("old.ts"));
+    const oldStream = streams()[0];
+    const oldHandle = query(".right-panel-resize-handle");
+    const oldBody = document.body;
+    const replacement = document.createElement("body");
+    replacement.innerHTML = oldBody.innerHTML.replaceAll(
+      'data-session="s1"',
+      'data-session="s2"',
+    );
+    oldBody.replaceWith(replacement);
+    htmxEvent(document.body, "htmx:after:process");
+    htmxEvent(document.body, "htmx:after:process");
+    expect(oldStream?.closed).toBe(true);
+    expect(tabs()).toHaveLength(0);
+    expect(byId("file-panel").classList.contains("right-panel-closed")).toBe(
+      true,
+    );
+    expect(byId("file-view").textContent).toBe("No file open");
+    keydown(oldHandle, "Home");
+    expect(localStorage.getItem("pi-right-panel-width")).toBeNull();
+    keydown(query(".right-panel-resize-handle"), "Home");
+    expect(localStorage.getItem("pi-right-panel-width")).toBe("300");
+    click(byId("file-panel-toggle"));
+    expect(byId("file-panel").classList.contains("right-panel-open")).toBe(
+      true,
+    );
+    click(byId("file-panel-close"));
+    expect(byId("file-panel").classList.contains("right-panel-closed")).toBe(
+      true,
+    );
+    const link = document.createElement("a");
+    link.dataset["filePath"] = "new.ts";
+    document.body.append(link);
+    const beforeOpen = ajaxUrls().length;
+    click(link);
+    expect(ajaxUrls()).toHaveLength(beforeOpen + 1);
+    await deliver(viewer("new.ts"));
+    expect(tabs()).toHaveLength(1);
+    expect(streams().at(-1)?.url).toContain("session=s2");
+    const requests = ajaxUrls().length;
+    oldStream?.dispatchEvent(new Event("change"));
+    expect(ajaxUrls()).toHaveLength(requests);
+  });
+
+  it("ignores a pending old viewer completion after cleanup", async () => {
+    page();
+    const { openFile, setUpFiles } = await load();
+    setUpFiles();
+    let complete: (() => void) | undefined;
+    htmx().ajax.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        complete = resolve;
+      }),
+    );
+    openFile("old.ts");
+    const oldStream = streams()[0];
+    htmxEvent(byId("file-panel"), "htmx:before:cleanup");
+    expect(oldStream?.closed).toBe(true);
+    page({ session: "s2" });
+    htmxEvent(document.body, "htmx:after:process");
+    complete?.();
+    await flush();
+    expect(streams()).toHaveLength(1);
+    expect(tabs()).toHaveLength(0);
+  });
+});
+
 describe("opening files", () => {
   it("opens a tab, the panel, and asks htmx for the viewer in the session's scope", async () => {
     page();

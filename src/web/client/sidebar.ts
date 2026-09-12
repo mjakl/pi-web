@@ -3,6 +3,7 @@
 // was elsewhere, where a row's fixed-position menu lands, whether a modifier
 // is held, and which project group is open.
 
+import { setUpRegion } from "./lifecycle.ts";
 import { setUpFolderMemory } from "./preferences.ts";
 
 // Which sessions finished a turn while the reader was looking elsewhere, and
@@ -93,11 +94,13 @@ function paintUnread(): void {
 }
 
 function setUpUnread(): void {
-  const ids = unreadIds();
-  if (ids.delete(currentSessionId())) storeUnread(ids);
-  paintUnread();
+  setUpRegion("main", () => {
+    const ids = unreadIds();
+    if (ids.delete(currentSessionId())) storeUnread(ids);
+    paintUnread();
+  });
   // The global stream announces the id and project of each finished session.
-  document.body.addEventListener("finished", (event) => {
+  document.addEventListener("finished", (event) => {
     const text = (event as CustomEvent<{ data?: unknown }>).detail?.data;
     if (typeof text !== "string") return;
     let finished: { id?: string; project?: string } = {};
@@ -116,7 +119,7 @@ function setUpUnread(): void {
   });
   // Rows arrive lazily and out of band; a streaming turn swaps ten times a
   // second and must not drag the whole sidebar through this.
-  document.body.addEventListener("htmx:after:settle", (event) => {
+  document.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (target instanceof Element && target.closest("#sidebar")) paintUnread();
   });
@@ -140,12 +143,12 @@ function applyProjectFilter(): void {
 }
 
 function setUpProjectFilter(): void {
-  document.body.addEventListener("input", (event) => {
+  document.addEventListener("input", (event) => {
     if ((event.target as HTMLElement).id === "project-filter") {
       applyProjectFilter();
     }
   });
-  document.body.addEventListener("keydown", (event) => {
+  document.addEventListener("keydown", (event) => {
     const input = event.target;
     if (
       event.key !== "Escape" ||
@@ -166,7 +169,7 @@ function setUpProjectFilter(): void {
  * disclosure; `areas/sidebar.css` turns aria-expanded into the chevron.
  */
 function setUpFolderGroups(): void {
-  document.body.addEventListener("click", (event) => {
+  document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const row = target.closest<HTMLElement>(
@@ -192,7 +195,7 @@ const EXPLORER_OPEN_KEY = "pi-web:file-explorer:open";
  * the state and areas/sidebar.css paints both states from it. Storage is
  * best-effort, as in pi-web: without it the choice lasts for this page.
  */
-function setUpExplorerFold(): void {
+function mountExplorerFold(button: HTMLElement, signal: AbortSignal): void {
   let open = true;
   try {
     open = localStorage.getItem(EXPLORER_OPEN_KEY) !== "false";
@@ -200,44 +203,46 @@ function setUpExplorerFold(): void {
     // A private window: the explorer starts open.
   }
   const paint = () => {
-    document
-      .getElementById("explorer-toggle")
-      ?.setAttribute("aria-expanded", String(open));
+    button.setAttribute("aria-expanded", String(open));
   };
   paint();
-  document.body.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof Element) || !target.closest("#explorer-toggle")) {
-      return;
-    }
-    open = !open;
-    try {
-      localStorage.setItem(EXPLORER_OPEN_KEY, String(open));
-    } catch {
-      // Without storage the choice lasts for this page only.
-    }
-    paint();
-  });
-  // A whole-page swap brings the section back in its server-rendered,
-  // open state.
-  document.body.addEventListener("htmx:after:settle", (event) => {
-    const target = event.target;
-    if (target instanceof Element && target.querySelector("#explorer-toggle")) {
+  button.addEventListener(
+    "click",
+    () => {
+      open = !open;
+      try {
+        localStorage.setItem(EXPLORER_OPEN_KEY, String(open));
+      } catch {
+        // Without storage the choice lasts for this page only.
+      }
       paint();
-    }
-  });
+    },
+    { signal },
+  );
 }
 
 /** The refresh button says it worked: a check for two seconds (§3.1). */
-function setUpSidebarRefresh(): void {
-  const button = document.getElementById("sidebar-refresh");
-  if (!button) return;
-  button.addEventListener("htmx:after:request", () => {
-    button.setAttribute("data-done", "");
-    setTimeout(() => {
-      button.removeAttribute("data-done");
-    }, 2000);
-  });
+function mountSidebarRefresh(button: HTMLElement, signal: AbortSignal): void {
+  button.removeAttribute("data-done");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  signal.addEventListener(
+    "abort",
+    () => {
+      clearTimeout(timer);
+    },
+    { once: true },
+  );
+  button.addEventListener(
+    "htmx:after:request",
+    () => {
+      button.setAttribute("data-done", "");
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        button.removeAttribute("data-done");
+      }, 2000);
+    },
+    { signal },
+  );
 }
 
 /**
@@ -363,7 +368,8 @@ function setUpShortcuts(): void {
   });
   // A row swapped in while the modifier is held arrives with its badge
   // hidden and unnumbered, and the rows after it have all moved down one.
-  document.body.addEventListener("htmx:after:settle", (event) => {
+  setUpRegion("#sidebar", paint);
+  document.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
     if (modifier === null || !(target instanceof Element)) return;
     if (target.closest("#sidebar")) paint();
@@ -372,7 +378,7 @@ function setUpShortcuts(): void {
 
 /** pi-web's whole row is the click target, not just its title (§3.4). */
 function setUpRowSelection(): void {
-  document.body.addEventListener("click", (event) => {
+  document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const row = target.closest<HTMLElement>(".session-row");
@@ -386,8 +392,8 @@ export function setUpSidebar(): void {
   setUpUnread();
   setUpProjectFilter();
   setUpFolderGroups();
-  setUpExplorerFold();
-  setUpSidebarRefresh();
+  setUpRegion("#explorer-toggle", mountExplorerFold);
+  setUpRegion("#sidebar-refresh", mountSidebarRefresh);
   setUpRowMenus();
   setUpShortcuts();
   setUpRowSelection();

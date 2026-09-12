@@ -33,38 +33,57 @@ export function setUpDrafts(
   sessionId: string | null,
   cwd: string | null,
   area: () => HTMLTextAreaElement | null,
+  signal?: AbortSignal,
 ): Drafts {
   let key = sessionId ?? `new:${cwd ?? ""}`;
   const field = area();
   if (field) {
     // A server-rendered draft (a rewind, a fork) outranks the stored one.
-    if (field.value.trim() === "") field.value = read(key);
+    if (!field.hasAttribute("data-restored-draft") && field.value.trim() === "")
+      field.value = read(key);
     else write(key, field.value);
   }
 
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let pending: string | undefined;
+  signal?.addEventListener(
+    "abort",
+    () => {
+      clearTimeout(timer);
+      if (pending !== undefined) write(key, pending);
+    },
+    { once: true },
+  );
 
-  document.body.addEventListener("web-pi:session-created", (event) => {
-    const detail = (event as CustomEvent<unknown>).detail;
-    if (typeof detail !== "object" || detail === null) return;
-    const moved = detail as { cwd?: unknown; id?: unknown };
-    if (typeof moved.id !== "string" || `new:${String(moved.cwd)}` !== key) {
-      return;
-    }
-    const pending = read(key);
-    write(key, "");
-    key = moved.id;
-    write(key, pending);
-  });
+  document.body.addEventListener(
+    "web-pi:session-created",
+    (event) => {
+      const detail = (event as CustomEvent<unknown>).detail;
+      if (typeof detail !== "object" || detail === null) return;
+      const moved = detail as { cwd?: unknown; id?: unknown };
+      if (typeof moved.id !== "string" || `new:${String(moved.cwd)}` !== key) {
+        return;
+      }
+      const pending = read(key);
+      write(key, "");
+      key = moved.id;
+      write(key, pending);
+    },
+    { signal },
+  );
 
   return {
     save(value) {
+      if (signal?.aborted) return;
+      pending = value;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         write(key, value);
+        pending = undefined;
       }, 300);
     },
     clear() {
+      pending = undefined;
       if (timer) clearTimeout(timer);
       write(key, "");
     },

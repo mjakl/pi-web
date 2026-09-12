@@ -4,6 +4,7 @@ import {
   formatContextUsage,
 } from "@core/context-usage";
 import type { ContextUsage } from "@core/context-usage";
+import type { ImageAttachment } from "@core/ports";
 import type { SessionStats } from "@core/session-entries";
 import type { NewSessionView, SessionView, SidebarView } from "@core/workspace";
 import { Composer, DropZone } from "./Composer.tsx";
@@ -596,6 +597,7 @@ export function SessionPage({
   sidebar,
   view,
   draft,
+  images,
   trust,
   home,
   overlay,
@@ -603,6 +605,7 @@ export function SessionPage({
   sidebar: SidebarView;
   view: SessionView;
   draft?: string;
+  images?: ImageAttachment[];
   trust?: { requiresTrust: boolean; trusted: boolean };
   home?: string;
   overlay?: unknown;
@@ -719,6 +722,7 @@ export function SessionPage({
               sessionId={summary.id}
               cwd={summary.cwd}
               draft={draft}
+              images={images}
               view={view}
               status={<Status view={view} />}
             />

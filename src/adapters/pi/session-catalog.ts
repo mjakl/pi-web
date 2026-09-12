@@ -3,7 +3,7 @@ import type { SessionCatalog, SessionRead } from "@core/ports";
 import {
   rowMetadataFold,
   STAR_TYPE,
-  userMessageText,
+  editableUserMessage,
 } from "@core/session-entries";
 import {
   isSessionId,
@@ -327,7 +327,7 @@ export function createPiSessionCatalog(options: {
       const manager = SessionManager.open(filePath);
       const entry = manager.getEntry(entryId);
       if (!entry) throw new Error("Select an existing conversation message");
-      const text = userMessageText(entry) ?? "";
+      const draft = editableUserMessage(entry) ?? { text: "", images: [] };
       // Editing a user message reopens the history *before* it; anything else
       // is copied up to and including itself. The role decides, not the text:
       // a question that is only images is still a question.
@@ -341,7 +341,7 @@ export function createPiSessionCatalog(options: {
       }
       const forked = branchToNewFile(filePath, leafId);
       paths.set(forked.id, forked.file);
-      return { id: forked.id, text };
+      return { id: forked.id, ...draft };
     },
 
     async clone(id, leafId) {

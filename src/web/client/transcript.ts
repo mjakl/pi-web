@@ -2,6 +2,7 @@ import { settledContent, swapTasks } from "./htmx.ts";
 import { codeText, highlightIn } from "./highlight.ts";
 import { setUpImagePreview } from "./images.ts";
 import { setUpMermaid } from "./mermaid.ts";
+import { setUpRegion } from "./lifecycle.ts";
 import { setUpRail } from "./rail.ts";
 
 // Everything the transcript needs from the browser: staying at the tail while
@@ -87,11 +88,12 @@ function setUpCopy(): void {
 export function setUpTranscript(): void {
   setUpRail();
   setUpImagePreview();
-  const view = document.getElementById("log");
-  if (!view) {
-    setUpCopy();
-    return;
-  }
+  setUpCopy();
+  setUpMermaid();
+  setUpRegion("#log", mountTranscript);
+}
+
+function mountTranscript(view: HTMLElement, signal: AbortSignal): void {
   const jump = document.getElementById("jump-to-latest");
   let follow = true;
   let previousTop = 0;
@@ -107,48 +109,69 @@ export function setUpTranscript(): void {
     previousTop = top;
     if (jump) jump.hidden = atTail(view);
   };
-  view.addEventListener("scroll", sync, { passive: true });
-  jump?.addEventListener("click", () => {
-    view.scrollTo({
-      top: view.scrollHeight,
-      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-    });
-  });
+  view.addEventListener("scroll", sync, { passive: true, signal });
+  jump?.addEventListener(
+    "click",
+    () => {
+      view.scrollTo({
+        top: view.scrollHeight,
+        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+      });
+    },
+    { signal },
+  );
 
   // A prepended page must not move the text under the reader's eyes: keep the
   // distance to the bottom, which the new content does not change.
   let anchor: number | null = null;
-  document.body.addEventListener("htmx:before:swap", (event) => {
-    const tasks = swapTasks(event) as { target: Element | string }[];
-    if (
-      tasks.some(({ target }) => {
-        const element =
-          typeof target === "string" ? document.querySelector(target) : target;
-        return element?.classList.contains("load-earlier");
-      })
-    ) {
-      anchor = view.scrollHeight - view.scrollTop;
-    }
-  });
-  document.body.addEventListener("htmx:after:settle", (event) => {
-    const target = event.target;
-    // Only the log and the running turn move the reader to the tail. A tool
-    // card fetching its own body must leave the scroll position alone.
-    const appended =
-      target instanceof Element &&
-      (target.id === "messages" || target.id === "turn");
-    if (anchor !== null) {
-      view.scrollTop = Math.max(0, view.scrollHeight - anchor);
-      anchor = null;
-    } else if (follow && appended) {
-      view.scrollTop = view.scrollHeight;
-    }
-    if (target instanceof Element) highlightIn(target);
-    for (const element of settledContent(event)) highlightIn(element);
-    sync();
-  });
+  document.addEventListener(
+    "htmx:before:swap",
+    (event) => {
+      if (signal.aborted || !view.isConnected) return;
+      const tasks = swapTasks(event) as { target: Element | string }[];
+      if (
+        tasks.some(({ target }) => {
+          const element =
+            typeof target === "string"
+              ? document.querySelector(target)
+              : target;
+          return (
+            element instanceof Element &&
+            view.contains(element) &&
+            element.classList.contains("load-earlier")
+          );
+        })
+      ) {
+        anchor = view.scrollHeight - view.scrollTop;
+      }
+    },
+    { signal },
+  );
+  document.addEventListener(
+    "htmx:after:settle",
+    (event) => {
+      if (signal.aborted || !view.isConnected) return;
+      const target = event.target;
+      // Only the log and the running turn move the reader to the tail. A tool
+      // card fetching its own body must leave the scroll position alone.
+      const appended =
+        target instanceof Element &&
+        view.contains(target) &&
+        (target.id === "messages" || target.id === "turn");
+      if (anchor !== null) {
+        view.scrollTop = Math.max(0, view.scrollHeight - anchor);
+        anchor = null;
+      } else if (follow && appended) {
+        view.scrollTop = view.scrollHeight;
+      }
+      if (target instanceof Element) highlightIn(target);
+      for (const element of settledContent(event)) highlightIn(element);
+      sync();
+    },
+    { signal },
+  );
 
   view.scrollTop = view.scrollHeight;
   // Images, mermaid diagrams and the highlighter all resize the transcript
@@ -157,12 +180,19 @@ export function setUpTranscript(): void {
   // reader scrolls away from the bottom themselves.
   const content = view.firstElementChild;
   if (content) {
-    new ResizeObserver(() => {
-      if (follow) view.scrollTop = view.scrollHeight;
-    }).observe(content);
+    const resize = new ResizeObserver(() => {
+      if (!signal.aborted && view.isConnected && follow)
+        view.scrollTop = view.scrollHeight;
+    });
+    resize.observe(content);
+    signal.addEventListener(
+      "abort",
+      () => {
+        resize.disconnect();
+      },
+      { once: true },
+    );
   }
   sync();
-  highlightIn(document);
-  setUpCopy();
-  setUpMermaid();
+  highlightIn(view);
 }

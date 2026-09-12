@@ -49,13 +49,28 @@ export type Attachments = {
   count(): number;
 };
 
-export function setUpImages(changed: () => void): Attachments {
-  const input = document.querySelector<HTMLInputElement>("#image-input");
-  const previews = document.querySelector<HTMLElement>("#image-previews");
+export function setUpImages(
+  changed: () => void,
+  owner: ParentNode = document,
+  signal?: AbortSignal,
+): Attachments {
+  const input = owner.querySelector<HTMLInputElement>("#image-input");
+  const previews = owner.querySelector<HTMLElement>("#image-previews");
   const attached: File[] = [];
+  let initializing = true;
+  let generation = 0;
+  signal?.addEventListener(
+    "abort",
+    () => {
+      generation += 1;
+      for (const image of previews?.querySelectorAll("img") ?? [])
+        URL.revokeObjectURL(image.src);
+    },
+    { once: true },
+  );
 
   function paint(): void {
-    if (!input || !previews) return;
+    if (signal?.aborted || !input || !previews) return;
     const transfer = new DataTransfer();
     for (const file of attached) transfer.items.add(file);
     input.files = transfer.files;
@@ -83,23 +98,29 @@ export function setUpImages(changed: () => void): Attachments {
       remove.setAttribute("aria-label", "Remove image");
       // By identity, never by the index this closure was built with: a
       // downscale finishing in the meantime renumbers the list.
-      remove.addEventListener("click", () => {
-        const at = attached.indexOf(file);
-        if (at === -1) return;
-        attached.splice(at, 1);
-        paint();
-      });
+      remove.addEventListener(
+        "click",
+        () => {
+          const at = attached.indexOf(file);
+          if (at === -1) return;
+          attached.splice(at, 1);
+          paint();
+        },
+        { signal },
+      );
       wrapper.append(image, remove);
       previews.append(wrapper);
     }
-    document
-      .querySelector("#composer")
+    input
+      .closest("#composer")
       ?.toggleAttribute("data-has-images", attached.length > 0);
     // An attachment turns the send button on, and turns `!` shell mode off.
-    changed();
+    if (!initializing) changed();
   }
 
   function add(files: readonly File[]): void {
+    if (signal?.aborted) return;
+    const version = generation;
     const room = MAX_IMAGES - attached.length;
     const accepted = files
       .filter((file) => file.type.startsWith("image/"))
@@ -109,6 +130,7 @@ export function setUpImages(changed: () => void): Attachments {
     }
     if (accepted.length === 0) return;
     void Promise.all(accepted.map(downscale)).then((processed) => {
+      if (signal?.aborted || version !== generation) return;
       const problem = imageLimitError(
         [...attached, ...processed].map((file) => ({
           mimeType: file.type,
@@ -124,29 +146,46 @@ export function setUpImages(changed: () => void): Attachments {
     });
   }
 
-  input?.addEventListener("change", () => {
-    const picked = [...(input.files ?? [])];
-    // The input is also where the form reads from; take the pick and rebuild.
-    input.value = "";
-    add(picked);
-  });
-  document.querySelector("#attach-image")?.addEventListener("click", () => {
-    input?.click();
-  });
-  document.addEventListener("paste", (event) => {
-    const items = [...(event.clipboardData?.items ?? [])].filter((item) =>
-      item.type.startsWith("image/"),
-    );
-    if (items.length === 0) return;
-    event.preventDefault();
-    add(items.map((item) => item.getAsFile()).filter((file) => file !== null));
-  });
+  input?.addEventListener(
+    "change",
+    () => {
+      const picked = [...(input.files ?? [])];
+      // The input is also where the form reads from; take the pick and rebuild.
+      input.value = "";
+      add(picked);
+    },
+    { signal },
+  );
+  owner.querySelector("#attach-image")?.addEventListener(
+    "click",
+    () => {
+      input?.click();
+    },
+    { signal },
+  );
+  document.addEventListener(
+    "paste",
+    (event) => {
+      const items = [...(event.clipboardData?.items ?? [])].filter((item) =>
+        item.type.startsWith("image/"),
+      );
+      if (items.length === 0) return;
+      event.preventDefault();
+      add(
+        items.map((item) => item.getAsFile()).filter((file) => file !== null),
+      );
+    },
+    { signal },
+  );
   // Images a recall took back out of the queue arrive as base64 in a hidden
   // element; they become Files again so the next send carries them. The
   // fragment rides out of band. Every swap task emits a settle event;
   // draining the holder makes repeated events harmless.
   const drainRecalled = (): void => {
-    const target = document.getElementById("recalled-images");
+    if (signal?.aborted) return;
+    const target =
+      owner.querySelector("#recalled-images") ??
+      document.getElementById("recalled-images");
     if (!target?.firstElementChild) return;
     const recalled: File[] = [];
     for (const item of target.querySelectorAll<HTMLElement>("[data-image]")) {
@@ -165,13 +204,21 @@ export function setUpImages(changed: () => void): Attachments {
       }
     }
     target.replaceChildren();
-    if (recalled.length > 0) add(recalled);
+    if (recalled.length > 0) {
+      attached.push(...recalled);
+      paint();
+    }
   };
-  document.body.addEventListener("htmx:after:settle", drainRecalled);
+  document.body.addEventListener("htmx:after:settle", drainRecalled, {
+    signal,
+  });
+  drainRecalled();
+  initializing = false;
 
   return {
     add,
     clear() {
+      generation += 1;
       attached.length = 0;
       paint();
     },

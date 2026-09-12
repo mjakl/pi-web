@@ -15,7 +15,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // These run against real session files the Pi SDK wrote, in a throwaway agent
 // directory. Never point them at ~/.pi/agent.
@@ -27,9 +27,12 @@ const cwd = "/repo/demo";
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "web-pi-test-"));
   sessionDir = join(root, "sessions", "demo");
+  vi.stubEnv("HOME", root);
+  vi.stubEnv("PI_CODING_AGENT_DIR", root);
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -124,7 +127,7 @@ describe("session file edits", () => {
 
     const removed = rewindSessionFile(file, secondPrompt.id);
 
-    expect(removed).toBe("second");
+    expect(removed).toEqual({ text: "second", images: [] });
     const after = lines(file);
     expect(readFileSync(file, "utf8").split("\n").slice(0, 3).join("\n")).toBe(
       kept,
@@ -292,6 +295,88 @@ describe("Pi session catalog", () => {
     const branch = (await catalog.read(forked.id))?.branch ?? [];
     expect(branch.map((entry) => entry.id)).not.toContain(wordless.id);
     expect(branch).toHaveLength(2);
+  });
+
+  it.each([
+    { shape: "flat", text: "" },
+    { shape: "flat", text: "  Explain\n\tthese images  " },
+    { shape: "nested", text: "" },
+    { shape: "nested", text: "  Explain\n\tthese images  " },
+  ])(
+    "restores $shape history images with text '$text' before rewind",
+    async ({ shape, text }) => {
+      const manager = makeSession(["earlier"]);
+      const images = [
+        { data: "AAEC/w==", mimeType: "image/png" },
+        { data: "//79AA==", mimeType: "image/jpeg" },
+      ];
+      const content = [
+        ...(text ? [{ type: "text", text }] : []),
+        ...images.map((image) =>
+          shape === "flat"
+            ? { type: "image", ...image }
+            : {
+                type: "image",
+                source: {
+                  type: "base64",
+                  data: image.data,
+                  media_type: image.mimeType,
+                },
+              },
+        ),
+      ];
+      const targetId = manager.appendMessage({
+        role: "user",
+        content: content as never,
+        timestamp: 3,
+      });
+      manager.appendMessage(answer("later answer"));
+      const file = fileOf(manager);
+      const before = readFileSync(file, "utf8");
+      const catalog = createPiSessionCatalog({ agentDir: root });
+      await catalog.list();
+      const id = manager.getSessionId();
+
+      const forked = await catalog.fork(id, targetId);
+      expect(forked).toMatchObject({ text, images });
+      expect(readFileSync(file, "utf8")).toBe(before);
+      expect((await catalog.read(forked.id))?.branch).toHaveLength(2);
+
+      const recalled = await catalog.rewind(id, targetId);
+      expect(recalled).toEqual({ text, images });
+      const reopened = SessionManager.open(file);
+      expect(reopened.getEntries().some((entry) => entry.id === targetId)).toBe(
+        false,
+      );
+      expect(
+        reopened.getBranch().filter((entry) => entry.type === "message"),
+      ).toHaveLength(2);
+    },
+  );
+
+  it("does not offer tool-result images for editing or destructively rewind them", async () => {
+    const manager = makeSession(["hello"]);
+    const targetId = manager.appendMessage({
+      role: "toolResult",
+      toolCallId: "call",
+      toolName: "read",
+      isError: false,
+      timestamp: 3,
+      content: [
+        { type: "text", text: "tool output" },
+        { type: "image", data: "AAAA", mimeType: "image/png" },
+      ],
+    });
+    const file = fileOf(manager);
+    const before = readFileSync(file, "utf8");
+    const catalog = createPiSessionCatalog({ agentDir: root });
+    await catalog.list();
+    const forked = await catalog.fork(manager.getSessionId(), targetId);
+    expect(forked).toMatchObject({ text: "", images: [] });
+    await expect(
+      catalog.rewind(manager.getSessionId(), targetId),
+    ).rejects.toThrow("Rewind requires an existing user message");
+    expect(readFileSync(file, "utf8")).toBe(before);
   });
 
   it("estimates what a compaction left in context", async () => {

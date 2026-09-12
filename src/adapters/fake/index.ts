@@ -51,6 +51,7 @@ import {
   readStars,
   rowMetadata,
   STAR_TYPE,
+  editableUserMessage,
   userMessageText,
 } from "@core/session-entries";
 import type { SessionSummary } from "@core/sessions";
@@ -1073,7 +1074,7 @@ export function createFakeWorld(
         const stored = need(id);
         const entry = stored.entries.find((item) => item.id === entryId);
         if (!entry) throw new Error("Select an existing conversation message");
-        const text = userMessageText(entry) ?? "";
+        const draft = editableUserMessage(entry) ?? { text: "", images: [] };
         // The role decides, as in the Pi adapter: a question that is only
         // images is still a question, and editing it reopens the history
         // before it.
@@ -1085,7 +1086,7 @@ export function createFakeWorld(
             "Nothing precedes the first message; use New for an empty session.",
           );
         }
-        return Promise.resolve({ id: copyBranch(id, leafId), text });
+        return Promise.resolve({ id: copyBranch(id, leafId), ...draft });
       },
       clone: (id, leafId) => {
         const stored = need(id);
@@ -1097,14 +1098,14 @@ export function createFakeWorld(
         const stored = need(id);
         const index = stored.entries.findIndex((item) => item.id === entryId);
         const target = stored.entries[index];
-        const text = target && userMessageText(target);
-        if (!target || !text) {
+        const draft = target && editableUserMessage(target);
+        if (!target || !draft) {
           throw new Error("Rewind requires an existing user message");
         }
         stored.entries = stored.entries.slice(0, index);
         stored.leafId = target.parentId;
         touch(stored);
-        return Promise.resolve(text);
+        return Promise.resolve(draft);
       },
       exportHtml: (id) => {
         const stored = need(id);

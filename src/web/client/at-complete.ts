@@ -9,7 +9,7 @@ import {
 } from "@core/composer";
 import { catppuccinIcon } from "@core/file-types";
 import { escapeHtml } from "@core/html";
-import { type MenuEndpoints, replaceRange, textarea } from "./editor.ts";
+import { type MenuEndpoints, replaceRange } from "./editor.ts";
 import { createMenu, type Menu } from "./menu.ts";
 
 // `@` completion. Plain names are matched against a cached index of the whole
@@ -78,29 +78,52 @@ export type AtMenu = {
   handleKey(event: KeyboardEvent): boolean;
 };
 
-export function setUpAtCompletion(endpoints: MenuEndpoints | null): AtMenu {
+export function setUpAtCompletion(
+  endpoints: MenuEndpoints | null,
+  owner: ParentNode = document,
+  signal?: AbortSignal,
+): AtMenu {
+  const textarea = () =>
+    owner.querySelector<HTMLTextAreaElement>("#composer-text");
   let token: AtQuery | null = null;
   let index: { files: string[]; truncated: boolean; loadedAt: number } | null =
     null;
   let indexInFlight = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let search: AbortController | undefined;
+  const indexController = new AbortController();
+  signal?.addEventListener(
+    "abort",
+    () => {
+      clearTimeout(timer);
+      search?.abort();
+      indexController.abort();
+      token = null;
+      menu.close();
+    },
+    { once: true },
+  );
 
-  const menu: Menu = createMenu("at-menu", (item) => {
-    const area = textarea();
-    const path = item.dataset["path"];
-    if (!area || !token || path === undefined) return;
-    const insert = buildAtInsertText(
-      { path, isDir: item.dataset["dir"] === "1" },
-      token.quoted,
-    );
-    // Completing inside a quoted token swallows the closing quote.
-    const caret = area.selectionStart;
-    const end = token.quoted && area.value[caret] === '"' ? caret + 1 : caret;
-    replaceRange(area, token.start, end, insert.text, insert.caret);
-    if (item.dataset["dir"] === "1") refresh();
-    else menu.close();
-  });
+  const menu: Menu = createMenu(
+    "at-menu",
+    (item) => {
+      const area = textarea();
+      const path = item.dataset["path"];
+      if (!area || !token || path === undefined) return;
+      const insert = buildAtInsertText(
+        { path, isDir: item.dataset["dir"] === "1" },
+        token.quoted,
+      );
+      // Completing inside a quoted token swallows the closing quote.
+      const caret = area.selectionStart;
+      const end = token.quoted && area.value[caret] === '"' ? caret + 1 : caret;
+      replaceRange(area, token.start, end, insert.text, insert.caret);
+      if (item.dataset["dir"] === "1") refresh();
+      else menu.close();
+    },
+    owner,
+    signal,
+  );
 
   function showLocal(query: string): void {
     if (!index) return;
@@ -120,11 +143,13 @@ export function setUpAtCompletion(endpoints: MenuEndpoints | null): AtMenu {
   }
 
   async function loadIndex(): Promise<void> {
-    if (endpoints === null || indexInFlight) return;
+    if (signal?.aborted || endpoints === null || indexInFlight) return;
     if (index && Date.now() - index.loadedAt < INDEX_TTL_MS) return;
     indexInFlight = true;
     try {
-      const response = await fetch(endpoints.index(""));
+      const response = await fetch(endpoints.index(""), {
+        signal: indexController.signal,
+      });
       if (!response.ok) return;
       const body = (await response.json()) as {
         files?: string[];
@@ -143,7 +168,7 @@ export function setUpAtCompletion(endpoints: MenuEndpoints | null): AtMenu {
   }
 
   async function serverSearch(query: string, path: boolean): Promise<void> {
-    if (endpoints === null) return;
+    if (signal?.aborted || endpoints === null) return;
     search?.abort();
     const controller = new AbortController();
     search = controller;
@@ -151,18 +176,23 @@ export function setUpAtCompletion(endpoints: MenuEndpoints | null): AtMenu {
     try {
       const response = await fetch(url, { signal: controller.signal });
       const body = (await response.json()) as { matches?: FileEntry[] };
-      if (token?.query !== query) return;
+      if (controller.signal.aborted) return;
+      if (signal?.aborted || token?.query !== query) return;
       if (!response.ok) {
         menu.render(panel("Files", note("Cannot list this directory")));
         return;
       }
       menu.render(renderEntries(body.matches ?? []));
     } catch {
-      if (!path) showLocal(query);
+      if (!signal?.aborted && !controller.signal.aborted && !path)
+        showLocal(query);
     }
   }
 
   function refresh(): void {
+    if (signal?.aborted) return;
+    clearTimeout(timer);
+    search?.abort();
     const area = textarea();
     if (!area) return;
     token = extractAtQuery(area.value.slice(0, area.selectionStart));
@@ -181,7 +211,7 @@ export function setUpAtCompletion(endpoints: MenuEndpoints | null): AtMenu {
       return;
     }
     void loadIndex().then(() => {
-      if (token?.query !== query) return;
+      if (signal?.aborted || token?.query !== query) return;
       showLocal(query);
       if (index?.truncated && query !== "") {
         timer = setTimeout(

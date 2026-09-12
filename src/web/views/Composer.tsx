@@ -1,5 +1,6 @@
 import type { SlashCommand, SlashSource } from "@core/composer";
 import type {
+  ImageAttachment,
   ModelOption,
   Notice,
   ThinkingChoice,
@@ -188,7 +189,7 @@ export function RecalledImages({
   images,
   oob,
 }: {
-  images: { data: string; mimeType: string }[];
+  images: ImageAttachment[];
   oob?: boolean;
 }) {
   return (
@@ -210,6 +211,7 @@ export function ComposerText({ draft }: { draft?: string }) {
       id="composer-text"
       name="text"
       class="composer-textarea"
+      data-restored-draft={draft !== undefined ? "" : undefined}
       rows={1}
       placeholder="Message…"
       // The browser keyboard must not steal Enter from a phone user.
@@ -608,6 +610,7 @@ export function Composer({
   sessionId,
   cwd,
   draft,
+  images = [],
   view,
   start,
   status,
@@ -615,6 +618,7 @@ export function Composer({
   sessionId?: string;
   cwd?: string;
   draft?: string;
+  images?: ImageAttachment[];
   /** The session this composer belongs to: its models and running state. */
   view?: SessionView;
   /** Set on the new-session page: the model to start in this folder with. */
@@ -726,7 +730,7 @@ export function Composer({
         </div>
         <div class="composer-shell-mode" id="shell-hint" hidden />
         <span class="sr-only" role="status" id="composer-running-note" />
-        <RecalledImages images={[]} oob={false} />
+        <RecalledImages images={images} oob={false} />
       </div>
     </form>
   );
