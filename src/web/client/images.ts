@@ -47,22 +47,62 @@ export type Attachments = {
   add(files: readonly File[]): void;
   clear(): void;
   count(): number;
+  /** Removes only the Files present in this submission, not later additions. */
+  submitted(): () => void;
 };
+
+type ImageDraft = {
+  files: File[];
+  pending: number;
+  generation: number;
+  changed: Set<() => void>;
+};
+const imageDrafts = new Map<string, ImageDraft>();
 
 export function setUpImages(
   changed: () => void,
   owner: ParentNode = document,
   signal?: AbortSignal,
+  storageKey?: string,
+  restored = false,
 ): Attachments {
+  let key = storageKey;
   const input = owner.querySelector<HTMLInputElement>("#image-input");
   const previews = owner.querySelector<HTMLElement>("#image-previews");
-  const attached: File[] = [];
+  const draft = (key === undefined ? undefined : imageDrafts.get(key)) ?? {
+    files: [],
+    pending: 0,
+    generation: 0,
+    changed: new Set<() => void>(),
+  };
+  if (key !== undefined) imageDrafts.set(key, draft);
+  if (restored) {
+    draft.files.length = 0;
+    draft.pending = 0;
+    draft.generation += 1;
+  }
+  document.body.addEventListener(
+    "web-pi:session-created",
+    (event) => {
+      const detail = (event as CustomEvent<{ cwd?: string; id?: string }>)
+        .detail;
+      if (!detail?.id || key !== `new:${detail.cwd ?? ""}`) return;
+      imageDrafts.delete(key);
+      key = detail.id;
+      imageDrafts.set(key, draft);
+    },
+    { signal },
+  );
+  const attached = draft.files;
   let initializing = true;
-  let generation = 0;
+  draft.changed.add(paint);
+  const notify = () => {
+    for (const paint of draft.changed) paint();
+  };
   signal?.addEventListener(
     "abort",
     () => {
-      generation += 1;
+      draft.changed.delete(paint);
       for (const image of previews?.querySelectorAll("img") ?? [])
         URL.revokeObjectURL(image.src);
     },
@@ -104,7 +144,7 @@ export function setUpImages(
           const at = attached.indexOf(file);
           if (at === -1) return;
           attached.splice(at, 1);
-          paint();
+          notify();
         },
         { signal },
       );
@@ -120,8 +160,8 @@ export function setUpImages(
 
   function add(files: readonly File[]): void {
     if (signal?.aborted) return;
-    const version = generation;
-    const room = MAX_IMAGES - attached.length;
+    const generation = draft.generation;
+    const room = MAX_IMAGES - attached.length - draft.pending;
     const accepted = files
       .filter((file) => file.type.startsWith("image/"))
       .slice(0, Math.max(room, 0));
@@ -129,8 +169,11 @@ export function setUpImages(
       showToast(`At most ${String(MAX_IMAGES)} images per message.`, "warning");
     }
     if (accepted.length === 0) return;
+    draft.pending += accepted.length;
+    // Compression belongs to the draft, not to whichever form is mounted.
     void Promise.all(accepted.map(downscale)).then((processed) => {
-      if (signal?.aborted || version !== generation) return;
+      if (generation !== draft.generation) return;
+      draft.pending -= accepted.length;
       const problem = imageLimitError(
         [...attached, ...processed].map((file) => ({
           mimeType: file.type,
@@ -142,7 +185,7 @@ export function setUpImages(
         return;
       }
       attached.push(...processed);
-      paint();
+      notify();
     });
   }
 
@@ -206,23 +249,37 @@ export function setUpImages(
     target.replaceChildren();
     if (recalled.length > 0) {
       attached.push(...recalled);
-      paint();
+      notify();
     }
   };
   document.body.addEventListener("htmx:after:settle", drainRecalled, {
     signal,
   });
   drainRecalled();
+  paint();
   initializing = false;
 
   return {
     add,
     clear() {
-      generation += 1;
+      draft.generation += 1;
+      draft.pending = 0;
       attached.length = 0;
-      paint();
+      notify();
     },
     count: () => attached.length,
+    submitted() {
+      const generation = draft.generation;
+      const sent = new Set(attached);
+      return () => {
+        if (draft.generation !== generation) return;
+        for (let index = attached.length - 1; index >= 0; index -= 1) {
+          const file = attached[index];
+          if (file && sent.has(file)) attached.splice(index, 1);
+        }
+        notify();
+      };
+    },
   };
 }
 

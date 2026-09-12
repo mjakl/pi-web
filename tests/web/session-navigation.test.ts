@@ -1,0 +1,587 @@
+import { afterEach, expect, it } from "vitest";
+import type {
+  HTMLElement,
+  HTMLInputElement,
+  HTMLTextAreaElement,
+  HTMLFormElement,
+} from "happy-dom";
+import { createFakeWorld } from "@adapters/fake";
+import { createWorkspace } from "@core/workspace";
+import { createWebApp } from "@web/app";
+import { htmxBrowser, type Transport } from "#/web/htmx4-browser";
+
+const browsers: Awaited<ReturnType<typeof htmxBrowser>>[] = [];
+afterEach(async () => {
+  for (const browser of browsers.splice(0)) await browser.close();
+});
+
+async function fixture(wrap: (transport: Transport) => Transport = (t) => t) {
+  const world = createFakeWorld({
+    sessions: ["s1", "s2", "s3"].map((id) => ({
+      summary: {
+        id,
+        cwd: "/fixture",
+        name: id,
+        modifiedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        fileSize: 0,
+      },
+      entries: [],
+    })),
+    reply: () => "Fixture answer",
+    delayMs: 2,
+  });
+  const workspace = createWorkspace(world);
+  const app = createWebApp({
+    workspace,
+    renderIntervalMs: 1,
+    defaultCwd: "/fixture",
+    staticRoot: "static",
+  });
+  const browser = await htmxBrowser(
+    await (await app.request("/sessions/s1")).text(),
+    wrap((request) => app.request(request)),
+  );
+  browsers.push(browser);
+  browser.window.happyDOM.settings.navigation.disableMainFrameNavigation = true;
+  return { ...browser, workspace, world, app };
+}
+type Browser = Awaited<ReturnType<typeof fixture>>;
+function click(b: Browser, id: string) {
+  b.document.querySelector<HTMLElement>(`#row-${id} a`)?.click();
+}
+async function displayed(b: Browser, id: string) {
+  await expect
+    .poll(
+      () =>
+        b.document.querySelector("main")?.getAttribute("data-session-id") ?? "",
+    )
+    .toBe(id);
+  await expect
+    .poll(() => b.window.location.pathname)
+    .toBe(id ? `/sessions/${id}` : "/new");
+  await expect
+    .poll(() =>
+      b.document.querySelector("#composer")?.hasAttribute("data-htmx-powered"),
+    )
+    .toBe(true);
+}
+function draft(b: Browser, text: string, image?: string) {
+  b.window.eval(
+    `document.querySelector('#composer-text').value=${JSON.stringify(text)};document.querySelector('#composer-text').dispatchEvent(new Event('input',{bubbles:true}));`,
+  );
+  if (image)
+    b.window.eval(
+      `{const transfer=new DataTransfer();transfer.items.add(new File([${JSON.stringify(image)}],'image.png',{type:'image/png'}));const input=document.querySelector('#image-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));}`,
+    );
+}
+function text(b: Browser) {
+  return b.document.querySelector<HTMLTextAreaElement>("#composer-text")?.value;
+}
+function selected(b: Browser, id: string) {
+  return (
+    b.document
+      .querySelector(`#row-${id}`)
+      ?.getAttribute("style")
+      ?.includes("var(--bg-selected)") ?? false
+  );
+}
+
+it("keeps same-session clicks local and preserves the shell across session switches", async () => {
+  const b = await fixture();
+  const shell = b.document.querySelector("#session-sidebar"),
+    files = b.document.querySelector("#file-panel"),
+    main = b.document.querySelector("main");
+  b.window.eval(
+    `window.wasHandled=false;document.addEventListener('click',event=>{window.wasHandled=event.defaultPrevented;event.preventDefault();},{once:true});document.querySelector('#row-s1 a').click()`,
+  );
+  expect(b.window.eval("window.wasHandled")).toBe(true);
+  expect(b.document.querySelector("main")).toBe(main);
+  expect(
+    b.requests.filter((r) => new URL(r.url).pathname === "/sessions/s1"),
+  ).toHaveLength(0);
+  click(b, "s2");
+  await displayed(b, "s2");
+  expect(b.document.querySelector("#session-sidebar")).toBe(shell);
+  expect(b.document.querySelector("#file-panel")).toBe(files);
+  expect(b.document.querySelectorAll("#file-panel")).toHaveLength(1);
+  click(b, "s1");
+  await displayed(b, "s1");
+  expect(b.document.querySelector("#file-panel")).toBe(files);
+});
+
+it("flushes the latest text on pagehide rather than waiting 300ms", async () => {
+  const b = await fixture();
+  draft(b, "just typed");
+  b.window.dispatchEvent(new b.window.Event("pagehide"));
+  expect(b.window.localStorage.getItem("web-pi:draft:s1")).toBe("just typed");
+});
+
+it("retains independent text and File drafts across immediate switches, including new chat", async () => {
+  const b = await fixture();
+  b.window.eval(
+    `window.revoked=[];const revoke=URL.revokeObjectURL.bind(URL);URL.revokeObjectURL=url=>{window.revoked.push(url);revoke(url);}`,
+  );
+  draft(b, "draft A", "bytes A");
+  click(b, "s2");
+  await displayed(b, "s2");
+  expect(text(b)).toBe("");
+  draft(b, "draft B", "bytes B");
+  click(b, "s1");
+  await displayed(b, "s1");
+  expect(text(b)).toBe("draft A");
+  expect(
+    await b.window.eval(
+      `document.querySelector('#image-input').files[0].text()`,
+    ),
+  ).toBe("bytes A");
+  expect(b.window.eval("window.revoked.length > 0")).toBe(true);
+  b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
+  await displayed(b, "");
+  expect(b.window.location.search).toBe("?cwd=%2Ffixture");
+  draft(b, "new draft", "new bytes");
+  click(b, "s2");
+  await displayed(b, "s2");
+  expect(text(b)).toBe("draft B");
+  expect(
+    await b.window.eval(
+      `document.querySelector('#image-input').files[0].text()`,
+    ),
+  ).toBe("bytes B");
+  b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
+  await displayed(b, "");
+  expect(text(b)).toBe("new draft");
+  expect(
+    await b.window.eval(
+      `document.querySelector('#image-input').files[0].text()`,
+    ),
+  ).toBe("new bytes");
+});
+
+it("keeps old content until ready and rejects a reversed obsolete navigation, including its trigger", async () => {
+  const release = Promise.withResolvers<undefined>();
+  let delayed: Request | undefined;
+  const b = await fixture((transport) => async (request) => {
+    const response = await transport(request);
+    if (new URL(request.url).pathname === "/sessions/s2") {
+      delayed = request;
+      await release.promise;
+      response.headers.set(
+        "HX-Trigger",
+        JSON.stringify({
+          "web-pi:session-created": { cwd: "/fixture", id: "obsolete" },
+        }),
+      );
+    }
+    return response;
+  });
+  const main = b.document.querySelector("main");
+  b.window.eval(
+    `window.obsoleteEvents=0;document.addEventListener('web-pi:session-created',()=>window.obsoleteEvents++);document.addEventListener('htmx:finally:request',event=>{if(new URL(event.detail.ctx.request.action,location.href).pathname==='/sessions/s2')window.obsoleteFinished=true;});`,
+  );
+  click(b, "s2");
+  await expect.poll(() => !!delayed).toBe(true);
+  expect(b.document.querySelector("main")).toBe(main);
+  try {
+    click(b, "s3");
+    await displayed(b, "s3");
+    expect(delayed?.signal.aborted).toBe(true);
+  } finally {
+    release.resolve(undefined);
+  }
+  await expect
+    .poll(() => b.window.eval("window.obsoleteFinished") === true)
+    .toBe(true);
+  expect(
+    b.document.querySelector("main")?.getAttribute("data-session-id"),
+  ).toBe("s3");
+  expect(b.window.location.pathname).toBe("/sessions/s3");
+  expect(b.window.eval("window.obsoleteEvents")).toBe(0);
+});
+
+it("uses native history restoration without replacing the shell", async () => {
+  const b = await fixture();
+  const shell = b.document.querySelector("#session-sidebar");
+  click(b, "s2");
+  await displayed(b, "s2");
+  click(b, "s3");
+  await displayed(b, "s3");
+  b.window.history.back();
+  await displayed(b, "s2");
+  b.window.history.back();
+  await displayed(b, "s1");
+  b.window.history.forward();
+  await displayed(b, "s2");
+  expect(b.document.querySelector("#session-sidebar")).toBe(shell);
+});
+
+it("keeps selection on the displayed session across global stream, star and lazy rows", async () => {
+  const b = await fixture();
+  await b.workspace.send("s1", "hello");
+  await expect
+    .poll(() => b.document.querySelector("#row-s1")?.textContent)
+    .toContain("2 msgs");
+  await expect.poll(() => selected(b, "s1")).toBe(true);
+  click(b, "s2");
+  await displayed(b, "s2");
+  await b.workspace.send("s1", "background");
+  await expect
+    .poll(() => b.document.querySelector("#row-s1")?.textContent)
+    .toContain("4 msgs");
+  expect(selected(b, "s1")).toBe(false);
+  expect(selected(b, "s2")).toBe(true);
+  await b.workspace.send("s2", "foreground");
+  await expect
+    .poll(() => b.document.querySelector("#messages .answer-star-toggle"))
+    .not.toBeNull();
+  b.document
+    .querySelector<HTMLElement>("#messages .answer-star-toggle")
+    ?.click();
+  await expect
+    .poll(() =>
+      b.document.querySelector('#row-s2 [aria-label="1 starred answers"]'),
+    )
+    .not.toBeNull();
+  await expect.poll(() => selected(b, "s2")).toBe(true);
+  await b.window.eval(
+    `htmx.ajax('GET','/sessions/s1/row?active=s1',{target:'#row-s1',swap:'outerHTML'})`,
+  );
+  expect(selected(b, "s1")).toBe(false);
+  expect(selected(b, "s2")).toBe(true);
+});
+
+it.each(["accepted", "rejected"])(
+  "handles a late %s submission only for its originating draft",
+  async (outcome) => {
+    const release = Promise.withResolvers<undefined>();
+    let pending: Request | undefined;
+    const b = await fixture((transport) => async (request) => {
+      if (new URL(request.url).pathname === "/sessions/s1/prompt") {
+        pending = request;
+        await release.promise;
+        return outcome === "accepted"
+          ? new Response(null, {
+              status: 204,
+              headers: { "X-Web-Pi-Submission": "accepted" },
+            })
+          : new Response("rejected", { status: 400 });
+      }
+      return transport(request);
+    });
+    draft(b, "submitted A", "image A");
+    await expect
+      .poll(
+        () =>
+          b.document.querySelector<HTMLInputElement>("#image-input")?.files
+            ?.length,
+      )
+      .toBe(1);
+    b.document.querySelector<HTMLFormElement>("#composer")?.requestSubmit();
+    await expect.poll(() => !!pending).toBe(true);
+    try {
+      click(b, "s2");
+      await displayed(b, "s2");
+      draft(b, "keep B", "image B");
+    } finally {
+      release.resolve(undefined);
+    }
+    await expect
+      .poll(() => b.window.localStorage.getItem("web-pi:draft:s1"))
+      .toBe(outcome === "accepted" ? null : "submitted A");
+    expect(text(b)).toBe("keep B");
+    click(b, "s1");
+    await displayed(b, "s1");
+    expect(text(b)).toBe(outcome === "accepted" ? "" : "submitted A");
+    expect(
+      b.document.querySelector<HTMLInputElement>("#image-input")?.files?.length,
+    ).toBe(outcome === "accepted" ? 0 : 1);
+  },
+);
+
+it("suppresses obsolete HX-Trigger headers when cancellation interrupts response body reading", async () => {
+  const b = await fixture((transport) => async (request) => {
+    if (new URL(request.url).pathname !== "/sessions/s2")
+      return transport(request);
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          request.signal.addEventListener(
+            "abort",
+            () => {
+              controller.error(new DOMException("aborted", "AbortError"));
+            },
+            { once: true },
+          );
+        },
+      }),
+      { headers: { "HX-Trigger": "obsolete-header" } },
+    );
+  });
+  b.window
+    .eval(`window.headersAdmitted=false;window.headerEffects=0;window.finishedOld=false;
+    document.addEventListener('obsolete-header',()=>window.headerEffects++);
+    document.addEventListener('htmx:before:response',e=>{if(new URL(e.detail.ctx.request.action,location.href).pathname==='/sessions/s2')window.headersAdmitted=true});
+    document.addEventListener('htmx:finally:request',e=>{if(new URL(e.detail.ctx.request.action,location.href).pathname==='/sessions/s2')window.finishedOld=true});`);
+  click(b, "s2");
+  await expect.poll(() => Boolean(b.window.eval("headersAdmitted"))).toBe(true);
+  click(b, "s3");
+  await displayed(b, "s3");
+  await expect.poll(() => Boolean(b.window.eval("finishedOld"))).toBe(true);
+  expect(b.window.eval("headerEffects")).toBe(0);
+});
+
+it("keeps the displayed URL and owner when a navigation or Back target is missing", async () => {
+  const b = await fixture();
+  b.world.store.delete("s2");
+  const main = b.document.querySelector("main");
+  click(b, "s2");
+  await expect
+    .poll(() => b.document.querySelector("#toasts")?.textContent)
+    .toContain("Could not open");
+  expect(b.window.location.pathname).toBe("/sessions/s1");
+  expect(b.document.querySelector("main")).toBe(main);
+  click(b, "s3");
+  await displayed(b, "s3");
+  b.world.store.delete("s1");
+  b.window.history.back();
+  await expect.poll(() => b.window.location.pathname).toBe("/sessions/s3");
+  expect(
+    b.document.querySelector("main")?.getAttribute("data-session-id"),
+  ).toBe("s3");
+});
+
+it("uses the selected worktree for New Session while keeping the current session open", async () => {
+  const b = await fixture();
+  b.world.projects.resolve = (cwd) =>
+    Promise.resolve({
+      root: "/fixture",
+      branch: cwd === "/fixture.wt" ? "topic" : null,
+      isWorktree: cwd === "/fixture.wt",
+      isTopLevel: cwd !== "/fixture.wt",
+    });
+  const main = b.document.querySelector("main");
+  draft(b, "session draft");
+  await b.window.eval(
+    `htmx.ajax('GET','/sidebar?project=%2Ffixture&cwd=%2Ffixture.wt',{source:'#project-select',target:'#project-nav',swap:'outerHTML'})`,
+  );
+  expect(b.document.querySelector("main")).toBe(main);
+  expect(text(b)).toBe("session draft");
+  expect(
+    b.document.querySelector("#project-select")?.getAttribute("data-cwd"),
+  ).toBe("/fixture.wt");
+  b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
+  await displayed(b, "");
+  expect(b.document.querySelector("main")?.getAttribute("data-cwd")).toBe(
+    "/fixture.wt",
+  );
+  expect(text(b)).toBe("");
+  expect(b.window.location.search).toBe("?cwd=%2Ffixture.wt");
+  expect(
+    b.document.querySelector("#file-explorer")?.getAttribute("data-cwd"),
+  ).toBe("/fixture.wt");
+  expect(
+    b.document.querySelector("#file-explorer")?.getAttribute("hx-get"),
+  ).toBe("/files/explorer?cwd=%2Ffixture.wt");
+});
+
+it("rejects a late folder-picker response without committing preference cookies", async () => {
+  const release = Promise.withResolvers<undefined>();
+  let started = false;
+  let cookie: string | null | undefined;
+  const b = await fixture((transport) => async (request) => {
+    if (new URL(request.url).pathname !== "/sidebar") return transport(request);
+    started = true;
+    await release.promise;
+    const response = await transport(request);
+    cookie = response.headers.get("Set-Cookie");
+    return response;
+  });
+  void b.window.eval(
+    `htmx.ajax('GET','/sidebar?project=%2Ffixture&cwd=%2Fstale',{source:'#project-select',target:'#project-nav',swap:'outerHTML'})`,
+  );
+  await expect.poll(() => started).toBe(true);
+  click(b, "s2");
+  await displayed(b, "s2");
+  release.resolve(undefined);
+  await expect.poll(() => cookie).toBeNull();
+  expect(
+    b.document.querySelector("#project-select")?.getAttribute("data-cwd"),
+  ).toBe("/fixture");
+  expect(
+    b.document.querySelector("main")?.getAttribute("data-session-id"),
+  ).toBe("s2");
+});
+
+it("does not clear the remembered session when a settings modal mounts its own main", async () => {
+  const b = await fixture();
+  expect(b.document.cookie).toContain("web-pi-session=s1");
+  await b.window.eval(
+    `htmx.ajax('GET','/settings',{target:'body',swap:'outerHTML'})`,
+  );
+  expect(b.document.querySelector("main.settings-dialog-main")).not.toBeNull();
+  expect(
+    b.document
+      .querySelector("#session-region main")
+      ?.getAttribute("data-session-id"),
+  ).toBe("s1");
+  expect(b.document.cookie).toContain("web-pi-session=s1");
+});
+
+it("keeps the shell and other drafts when cloning or deleting the displayed session", async () => {
+  const b = await fixture();
+  await b.workspace.send("s1", "seed");
+  await expect
+    .poll(() => b.document.querySelector("#messages")?.textContent)
+    .toContain("Fixture answer");
+  const shell = b.document.querySelector("#session-sidebar");
+  const panel = b.document.querySelector("#file-panel");
+  draft(b, "keep original", "original image");
+  await b.window.eval(
+    `htmx.ajax('POST','/sessions/s1/clone',{source:'#row-s1',target:'#row-s1',swap:'none'})`,
+  );
+  await displayed(b, "copy-1");
+  expect(b.document.querySelector("#session-sidebar")).toBe(shell);
+  expect(b.document.querySelector("#file-panel")).toBe(panel);
+  click(b, "s1");
+  await displayed(b, "s1");
+  expect(text(b)).toBe("keep original");
+  expect(
+    b.document.querySelector<HTMLInputElement>("#image-input")?.files?.length,
+  ).toBe(1);
+  await b.window.eval(
+    `htmx.ajax('POST','/sessions/s1/delete',{source:'#row-s1',target:'#row-s1',swap:'none'})`,
+  );
+  await displayed(b, "");
+  expect(b.document.querySelector("#session-sidebar")).toBe(shell);
+  expect(b.document.querySelector("#file-panel")).toBe(panel);
+  expect(b.document.cookie).not.toContain("web-pi-session=");
+});
+
+it("retains a pending image decode across owner replacement", async () => {
+  const b = await fixture();
+  b.window
+    .eval(`window.decode=Promise.withResolvers();window.createImageBitmap=()=>window.decode.promise;
+    const transfer=new DataTransfer();transfer.items.add(new File([new Uint8Array(2*1024*1024)],'large.png',{type:'image/png'}));
+    const input=document.querySelector('#image-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));`);
+  click(b, "s2");
+  await displayed(b, "s2");
+  click(b, "s1");
+  await displayed(b, "s1");
+  b.window.eval(
+    `window.decode.reject(new Error('fixture decoder unavailable'));`,
+  );
+  await expect
+    .poll(
+      () =>
+        b.document.querySelector<HTMLInputElement>("#image-input")?.files
+          ?.length,
+    )
+    .toBe(1);
+  expect(
+    b.document.querySelector<HTMLInputElement>("#image-input")?.files?.[0]
+      ?.size,
+  ).toBe(2 * 1024 * 1024);
+});
+
+it("restores folder-scoped new drafts and refreshes sidebar context on native Back", async () => {
+  const b = await fixture();
+  const other = b.world.store.get("s3");
+  if (!other) throw new Error("Missing fixture session");
+  other.summary.cwd = "/other";
+  const shell = b.document.querySelector("#session-sidebar");
+  const files = b.document.querySelector("#file-panel");
+  b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
+  await displayed(b, "");
+  draft(b, "new in fixture", "fixture image");
+  await b.window.eval(
+    `htmx.ajax('GET','/sidebar?project=%2Fother&cwd=%2Fother',{source:'#project-select',target:'#project-nav',swap:'outerHTML'})`,
+  );
+  await expect
+    .poll(() => b.document.querySelector("main")?.getAttribute("data-cwd"))
+    .toBe("/other");
+  expect(text(b)).toBe("");
+  draft(b, "new in other", "other image");
+  await b.workspace.send("s3", "background in other");
+  await expect
+    .poll(() => b.document.querySelector("#row-s3")?.textContent)
+    .toContain("2 msgs");
+  expect(
+    b.document.querySelector("#project-select")?.getAttribute("title"),
+  ).toBe("/other");
+  b.window.history.back();
+  await expect
+    .poll(() => b.document.querySelector("main")?.getAttribute("data-cwd"))
+    .toBe("/fixture");
+  expect(text(b)).toBe("new in fixture");
+  await expect
+    .poll(() =>
+      b.document.querySelector("#project-select")?.getAttribute("title"),
+    )
+    .toBe("/fixture");
+  expect(
+    await b.window.eval(
+      `document.querySelector('#image-input').files[0].text()`,
+    ),
+  ).toBe("fixture image");
+  b.window.history.forward();
+  await expect
+    .poll(() => b.document.querySelector("main")?.getAttribute("data-cwd"))
+    .toBe("/other");
+  expect(text(b)).toBe("new in other");
+  expect(b.document.querySelector("#session-sidebar")).toBe(shell);
+  expect(b.document.querySelector("#file-panel")).toBe(files);
+});
+
+it("does not let an old submit navigate while the reader's newer choice is loading", async () => {
+  const releasePost = Promise.withResolvers<undefined>();
+  const releasePage = Promise.withResolvers<undefined>();
+  let posted = false,
+    requested = false;
+  const b = await fixture((transport) => async (request) => {
+    const path = new URL(request.url).pathname;
+    if (path === "/sessions/s1/prompt") {
+      posted = true;
+      await releasePost.promise;
+      return new Response(null, {
+        status: 200,
+        headers: {
+          "X-Web-Pi-Submission": "accepted",
+          "HX-Location": JSON.stringify({
+            path: "/sessions/s3",
+            source: "#session-region",
+            target: "#session-region",
+            swap: "outerHTML",
+          }),
+        },
+      });
+    }
+    if (path === "/sessions/s2") {
+      requested = true;
+      await releasePage.promise;
+    }
+    return transport(request);
+  });
+  draft(b, "submitted A");
+  b.document.querySelector<HTMLFormElement>("#composer")?.requestSubmit();
+  await expect.poll(() => posted).toBe(true);
+  click(b, "s2");
+  await expect.poll(() => requested).toBe(true);
+  try {
+    releasePost.resolve(undefined);
+    await expect
+      .poll(() => b.window.localStorage.getItem("web-pi:draft:s1"))
+      .toBeNull();
+    expect(
+      b.document.querySelector("main")?.getAttribute("data-session-id"),
+    ).toBe("s1");
+    expect(
+      b.requests.filter(
+        (request) => new URL(request.url).pathname === "/sessions/s3",
+      ),
+    ).toHaveLength(0);
+  } finally {
+    releasePage.resolve(undefined);
+    releasePost.resolve(undefined);
+  }
+  await displayed(b, "s2");
+});

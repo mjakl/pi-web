@@ -103,6 +103,18 @@ it.each([
       "web-pi:draft:s1",
       "unrelated old draft",
     );
+    browser.window.eval(`{
+      const area=document.querySelector('#composer-text');area.value='unrelated in-memory draft';area.dispatchEvent(new Event('input',{bubbles:true}));
+      const transfer=new DataTransfer();transfer.items.add(new File(['obsolete bytes'],'old.png',{type:'image/png'}));
+      const input=document.querySelector('#image-input');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+    }`);
+    await expect
+      .poll(
+        () =>
+          browser.document.querySelector<HTMLInputElement>("#image-input")
+            ?.files?.length,
+      )
+      .toBe(1);
     const before = required(browser.document.querySelector("#composer"));
     const button = required(
       browser.document.querySelector<HTMLButtonElement>(

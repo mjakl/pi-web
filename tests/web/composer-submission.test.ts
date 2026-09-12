@@ -7,7 +7,7 @@ import type {
   HTMLSelectElement,
 } from "happy-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { htmxBrowser, page } from "#/web/htmx4-browser";
+import { htmxBrowser } from "#/web/htmx4-browser";
 
 function required<T>(value: T | null | undefined): T {
   if (value == null) throw new Error("Missing expected test value");
@@ -71,18 +71,12 @@ async function openComposer(
   const html = await (
     await app.request(fresh ? "/new" : "/sessions/s1")
   ).text();
-  const form = required(/<form id="composer"[\s\S]*?<\/form>/.exec(html)?.[0]);
-  const browser = await htmxBrowser(
-    page(`${form}<div id="toasts"></div>`),
-    async (request) => {
-      const response = await app.request(request);
-      if (loseResponse && request.method === "POST")
-        throw new Error("Connection lost after dispatch");
-      return response;
-    },
-  );
-  // Observe redirect ordering without navigating this disposable DOM.
-  browser.window.eval("htmx._loc = { href: '' }");
+  const browser = await htmxBrowser(html, async (request) => {
+    const response = await app.request(request);
+    if (loseResponse && request.method === "POST")
+      throw new Error("Connection lost after dispatch");
+    return response;
+  });
   browsers.push(browser);
   return browser;
 }
@@ -229,7 +223,10 @@ describe("composer acceptance through shipped HTMX and real routes", () => {
       expect(area(browser).value).toBe("");
       expect(notices(browser)).toMatch(/Renamed|reloaded/);
       expect(prompt).not.toHaveBeenCalled();
-      expect(browser.window.eval("htmx._loc.href")).toBe("/sessions/new-1");
+      await expect
+        .poll(() => browser.window.location.pathname)
+        .toBe("/sessions/new-1");
+      await expect.poll(() => notices(browser)).toMatch(/Renamed|reloaded/);
     },
   );
 
@@ -269,7 +266,9 @@ describe("composer acceptance through shipped HTMX and real routes", () => {
       expect(clears).toBe(1);
       if (fresh) {
         expect(promotedDraft).toBeNull();
-        expect(browser.window.eval("htmx._loc.href")).toBe("/sessions/new-1");
+        await expect
+          .poll(() => browser.window.location.pathname)
+          .toBe("/sessions/new-1");
       }
     },
   );

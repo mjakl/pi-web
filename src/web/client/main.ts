@@ -9,6 +9,7 @@ import { setUpComposer } from "./composer.ts";
 import { setUpFiles } from "./files.ts";
 import { setUpRequestFields } from "./htmx.ts";
 import { setUpSseStartup } from "./sse.ts";
+import { setUpNavigation } from "./navigation.ts";
 
 setUpRequestFields();
 setUpSseStartup();
@@ -17,3 +18,4 @@ setUpSidebar();
 setUpTranscript();
 setUpComposer();
 setUpFiles();
+setUpNavigation();

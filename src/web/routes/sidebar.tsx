@@ -29,6 +29,7 @@ import {
   field,
   fileFailure,
   html,
+  sessionLocation,
   toastHeader,
 } from "./shared.ts";
 
@@ -50,7 +51,8 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
   app.get("/sidebar", async (c) => {
     const project = c.req.query("project");
     const cwd = c.req.query("cwd");
-    if (project !== undefined && project !== "") {
+    const inApp = c.req.header("HX-Request") === "true";
+    if (!inApp && project !== undefined && project !== "") {
       setCookie(c, PROJECT_COOKIE, project, {
         path: "/",
         sameSite: "Lax",
@@ -63,28 +65,39 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
         .validateFolder(cwd)
         .catch(() => undefined);
       folder = chosen?.cwd ?? cwd;
-      remember(c, CWD_COOKIE, folder);
+      if (!inApp) remember(c, CWD_COOKIE, folder);
     }
     const activeId = currentSessionId(c);
     const open =
       activeId === undefined ? undefined : await deps.workspace.row(activeId);
-    if (
-      open &&
-      project !== undefined &&
-      project !== "" &&
-      projectKeyOf(open.summary) !== project
-    ) {
-      deleteCookie(c, SESSION_COOKIE, { path: "/" });
-      c.header("HX-Redirect", "/");
-      return c.body(null, 200);
-    }
     const sidebar = await deps.workspace.sidebar(
       project === undefined ? {} : { remembered: project },
     );
+    if (
+      (open &&
+        project !== undefined &&
+        project !== "" &&
+        projectKeyOf(open.summary) !== project) ||
+      (inApp && !open && (folder !== undefined || project !== undefined))
+    ) {
+      if (inApp) {
+        const destination =
+          folder ??
+          sidebar.projects.find((entry) => entry.key === sidebar.selected)
+            ?.entryPath ??
+          currentCwd(c, sidebar);
+        sessionLocation(c, `/new?cwd=${encodeURIComponent(destination)}`);
+      } else {
+        deleteCookie(c, SESSION_COOKIE, { path: "/" });
+        c.header("HX-Redirect", "/");
+      }
+      return c.body(null, 200);
+    }
     return c.html(
       <>
         <ProjectNav
           view={sidebar}
+          cwd={folder}
           {...(activeId === undefined ? {} : { activeId })}
         />
         {folder === undefined ? null : (
@@ -176,8 +189,10 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
     if (!isSessionId(id)) return c.notFound();
     return guard(c, async () => {
       await deps.workspace.remove(id);
-      if (c.req.header("HX-Current-URL")?.includes(`/sessions/${id}`)) {
-        c.header("HX-Redirect", "/");
+      if (currentSessionId(c) === id) {
+        if (c.req.header("HX-Request") === "true")
+          sessionLocation(c, `/new?cwd=${encodeURIComponent(currentCwd(c))}`);
+        else c.header("HX-Redirect", "/");
       }
       return c.body(null, 200);
     });
@@ -188,7 +203,7 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
     if (!isSessionId(id)) return c.notFound();
     return guard(c, async () => {
       const cloned = await deps.workspace.clone(id);
-      c.header("HX-Redirect", `/sessions/${cloned}`);
+      sessionLocation(c, `/sessions/${cloned}`);
       return c.body(null, 200);
     });
   });
@@ -239,19 +254,19 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
 
   /**
    * The picker's commit. Validating is what makes a folder reachable, and the
-   * project root it resolves to is the sidebar's key for it, so both cookies
-   * are written here and the reader lands on a new session in that folder.
+   * project root it resolves to is the sidebar's key. In-app choices commit
+   * preference cookies only when the new session region mounts.
    */
   app.post("/workspaces/validate", async (c) => {
     const form = await c.req.formData();
     try {
       const chosen = await deps.workspace.validateFolder(field(form, "cwd"));
-      remember(c, CWD_COOKIE, chosen.cwd);
-      remember(c, PROJECT_COOKIE, chosen.projectRoot);
       if (c.req.header("HX-Request") !== "true") {
+        remember(c, CWD_COOKIE, chosen.cwd);
+        remember(c, PROJECT_COOKIE, chosen.projectRoot);
         return c.json({ ...chosen, projectKey: chosen.projectRoot });
       }
-      c.header("HX-Redirect", "/new");
+      sessionLocation(c, `/new?cwd=${encodeURIComponent(chosen.cwd)}`);
       return c.body(null, 200);
     } catch (error) {
       if (c.req.header("HX-Request") === "true") {
@@ -282,7 +297,6 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
       shown === undefined || shown === ""
         ? getCookie(c, PROJECT_COOKIE)
         : shown;
-    const activeId = currentSessionId(c);
     const cwd = currentCwd(c);
     return streamSSE(c, async (stream) => {
       let badges = "";
@@ -290,7 +304,6 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
       const sidebar = () =>
         deps.workspace.sidebar({
           ...(remembered === undefined ? {} : { remembered }),
-          ...(activeId === undefined ? {} : { activeId }),
         });
       const send = (event: RuntimeEvent) => {
         // A completed run is the session stream's business; this one is the
@@ -317,11 +330,7 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
                       <SessionRow {...found} />
                     </Partial>
                   ) : (
-                    <SessionList
-                      view={view}
-                      partial
-                      {...(activeId === undefined ? {} : { activeId })}
-                    />
+                    <SessionList view={view} partial />
                   ),
                 ),
               });

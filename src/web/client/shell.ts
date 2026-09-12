@@ -41,6 +41,10 @@ function setUpTitle(): void {
     name === undefined || !opened ? "Pi Web" : `${name} - Pi Web`;
 }
 
+export function closeMobileSidebar(): void {
+  if (matchMedia("(max-width: 640px)").matches) setSidebarOpen(false);
+}
+
 function setSidebarOpen(open: boolean): void {
   const element = sidebar();
   if (!element) return;
@@ -355,6 +359,9 @@ export function setUpShell(): void {
   setUpPreferences();
   setUpDialogs();
   setUpRegion("#session-sidebar", mountSidebar);
+  setUpRegion("#sidebar-toggle", () => {
+    setSidebarOpen(sidebar()?.classList.contains("sidebar-open") ?? false);
+  });
   setUpRegion(".sidebar-resize-handle", mountSidebarResize);
   setUpRegion("#mobile-toolbar-more", mountMobileToolbar);
   setUpRegion("#top-panel", mountTopPanels);

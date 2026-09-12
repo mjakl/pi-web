@@ -89,11 +89,10 @@ async function composer(app: App, id?: string) {
   const form = required(/<form id="composer"[\s\S]*?<\/form>/.exec(html)?.[0]);
   const browser = await htmxBrowser(
     page(
-      `<main ${id ? `data-session-id="${id}"` : ""}>${form}</main><div id="toasts"></div>`,
+      `<div id="session-region" hx-history-elt hx-sync="this:replace"><main ${id ? `data-session-id="${id}"` : ""}>${form}</main><div id="toasts"></div></div>`,
     ),
     (request) => app.request(request),
   );
-  browser.window.eval("htmx._loc = { href: '' }");
   browsers.push(browser);
   return browser;
 }
@@ -224,8 +223,13 @@ describe("production startup from the rendered composer", () => {
         ),
       ).click();
       await expect
-        .poll(() => browser.window.eval("htmx._loc.href") as string)
-        .toMatch(/^\/sessions\//);
+        .poll(
+          () =>
+            browser.document
+              .querySelector("main")
+              ?.getAttribute("data-session-id") ?? "",
+        )
+        .not.toBe("");
       const live = required(h.runtime.live()[0]);
       expect(live.snapshot().status.model).toMatchObject({
         provider: PROVIDER,
@@ -376,9 +380,12 @@ describe("production shell admission and persistence", () => {
         "response must not wait for shell completion",
       ).not.toBeNull();
       const live = required(h.runtime.live()[0]);
-      expect(required(response).headers.get("HX-Redirect")).toBe(
-        `/sessions/${live.id}`,
-      );
+      expect(
+        JSON.parse(required(response).headers.get("HX-Location") ?? "{}"),
+      ).toMatchObject({
+        path: `/sessions/${live.id}`,
+        target: "#session-region",
+      });
       expect(required(response).headers.get("HX-Trigger")).toContain(live.id);
       expect(required(response).headers.get("X-Web-Pi-Submission")).toBe(
         "accepted",

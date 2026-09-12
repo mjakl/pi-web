@@ -180,16 +180,19 @@ describe("the directory picker", () => {
     expect(html).toContain('id="directory-picker-panel"');
   });
 
-  it("remembers the chosen folder and its project in cookies", async () => {
+  it("navigates to the chosen folder without committing cookies before the view mounts", async () => {
     const { app } = testApp();
     const res = await app.request("/workspaces/validate", {
       ...form({ cwd: repo }),
       headers: { "HX-Request": "true" },
     });
-    expect(res.headers.get("HX-Redirect")).toBe("/new");
-    const cookies = res.headers.getSetCookie().join(" ");
-    expect(cookies).toContain(`web-pi-cwd=${encodeURIComponent(repo)}`);
-    expect(cookies).toContain("web-pi-project=");
+    expect(JSON.parse(res.headers.get("HX-Location") ?? "{}")).toEqual({
+      path: `/new?cwd=${encodeURIComponent(repo)}`,
+      source: "#session-region",
+      target: "#session-region",
+      swap: "outerHTML",
+    });
+    expect(res.headers.getSetCookie()).toEqual([]);
   });
 
   it("reports a folder it cannot use as a toast, not a broken page", async () => {

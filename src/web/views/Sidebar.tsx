@@ -191,6 +191,7 @@ export function SessionRow({
       >
         <div
           title={title}
+          data-session-title
           style={`display:flex; align-items:center; gap:5px; min-width:0; font-size:12px; font-weight:${selected ? "500" : "400"}; line-height:1.4; color:var(${summary.live === true ? "--text" : "--text-muted"})`}
         >
           <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0">
@@ -404,6 +405,7 @@ export function ProjectSelect({
         class="anchor-sidebar-project"
         popovertarget="sidebar-project-menu"
         data-project-key={view.selected ?? ""}
+        data-cwd={folder}
         title={folder}
         style={`width:100%; display:flex; align-items:center; padding:6px 10px; background:${chosen ? "var(--bg-hover)" : "rgba(37,99,235,0.06)"}; border:1px solid ${chosen ? "var(--border)" : "rgba(37,99,235,0.4)"}; border-radius:7px; cursor:pointer; font-size:12px; color:var(--text); text-align:left; transition:border-color 0.15s, background 0.15s`}
       >
@@ -678,26 +680,24 @@ function ProjectFolderRow({
 }
 
 /**
- * The project selector and its list. One element, because the shared stream
- * lives on it: switching project replaces it, which reconnects the stream —
- * with the new project in the URL, so the stream tracks what is on screen
- * rather than re-deriving the choice from the cookie.
+ * The project list owns its stream. A project switch replaces both; a folder
+ * switch can replace just the stream without losing the loaded rows.
  */
 export function ProjectNav({
   view,
   activeId,
+  cwd,
 }: {
   view: SidebarView;
-  activeId?: string;
+  activeId?: string | undefined;
+  cwd?: string | undefined;
 }) {
   return (
     <div
       id="project-nav"
       style="display:flex; min-height:0; flex:1 1 0; flex-direction:column"
-      hx-sse:connect={`/events${view.selected === undefined ? "" : `?project=${encodeURIComponent(view.selected)}`}`}
-      hx-trigger="web-pi:sse-start"
-      hx-swap="none"
     >
+      <SidebarEvents project={view.selected} cwd={cwd} />
       <SessionList
         view={view}
         {...(activeId === undefined ? {} : { activeId })}
@@ -706,11 +706,28 @@ export function ProjectNav({
   );
 }
 
-/**
- * The explorer section at the foot of the sidebar (§3.5). The tree itself is
- * fetched by the files area's routes and rendered into `#file-explorer`.
- */
-function ExplorerSection({
+export function SidebarEvents({
+  project,
+  cwd,
+}: {
+  project?: string | undefined;
+  cwd?: string | undefined;
+}) {
+  const query = new URLSearchParams();
+  if (project !== undefined) query.set("project", project);
+  if (cwd !== undefined) query.set("cwd", cwd);
+  return (
+    <div
+      id="sidebar-events"
+      hx-sse:connect={`/events?${query.toString()}`}
+      hx-trigger="web-pi:sse-start"
+      hx-swap="none"
+    />
+  );
+}
+
+/** The explorer's tree is fetched separately into #file-explorer. */
+export function ExplorerSection({
   sessionId,
   cwd,
 }: {
@@ -851,6 +868,7 @@ export function Sidebar({
             <a
               class="sidebar-icon-button"
               href="/new"
+              data-session-link
               title="New session"
               aria-label="New session"
               aria-keyshortcuts="Meta+K Control+K"
@@ -905,6 +923,7 @@ export function Sidebar({
       </div>
       <ProjectNav
         view={view}
+        cwd={cwd}
         {...(activeId === undefined ? {} : { activeId })}
       />
       {/* pi-web shows the explorer for whichever folder is selected, with or

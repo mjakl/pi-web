@@ -352,9 +352,11 @@ function SessionStatsButton({
 
 export function Shell({
   sidebar,
+  fragment,
   activeId,
   settledCursor,
   cwd,
+  cwdAvailable,
   home,
   usage,
   tokens,
@@ -364,11 +366,13 @@ export function Shell({
   children,
   overlay,
 }: {
-  sidebar: SidebarView;
+  sidebar?: SidebarView | undefined;
+  fragment?: boolean | undefined;
   activeId?: string;
   settledCursor?: string;
   /** The folder on screen: the document title is built from it. */
   cwd?: string;
+  cwdAvailable?: boolean | undefined;
   /** The reader's home folder: the workspace pill shortens paths with it. */
   home?: string;
   usage?: ContextUsage;
@@ -380,6 +384,44 @@ export function Shell({
   /** An overlay over the whole shell: the settings dialog. */
   overlay?: unknown;
 }) {
+  const region = (
+    <div
+      id="session-region"
+      hx-history-elt
+      hx-sync="this:replace"
+      style="flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0"
+    >
+      <TopBar
+        {...(activeId === undefined ? {} : { sessionId: activeId })}
+        {...(usage === undefined ? {} : { usage })}
+        {...(tokens === undefined ? {} : { tokens })}
+        {...(cwd === undefined ? {} : { cwd })}
+        {...(trust === undefined ? {} : { trust })}
+        {...(panels === undefined ? {} : { panels })}
+        {...(compactOff === true ? { compactOff } : {})}
+      />
+      <main
+        style="flex:1; overflow:hidden; position:relative"
+        data-session-id={activeId}
+        data-cwd={cwd}
+        data-cwd-available={cwdAvailable === false ? "false" : undefined}
+        hx-sse:connect={
+          activeId
+            ? `/sessions/${activeId}/events?after=${encodeURIComponent(settledCursor ?? "")}`
+            : undefined
+        }
+        hx-trigger="web-pi:sse-start"
+        hx-swap="none"
+      >
+        {children}
+        <div class="chat-notices">
+          <div id="toasts" hx-preserve />
+        </div>
+        <DialogHost />
+      </main>
+    </div>
+  );
+  if (fragment) return region;
   return (
     <div style="display:flex; width:100%; height:100%; padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); overflow:hidden; background:var(--bg)">
       <div
@@ -391,12 +433,14 @@ export function Shell({
         class="sidebar-container sidebar-open sidebar-mobile-pending"
         style="background:var(--bg-panel); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); z-index:200"
       >
-        <Sidebar
-          view={sidebar}
-          {...(activeId === undefined ? {} : { activeId })}
-          {...(cwd === undefined ? {} : { cwd })}
-          {...(home === undefined ? {} : { home })}
-        />
+        {sidebar && (
+          <Sidebar
+            view={sidebar}
+            {...(activeId === undefined ? {} : { activeId })}
+            {...(cwd === undefined ? {} : { cwd })}
+            {...(home === undefined ? {} : { home })}
+          />
+        )}
       </div>
       <div
         class="panel-resize-handle sidebar-resize-handle"
@@ -410,36 +454,7 @@ export function Shell({
         title="Resize the sidebar"
         aria-label="Resize the sidebar"
       />
-      <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0">
-        <TopBar
-          {...(activeId === undefined ? {} : { sessionId: activeId })}
-          {...(usage === undefined ? {} : { usage })}
-          {...(tokens === undefined ? {} : { tokens })}
-          {...(cwd === undefined ? {} : { cwd })}
-          {...(trust === undefined ? {} : { trust })}
-          {...(panels === undefined ? {} : { panels })}
-          {...(compactOff === true ? { compactOff } : {})}
-        />
-        <main
-          style="flex:1; overflow:hidden; position:relative"
-          data-session-id={activeId}
-          data-cwd={cwd}
-          hx-sse:connect={
-            activeId
-              ? `/sessions/${activeId}/events?after=${encodeURIComponent(settledCursor ?? "")}`
-              : undefined
-          }
-          hx-trigger="web-pi:sse-start"
-          hx-swap="none"
-        >
-          {children}
-          {/* pi-web floats notices over the transcript, clear of the rail. */}
-          <div class="chat-notices">
-            <div id="toasts" />
-          </div>
-          <DialogHost />
-        </main>
-      </div>
+      {region}
       <div class="right-panel-overlay-backdrop" aria-hidden="true" />
       <div
         class="panel-resize-handle right-panel-resize-handle"
@@ -527,12 +542,14 @@ export function IndexPage({
 
 export function NewSessionPage({
   sidebar,
+  fragment,
   view,
   draft,
   home,
   overlay,
 }: {
-  sidebar: SidebarView;
+  sidebar?: SidebarView | undefined;
+  fragment?: boolean | undefined;
   view: NewSessionView;
   draft?: string;
   home?: string;
@@ -541,7 +558,9 @@ export function NewSessionPage({
   return (
     <Shell
       sidebar={sidebar}
+      fragment={fragment}
       cwd={view.cwd}
+      cwdAvailable={view.available}
       trust={view.trust}
       {...(home === undefined ? {} : { home })}
       {...(overlay === undefined ? {} : { overlay })}
@@ -582,6 +601,7 @@ export function NewSessionPage({
 
 export function SessionPage({
   sidebar,
+  fragment,
   view,
   draft,
   images,
@@ -589,7 +609,8 @@ export function SessionPage({
   home,
   overlay,
 }: {
-  sidebar: SidebarView;
+  sidebar?: SidebarView | undefined;
+  fragment?: boolean | undefined;
   view: SessionView;
   draft?: string;
   images?: ImageAttachment[];
@@ -604,7 +625,9 @@ export function SessionPage({
   return (
     <Shell
       sidebar={sidebar}
+      fragment={fragment}
       activeId={summary.id}
+      cwdAvailable={summary.cwdAvailable}
       settledCursor={view.settledCursor}
       cwd={summary.cwd}
       usage={view.usage}

@@ -75,6 +75,7 @@ export function createWebApp(deps: WebDeps) {
     );
     return (
       c.req.query("cwd") ??
+      c.req.header("X-Web-Pi-Cwd") ??
       getCookie(c, CWD_COOKIE) ??
       project?.entryPath ??
       deps.defaultCwd
@@ -102,8 +103,10 @@ export function createWebApp(deps: WebDeps) {
       deps.workspace.viewSession(id, warnTokens(c)),
     ]);
     if (!view) return c.notFound();
-    rememberProject(c, sidebar);
-    remember(c, SESSION_COOKIE, id);
+    if (!c.req.header("HX-Request")) {
+      rememberProject(c, sidebar);
+      remember(c, SESSION_COOKIE, id);
+    }
     c.header("HX-Push-Url", `/sessions/${id}`);
     return c.render(
       <SessionPage
@@ -122,7 +125,10 @@ export function createWebApp(deps: WebDeps) {
     // The open session's row keeps its selected background through a swap.
     // The page says which that is when its own URL cannot: settings opens
     // over a session without becoming one.
-    const activeId = c.req.query("active") ?? currentSessionId(c);
+    const activeId =
+      c.req.header("X-Web-Pi-Session") === undefined
+        ? (c.req.query("active") ?? currentSessionId(c))
+        : currentSessionId(c);
     return c.html(
       <SessionRow
         {...found}

@@ -3,7 +3,14 @@
 
 import { type DialogAnswer } from "@core/extension-ui";
 import { type PackageScope, isPackageAction } from "@core/packages";
-import { isSessionId } from "@core/sessions";
+import { isSessionId, projectKeyOf } from "@core/sessions";
+import { Partial } from "@web/views/Partial";
+import {
+  ExplorerSection,
+  ProjectNav,
+  ProjectSelect,
+  SidebarEvents,
+} from "@web/views/Sidebar";
 import {
   type SkillScope,
   type SkillUpdate,
@@ -52,6 +59,48 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
     guard,
   } = ctx;
 
+  // Only a folder/project change needs fresh sidebar and explorer context.
+  // A same-folder switch preserves their existing owners and loaded pages.
+  async function navigationContext(
+    c: Context,
+    cwd: string,
+    project: string,
+    activeId?: string,
+  ) {
+    if (
+      c.req.header("X-Web-Pi-Cwd") === cwd &&
+      c.req.header("X-Web-Pi-Project") === project
+    )
+      return null;
+    const sidebar = await deps.workspace.sidebar({ remembered: project });
+    return (
+      <>
+        {c.req.header("X-Web-Pi-Project") === project ? (
+          <Partial target="#sidebar-events" swap="outerHTML">
+            <SidebarEvents project={project} cwd={cwd} />
+          </Partial>
+        ) : (
+          <Partial target="#project-nav" swap="outerHTML">
+            <ProjectNav view={sidebar} activeId={activeId} cwd={cwd} />
+          </Partial>
+        )}
+        <Partial target="#project-picker" swap="outerHTML">
+          <ProjectSelect
+            view={sidebar}
+            cwd={cwd}
+            {...(deps.home === undefined ? {} : { home: deps.home })}
+          />
+        </Partial>
+        <Partial target="#explorer-section" swap="outerHTML">
+          <ExplorerSection
+            cwd={cwd}
+            {...(activeId === undefined ? {} : { sessionId: activeId })}
+          />
+        </Partial>
+      </>
+    );
+  }
+
   /**
    * The landing page. pi-web shows the chat area whenever a folder is
    * picked, so with one to start in this is the new-session view; only
@@ -83,19 +132,31 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
   });
 
   app.get("/new", async (c) => {
-    const sidebar = await sidebarOf(c);
+    const fragment = c.req.header("HX-Target") === "div#session-region";
+    const sidebar = fragment ? undefined : await sidebarOf(c);
     const cwd = currentCwd(c, sidebar);
     const view = await deps.workspace.newSession(cwd);
-    if (view.available) remember(c, CWD_COOKIE, cwd);
-    deleteCookie(c, SESSION_COOKIE, { path: "/" });
-    return c.render(
+    if (!fragment) {
+      if (view.available) remember(c, CWD_COOKIE, cwd);
+      deleteCookie(c, SESSION_COOKIE, { path: "/" });
+    }
+    const page = (
       <NewSessionPage
         sidebar={sidebar}
+        fragment={fragment}
         view={view}
         draft={c.req.query("text")}
         {...(deps.home === undefined ? {} : { home: deps.home })}
-      />,
+      />
     );
+    return fragment
+      ? c.html(
+          <>
+            {page}
+            {await navigationContext(c, view.cwd, view.projectKey)}
+          </>,
+        )
+      : c.render(page);
   });
 
   // The two panels the top bar opens before there is a session to ask: the
@@ -170,29 +231,44 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
       ...(through === undefined ? {} : { through }),
       ...warnTokens(c),
     };
+    const fragment = c.req.header("HX-Target") === "div#session-region";
     const [sidebar, view] = await Promise.all([
-      sidebarOf(c, id),
+      fragment ? undefined : sidebarOf(c, id),
       deps.workspace.viewSession(id, options).catch(() => undefined),
     ]);
     if (!view) return c.notFound();
-    rememberProject(c, sidebar);
+    if (sidebar) rememberProject(c, sidebar);
     // Opening a session also selects its folder, so `/new` and the settings
     // page follow the reader from session to session.
-    if (view.summary.cwdAvailable !== false) {
+    if (!fragment && view.summary.cwdAvailable !== false) {
       remember(c, CWD_COOKIE, view.summary.cwd);
     }
-    remember(c, SESSION_COOKIE, id);
+    if (!fragment) remember(c, SESSION_COOKIE, id);
     const trust = await deps.workspace
       .trustStatus(view.summary.cwd)
       .catch(() => undefined);
-    return c.render(
+    const page = (
       <SessionPage
         sidebar={sidebar}
+        fragment={fragment}
         view={view}
         {...(trust === undefined ? {} : { trust })}
         {...(deps.home === undefined ? {} : { home: deps.home })}
-      />,
+      />
     );
+    return fragment
+      ? c.html(
+          <>
+            {page}
+            {await navigationContext(
+              c,
+              view.summary.cwd,
+              projectKeyOf(view.summary),
+              id,
+            )}
+          </>,
+        )
+      : c.render(page);
   });
 
   app.get("/sessions/:id/stats", async (c) => {

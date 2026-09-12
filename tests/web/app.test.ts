@@ -705,7 +705,10 @@ describe("web app", () => {
       body: form,
       headers: { "HX-Request": "true" },
     });
-    expect(res.headers.get("hx-redirect")).toBe("/sessions/new-1");
+    expect(JSON.parse(res.headers.get("HX-Location") ?? "{}")).toMatchObject({
+      path: "/sessions/new-1",
+      target: "#session-region",
+    });
     expect(res.headers.get("hx-trigger")).toContain("web-pi:session-created");
     expect(res.headers.get("hx-trigger")).toContain("/repo/two");
   });
@@ -755,7 +758,9 @@ describe("web app", () => {
       body: form,
       headers: { "HX-Request": "true" },
     });
-    expect(started.headers.get("hx-redirect")).toBe("/sessions/new-1");
+    expect(
+      JSON.parse(started.headers.get("HX-Location") ?? "{}"),
+    ).toMatchObject({ path: "/sessions/new-1", target: "#session-region" });
     expect(world.store.has("new-1")).toBe(false);
 
     let received = "";
@@ -810,7 +815,9 @@ describe("web app", () => {
         headers: { cookie: "web-pi-project=/repo/one" },
       })
     ).text();
-    expect(page).toContain('hx-sse:connect="/events?project=%2Frepo%2Fone"');
+    expect(page).toContain(
+      'hx-sse:connect="/events?project=%2Frepo%2Fone&amp;cwd=%2Frepo%2Fone"',
+    );
     expect(page).not.toContain("sse-swap=");
     expect(page).not.toContain('hx-ext="sse"');
     expect(page).not.toContain("hx-params=");
@@ -1661,15 +1668,15 @@ describe("conversation rail, shelf, and written files", () => {
         { text: "found them" },
       ],
     });
+    const baseline = await (await app.request("/sessions/s1")).text();
     const form = new FormData();
     form.set("text", "go");
     await app.request("/sessions/s1/prompt", { method: "POST", body: form });
     await new Promise((resolve) => setTimeout(resolve, 80));
     const page = await (await app.request("/sessions/s1")).text();
     expect(page).not.toContain("xxxxx");
-    // The whole page stays smaller than the one result it left out. The
-    // slack is the shell's own markup, which the pixel port roughly doubled.
-    expect(page.length).toBeLessThan(output.length + 15_000);
+    // Compare the turn's added markup, not the unrelated shell overhead.
+    expect(page.length - baseline.length).toBeLessThan(output.length);
 
     const url = deferredUrl(page);
     const opened = await (await app.request(url)).text();

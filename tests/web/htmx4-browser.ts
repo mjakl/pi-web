@@ -89,6 +89,12 @@ export async function htmxBrowser(
     }
   };`);
   window.document.write(markup);
+  // happy-dom's ID cache uses insertion order for duplicate IDs. Native
+  // hx-preserve temporarily puts the old ID in a pantry after body; browsers
+  // return the replacement in body first, as querySelector does here.
+  window.eval(
+    `document.getElementById = id => id ? document.querySelector('#' + CSS.escape(id)) : null`,
+  );
   for (const path of [HTMX_SRC, HTMX_SSE_SRC]) {
     window.eval(readFileSync(resolve(process.cwd(), path.slice(1)), "utf8"));
   }

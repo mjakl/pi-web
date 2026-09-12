@@ -1,8 +1,5 @@
-// An unsent request survives a reload. Text only: attachments are Files, and
-// a megabyte of base64 has no business in localStorage.
-
+// Text survives reloads; attachment bytes stay in the images module's memory.
 const PREFIX = "web-pi:draft:";
-
 function read(key: string): string {
   try {
     return localStorage.getItem(PREFIX + key) ?? "";
@@ -10,82 +7,120 @@ function read(key: string): string {
     return "";
   }
 }
-
 function write(key: string, value: string): void {
   try {
     if (value === "") localStorage.removeItem(PREFIX + key);
     else localStorage.setItem(PREFIX + key, value);
   } catch {
-    // Without storage the draft simply lasts for this page only.
+    /* Private storage: the in-memory draft still works. */
   }
 }
 
+export function draftKey(sessionId: string | null, cwd: string | null): string {
+  return sessionId ?? `new:${cwd ?? ""}`;
+}
+type Draft = {
+  key: string;
+  text: string;
+  version: number;
+  timer?: ReturnType<typeof setTimeout> | undefined;
+  changed: Set<() => void>;
+};
+const drafts = new Map<string, Draft>();
+function flush(draft: Draft): void {
+  clearTimeout(draft.timer);
+  draft.timer = undefined;
+  write(draft.key, draft.text);
+}
 export type Drafts = {
   save(value: string): void;
-  clear(): void;
+  clear(version?: number): boolean;
+  version(): number;
 };
 
-/**
- * A session that does not exist yet is keyed by its folder; the server tells
- * us the real id once the first prompt lands, and the draft moves with it.
- */
 export function setUpDrafts(
   sessionId: string | null,
   cwd: string | null,
   area: () => HTMLTextAreaElement | null,
   signal?: AbortSignal,
 ): Drafts {
-  let key = sessionId ?? `new:${cwd ?? ""}`;
+  const key = draftKey(sessionId, cwd);
+  const draft = drafts.get(key) ?? {
+    key,
+    text: read(key),
+    version: 0,
+    changed: new Set<() => void>(),
+  };
+  drafts.set(key, draft);
   const field = area();
   if (field) {
-    // A server-rendered draft (a rewind, a fork) outranks the stored one.
-    if (!field.hasAttribute("data-restored-draft") && field.value.trim() === "")
-      field.value = read(key);
-    else write(key, field.value);
+    if (
+      field.hasAttribute("data-restored-draft") ||
+      field.value.trim() !== ""
+    ) {
+      draft.text = field.value;
+      draft.version += 1;
+      flush(draft);
+    } else field.value = draft.text;
   }
-
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let pending: string | undefined;
+  const changed = () => {
+    const field = area();
+    if (!field || signal?.aborted || field.value === draft.text) return;
+    field.value = draft.text;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  draft.changed.add(changed);
   signal?.addEventListener(
     "abort",
     () => {
-      clearTimeout(timer);
-      if (pending !== undefined) write(key, pending);
+      flush(draft);
+      draft.changed.delete(changed);
     },
     { once: true },
   );
-
-  document.body.addEventListener(
-    "web-pi:session-created",
-    (event) => {
-      const detail = (event as CustomEvent<unknown>).detail;
-      if (typeof detail !== "object" || detail === null) return;
-      const moved = detail as { cwd?: unknown; id?: unknown };
-      if (typeof moved.id !== "string" || `new:${String(moved.cwd)}` !== key) {
-        return;
-      }
-      const pending = read(key);
-      write(key, "");
-      key = moved.id;
-      write(key, pending);
+  addEventListener(
+    "pagehide",
+    () => {
+      flush(draft);
     },
     { signal },
   );
-
+  document.body.addEventListener(
+    "web-pi:session-created",
+    (event) => {
+      const detail = (event as CustomEvent<{ cwd?: string; id?: string }>)
+        .detail;
+      if (!detail?.id || draft.key !== draftKey(null, detail.cwd ?? null))
+        return;
+      flush(draft);
+      write(draft.key, "");
+      drafts.delete(draft.key);
+      draft.key = detail.id;
+      drafts.set(draft.key, draft);
+      flush(draft);
+    },
+    { signal },
+  );
   return {
     save(value) {
       if (signal?.aborted) return;
-      pending = value;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        write(key, value);
-        pending = undefined;
+      if (value !== draft.text) {
+        draft.text = value;
+        draft.version += 1;
+      }
+      clearTimeout(draft.timer);
+      draft.timer = setTimeout(() => {
+        flush(draft);
       }, 300);
     },
-    clear() {
-      pending = undefined;
-      if (timer) clearTimeout(timer);
-      write(key, "");
+    clear(version) {
+      if (version !== undefined && version !== draft.version) return false;
+      draft.text = "";
+      draft.version += 1;
+      flush(draft);
+      for (const notify of draft.changed) notify();
+      return true;
     },
+    version: () => draft.version,
   };
 }

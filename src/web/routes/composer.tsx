@@ -38,6 +38,7 @@ import {
   field,
   html,
   readSubmission,
+  sessionLocation,
   sleep,
   toastHeader,
 } from "./shared.ts";
@@ -131,7 +132,7 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
         "HX-Trigger",
         JSON.stringify({ ...triggers, "web-pi:session-created": { cwd, id } }),
       );
-      c.header("HX-Redirect", `/sessions/${id}`);
+      sessionLocation(c, `/sessions/${id}`);
       return c.body(null, 200);
     });
   }
@@ -160,7 +161,7 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
         return c.body(null, 200);
       default: {
         const cloned = await deps.workspace.clone(id);
-        c.header("HX-Redirect", `/sessions/${cloned}`);
+        sessionLocation(c, `/sessions/${cloned}`);
         return c.body(null, 200);
       }
     }

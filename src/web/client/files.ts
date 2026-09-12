@@ -604,6 +604,9 @@ export function setUpFiles(): void {
     );
   });
   setUpRegion(".right-panel-resize-handle", mountPanelResize);
+  setUpRegion("#file-panel-toggle", () => {
+    setOpen(isOpen());
+  });
   for (const type of ["load", "loadedmetadata"]) {
     document.addEventListener(
       type,

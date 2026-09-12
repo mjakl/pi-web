@@ -7,7 +7,13 @@ import { EarlierPage, StarButton, ToolBody } from "@web/views/Items";
 import { SessionRow } from "@web/views/Sidebar";
 import { turnBusy } from "@web/views/Status";
 import { raw } from "hono/html";
-import { type RouteContext, type WebApp, errorText, field } from "./shared.ts";
+import {
+  type RouteContext,
+  type WebApp,
+  currentSessionId,
+  errorText,
+  field,
+} from "./shared.ts";
 
 export function transcriptRoutes(app: WebApp, ctx: RouteContext): void {
   const { deps, page, guard } = ctx;
@@ -131,7 +137,9 @@ export function transcriptRoutes(app: WebApp, ctx: RouteContext): void {
               starred: view.starred,
             }}
           />
-          {found ? <SessionRow {...found} oob /> : null}
+          {found ? (
+            <SessionRow {...found} activeId={currentSessionId(c) ?? ""} oob />
+          ) : null}
         </>,
       );
     });

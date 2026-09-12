@@ -147,8 +147,12 @@ change, and a named `finished` event carrying JSON with the session id and its
 project. The browser turns that into an unread dot in `localStorage` — on the
 row when the session is listed, on the project when it is not; it replaces
 pi-web's 2.5 s polling. The stream reads the project cookie at connect time, and
-the selector, the list and the stream live in one `#project-nav` element, so
-switching project replaces all three and reconnects.
+the list and its small `#sidebar-events` owner live in `#project-nav`. Switching
+project replaces the nav and reconnects; switching working folder within that
+project replaces only the stream owner and folder controls. The stream URL names
+both project and folder, never a captured selected session. Row selection is
+projected from the displayed `main` on processing and settlement, including lazy
+rows, star responses and stream updates.
 
 `src/core/transcript.ts` projects one branch into items, and `src/core/turns.ts`
 groups those items into turns, pages them, and writes the activity line. Every
@@ -178,6 +182,42 @@ so it travels in the `web-pi-warn-tokens` cookie and enters the formula as an
 argument of `contextUsage()`; the settings page renders the current value and
 the input writes the cookie. The badge, the compaction button, the statistics
 panel, and any future warning read this one value.
+
+### Session navigation and drafts
+
+Ordinary session links and the new-chat link request `#session-region`, which
+contains the top bar, session stream owner and composer. The same page views
+render that region for HTMX and the whole shell for direct loads. Same-session
+clicks only close the mobile drawer; modified clicks retain native link
+behavior. A different session replaces the region when ready, retaining the
+sidebar and file panel. Folder changes refresh sidebar/explorer context; normal
+same-folder switches keep their loaded rows, tree and file tabs.
+
+HTMX owns URL pushes, `HX-Location` after creation or a project change, and
+`hx-history-elt` restores. A same-project worktree choice leaves the session
+open and changes the next new-chat folder on `#project-select`; New Session uses
+that explicit folder. Before a session starts, a folder switch opens that
+folder's draft. Clone, custom-folder selection and deletion of the displayed
+session use the same region navigation.
+
+Navigation cancellation covers normal and history request shapes. A pending
+request identity rejects reversed responses; admission epochs also reject an old
+command's navigation/notice effects while a newer choice is still loading. The
+guard clears parsed HX headers because HTMX fires `HX-Trigger` even after
+response cancellation, including a canceled response body read. Displayed
+session identity lives on `main`, and the chosen folder lives on the picker.
+Request headers and committed preference cookies derive from those owners, not a
+second current-session store. The notice shelf uses native `hx-preserve` across
+region replacements.
+
+Text drafts remain keyed by session or `new:<cwd>`, debounced for 300 ms and
+flushed on owner departure and `pagehide`. File drafts stay in per-key memory;
+compression belongs to the draft, while previews and their object URLs belong to
+the mounted form. An accepted response clears only its originating text revision
+and sent Files, even after that form leaves. Later attachments remain. New text
+edits and explicit history-restored payloads invalidate older revisions.
+Rejected or ambiguous submissions retain the draft; no response is retried
+automatically.
 
 ## Dependency rules
 
@@ -513,9 +553,9 @@ pi-web features absent from this slice, roughly in order of value:
 
 Decisions, not gaps:
 
-- **Drafts persist text, not attachments.** An image lives in the browser as
-  bytes; keeping it across a reload would mean a second store for something the
-  reader can drop in again in a second.
+- **Attachments survive in-app navigation, not reloads.** Unsent Files stay in
+  session/folder-keyed memory. Only text reaches localStorage; image bytes are
+  never serialized there. Reloading the browser discards attachment drafts.
 - **No message layer.** pi-web's 477 English keys are one locale behind an
   indirection; web-pi is English only and the strings live where they are read,
   in the views.

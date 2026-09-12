@@ -91,8 +91,24 @@ export const SKILL_COOKIE = "web-pi-skill";
 
 export const YEAR = 60 * 60 * 24 * 365;
 
-/** The session the reader has open, for requests that only carry a referrer. */
+/** Navigate without discarding the surrounding shell or in-memory drafts. */
+export function sessionLocation(c: Context, path: string): void {
+  c.header(
+    "HX-Location",
+    JSON.stringify({
+      path,
+      source: "#session-region",
+      target: "#session-region",
+      swap: "outerHTML",
+    }),
+  );
+}
+
+/** An explicit displayed identity wins, including no open session. */
 export function currentSessionId(c: Context): string | undefined {
+  const displayed = c.req.header("X-Web-Pi-Session");
+  if (displayed !== undefined)
+    return isSessionId(displayed) ? displayed : undefined;
   const url = c.req.header("HX-Current-URL") ?? c.req.header("Referer") ?? "";
   const id = /\/sessions\/([^/?#]+)/.exec(url)?.[1];
   if (id !== undefined && isSessionId(id)) return id;

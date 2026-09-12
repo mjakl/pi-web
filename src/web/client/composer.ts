@@ -6,7 +6,8 @@ import {
   inputHistory,
 } from "@core/composer";
 import { setUpAtCompletion } from "./at-complete.ts";
-import { setUpDrafts } from "./drafts.ts";
+import { draftKey, setUpDrafts } from "./drafts.ts";
+import type { HtmxRequestCtx } from "htmx.org";
 import {
   menuEndpoints,
   replaceRange,
@@ -82,10 +83,25 @@ function lastAnswer(): string {
 }
 
 let composerSetUp = false;
+const submissions = new WeakMap<HtmxRequestCtx, () => void>();
 
 export function setUpComposer(): void {
   if (composerSetUp) return;
   composerSetUp = true;
+  // Confirmation belongs to the submitting draft even after its form leaves.
+  // This runs before navigation suppresses a detached response's UI effects.
+  document.addEventListener("htmx:before:response", (event) => {
+    const ctx = requestContext(event);
+    const clear = submissions.get(ctx);
+    submissions.delete(ctx);
+    if (
+      ctx.response &&
+      ctx.response.status >= 200 &&
+      ctx.response.status < 300 &&
+      ctx.response.headers.get("X-Web-Pi-Submission") === "accepted"
+    )
+      clear?.();
+  });
   // The file panel's `@` buttons put a path into the composer.
   document.body.addEventListener("click", (event) => {
     const chip = (event.target as HTMLElement).closest<HTMLElement>(
@@ -121,6 +137,8 @@ function mountComposer(form: HTMLElement, signal: AbortSignal): void {
     },
     form,
     signal,
+    draftKey(sessionId, cwd),
+    textarea()?.hasAttribute("data-restored-draft") === true,
   );
 
   /**
@@ -367,23 +385,21 @@ function mountComposer(form: HTMLElement, signal: AbortSignal): void {
   );
 
   form.addEventListener(
-    "htmx:after:request",
+    "htmx:before:request",
     (event) => {
-      // Only the form's own submission empties it. The toolbar's buttons — a
-      // model pick, a queue recall — are inside the form and their requests
-      // bubble through here too.
       if (event.target !== form) return;
-      const response = requestContext(event).response;
-      // HTMX 4 fires this before HX-Redirect and the session-created trigger.
-      // Missing confirmation (including an ambiguous transport failure) keeps
-      // the draft; nothing here retries the request.
-      if (
-        response &&
-        response.status >= 200 &&
-        response.status < 300 &&
-        response.headers.get("X-Web-Pi-Submission") === "accepted"
-      )
-        clearComposer();
+      const textVersion = drafts.version();
+      const clearSubmittedImages = images.submitted();
+      submissions.set(requestContext(event), () => {
+        drafts.clear(textVersion);
+        clearSubmittedImages();
+        if (!signal.aborted) {
+          slash.close();
+          at.close();
+          cycle = null;
+          syncAction();
+        }
+      });
     },
     { signal },
   );
@@ -393,7 +409,10 @@ function mountComposer(form: HTMLElement, signal: AbortSignal): void {
     (event) => {
       if (event.target !== form) return;
       showToast(
-        "Could not confirm submission. Check the conversation before sending again.",
+        requestContext(event).response?.headers.get("X-Web-Pi-Submission") ===
+          "accepted"
+          ? "Submission accepted, but the view could not refresh."
+          : "Could not confirm submission. Check the conversation before sending again.",
       );
     },
     { signal },

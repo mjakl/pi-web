@@ -46,6 +46,35 @@ function fakeCanvas(jpegBase64Length: number): void {
   );
 }
 
+describe("accepted attachment drafts", () => {
+  it("clears sent Files without removing additions made while the response was pending", async () => {
+    const { images } = await load();
+    images.add([image("sent.png")]);
+    await flush();
+    const accept = images.submitted();
+    images.add([image("later.png")]);
+    await flush();
+    accept();
+    accept();
+    expect([...(input().files ?? [])].map((file) => file.name)).toEqual([
+      "later.png",
+    ]);
+  });
+
+  it("does not remove a File deliberately re-added after clearing the draft", async () => {
+    const { images } = await load();
+    const file = image("same.png");
+    images.add([file]);
+    await flush();
+    const accept = images.submitted();
+    images.clear();
+    images.add([file]);
+    await flush();
+    accept();
+    expect([...(input().files ?? [])]).toEqual([file]);
+  });
+});
+
 describe("adding images", () => {
   it("keeps only images, paints a chip each, and fills the form's file input", async () => {
     const { images, changed } = await load();

@@ -37,11 +37,22 @@ function currentSessionId(): string {
   return document.querySelector("main")?.getAttribute("data-session-id") ?? "";
 }
 
-/**
- * The unread halo (§3.4): pi-web renders the indicator in `--info` with
- * `.session-indicator-unread`, and titles it "<status> · New activity".
- */
+function paintSelection(): void {
+  const active = currentSessionId();
+  for (const row of document.querySelectorAll<HTMLElement>(
+    ".session-row[data-session-id]",
+  )) {
+    const selected = row.dataset["sessionId"] === active;
+    row.style.background = selected ? "var(--bg-selected)" : "";
+    row.style.borderLeftColor = selected ? "var(--accent)" : "transparent";
+    const title = row.querySelector<HTMLElement>("[data-session-title]");
+    if (title) title.style.fontWeight = selected ? "500" : "400";
+  }
+}
+
+/** The unread halo uses --info and adds “New activity” to the status title. */
 function paintUnread(): void {
+  paintSelection();
   const ids = unreadIds();
   for (const row of document.querySelectorAll<HTMLElement>(
     ".session-row[data-session-id]",

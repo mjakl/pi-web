@@ -153,18 +153,18 @@ describe("sending", () => {
     setUpComposer();
     type(area(), "retry me");
     keydown(area(), "Enter");
-    htmxEvent(byId("composer"), "htmx:after:request", {
-      ctx: { response: { status: 500 } },
-    });
+    const rejected = { response: { status: 500, headers: new Headers() } };
+    htmxEvent(byId("composer"), "htmx:before:request", { ctx: rejected });
+    htmxEvent(byId("composer"), "htmx:before:response", { ctx: rejected });
     expect(area().value).toBe("retry me");
-    htmxEvent(byId("composer"), "htmx:after:request", {
-      ctx: {
-        response: {
-          status: 200,
-          headers: new Headers({ "X-Web-Pi-Submission": "accepted" }),
-        },
+    const accepted = {
+      response: {
+        status: 200,
+        headers: new Headers({ "X-Web-Pi-Submission": "accepted" }),
       },
-    });
+    };
+    htmxEvent(byId("composer"), "htmx:before:request", { ctx: accepted });
+    htmxEvent(byId("composer"), "htmx:before:response", { ctx: accepted });
     expect(area().value).toBe("");
     expect(primary().disabled).toBe(true);
   });
