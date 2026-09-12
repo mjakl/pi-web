@@ -19,6 +19,10 @@ import { setUpImages } from "./images.ts";
 import { requestContext } from "./htmx.ts";
 import { navigationIntent } from "./navigation.ts";
 import { setUpSlashMenu } from "./slash-menu.ts";
+import {
+  focusSessionInput,
+  setUpSessionInputFocus,
+} from "./session-input-focus.ts";
 import { showToast } from "./toasts.ts";
 
 // Everything the composer cannot ask the server for: which key does what, the
@@ -82,6 +86,7 @@ const submissions = new WeakMap<HtmxRequestCtx, () => void>();
 export function setUpComposer(): void {
   if (composerSetUp) return;
   composerSetUp = true;
+  setUpSessionInputFocus();
   // Confirmation belongs to the submitting draft even after its form leaves.
   // This runs before navigation suppresses a detached response's UI effects.
   document.addEventListener("htmx:before:response", (event) => {
@@ -512,35 +517,7 @@ function mountComposer(form: HTMLElement, signal: AbortSignal): void {
   setUpDropZone(images, signal);
   mirrorRunning();
   onInput();
-  focusComposer(textarea(), signal);
-}
-
-/**
- * pi-web hands the composer the caret once per opened session, on a pointer
- * device only, and never over something the reader is already using
- * (hooks/useSessionInputFocus.ts). A replaced composer owns its own focus frame.
- */
-function focusComposer(
-  area: HTMLTextAreaElement | null,
-  signal: AbortSignal,
-): void {
-  if (matchMedia("(max-width: 640px), (pointer: coarse)").matches) return;
-  if (document.querySelector("dialog[open]")) return;
-  const active = document.activeElement;
-  if (active !== null && active !== document.body) return;
-  if (!area || area.disabled) return;
-  const frame = requestAnimationFrame(() => {
-    if (signal.aborted || !area.isConnected) return;
-    area.focus({ preventScroll: true });
-    area.setSelectionRange(area.value.length, area.value.length);
-  });
-  signal.addEventListener(
-    "abort",
-    () => {
-      cancelAnimationFrame(frame);
-    },
-    { once: true },
-  );
+  focusSessionInput(textarea(), signal);
 }
 
 const COMPOSER_MENUS = new Set(["model-menu", "composer-controls"]);
