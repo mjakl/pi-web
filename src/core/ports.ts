@@ -54,6 +54,8 @@ export type SessionRead = {
 export type SessionCatalog = {
   /** Headers only, so a store with thousands of sessions stays cheap. */
   list(): Promise<SessionSummary[]>;
+  /** Working folder from the current header only; undefined if unreadable. */
+  folder(id: string): Promise<string | undefined>;
   /** Undefined when the id is unknown. */
   read(id: string, leafId?: string): Promise<SessionRead | undefined>;
   /**

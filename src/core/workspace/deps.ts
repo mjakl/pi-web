@@ -13,6 +13,7 @@ import type {
   Git,
   ModelCatalog,
   ModelListing,
+  LiveSnapshot,
   Packages,
   ProjectResolver,
   ProjectResources,
@@ -66,6 +67,7 @@ export function createShared(deps: WorkspaceDeps) {
   /** Runtime state plus the project a session's folder belongs to. */
   async function decorate(
     sessions: readonly SessionSummary[],
+    snapshots?: ReadonlyMap<string, LiveSnapshot>,
   ): Promise<SessionSummary[]> {
     const roots = new Map<string, ProjectInfo>();
     const present = new Map<string, boolean>();
@@ -85,7 +87,12 @@ export function createShared(deps: WorkspaceDeps) {
       return {
         ...session,
         ...(live
-          ? { live: true, running: live.snapshot().status.running }
+          ? {
+              live: true,
+              running:
+                snapshots?.get(session.id)?.status.running ??
+                live.snapshot().status.running,
+            }
           : {}),
         ...(project ? { projectRoot: project.root } : {}),
         ...(project?.branch ? { branch: project.branch } : {}),
@@ -114,7 +121,11 @@ export function createShared(deps: WorkspaceDeps) {
   async function summaryOf(id: string): Promise<SessionSummary | undefined> {
     const live = deps.runtime.get(id);
     if (live) {
-      const [decorated] = await decorate([live.snapshot().summary]);
+      const snapshot = live.snapshot();
+      const [decorated] = await decorate(
+        [snapshot.summary],
+        new Map([[id, snapshot]]),
+      );
       return decorated;
     }
     const stored = await deps.sessions.read(id);
@@ -140,7 +151,10 @@ export function createShared(deps: WorkspaceDeps) {
 
   async function cwdOf(sessionId: string | undefined): Promise<string> {
     if (sessionId === undefined) return "";
-    return (await summaryOf(sessionId))?.cwd ?? "";
+    const live = deps.runtime.get(sessionId);
+    return live
+      ? live.snapshot().summary.cwd
+      : ((await deps.sessions.folder(sessionId)) ?? "");
   }
 
   // --- File access -------------------------------------------------------
@@ -157,14 +171,17 @@ export function createShared(deps: WorkspaceDeps) {
     );
   }
 
-  async function nearRoots(sessionId: string | undefined): Promise<string[]> {
+  async function nearRoots(
+    sessionId: string | undefined,
+    sessionCwd?: string,
+  ): Promise<string[]> {
     const roots = [...validatedRoots];
     if (sessionId === undefined) return roots;
-    const summary = await summaryOf(sessionId);
-    if (!summary) return roots;
-    roots.push(summary.cwd);
+    const cwd = sessionCwd ?? (await cwdOf(sessionId));
+    if (cwd === "") return roots;
+    roots.push(cwd);
     // A linked worktree may reach the repository it belongs to.
-    const root = await projectRootOf(summary.cwd);
+    const root = await projectRootOf(cwd);
     if (root !== undefined) roots.push(root);
     return roots;
   }
@@ -194,6 +211,8 @@ export function createShared(deps: WorkspaceDeps) {
     path: string,
     options: {
       sessionId?: string | undefined;
+      /** Already resolved by this use case, never a caller-supplied folder. */
+      sessionCwd?: string;
       listing?: boolean;
       allowMissing?: boolean;
     } = {},
@@ -201,7 +220,7 @@ export function createShared(deps: WorkspaceDeps) {
     if (!isAbsolutePath(path)) {
       throw new FileAccessError("Path must be absolute", 400);
     }
-    const roots = await nearRoots(options.sessionId);
+    const roots = await nearRoots(options.sessionId, options.sessionCwd);
     if (!withinAny(roots, path)) roots.push(...(await everyRoot()));
     let referenced = false;
     if (!withinAny(roots, path)) {

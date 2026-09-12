@@ -8,7 +8,8 @@ import type { ToolCallView } from "@core/transcript";
 import { isEditToolName, toolFilePath } from "@core/turns";
 import { CardChevronIcon } from "@web/views/icons";
 import { Images, type ItemActions } from "./shared.tsx";
-import { Subagent } from "./subagent.tsx";
+import { Subagent, SubagentContent } from "./subagent.tsx";
+import { DeferredToolBody, toolResultUrl } from "./deferred-tool.tsx";
 
 // pi-web's tool card and its body: arguments, output, and the split diff
 // of an edit, cut to a budget with a button that fetches the whole.
@@ -190,10 +191,9 @@ function trimmedDiff(
 }
 
 /**
- * A tool call's arguments and its result. A real session holds hundreds of
- * kilobytes of these, so a settled card ships a placeholder that fetches this
- * when the reader opens it, and what arrives is still cut to a budget with a
- * button for the rest.
+ * The body fetched by a completed card, whether stored or in the live turn.
+ * Ordinary output is budgeted with a button for the rest; subagents retain
+ * their structured results, nested disclosures and raw payloads.
  */
 export function ToolBody({
   call,
@@ -204,6 +204,10 @@ export function ToolBody({
   actions?: ItemActions;
   full?: boolean;
 }) {
+  if (call.subagent)
+    return (
+      <SubagentContent view={call.subagent} call={call} actions={actions} />
+    );
   const result = call.result;
   const budgeted = actions !== undefined && full !== true;
   const more =
@@ -298,13 +302,7 @@ export function ToolCard({
   }
   const failed = call.result?.isError === true;
   const filePath = toolFilePath(call, actions?.cwd ?? "");
-  // A settled card is collapsed, so its body only has to exist once someone
-  // opens it. That is what keeps a long session's page from reaching a
-  // megabyte of tool output nobody reads.
-  const deferred =
-    actions && !actions.live && call.result
-      ? `/sessions/${actions.sessionId}/entries/${call.result.entryId}/tool-result/${encodeURIComponent(call.id)}`
-      : undefined;
+  const deferred = toolResultUrl(call, actions);
   return (
     <details
       id={`tool-${encodeURIComponent(call.id)}`}
@@ -346,20 +344,7 @@ export function ToolCard({
       {deferred === undefined ? (
         <ToolBody call={call} actions={actions} />
       ) : (
-        <div
-          class="tool-result"
-          hx-get={deferred}
-          hx-trigger="toggle once from:closest details"
-          hx-swap="outerHTML"
-        >
-          <pre
-            style={`margin:0; padding:8px 10px; color:var(--text-dim); font-size:12px; line-height:1.5; background:var(--bg-subtle); border-top:1px solid ${
-              failed ? "rgba(248,113,113,0.25)" : "rgba(34,197,94,0.2)"
-            }`}
-          >
-            Loading output…
-          </pre>
-        </div>
+        <DeferredToolBody url={deferred} failed={failed} />
       )}
     </details>
   );

@@ -5,6 +5,7 @@ import type {
   ToolCallView,
 } from "@core/transcript";
 import { CardChevronIcon } from "@web/views/icons";
+import { DeferredToolBody, toolResultUrl } from "./deferred-tool.tsx";
 import { formatDuration, type ItemActions, Markdown } from "./shared.tsx";
 
 // pi-web's SubagentToolCall: one card per `subagent` call, with the
@@ -186,7 +187,7 @@ export function Subagent({
           })
           .join(" · ")
       : "";
-  const raw = call.result?.text ?? "";
+  const deferred = toolResultUrl(call, actions);
   return (
     <SubagentDisclosure
       id={`tool-${encodeURIComponent(call.id)}`}
@@ -215,6 +216,30 @@ export function Subagent({
         </span>
       }
     >
+      {deferred ? (
+        <DeferredToolBody url={deferred} />
+      ) : (
+        <SubagentContent view={view} call={call} actions={actions} />
+      )}
+    </SubagentDisclosure>
+  );
+}
+
+export function SubagentContent({
+  view,
+  call,
+  actions,
+}: {
+  view: SubagentView;
+  call: ToolCallView;
+  actions?: ItemActions;
+}) {
+  const { calls, runs } = view;
+  const single = calls.length === 1 ? calls[0] : undefined;
+  const progress = actions?.progress?.[call.id];
+  const raw = call.result?.text ?? "";
+  return (
+    <div class="tool-result" hx-morph-skip={call.result ? true : undefined}>
       {runs === null && call.result ? (
         <div class="subagent-body subagent-result">
           <div class="subagent-section-label">Result</div>
@@ -267,6 +292,6 @@ export function Subagent({
           </SubagentDisclosure>
         ) : null}
       </div>
-    </SubagentDisclosure>
+    </div>
   );
 }

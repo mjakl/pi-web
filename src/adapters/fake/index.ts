@@ -1000,6 +1000,7 @@ export function createFakeWorld(
     store,
     sessions: {
       list: () => Promise.resolve([...store.values()].map((s) => s.summary)),
+      folder: (id) => Promise.resolve(store.get(id)?.summary.cwd),
       read: (id, leafId) => {
         const stored = store.get(id);
         return Promise.resolve(
