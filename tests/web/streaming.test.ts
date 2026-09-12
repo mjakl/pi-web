@@ -2,6 +2,7 @@ import type {
   HTMLButtonElement,
   HTMLDetailsElement,
   HTMLElement,
+  HTMLTextAreaElement,
 } from "happy-dom";
 import { afterEach, expect, it } from "vitest";
 import { htmxBrowser } from "#/web/htmx4-browser";
@@ -88,6 +89,78 @@ async function open(
   return browser;
 }
 
+it.each(["decoration", "models"] as const)(
+  "captures pending events before awaited %s and delivers later events in the next live view",
+  async (phase) => {
+    const f = await streamingFixture();
+    const { document } = await open(f);
+    await expect.poll(() => f.subscribers).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let block = true;
+    const pause = async () => {
+      if (block) {
+        block = false;
+        entered.resolve(undefined);
+        await release.promise;
+      }
+    };
+    if (phase === "decoration") {
+      const resolve = f.world.projects.resolve.bind(f.world.projects);
+      f.world.projects.resolve = async (cwd) => {
+        await pause();
+        return resolve(cwd);
+      };
+    } else {
+      const list = f.world.models.list.bind(f.world.models);
+      f.world.models.list = async (cwd) => {
+        await pause();
+        return list(cwd);
+      };
+    }
+
+    f.resetSnapshotReads();
+    f.injectPending("first pending notice", "first pending text");
+    f.emit("activity");
+    await entered.promise;
+    f.injectPending("second pending notice", "second pending text");
+    release.resolve(undefined);
+
+    await expect
+      .poll(() => document.body.textContent)
+      .toContain("first pending notice");
+    await expect
+      .poll(
+        () =>
+          document.querySelector<HTMLTextAreaElement>("#composer-text")?.value,
+      )
+      .toContain("first pending text");
+    expect(document.body.textContent).not.toContain("second pending notice");
+    expect(
+      document.querySelector<HTMLTextAreaElement>("#composer-text")?.value,
+    ).not.toContain("second pending text");
+    expect(f.snapshotReads).toBe(1);
+
+    f.resetSnapshotReads();
+    f.emit("activity");
+    await expect
+      .poll(() => document.body.textContent)
+      .toContain("second pending notice");
+    await expect
+      .poll(
+        () =>
+          document.querySelector<HTMLTextAreaElement>("#composer-text")?.value,
+      )
+      .toContain("second pending text");
+    expect(
+      document.body.textContent?.match(/first pending notice/g),
+    ).toHaveLength(1);
+    expect(f.snapshotReads).toBe(1);
+  },
+);
+
 it("renders each live update from one coherent runtime snapshot", async () => {
   const f = await streamingFixture();
   const { document } = await open(f);
@@ -141,6 +214,53 @@ it("omits completed ordinary and subagent bodies until their collapsed cards ope
   expect(toolRequests(requests, "call-rich-subagent")).toHaveLength(1);
 });
 
+it.each(["live", "stored"] as const)(
+  "serves completed ordinary and subagent bodies from an alternate %s branch",
+  async (source) => {
+    const f = await streamingFixture();
+    const alternate = f.alternateCompletedTools();
+    if (source === "stored") await f.persistAndStop();
+
+    const page = await (
+      await f.app.request(`/sessions/${f.id}?leaf=${alternate.leaf}`)
+    ).text();
+    const ordinaryUrl = `/sessions/${f.id}/entries/alternate-ordinary-result/tool-result/call-alternate-ordinary`;
+    const subagentUrl = `/sessions/${f.id}/entries/alternate-subagent-result/tool-result/call-alternate-subagent`;
+    expect(page).toContain(ordinaryUrl);
+    expect(page).toContain(subagentUrl);
+
+    const ordinary = await f.app.request(ordinaryUrl);
+    expect(ordinary.status).toBe(200);
+    expect(await ordinary.text()).toContain("alternate ordinary body");
+    const subagent = await f.app.request(subagentUrl);
+    expect(subagent.status).toBe(200);
+    expect(await subagent.text()).toContain("alternate subagent body");
+
+    for (const path of [
+      `/sessions/${f.id}/entries/alternate-ordinary-result/tool-result/call-alternate-subagent`,
+      `/sessions/${f.id}/entries/alternate-subagent-result/tool-result/call-alternate-ordinary`,
+    ]) {
+      expect((await f.app.request(path)).status).toBe(404);
+    }
+  },
+);
+
+it("does not consume pending events while rendering an alternate live branch", async () => {
+  const f = await streamingFixture();
+  const alternate = f.alternateCompletedTools();
+  f.injectPending("pending branch notice", "pending branch text");
+
+  const response = await f.app.request(
+    `/sessions/${f.id}?leaf=${alternate.leaf}`,
+  );
+  expect(response.status).toBe(200);
+  expect(f.snapshot.status.notices).toContainEqual({
+    level: "info",
+    message: "pending branch notice",
+  });
+  expect(f.snapshot.status.editorText).toEqual(["pending branch text"]);
+});
+
 it("only serves deferred subagent content for its session and matching entry and call", async () => {
   const f = await streamingFixture();
   f.richRunningTools();
@@ -151,6 +271,39 @@ it("only serves deferred subagent content for its session and matching entry and
   ]) {
     expect((await f.app.request(path)).status).toBe(404);
   }
+});
+
+it("leaves pending events for the live view after a deferred body request", async () => {
+  const f = await streamingFixture();
+  f.richRunningTools();
+  const { document } = await open(f);
+  await expect.poll(() => f.subscribers).toBe(1);
+  f.injectPending("body-safe notice", "body-safe text");
+
+  openDetails(
+    required(
+      document.querySelector<HTMLDetailsElement>("#tool-call-rich-ordinary"),
+    ),
+  );
+  await expect
+    .poll(() => document.body.textContent)
+    .toContain("ordinary-output-body:");
+  expect(f.snapshot.status.notices).toContainEqual({
+    level: "info",
+    message: "body-safe notice",
+  });
+  expect(f.snapshot.status.editorText).toEqual(["body-safe text"]);
+
+  f.emit("activity");
+  await expect
+    .poll(() => document.body.textContent)
+    .toContain("body-safe notice");
+  await expect
+    .poll(
+      () =>
+        document.querySelector<HTMLTextAreaElement>("#composer-text")?.value,
+    )
+    .toContain("body-safe text");
 });
 
 it("fetches a running tool automatically when it completes while open", async () => {
@@ -196,7 +349,16 @@ it("updates running subagent progress and fetches its result when it completes o
       ],
     },
   });
-  const { document, requests } = await open(f);
+  const { document, requests } = await open(f, undefined, (request) => {
+    if (
+      new URL(request.url).pathname.endsWith("/tool-result/call-rich-subagent")
+    ) {
+      // Arrive after the completion frame was captured, before its automatic
+      // body request. Only the next live frame may consume this batch.
+      f.injectPending("automatic-body notice", "automatic-body text");
+    }
+    return f.app.request(request);
+  });
   await expect.poll(() => f.subscribers).toBe(1);
   const card = required(
     document.querySelector<HTMLDetailsElement>("#tool-call-rich-subagent"),
@@ -231,6 +393,21 @@ it("updates running subagent progress and fetches its result when it completes o
   await expect.poll(() => card.textContent).toContain("subagent-run-output:");
   expect(card.open).toBe(true);
   expect(toolRequests(requests, "call-rich-subagent")).toHaveLength(1);
+  expect(f.snapshot.status.editorText).toEqual(["automatic-body text"]);
+  expect(f.snapshot.status.notices).toContainEqual({
+    level: "info",
+    message: "automatic-body notice",
+  });
+  f.emit("activity");
+  await expect
+    .poll(() => document.body.textContent)
+    .toContain("automatic-body notice");
+  await expect
+    .poll(
+      () =>
+        document.querySelector<HTMLTextAreaElement>("#composer-text")?.value,
+    )
+    .toContain("automatic-body text");
 });
 
 it("keeps an expanded nested subagent body, scroll and selection across live frames", async () => {

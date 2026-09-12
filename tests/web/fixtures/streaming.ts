@@ -16,11 +16,25 @@ export async function streamingFixture() {
   const live = world.runtime.get(id);
   if (!live) throw new Error("Missing fixture runtime");
   let snapshot = live.snapshot();
+  let pendingNotices = [...snapshot.status.notices];
+  let pendingEditorText = [...snapshot.status.editorText];
   let snapshotReads = 0;
   const listeners = new Set<(event: LiveEvent) => void>();
+  const currentSnapshot = (): LiveSnapshot => ({
+    ...snapshot,
+    status: {
+      ...snapshot.status,
+      notices: [...pendingNotices],
+      editorText: [...pendingEditorText],
+    },
+  });
   live.snapshot = () => {
     snapshotReads += 1;
-    return snapshot;
+    return currentSnapshot();
+  };
+  live.takePending = () => {
+    pendingNotices = [];
+    pendingEditorText = [];
   };
   live.subscribe = (listener) => {
     listeners.add(listener);
@@ -39,7 +53,15 @@ export async function streamingFixture() {
   };
   const update = (change: Partial<LiveSnapshot>, event?: LiveEvent["type"]) => {
     snapshot = { ...snapshot, ...change };
+    if (change.status) {
+      pendingNotices = [...change.status.notices];
+      pendingEditorText = [...change.status.editorText];
+    }
     if (event) emit(event);
+  };
+  const injectPending = (notice: string, editorText: string) => {
+    pendingNotices.push({ level: "info", message: notice });
+    pendingEditorText.push(editorText);
   };
   let sequence = 0;
   const finish = (text: string, notify = true) => {
@@ -182,6 +204,94 @@ export async function streamingFixture() {
       },
     });
   };
+  const alternateCompletedTools = () => {
+    const root = userEntry("branch-root", null, "choose a branch");
+    const tools = assistantEntry("alternate-tools", root.id, "", 100);
+    if (tools.type !== "message" || tools.message.role !== "assistant")
+      throw new Error("Invalid alternate tool fixture");
+    tools.message.content = [
+      {
+        type: "toolCall",
+        id: "call-alternate-ordinary",
+        name: "read",
+        arguments: { path: "alternate.txt" },
+      },
+      {
+        type: "toolCall",
+        id: "call-alternate-subagent",
+        name: "subagent",
+        arguments: {
+          calls: [{ agent: "explore", prompt: "alternate prompt" }],
+        },
+      },
+    ];
+    const ordinaryResult: SessionEntry = {
+      type: "message",
+      id: "alternate-ordinary-result",
+      parentId: tools.id,
+      timestamp: new Date().toISOString(),
+      message: {
+        role: "toolResult",
+        toolCallId: "call-alternate-ordinary",
+        toolName: "read",
+        content: [{ type: "text", text: "alternate ordinary body" }],
+        isError: false,
+        timestamp: Date.now(),
+      },
+    };
+    const subagentResult: SessionEntry = {
+      type: "message",
+      id: "alternate-subagent-result",
+      parentId: ordinaryResult.id,
+      timestamp: new Date().toISOString(),
+      message: {
+        role: "toolResult",
+        toolCallId: "call-alternate-subagent",
+        toolName: "subagent",
+        content: [{ type: "text", text: "alternate raw subagent result" }],
+        details: {
+          kind: "pi-subagent",
+          results: [
+            {
+              agent: "explore",
+              exitCode: 0,
+              messages: [
+                {
+                  role: "assistant",
+                  content: [{ type: "text", text: "alternate subagent body" }],
+                },
+              ],
+            },
+          ],
+        },
+        isError: false,
+        timestamp: Date.now(),
+      },
+    };
+    const active = assistantEntry(
+      "active-answer",
+      root.id,
+      "active branch",
+      100,
+    );
+    const entries = [root, tools, ordinaryResult, subagentResult, active];
+    update({
+      branch: [root, active],
+      entries,
+      turnStart: 2,
+      partial: undefined,
+      status: { ...snapshot.status, running: false, tools: [] },
+    });
+    return { entries, leaf: subagentResult.id };
+  };
+  const persistAndStop = async () => {
+    world.store.set(id, {
+      summary: snapshot.summary,
+      entries: [...snapshot.entries],
+      leafId: snapshot.branch.at(-1)?.id ?? null,
+    });
+    await live.stop();
+  };
   const completeRichUnfinished = () => {
     const result: SessionEntry = {
       type: "message",
@@ -267,12 +377,15 @@ export async function streamingFixture() {
     finish,
     runningTools,
     richRunningTools,
+    alternateCompletedTools,
+    persistAndStop,
     completeRichUnfinished,
+    injectPending,
     resetSnapshotReads() {
       snapshotReads = 0;
     },
     get snapshot() {
-      return snapshot;
+      return currentSnapshot();
     },
     get snapshotReads() {
       return snapshotReads;

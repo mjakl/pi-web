@@ -3,7 +3,6 @@ import { contextUsage, type ContextUsage } from "@core/context-usage";
 import { isThinkingLevel } from "@core/models";
 import type {
   EditableMessage,
-  LiveSession,
   LiveSnapshot,
   ModelListing,
   RuntimeEvent,
@@ -49,7 +48,6 @@ export function sessionUseCases({
   cwdOf,
 }: Shared) {
   function liveView(
-    live: LiveSession,
     snapshot: LiveSnapshot,
     summary: SessionSummary,
     models: ModelListing,
@@ -89,9 +87,6 @@ export function sessionUseCases({
       });
     }
     const { status } = snapshot;
-    // This view is what delivers notices and extension composer text; nothing
-    // else may consume them.
-    live.takePending();
     const starred = readStars(snapshot.entries);
     const leafId = snapshot.branch.at(-1)?.id ?? null;
     const reported = status.contextTokens;
@@ -214,19 +209,24 @@ export function sessionUseCases({
     const live = deps.runtime.get(id);
     if (live) {
       const snapshot = live.snapshot();
+      const leafId = snapshot.branch.at(-1)?.id ?? null;
+      const requestedLeaf = options.leaf;
+      const alternate = requestedLeaf !== undefined && requestedLeaf !== leafId;
+      // Consume only the captured batch, before enrichment can await newer
+      // notices or composer text. Read-only branch views deliver neither.
+      if (!alternate) live.takePending();
       const [summary] = await decorate(
         [snapshot.summary],
         new Map([[id, snapshot]]),
       );
       if (!summary) return undefined;
-      const leafId = snapshot.branch.at(-1)?.id ?? null;
-      if (options.leaf !== undefined && options.leaf !== leafId) {
+      if (alternate) {
         // Another branch of a running session: read-only, but still from the
         // runtime's entries rather than from a file it has yet to flush.
         return storedView(
           {
             summary: snapshot.summary,
-            branch: branchTo(snapshot.entries, options.leaf),
+            branch: branchTo(snapshot.entries, requestedLeaf),
             entries: snapshot.entries,
             leafId,
           },
@@ -234,13 +234,7 @@ export function sessionUseCases({
           options,
         );
       }
-      return liveView(
-        live,
-        snapshot,
-        summary,
-        await modelsFor(summary.cwd),
-        options,
-      );
+      return liveView(snapshot, summary, await modelsFor(summary.cwd), options);
     }
     const stored = await deps.sessions.read(id, options.leaf);
     if (!stored) return undefined;

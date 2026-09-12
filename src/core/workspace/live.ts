@@ -22,6 +22,7 @@ import {
   type ToolCallView,
 } from "@core/transcript";
 import { unavailableFolderMessage } from "@core/workspaces";
+import { branchTo } from "@core/session-entries";
 import type { Shared } from "./deps.ts";
 import { ForbiddenPath } from "./views.ts";
 
@@ -257,7 +258,12 @@ export function liveUseCases({
     ): Promise<ToolCallView | undefined> {
       const stored = await entriesOf(id);
       if (!stored) return undefined;
-      for (const item of projectTranscript(stored.branch).items) {
+      // A deferred card can belong to a read-only alternate leaf. Its result
+      // entry pins that branch without trusting a branch supplied by the client.
+      const branch = stored.branch.some((entry) => entry.id === entryId)
+        ? stored.branch
+        : branchTo(stored.entries, entryId);
+      for (const item of projectTranscript(branch).items) {
         if (item.kind !== "assistant") continue;
         for (const block of item.blocks) {
           if (block.kind !== "tool" || block.call.id !== callId) continue;

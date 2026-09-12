@@ -197,19 +197,11 @@ export function transcriptRoutes(app: WebApp, ctx: RouteContext): void {
       c.req.param("callId"),
     );
     if (!call) return c.notFound();
-    const view = await deps.workspace.viewSession(id);
+    const cwd = await deps.workspace.sessionFolder(id);
     return c.html(
       <ToolBody
         call={call}
-        {...(view
-          ? {
-              actions: {
-                sessionId: id,
-                cwd: view.summary.cwd,
-                starred: view.starred,
-              },
-            }
-          : {})}
+        actions={{ sessionId: id, cwd: cwd ?? "", starred: new Set() }}
         {...(c.req.query("full") === "1" ? { full: true } : {})}
       />,
     );
