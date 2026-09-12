@@ -153,7 +153,7 @@ export function AssistantMessage({
     item.errorMessage === undefined &&
     item.stopReason !== "aborted"
   ) {
-    return <></>;
+    return <HistoryActionFrame entryId={item.entryId} actions={actions} />;
   }
   const editable = actions && !actions.readOnly && !actions.live;
   const usage = usageLine(item);
@@ -170,89 +170,96 @@ export function AssistantMessage({
       ? "auto minmax(0, 1fr)"
       : "minmax(0, 1fr)";
   return (
-    <div
-      class="message-row"
-      {...(item.processHalf
-        ? {}
-        : {
-            // Pi assigns the persisted entry ID at message_end. Until then the
-            // message's own timestamp distinguishes successive partial messages.
-            id:
-              item.entryId === "partial"
-                ? `entry-partial-${String(Date.parse(item.timestamp))}`
-                : `entry-${item.entryId}`,
-          })}
-      data-role="assistant"
-      style="margin-bottom:16px"
+    <HistoryActionFrame
+      entryId={item.entryId}
+      actions={actions}
+      copyText={streaming ? undefined : answerText(item)}
     >
       <div
-        style={`font-size:11px; color:var(--text-dim); margin-bottom:4px; display:grid; grid-template-columns:${columns}; align-items:center; column-gap:6px`}
+        class="message-row"
+        {...(item.processHalf
+          ? {}
+          : {
+              // Pi assigns the persisted entry ID at message_end. Until then the
+              // message's own timestamp distinguishes successive partial messages.
+              id:
+                item.entryId === "partial"
+                  ? `entry-partial-${String(Date.parse(item.timestamp))}`
+                  : `entry-${item.entryId}`,
+            })}
+        data-role="assistant"
+        style="margin-bottom:16px"
       >
-        {star && actions ? (
-          <StarButton entryId={item.entryId} actions={actions} />
-        ) : null}
-        <span
-          title={item.model}
-          style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"
-        >
-          {item.model}
-        </span>
-        {streaming ? (
-          <>
-            <span
-              title="Estimated token count while streaming"
-              style="display:flex; align-items:center; justify-content:flex-end; gap:2px; color:var(--text); font-variant-numeric:tabular-nums; white-space:nowrap"
-            >
-              {streaming.tokens > 0 ? (
-                <>
-                  <TokenArrowIcon size={10} direction="out" />
-                  {String(streaming.tokens)}
-                </>
-              ) : null}
-            </span>
-            <span style="text-align:right; color:var(--text-dim); font-size:11px; font-weight:400; font-variant-numeric:tabular-nums; white-space:nowrap">
-              {streaming.tokensPerSecond === null
-                ? ""
-                : `${streaming.tokensPerSecond.toFixed(1)} t/s`}
-            </span>
-          </>
-        ) : null}
-      </div>
-      <Blocks item={item} actions={actions} />
-      {item.errorMessage === undefined && item.stopReason !== "error" ? null : (
         <div
-          role="alert"
-          style={`margin-top:${item.blocks.length > 0 ? "8px" : "0"}; padding:7px 10px; border:1px solid rgba(239,68,68,0.3); border-radius:6px; background:rgba(239,68,68,0.07); color:var(--danger); font-family:var(--font-mono); font-size:12px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere`}
+          style={`font-size:11px; color:var(--text-dim); margin-bottom:4px; display:grid; grid-template-columns:${columns}; align-items:center; column-gap:6px`}
         >
-          Error: {item.errorMessage ?? "Unknown provider error"}
+          {star && actions ? (
+            <StarButton entryId={item.entryId} actions={actions} />
+          ) : null}
+          <span
+            title={item.model}
+            style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"
+          >
+            {item.model}
+          </span>
+          {streaming ? (
+            <>
+              <span
+                title="Estimated token count while streaming"
+                style="display:flex; align-items:center; justify-content:flex-end; gap:2px; color:var(--text); font-variant-numeric:tabular-nums; white-space:nowrap"
+              >
+                {streaming.tokens > 0 ? (
+                  <>
+                    <TokenArrowIcon size={10} direction="out" />
+                    {String(streaming.tokens)}
+                  </>
+                ) : null}
+              </span>
+              <span style="text-align:right; color:var(--text-dim); font-size:11px; font-weight:400; font-variant-numeric:tabular-nums; white-space:nowrap">
+                {streaming.tokensPerSecond === null
+                  ? ""
+                  : `${streaming.tokensPerSecond.toFixed(1)} t/s`}
+              </span>
+            </>
+          ) : null}
         </div>
-      )}
-      {item.stopReason !== "aborted" ? null : (
-        <div style="margin-top:8px; font-size:11px; color:var(--text-dim)">
-          Stopped
+        <Blocks item={item} actions={actions} />
+        {item.errorMessage === undefined &&
+        item.stopReason !== "error" ? null : (
+          <div
+            role="alert"
+            style={`margin-top:${item.blocks.length > 0 ? "8px" : "0"}; padding:7px 10px; border:1px solid rgba(239,68,68,0.3); border-radius:6px; background:rgba(239,68,68,0.07); color:var(--danger); font-family:var(--font-mono); font-size:12px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere`}
+          >
+            Error: {item.errorMessage ?? "Unknown provider error"}
+          </div>
+        )}
+        {item.stopReason !== "aborted" ? null : (
+          <div style="margin-top:8px; font-size:11px; color:var(--text-dim)">
+            Stopped
+          </div>
+        )}
+        <WrittenFiles files={written ?? []} actions={actions} />
+        <div style="display:flex; align-items:center; gap:8px; margin-top:4px">
+          {usage === "" || streaming ? null : (
+            <div style="font-size:11px; color:var(--text-dim)">{usage}</div>
+          )}
+          {streaming || editable ? null : (
+            <CopyButton
+              text={answerText(item)}
+              class="message-actions message-copy"
+            />
+          )}
+          {streaming ||
+          item.processHalf === true ||
+          actions?.timestamps?.has(item.entryId) !== true ? null : (
+            <Time
+              value={item.timestamp}
+              style="font-size:10px; color:var(--text-dim); margin-left:auto"
+            />
+          )}
         </div>
-      )}
-      <WrittenFiles files={written ?? []} actions={actions} />
-      <div style="display:flex; align-items:center; gap:8px; margin-top:4px">
-        {usage === "" || streaming ? null : (
-          <div style="font-size:11px; color:var(--text-dim)">{usage}</div>
-        )}
-        {streaming ? null : (
-          <CopyButton
-            text={answerText(item)}
-            class="message-actions message-copy"
-          />
-        )}
-        {streaming ||
-        item.processHalf === true ||
-        actions?.timestamps?.has(item.entryId) !== true ? null : (
-          <Time
-            value={item.timestamp}
-            style="font-size:10px; color:var(--text-dim); margin-left:auto"
-          />
-        )}
       </div>
-    </div>
+    </HistoryActionFrame>
   );
 }
 

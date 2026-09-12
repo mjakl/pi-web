@@ -288,16 +288,19 @@ export function HistoryActionFrame({
   entryId,
   actions,
   children,
+  copyText,
 }: {
   entryId: string;
   actions?: ItemActions;
   children?: unknown;
+  copyText?: string;
 }) {
   if (!actions || actions.readOnly || actions.live) return <>{children}</>;
   return (
     <div class="history-action-host">
       {children}
       <div class="history-actions">
+        {copyText === undefined ? null : <CopyButton text={copyText} />}
         <HistoryActionButtons entryId={entryId} actions={actions} />
       </div>
     </div>

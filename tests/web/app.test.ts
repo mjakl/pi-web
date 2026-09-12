@@ -1725,10 +1725,10 @@ describe("transcript rendering", () => {
     expect(page).toContain('class="user-message-band"');
     expect(page).toContain('class="user-message-band-content"');
     expect(page).toContain('class="message-row"');
-    // The answer: star toggle, model label, then the hover-only copy button.
+    // The answer: star toggle, model label, then the shared action row.
     expect(page).toContain('class="answer-star-toggle"');
     expect(page).toContain("grid-template-columns:auto minmax(0, 1fr)");
-    expect(page).toContain('class="message-actions message-copy"');
+    expect(page).toContain('class="message-copy"');
     expect(page).toContain('class="history-action-host"');
     expect(page).toContain('class="history-actions"');
     expect(page).toContain('class="history-action"');

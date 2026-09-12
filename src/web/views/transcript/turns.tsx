@@ -32,14 +32,12 @@ export function Item({
       return <UserMessage item={item} actions={actions} />;
     case "assistant":
       return (
-        <HistoryActionFrame entryId={item.entryId} actions={actions}>
-          <AssistantMessage
-            item={item}
-            actions={actions}
-            starrable={starrable ?? false}
-            {...(written === undefined ? {} : { written })}
-          />
-        </HistoryActionFrame>
+        <AssistantMessage
+          item={item}
+          actions={actions}
+          starrable={starrable ?? false}
+          {...(written === undefined ? {} : { written })}
+        />
       );
     case "compaction":
       return (
