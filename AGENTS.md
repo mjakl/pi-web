@@ -44,7 +44,11 @@ src/core       rules and ports: transcript projection, session derivations
                the skill frontmatter toggle, skill install metadata, package
                list semantics, startup model preferences, tool schemas,
                pending extension dialogs and custom-UI frames, terminal key
-               encoding, the run-completion rule, workspace
+               encoding, the run-completion rule
+src/core/workspace  the inbound port, one module per use-case family
+               (sessions, live, files, config) over deps.ts, which holds the
+               ports and the shared internals; index.ts composes them into
+               the one `Workspace` object every route calls
 src/adapters   Pi SDK, filesystem, Git, and in-memory implementations of the
                ports
 src/web        Hono routes, JSX views, HTMX/SSE delivery, client bundle, the
@@ -114,8 +118,8 @@ Read `docs/architecture.md` before changing a port, the SSE contract, or context
 accounting. Shell commands run with a sanitised environment; read
 `docs/adr/0001-project-command-environment.md` before changing that.
 
-Every file request goes through `authorize` in `src/core/workspace.ts`; add a
-root through the allowed-root flow there, never a check in a route handler.
+Every file request goes through `authorize` in `src/core/workspace/deps.ts`; add
+a root through the allowed-root flow there, never a check in a route handler.
 `docs/specs/files-git.md` is the behaviour it mirrors.
 
 ## Validation

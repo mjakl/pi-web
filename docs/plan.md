@@ -24,9 +24,10 @@ missing — four deliberate gaps, no packaging ones — is in
 
 Conventions for every phase:
 
-- Server owns UI state. A feature adds a use case to `src/core/workspace.ts` (or
-  a sibling core module), a port if it needs Pi, files, Git, or the network, an
-  adapter, a route, and views. No route talks to an adapter.
+- Server owns UI state. A feature adds a use case to the family it belongs to in
+  `src/core/workspace/` (or a sibling core module), a port if it needs Pi,
+  files, Git, or the network, an adapter, a route, and views. No route talks to
+  an adapter.
 - Fragments over JSON. HTMX swaps rendered HTML; JSON endpoints exist only where
   a client script genuinely needs data (path completion, file index).
 - Client scripts live in `src/web/client/*.ts`, bundled by esbuild into
