@@ -199,6 +199,90 @@ describe("authoritative /copy through real routes and the shipped client", () =>
     expect(notices(browser)).not.toContain("Answer copied.");
   });
 
+  it.each(["lookup", "lookup error", "clipboard", "clipboard error"])(
+    "suppresses obsolete %s effects while the next navigation is still pending",
+    async (phase) => {
+      const { app } = fixture();
+      const copyGate = Promise.withResolvers<undefined>();
+      const navigationGate = Promise.withResolvers<undefined>();
+      const lookupPending = phase.startsWith("lookup");
+      let navigationArrived = false;
+      let copyReleased = false;
+      const browser = await htmxBrowser(
+        await (await app.request("/sessions/s1")).text(),
+        async (request) => {
+          const response = await app.request(request);
+          const path = new URL(request.url).pathname;
+          if (lookupPending && path.endsWith("/last-assistant-text")) {
+            await copyGate.promise;
+            copyReleased = true;
+            if (phase === "lookup error")
+              return new Response("failed", { status: 500 });
+          }
+          if (path === "/sessions/s2") {
+            navigationArrived = true;
+            await navigationGate.promise;
+          }
+          return response;
+        },
+      );
+      browsers.push(browser);
+      const write = vi
+        .spyOn(browser.window.navigator.clipboard, "writeText")
+        .mockImplementation(() =>
+          lookupPending ? Promise.resolve() : copyGate.promise,
+        );
+      browser.window.localStorage.setItem("web-pi:draft:s2", "successor draft");
+      const origin = area(browser);
+      const originalNotices = notices(browser);
+      try {
+        copy(browser);
+        await expect
+          .poll(() =>
+            lookupPending
+              ? browser.requests.some((request) =>
+                  request.url.endsWith("/last-assistant-text"),
+                )
+              : write.mock.calls.length === 1,
+          )
+          .toBe(true);
+        browser.document.querySelector('a[href="/sessions/s2"]')?.dispatchEvent(
+          new browser.window.MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+          }),
+        );
+        await expect.poll(() => navigationArrived).toBe(true);
+        expect(origin.isConnected).toBe(true);
+        expect(
+          browser.document.querySelector("main")?.dataset["sessionId"],
+        ).toBe("s1");
+        if (phase === "clipboard error")
+          copyGate.reject(new Error("clipboard denied"));
+        else copyGate.resolve(undefined);
+        if (lookupPending) await expect.poll(() => copyReleased).toBe(true);
+        // Drain the copy continuation, without releasing the held navigation.
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        expect(write).toHaveBeenCalledTimes(lookupPending ? 0 : 1);
+        expect(origin.isConnected).toBe(true);
+        expect(origin.value).toBe("/copy");
+        expect(notices(browser)).toBe(originalNotices);
+        navigationGate.resolve(undefined);
+        await expect
+          .poll(
+            () => browser.document.querySelector("main")?.dataset["sessionId"],
+          )
+          .toBe("s2");
+        expect(area(browser).value).toBe("successor draft");
+        expect(notices(browser)).toBe(originalNotices);
+      } finally {
+        copyGate.resolve(undefined);
+        navigationGate.resolve(undefined);
+      }
+    },
+  );
+
   it("coalesces repeated /copy and cancels the result when the draft changes", async () => {
     const { browser, write, release } = await open(false, true);
     copy(browser);

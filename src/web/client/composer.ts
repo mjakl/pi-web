@@ -17,6 +17,7 @@ import {
 import { setUpRegion } from "./lifecycle.ts";
 import { setUpImages } from "./images.ts";
 import { requestContext } from "./htmx.ts";
+import { navigationIntent } from "./navigation.ts";
 import { setUpSlashMenu } from "./slash-menu.ts";
 import { showToast } from "./toasts.ts";
 
@@ -223,7 +224,9 @@ function mountComposer(form: HTMLElement, signal: AbortSignal): void {
       return;
     }
     const version = drafts.version();
+    const intent = navigationIntent();
     const current = () =>
+      navigationIntent() === intent &&
       !signal.aborted &&
       form.isConnected &&
       drafts.version() === version &&

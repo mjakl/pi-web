@@ -25,10 +25,16 @@ function sessionTarget(ctx: HtmxRequestCtx): boolean {
   return ctx.target?.id === "session-region";
 }
 
+let intent = 0;
+
+/** Plain-fetch effects use the same admission generation as HTMX requests. */
+export function navigationIntent(): number {
+  return intent;
+}
+
 export function setUpNavigation(): void {
   let latest: HtmxRequestCtx | undefined;
   let cancel: (() => void) | undefined;
-  let intent = 0;
   const admitted = new WeakMap<HtmxRequestCtx, number>();
   const navigations = new WeakSet<HtmxRequestCtx>();
   // Qualify the initial new-chat history entry by folder, before leaving it.
