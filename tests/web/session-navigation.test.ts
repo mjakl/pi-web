@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type {
   HTMLElement,
   HTMLInputElement,
@@ -198,6 +198,99 @@ it("keeps old content until ready and rejects a reversed obsolete navigation, in
   expect(b.window.location.pathname).toBe("/sessions/s3");
   expect(b.window.eval("window.obsoleteEvents")).toBe(0);
 });
+
+it.each(["back", "forward", "new-chat back", "ordinary"] as const)(
+  "keeps URL and owners aligned when a same-session click cancels pending %s navigation",
+  async (direction) => {
+    const release = Promise.withResolvers<undefined>();
+    let hold = false;
+    let pending: Request | undefined;
+    const destination =
+      direction === "forward"
+        ? "/sessions/s2"
+        : direction === "new-chat back"
+          ? "/new"
+          : "/sessions/s1";
+    const b = await fixture((transport) => async (request) => {
+      const response = await transport(request);
+      if (hold && new URL(request.url).pathname === destination) {
+        pending = request;
+        await release.promise;
+      }
+      return response;
+    });
+    if (direction === "new-chat back") {
+      b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
+      await displayed(b, "");
+    }
+    click(b, "s2");
+    await displayed(b, "s2");
+    if (direction === "forward") {
+      b.window.history.back();
+      await displayed(b, "s1");
+    }
+    const selectedId = direction === "forward" ? "s1" : "s2";
+    const selectors = [
+      "#session-region",
+      "main",
+      "#composer",
+      "#session-sidebar",
+      "#file-panel",
+    ];
+    const owners = selectors.map((selector) =>
+      b.document.querySelector(selector),
+    );
+    // happy-dom replaceState truncates forward entries. Check no push here;
+    // Chromium verifies that the real history length and forward entry survive.
+    const push = vi.spyOn(b.window.history, "pushState");
+    draft(b, "keep this draft");
+    b.window.eval(
+      `window.canceledFinished=false;document.addEventListener('htmx:finally:request',event=>{if(new URL(event.detail.ctx.request.action,location.href).pathname===${JSON.stringify(destination)})window.canceledFinished=true;});`,
+    );
+    hold = true;
+    let requests = 0;
+    try {
+      if (direction === "ordinary") click(b, "s1");
+      else if (direction === "forward") b.window.history.forward();
+      else b.window.history.back();
+      await expect.poll(() => !!pending).toBe(true);
+      expect(b.window.location.pathname).toBe(
+        direction === "ordinary" ? "/sessions/s2" : destination,
+      );
+      if (direction === "new-chat back")
+        expect(b.window.location.search).toBe("?cwd=%2Ffixture");
+      expect(pending?.headers.get("HX-History-Restore-Request")).toBe(
+        direction === "ordinary" ? null : "true",
+      );
+      requests = b.requests.length;
+      const state = b.window.history.state as unknown;
+      const replace = vi.spyOn(b.window.history, "replaceState");
+      click(b, selectedId);
+      expect(pending?.signal.aborted).toBe(true);
+      expect(b.window.location.pathname).toBe(`/sessions/${selectedId}`);
+      expect(b.window.location.search).toBe("");
+      expect(push).not.toHaveBeenCalled();
+      expect(b.window.history.state).toEqual(state);
+      expect(replace).toHaveBeenCalledTimes(direction === "ordinary" ? 0 : 1);
+      expect(b.requests).toHaveLength(requests);
+    } finally {
+      release.resolve(undefined);
+    }
+    await expect
+      .poll(() => b.window.eval("window.canceledFinished") === true)
+      .toBe(true);
+    expect(b.window.location.pathname).toBe(`/sessions/${selectedId}`);
+    expect(push).not.toHaveBeenCalled();
+    expect(b.requests).toHaveLength(requests);
+    selectors.forEach((selector, index) => {
+      expect(b.document.querySelector(selector)).toBe(owners[index]);
+    });
+    expect(
+      b.document.querySelector("main")?.getAttribute("data-session-id"),
+    ).toBe(selectedId);
+    expect(text(b)).toBe("keep this draft");
+  },
+);
 
 it("uses native history restoration without replacing the shell", async () => {
   const b = await fixture();

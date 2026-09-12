@@ -72,14 +72,20 @@ export function setUpNavigation(): void {
     closeMobileSidebar();
     const main = document.querySelector<HTMLElement>("main");
     intent += 1;
+    const canceledHistory =
+      latest?.request.headers["HX-History-Restore-Request"] === "true";
     cancel?.();
     cancel = undefined;
     latest = undefined;
     if (
       url.pathname === `/sessions/${main?.dataset["sessionId"] ?? ""}` &&
       !url.search
-    )
+    ) {
+      // Back/Forward changes the address before its replacement view arrives.
+      if (canceledHistory && location.pathname !== url.pathname)
+        history.replaceState(history.state, "", displayedUrl());
       return;
+    }
     if (url.pathname === "/new" && !url.searchParams.has("cwd"))
       url.searchParams.set("cwd", chosenCwd());
     void htmx().ajax("GET", url.pathname + url.search, {
