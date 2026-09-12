@@ -151,7 +151,12 @@ function renderFrame(component: FrameComponent, width: number): string[] {
 export function createCustomUiHost(onChange: () => void = () => {}) {
   const active = new Map<
     string,
-    { component: FrameComponent; width: number; lines: string[] }
+    {
+      component: FrameComponent;
+      width: number;
+      lines: string[];
+      onClose: (() => void) | undefined;
+    }
   >();
   let counter = 0;
 
@@ -171,6 +176,7 @@ export function createCustomUiHost(onChange: () => void = () => {}) {
     } catch {
       // A component that throws on dispose is still gone.
     }
+    entry.onClose?.();
     onChange();
   }
 
@@ -180,11 +186,20 @@ export function createCustomUiHost(onChange: () => void = () => {}) {
       const entry = id === undefined ? undefined : active.get(id);
       return id === undefined || !entry ? null : { id, lines: entry.lines };
     },
-    /** Registers a component and draws its first frame. Returns its id. */
-    open(component: FrameComponent, width: number): string {
+    /**
+     * Registers a component and draws its first frame. Returns its id.
+     * `onClose` runs whenever the UI goes away, including a close the host
+     * decides on (a failing keystroke, session stop), so the extension
+     * waiting on it can be answered instead of left hanging.
+     */
+    open(
+      component: FrameComponent,
+      width: number,
+      onClose?: () => void,
+    ): string {
       counter += 1;
       const id = `c${String(counter)}`;
-      active.set(id, { component, width, lines: [] });
+      active.set(id, { component, width, lines: [], onClose });
       draw(id);
       return id;
     },

@@ -249,7 +249,11 @@ export function createExtensionUi(sink: ExtensionUiSink) {
               finish(undefined as T);
               return;
             }
-            id = custom.open(component, width);
+            // Closed by the host — a failing keystroke, session stop — the
+            // extension gets nothing back, as in pi-web, rather than waiting.
+            id = custom.open(component, width, () => {
+              finish(undefined as T);
+            });
           })
           .catch((error: unknown) => {
             sink.notify("error", `Extension UI: ${message(error)}`);

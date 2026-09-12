@@ -29,7 +29,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { runNpx } from "./npx.ts";
+import { type NpxResult, runNpx } from "./npx.ts";
 import {
   createPiProjectTrust,
   projectTrustReloadOptions,
@@ -41,6 +41,12 @@ import {
 
 const NPX_TIMEOUT_MS = 60_000;
 const run = promisify(execFile);
+
+type Fetch = typeof fetch;
+type Npx = (
+  args: string[],
+  options: { cwd?: string; timeout: number },
+) => Promise<NpxResult>;
 
 function registryBase(): string {
   return process.env["SKILLS_API_URL"] ?? SKILLS_HOME;
@@ -85,9 +91,10 @@ type GitTree = { sha?: unknown; tree?: unknown };
 async function githubTreeHash(
   install: SkillInstall,
   folder: string,
+  http: Fetch,
 ): Promise<string | { retry: true }> {
   const token = process.env["GITHUB_TOKEN"] ?? process.env["GH_TOKEN"];
-  const response = await fetch(
+  const response = await http(
     `https://api.github.com/repos/${install.source}/git/trees/${install.ref ?? "HEAD"}?recursive=1`,
     {
       headers: {
@@ -159,12 +166,12 @@ async function gitTreeHash(
   }
 }
 
-async function latestHash(install: SkillInstall): Promise<string> {
+async function latestHash(install: SkillInstall, http: Fetch): Promise<string> {
   const folder = skillFolder(install.skillPath ?? "");
   if (install.scope === "project") {
     const [owner, repo] = install.source.split("/");
     const name = install.package.slice(install.package.lastIndexOf("@") + 1);
-    const response = await fetch(
+    const response = await http(
       `${registryBase()}/api/download/${String(owner)}/${String(repo)}/${skillSlug(name)}`,
       { signal: AbortSignal.timeout(15_000) },
     );
@@ -177,12 +184,20 @@ async function latestHash(install: SkillInstall): Promise<string> {
     }
     return body.hash;
   }
-  const hash = await githubTreeHash(install, folder);
+  const hash = await githubTreeHash(install, folder, http);
   return typeof hash === "string" ? hash : gitTreeHash(install, folder);
 }
 
-export function createPiSkills(options: { agentDir: string }): Skills {
+export function createPiSkills(options: {
+  agentDir: string;
+  /** The registry and GitHub calls; tests answer them without a network. */
+  fetch?: Fetch;
+  /** `npx skills`; tests answer it without installing anything. */
+  npx?: Npx;
+}): Skills {
   const trust = createPiProjectTrust({ agentDir: options.agentDir });
+  const http = options.fetch ?? fetch;
+  const npx = options.npx ?? runNpx;
 
   async function listSkills(cwd: string): Promise<{
     skills: SkillInfo[];
@@ -269,7 +284,7 @@ export function createPiSkills(options: { agentDir: string }): Skills {
     async search(query, limit) {
       // skills.sh is the only source of truth; a failure is reported, never
       // papered over with a local guess.
-      const response = await fetch(
+      const response = await http(
         searchUrl(registryBase(), query, clampSearchLimit(limit)),
         { cache: "no-store", signal: AbortSignal.timeout(15_000) },
       );
@@ -280,7 +295,7 @@ export function createPiSkills(options: { agentDir: string }): Skills {
     },
 
     async install(pkg, scope, cwd) {
-      const result = await runNpx(installArgs(pkg, scope), {
+      const result = await npx(installArgs(pkg, scope), {
         timeout: NPX_TIMEOUT_MS,
         ...(scope === "project" ? { cwd } : {}),
       });
@@ -311,7 +326,7 @@ export function createPiSkills(options: { agentDir: string }): Skills {
             };
           }
           try {
-            const latest = await latestHash(install);
+            const latest = await latestHash(install, http);
             return {
               ...base,
               state:
@@ -339,7 +354,7 @@ export function createPiSkills(options: { agentDir: string }): Skills {
       if (!install.canCheckForUpdates) {
         throw new Error("This skill cannot be updated automatically");
       }
-      const result = await runNpx(updateArgs(install), {
+      const result = await npx(updateArgs(install), {
         timeout: NPX_TIMEOUT_MS,
         ...(scope === "project" ? { cwd } : {}),
       });

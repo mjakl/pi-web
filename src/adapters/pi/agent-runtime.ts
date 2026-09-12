@@ -29,6 +29,7 @@ import {
   type AgentSessionEvent,
   createAgentSessionFromServices,
   createAgentSessionServices,
+  type InlineExtension,
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
@@ -582,9 +583,11 @@ class PiLiveSession implements LiveSession {
 
   clearQueue(): QueuedMessage[] {
     const mirrored = this.queue;
+    // Copied first: the SDK's clearQueue emits `queue_update` synchronously,
+    // and that handler forgets the attachments of every message not queued.
+    const images = new Map(this.queuedImages);
     const dropped = this.inner.clearQueue();
     this.queue = [];
-    const images = new Map(this.queuedImages);
     this.queuedImages.clear();
     this.emit({ type: "activity" });
     // Both halves can hold something: the SDK's own queue and the mirror this
@@ -703,7 +706,11 @@ const DRAFT_IDLE_MS = 10 * 60 * 1000;
 export function createPiAgentRuntime(options: {
   agentDir: string;
   catalog: PiSessionCatalog;
+  /** Loaded into every session besides the user's own; tests script a provider through one. */
+  extensions?: InlineExtension[];
+  draftIdleMs?: number;
 }): AgentRuntime {
+  const draftIdleMs = options.draftIdleMs ?? DRAFT_IDLE_MS;
   const live = new Map<string, PiLiveSession>();
   const starting = new Map<string, Promise<PiLiveSession>>();
   const watchers = new Set<(event: RuntimeEvent) => void>();
@@ -737,6 +744,7 @@ export function createPiAgentRuntime(options: {
             agentDir: options.agentDir,
             settings: settingsManager,
           }),
+          ...(options.extensions ?? []),
         ],
         extensionsOverride: preferUserBashExtension,
       },
@@ -776,7 +784,7 @@ export function createPiAgentRuntime(options: {
       idle = setTimeout(() => {
         if (!wrapper.hasTranscript() && !wrapper.busy) void wrapper.stop();
         else resetIdle();
-      }, DRAFT_IDLE_MS).unref();
+      }, draftIdleMs).unref();
     };
     wrapper.subscribe((event) => {
       if (event.type === "turn_done") {
@@ -846,9 +854,13 @@ export function createPiAgentRuntime(options: {
       if (existing) return existing;
       const inflight = starting.get(target.sessionId);
       if (inflight) return inflight;
-      const filePath = await options.catalog.pathOf(target.sessionId);
-      if (!filePath) throw new Error(`Unknown session ${target.sessionId}`);
-      const promise = start(SessionManager.open(filePath)).finally(() => {
+      // The lock has to be in place before the first await, or two opens that
+      // arrive together both pass this point and start two sessions on one file.
+      const promise = (async () => {
+        const filePath = await options.catalog.pathOf(target.sessionId);
+        if (!filePath) throw new Error(`Unknown session ${target.sessionId}`);
+        return start(SessionManager.open(filePath));
+      })().finally(() => {
         starting.delete(target.sessionId);
       });
       starting.set(target.sessionId, promise);
