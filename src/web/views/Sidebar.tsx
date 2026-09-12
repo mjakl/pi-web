@@ -720,10 +720,13 @@ function ExplorerSection({
       ? `cwd=${encodeURIComponent(cwd)}`
       : `session=${encodeURIComponent(sessionId)}`;
   const explorerUrl = `/files/explorer?${scope}`;
+  // The section's flex, the toggle's min-height and the chevron's rotation
+  // are pi-web's per-state inline values; areas/sidebar.css writes them from
+  // aria-expanded, which client/sidebar.ts flips and remembers.
   return (
     <div
       id="explorer-section"
-      style="border-top:1px solid var(--border); display:flex; flex-direction:column; flex:1 1 0; min-height:0; overflow:hidden"
+      style="border-top:1px solid var(--border); display:flex; flex-direction:column; min-height:0; overflow:hidden"
     >
       <div style="display:flex; align-items:center; flex-shrink:0">
         <button
@@ -735,7 +738,7 @@ function ExplorerSection({
         >
           <span
             data-explorer-chevron
-            style="display:flex; transform:rotate(90deg); transition:transform 0.15s"
+            style="display:flex; transition:transform 0.15s"
           >
             <SmallChevronIcon />
           </span>

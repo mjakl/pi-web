@@ -359,6 +359,12 @@ export type RuntimeEvent = {
 export type AgentRuntime = {
   get(sessionId: string): LiveSession | undefined;
   /**
+   * Every session this process holds open. Pi writes a new session's file
+   * with its first assistant message, so until then this is the only place
+   * the session exists.
+   */
+  live(): LiveSession[];
+  /**
    * Resume a persisted session, or create a new one in `cwd`. An explicit
    * model or reasoning level starts the session there and is written back as
    * Pi's default when the session really started on it.

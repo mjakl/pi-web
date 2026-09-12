@@ -248,10 +248,11 @@ describe("the new-session page", () => {
     body.set("thinking", "high");
     const res = await app.request("/sessions", { method: "POST", body });
     expect(res.status).toBe(303);
-    const started = [...world.store.values()].find((session) =>
-      session.summary.id.startsWith("new-"),
-    );
-    expect(started?.summary.cwd).toBe(repo);
+    // Not in the store yet: Pi writes the file with the first answer.
+    const started = world.runtime
+      .live()
+      .find((session) => session.id.startsWith("new-"));
+    expect(started?.snapshot().summary.cwd).toBe(repo);
   });
 
   it("will not start a session in a folder that is gone", async () => {

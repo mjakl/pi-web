@@ -54,3 +54,27 @@ a.sidebar-icon-button:hover {
   display: flex;
   color: var(--success);
 }
+
+/* SessionSidebar.tsx L1705-L1860: the explorer folds to its header row. The
+   toggle's aria-expanded is the state; client/sidebar.ts flips it and keeps
+   it in localStorage. Open, the section shares the sidebar with the list
+   (flex 1 1 0) and the chevron points down; closed, it is the header row
+   alone at the footer height, and pi-web renders neither the body nor the
+   changes and search toggles. Those hide here rather than with `hidden`,
+   which client/files.ts owns on the changes toggle. */
+#explorer-section {
+  flex: 1 1 0;
+}
+#explorer-section:has(#explorer-toggle[aria-expanded="false"]) {
+  flex: 0 0 auto;
+}
+#explorer-toggle[aria-expanded="false"] {
+  min-height: var(--footer-row-height);
+}
+#explorer-toggle[aria-expanded="true"] [data-explorer-chevron] {
+  transform: rotate(90deg);
+}
+#explorer-section:has(#explorer-toggle[aria-expanded="false"])
+  :is(#explorer-body, #explorer-changes-toggle, #explorer-search-toggle) {
+  display: none;
+}

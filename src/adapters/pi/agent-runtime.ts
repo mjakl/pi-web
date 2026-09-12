@@ -837,6 +837,7 @@ export function createPiAgentRuntime(options: {
 
   return {
     get: (sessionId) => live.get(sessionId),
+    live: () => [...live.values()],
     subscribeAll(listener) {
       watchers.add(listener);
       return () => watchers.delete(listener);

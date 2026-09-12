@@ -2,6 +2,7 @@ import type { SessionSummary } from "@core/sessions";
 import { SessionRow } from "@web/views/Sidebar";
 import { describe, expect, it, vi } from "vitest";
 import {
+  blockStorage,
   byId,
   click,
   field,
@@ -230,6 +231,50 @@ describe("the project menu", () => {
     expect(byId("folders-1").hidden).toBe(false);
     click(query(".project-folder-row"));
     expect(byId("folders-1").hidden).toBe(true);
+  });
+});
+
+describe("the explorer fold", () => {
+  const section =
+    '<div id="explorer-section">' +
+    '<button type="button" id="explorer-toggle" aria-expanded="true" aria-controls="explorer-body">Explorer</button>' +
+    '<div id="explorer-body"></div></div>';
+
+  async function mounted(): Promise<HTMLElement> {
+    page();
+    byId("sidebar").insertAdjacentHTML("beforeend", section);
+    const { setUpSidebar } = await load();
+    setUpSidebar();
+    return byId("explorer-toggle");
+  }
+
+  it("folds on click, remembers it under pi-web's key, and stays folded after a reload", async () => {
+    let toggle = await mounted();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(localStorage.getItem("pi-web:file-explorer:open")).toBe("false");
+    // The next page load: the server renders it open, the module folds it.
+    toggle = await mounted();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(localStorage.getItem("pi-web:file-explorer:open")).toBe("true");
+  });
+
+  it("re-folds a section that a whole-page swap rendered open", async () => {
+    localStorage.setItem("pi-web:file-explorer:open", "false");
+    await mounted();
+    byId("sidebar").innerHTML = section;
+    htmxEvent(byId("sidebar"), "htmx:afterSwap");
+    expect(byId("explorer-toggle").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("still folds in a private window, for this page", async () => {
+    blockStorage();
+    const toggle = await mounted();
+    click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
   });
 });
 

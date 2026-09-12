@@ -15,13 +15,14 @@ import {
   SessionRows,
 } from "@web/views/Sidebar";
 import { BrowsePane, DirectoryPicker, FolderList } from "@web/views/Workspace";
-import { getCookie, setCookie } from "hono/cookie";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
 import {
   type RouteContext,
   type WebApp,
   CWD_COOKIE,
   PROJECT_COOKIE,
+  SESSION_COOKIE,
   currentSessionId,
   errorText,
   field,
@@ -38,6 +39,12 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
    * and send the pill along out of band so it names the new folder.
    * Validating the folder is also what makes files in it readable, the same
    * grant the picker's commit makes.
+   *
+   * A session stays open across the worktrees of its own project and closes
+   * when the selector moves to another one, as in pi-web (AppShell.tsx
+   * handleCwdChange; workspace-config.md §2.7): the reader lands on the
+   * new-session view under the folder just chosen, so the list, the chat,
+   * the explorer and every page opened from here agree on the project.
    */
   app.get("/sidebar", async (c) => {
     const project = c.req.query("project");
@@ -57,10 +64,22 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
       folder = chosen?.cwd ?? cwd;
       remember(c, CWD_COOKIE, folder);
     }
+    const activeId = currentSessionId(c);
+    const open =
+      activeId === undefined ? undefined : await deps.workspace.row(activeId);
+    if (
+      open &&
+      project !== undefined &&
+      project !== "" &&
+      projectKeyOf(open.summary) !== project
+    ) {
+      deleteCookie(c, SESSION_COOKIE, { path: "/" });
+      c.header("HX-Redirect", "/");
+      return c.body(null, 200);
+    }
     const sidebar = await deps.workspace.sidebar(
       project === undefined ? {} : { remembered: project },
     );
-    const activeId = currentSessionId(c);
     return c.html(
       <>
         <ProjectNav

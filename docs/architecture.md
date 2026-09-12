@@ -19,7 +19,7 @@ Internal interfaces, all consumers in this repository. Defined in
 | Port               | Purpose                                                                                                                      | Adapter                              |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
 | `SessionCatalog`   | List from headers only; read one branch; row metadata; rename, delete, star, fork, clone, rewind, export                     | `src/adapters/pi/session-catalog.ts` |
-| `AgentRuntime`     | Open or resume a `LiveSession`; watch every session's lifecycle                                                              | `src/adapters/pi/agent-runtime.ts`   |
+| `AgentRuntime`     | Open or resume a `LiveSession`; list the open ones; watch every session's lifecycle                                          | `src/adapters/pi/agent-runtime.ts`   |
 | `LiveSession`      | `snapshot()`, `prompt()`, `abort()`, `commands()`, `compact()`, `clearQueue()`, `runBash()`, `navigateTree()`, `subscribe()` | same                                 |
 | `ModelCatalog`     | Models Pi has credentials for, narrowed by `enabledModels`, with the configured default and per-pattern reasoning pins       | `src/adapters/pi/model-catalog.ts`   |
 | `ProjectResolver`  | The repository a working folder belongs to, and its branch                                                                   | `src/adapters/pi/projects.ts`        |

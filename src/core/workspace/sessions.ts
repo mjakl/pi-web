@@ -265,7 +265,15 @@ export function sessionUseCases({
     async sidebar(
       options: { remembered?: string; activeId?: string } = {},
     ): Promise<SidebarView> {
-      const all = await decorate(await deps.sessions.list());
+      const stored = await deps.sessions.list();
+      const known = new Set(stored.map((session) => session.id));
+      // A session Pi has not flushed yet has no file to list; its row comes
+      // from the runtime, or the list would miss it until the turn ends.
+      const unflushed = deps.runtime
+        .live()
+        .filter((live) => !known.has(live.id))
+        .map((live) => live.snapshot().summary);
+      const all = await decorate([...stored, ...unflushed]);
       const projects = recentProjects(all);
       const open =
         options.activeId === undefined

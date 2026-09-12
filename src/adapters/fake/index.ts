@@ -1117,6 +1117,7 @@ export function createFakeWorld(
     },
     runtime: {
       get: (id) => live.get(id),
+      live: () => [...live.values()],
       subscribeAll(listener) {
         watchers.add(listener);
         return () => watchers.delete(listener);
@@ -1145,8 +1146,21 @@ export function createFakeWorld(
           entries: [],
           leafId: null,
         });
-        store.set(stored.summary.id, stored);
-        return Promise.resolve(open(stored));
+        const session = open(stored);
+        // Pi writes a new session's file with its first assistant message
+        // (SessionManager._persist); until then only the runtime knows it.
+        session.subscribe(() => {
+          if (
+            !store.has(stored.summary.id) &&
+            stored.entries.some(
+              (entry) =>
+                entry.type === "message" && entry.message.role === "assistant",
+            )
+          ) {
+            store.set(stored.summary.id, stored);
+          }
+        });
+        return Promise.resolve(session);
       },
     },
     models: {

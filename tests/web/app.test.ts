@@ -633,6 +633,47 @@ describe("web app", () => {
     expect(received).toContain('data: {"id":"s1","project":"/repo/one"}');
   });
 
+  it("lists a session Pi has not written to disk yet", async () => {
+    // Pi writes a new session's file with its first assistant message, so
+    // between the start and the first answer the runtime alone knows it.
+    const { app, world } = testApp({ delayMs: 200, reply: () => "done" });
+    const res = await app.request("/events?project=%2Frepo%2Fone");
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("no body");
+    const form = new FormData();
+    form.set("cwd", "/repo/one");
+    form.set("text", "go");
+    const started = await app.request("/sessions", {
+      method: "POST",
+      body: form,
+      headers: { "HX-Request": "true" },
+    });
+    expect(started.headers.get("hx-redirect")).toBe("/sessions/new-1");
+    expect(world.store.has("new-1")).toBe(false);
+
+    let received = "";
+    const decoder = new TextDecoder();
+    while (!received.includes("\n\n")) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      received += decoder.decode(chunk.value);
+    }
+    await reader.cancel();
+    // The first push is the whole list, since the page has no row to swap,
+    // with the new row already running.
+    const list = received.slice(0, received.indexOf("\n\n"));
+    expect(list).toContain('id="session-list"');
+    expect(list).toContain('hx-swap-oob="innerHTML"');
+    expect(list).toContain('id="row-new-1"');
+    expect(list).toContain('data-status="Agent running…"');
+    // The page the browser is sent to, rendered while the turn still runs,
+    // shows the same row selected.
+    const page = await (await app.request("/sessions/new-1")).text();
+    const row = page.slice(page.indexOf('id="row-new-1"'));
+    expect(row).toContain("background:var(--bg-selected)");
+    expect(row).toContain('data-status="Agent running…"');
+  });
+
   it("keeps the stream on the project the page shows", async () => {
     // A dialog never answered here: the session in the other project stays
     // running while the stream is read.
@@ -715,6 +756,59 @@ describe("web app", () => {
     ).text();
     expect(page).toContain('href="/sessions/s2"');
     expect(page).not.toContain('href="/sessions/s1"');
+  });
+
+  it("closes the open session when the selector moves to another project", async () => {
+    const { app, world } = testApp();
+    world.store.set("s2", {
+      summary: {
+        id: "s2",
+        cwd: "/repo/two",
+        name: "Other project",
+        createdAt: "2026-09-03T00:00:00.000Z",
+        modifiedAt: "2026-09-03T00:00:00.000Z",
+        fileSize: 2,
+      },
+      entries: [userEntry("v1", null, "second project")],
+    });
+    // Opening a session selects its project and remembers the session.
+    const opened = await app.request("/sessions/s1");
+    const remembered = opened.headers.getSetCookie().join(" ");
+    expect(remembered).toContain("web-pi-project=%2Frepo%2Fone");
+    expect(remembered).toContain("web-pi-session=s1");
+
+    // Another project's folder: the session closes, as it does in pi-web,
+    // and the reader lands on the new-session view under that project.
+    const onSession = {
+      "HX-Current-URL": "http://x/sessions/s1",
+      cookie: "web-pi-session=s1; web-pi-project=/repo/one",
+    };
+    const switched = await app.request("/sidebar?project=%2Frepo%2Ftwo", {
+      headers: onSession,
+    });
+    expect(switched.headers.get("hx-redirect")).toBe("/");
+    const cookies = switched.headers.getSetCookie().join(" ");
+    expect(cookies).toContain("web-pi-session=;");
+    expect(cookies).toContain("web-pi-project=%2Frepo%2Ftwo");
+
+    // Settings opened from there shows that project and closes back to it,
+    // rather than to the session that was open before the switch.
+    const settings = await (
+      await app.request("/settings?section=general", {
+        headers: { cookie: "web-pi-project=/repo/two" },
+      })
+    ).text();
+    expect(settings).toContain('href="/sessions/s2"');
+    expect(settings).not.toContain('href="/sessions/s1"');
+    expect(settings).toContain('data-close-href="/"');
+
+    // Another folder of the session's own project keeps it open.
+    const worktree = await app.request(
+      "/sidebar?project=%2Frepo%2Fone&cwd=%2Frepo%2Fone.wt",
+      { headers: onSession },
+    );
+    expect(worktree.headers.get("hx-redirect")).toBeNull();
+    expect(await worktree.text()).toContain('id="project-nav"');
   });
 
   it("lists subagent runs inline, as pi-web does", async () => {

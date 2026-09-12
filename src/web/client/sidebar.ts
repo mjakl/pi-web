@@ -183,6 +183,52 @@ function setUpFolderGroups(): void {
   });
 }
 
+/** pi-web's key, so a reader's choice survives the switch between the two. */
+const EXPLORER_OPEN_KEY = "pi-web:file-explorer:open";
+
+/**
+ * The explorer folds to its header row (§3.5). pi-web keeps `explorerOpen`
+ * in React and reads the stored value after hydration, so a collapsed
+ * explorer opens for a frame there too; here aria-expanded on the toggle is
+ * the state and areas/sidebar.css paints both states from it. Storage is
+ * best-effort, as in pi-web: without it the choice lasts for this page.
+ */
+function setUpExplorerFold(): void {
+  let open = true;
+  try {
+    open = localStorage.getItem(EXPLORER_OPEN_KEY) !== "false";
+  } catch {
+    // A private window: the explorer starts open.
+  }
+  const paint = () => {
+    document
+      .getElementById("explorer-toggle")
+      ?.setAttribute("aria-expanded", String(open));
+  };
+  paint();
+  document.body.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest("#explorer-toggle")) {
+      return;
+    }
+    open = !open;
+    try {
+      localStorage.setItem(EXPLORER_OPEN_KEY, String(open));
+    } catch {
+      // Without storage the choice lasts for this page only.
+    }
+    paint();
+  });
+  // A whole-page swap brings the section back in its server-rendered,
+  // open state.
+  document.body.addEventListener("htmx:afterSwap", (event) => {
+    const target = event.target;
+    if (target instanceof Element && target.querySelector("#explorer-toggle")) {
+      paint();
+    }
+  });
+}
+
 /** The refresh button says it worked: a check for two seconds (§3.1). */
 function setUpSidebarRefresh(): void {
   const button = document.getElementById("sidebar-refresh");
@@ -341,6 +387,7 @@ export function setUpSidebar(): void {
   setUpUnread();
   setUpProjectFilter();
   setUpFolderGroups();
+  setUpExplorerFold();
   setUpSidebarRefresh();
   setUpRowMenus();
   setUpShortcuts();
