@@ -58,8 +58,8 @@ src/server.ts  process entrypoint; src/cli.ts the flags and startup behind the
                bin, src/host-pi.ts the SDK resolution both of them use,
                src/http.ts the proxy-aware global dispatcher
 bin/web-pi.js  the published entry point: imports dist/cli.js, nothing else
-tests/         vitest, mirrors src/ and scripts/; tests/smoke runs only from
-               `just smoke`
+tests/         vitest, mirrors src/ and scripts/; tests/client runs the
+               bundle's modules in happy-dom, tests/smoke only from `just smoke`
 scripts/       repository tooling: host Pi linking, doctor, doc checks
 ```
 
@@ -125,6 +125,9 @@ root through the allowed-root flow there, never a check in a route handler.
   method lands there in the same change, or every web test stops running.
 - Tests that write session files build them with `SessionManager` in a `mkdtemp`
   directory and pass that as the agent directory.
+- `tests/client` mounts the markup a view renders and dispatches DOM events at
+  the client module; `setup.ts` fakes htmx and undoes every listener after each
+  test. happy-dom has no layout, so a test that needs geometry sets it.
 - Add or update the nearest test for changed behaviour; assert on rendered
   output or port behaviour, never on source text.
 - `just build` writes `dist/` and the built assets; `just smoke` packs the

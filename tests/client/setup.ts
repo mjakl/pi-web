@@ -1,0 +1,129 @@
+// The browser the client modules run in under test: happy-dom, the few APIs
+// it lacks that the modules reach for, and a clean page for every test. The
+// modules register listeners on `document`, `window` and `body` when they are
+// set up, so every registration made during a test is undone after it, and
+// the module registry is reset so module-level state starts over too.
+
+import { afterEach, beforeEach, vi } from "vitest";
+import { device, installFakeHtmx } from "./helpers.ts";
+
+// --- Popover API (absent from happy-dom 20) --------------------------------
+// Only what the modules observe: the toggle events, with their `newState`.
+
+const openPopovers = new WeakSet<HTMLElement>();
+
+function toggleEvent(type: "beforetoggle" | "toggle", open: boolean): Event {
+  return Object.assign(
+    new Event(type, { cancelable: type === "beforetoggle" }),
+    {
+      oldState: open ? "closed" : "open",
+      newState: open ? "open" : "closed",
+    },
+  );
+}
+
+function setPopover(element: HTMLElement, open: boolean): void {
+  if (openPopovers.has(element) === open) return;
+  element.dispatchEvent(toggleEvent("beforetoggle", open));
+  if (open) openPopovers.add(element);
+  else openPopovers.delete(element);
+  element.dispatchEvent(toggleEvent("toggle", open));
+}
+
+Object.assign(HTMLElement.prototype, {
+  showPopover(this: HTMLElement): void {
+    setPopover(this, true);
+  },
+  hidePopover(this: HTMLElement): void {
+    setPopover(this, false);
+  },
+  togglePopover(this: HTMLElement, force?: boolean): boolean {
+    setPopover(this, force ?? !openPopovers.has(this));
+    return openPopovers.has(this);
+  },
+});
+
+// happy-dom answers `getModifierState("AltGraph")` with `altKey`; a browser
+// reports AltGraph on its own, and the composer tells the two apart.
+// eslint-disable-next-line typescript/unbound-method -- called with `this` below
+const { getModifierState } = KeyboardEvent.prototype;
+KeyboardEvent.prototype.getModifierState = function (
+  this: KeyboardEvent,
+  key: string,
+): boolean {
+  return key === "AltGraph" ? false : getModifierState.call(this, key);
+};
+
+// --- Listener bookkeeping --------------------------------------------------
+
+type Registration = {
+  target: EventTarget | null;
+  type: string;
+  listener: EventListenerOrEventListenerObject;
+  options: boolean | AddEventListenerOptions | undefined;
+};
+
+const registrations: Registration[] = [];
+
+// eslint-disable-next-line typescript/unbound-method -- called with `this` below
+const { addEventListener: addListener } = EventTarget.prototype;
+EventTarget.prototype.addEventListener = function (
+  this: EventTarget,
+  type: string,
+  listener: EventListenerOrEventListenerObject | null,
+  options?: boolean | AddEventListenerOptions,
+): void {
+  if (listener) registrations.push({ target: this, type, listener, options });
+  addListener.call(this, type, listener, options);
+};
+
+// The bare `addEventListener(...)` a module calls is vitest's copy, bound to
+// the window before the patch above; `null` stands for the window here.
+const windowAdd = globalThis.addEventListener;
+const windowRemove = globalThis.removeEventListener;
+globalThis.addEventListener = (
+  type: string,
+  listener: EventListenerOrEventListenerObject | null,
+  options?: boolean | AddEventListenerOptions,
+): void => {
+  if (listener === null) return;
+  registrations.push({ target: null, type, listener, options });
+  windowAdd(type, listener, options);
+};
+
+function clearAttributes(element: Element): void {
+  for (const attribute of [...element.attributes]) {
+    element.removeAttribute(attribute.name);
+  }
+}
+
+beforeEach(() => {
+  vi.resetModules();
+  installFakeHtmx();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.resolve(new Response(""))),
+  );
+});
+
+afterEach(() => {
+  for (const { target, type, listener, options } of registrations.splice(0)) {
+    if (target === null) windowRemove(type, listener, options);
+    else target.removeEventListener(type, listener, options);
+  }
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  document.body.replaceChildren();
+  clearAttributes(document.body);
+  clearAttributes(document.documentElement);
+  document.title = "";
+  localStorage.clear();
+  sessionStorage.clear();
+  device({
+    prefersColorScheme: "light",
+    prefersReducedMotion: "no-preference",
+  });
+  window.innerWidth = 1024;
+  window.innerHeight = 768;
+});

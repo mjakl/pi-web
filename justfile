@@ -70,6 +70,10 @@ typecheck: link-pi
 test: link-pi
     pnpm exec vitest run
 
+# TEST: Whole suite with line coverage; `--project client` narrows to the bundle
+coverage: link-pi
+    pnpm exec vitest run --coverage
+
 # TEST: Selected tests, e.g. `just test-one tests/core`
 [positional-arguments]
 test-one *args: link-pi
