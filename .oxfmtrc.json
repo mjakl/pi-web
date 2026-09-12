@@ -16,7 +16,8 @@
     "static/vendor",
     "tsconfig.json",
     "pnpm-lock.yaml",
-    "docs/specs"
+    "docs/specs",
+    "tests/web/fixtures/*.html"
   ],
   "overrides": [
     {
