@@ -386,6 +386,9 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
       // The shelf holds open panels, so it is only re-sent when an extension
       // actually changed a status or a widget.
       let shelf = "";
+      // Prompts and branch activation can change the rail before settlement.
+      // Keep unchanged marks in place while assistant tokens stream.
+      let rail = "";
       // The model selector is a whole subtree with an open popover in it, and
       // a turn renders ten times a second: send it only when the pick moved.
       let model = "";
@@ -424,6 +427,8 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
         ]);
         const modelChanged = nextModel !== model;
         model = nextModel;
+        const nextRail = JSON.stringify([view.rail, view.branched]);
+        const railChanged = nextRail !== rail;
         const reconciled = cursor !== view.settledCursor;
         // One snapshot and one frame: never clear a missed answer without its
         // canonical replacement, or clear a newer turn on a delayed turn_done.
@@ -451,13 +456,14 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
                   </Partial>
                 </>
               )}
-              {reconciled && !view.resetTranscript ? (
+              {railChanged && !view.resetTranscript ? (
                 <Rail view={view} oob />
               ) : null}
               <Status view={view} model={modelChanged} oob partial />
             </>,
           ),
         });
+        rail = nextRail;
         cursor = view.settledCursor;
         // Native SSE awaits the complete HTML frame before semantic events.
         if (reconciled || kind === "turn_done")
