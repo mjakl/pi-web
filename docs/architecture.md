@@ -88,8 +88,9 @@ The session stream sends unnamed HTML messages containing native HTMX 4
 `hx-partial` elements with explicit targets and swap modes:
 
 - `#messages` receives canonical items after the delivered settled cursor
-  (`beforeend`), with the re-rendered conversation rail riding along out of
-  band;
+  (`beforeend`);
+- `#rail` receives the conversation rail out of band when its marks or branch
+  state change, including during a running turn; unchanged rails stay in place;
 - `#turn` receives the current turn (`innerMorph`), keyed by entry and tool-call
   IDs. Partial assistant messages use their message timestamp until Pi assigns
   an entry ID. Morphing ignores `open`, so disclosure choices survive changing
@@ -372,11 +373,12 @@ composition root and the only importer of Pi adapters.
   `calc(12px + (100% - 42px) * row/rows)`, so the server needs no measurement of
   the reader's viewport, and the connector SVG is stretched over the same box.
   The rail covers the whole session from the first render — the marks come from
-  the entries, not from the page — so paging never changes it and only a settled
-  turn re-sends it. `src/web/client/rail.ts` measures the transcript for the
-  active mark, the hover preview, and press-and-drag; a mark whose entry the
-  page has not loaded is reached through the "load earlier" sentinel with
-  `through=`.
+  the entries, not from the page, so paging never changes it. Even a single mark
+  is shown. The stream re-sends it when its marks or branch state change,
+  independently of transcript settlement. `src/web/client/rail.ts` measures the
+  transcript for the active mark, the hover preview, and press-and-drag; a mark
+  whose entry the page has not loaded is reached through the "load earlier"
+  sentinel with `through=`.
 - **An extension dialog is a pending request, not a message.**
   `src/core/extension-ui.ts` holds both state machines: unanswered dialogs with
   their timeouts and abort signals, and the custom UIs whose frames the panel

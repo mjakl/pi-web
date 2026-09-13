@@ -195,7 +195,7 @@ function Graph({ marks, rows }: { marks: RailMark[]; rows: number }) {
 }
 
 /**
- * Re-rendered from the server whenever a turn settles: the marks come from
+ * Re-rendered from the server whenever the rail changes: the marks come from
  * the session's entries, so nothing about them depends on which page of the
  * transcript the browser currently holds.
  */
@@ -214,16 +214,12 @@ export function Rail({ view, oob }: { view: SessionView; oob?: boolean }) {
       data-graph-width={String(lanes * LANE + WIDTH)}
       {...(oob ? { "hx-swap-oob": "true" } : {})}
     >
-      {marks.length < 2 ? null : (
-        <>
-          {/* pi-web chains the anchors into a parent/child path even with no
-              fork in the session, so a linear rail carries the spine too. */}
-          <Graph marks={marks} rows={rows} />
-          {marks.map((mark) => (
-            <Node mark={mark} rows={rows} sessionId={view.summary.id} />
-          ))}
-        </>
-      )}
+      {/* pi-web chains the anchors into a parent/child path even with no
+          fork in the session, so a linear rail carries the spine too. */}
+      <Graph marks={marks} rows={rows} />
+      {marks.map((mark) => (
+        <Node mark={mark} rows={rows} sessionId={view.summary.id} />
+      ))}
     </div>
   );
 }
