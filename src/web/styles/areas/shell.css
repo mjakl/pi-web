@@ -4,6 +4,16 @@
    CSS this area may edit. Add a rule only when pi-web's own CSS cannot
    express it, and say why. */
 
+/* Keep compaction progress legible while disabled. CSS animation, rather
+   than SMIL, respects the shared reduced-motion rule in globals.css. */
+.context-compact-button[aria-busy="true"] {
+  opacity: 1;
+}
+
+.context-compact-button[aria-busy="true"] svg {
+  animation: spin 0.9s linear infinite;
+}
+
 /* Settings is a page in web-pi and a React modal in pi-web, so its surface
    takes the initial focus: without that, `showModal()` focuses the first
    section tab and rings it, which pi-web never shows. The surface is only a
