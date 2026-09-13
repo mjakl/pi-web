@@ -31,6 +31,10 @@ Hover over a prompt mark to preview it before jumping, including prompts in
 history that has not loaded yet. Stars are saved in the Pi session, and the
 session menu can clear them all.
 
+The naming cutover does not read old `pi-web:star` metadata, so those answers
+must be starred again. See
+[the clean-cut naming change](docs/deployment.md#clean-cut-naming).
+
 ![Starred release decisions and the desktop conversation rail](docs/images/session-navigation.png)
 
 ### Read the result, then inspect the process
@@ -84,7 +88,7 @@ web-pi has no credential-management page.
 
 This repository now contains the Hono implementation. The previous Next.js
 application, its documentation, and its history remain at
-[`archive/nextjs-final`](https://github.com/mjakl/pi-web/tree/archive/nextjs-final).
+[`archive/nextjs-final`](https://github.com/mjakl/web-pi/tree/archive/nextjs-final).
 The import preserves both Git histories, including web-pi's performance work.
 
 This implementation reuses the visual design and applicable behavior of that

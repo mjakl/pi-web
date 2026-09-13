@@ -97,7 +97,7 @@ describe("session file edits", () => {
       subagentFile,
       `${readFileSync(subagentFile, "utf8")}${JSON.stringify({
         type: "custom",
-        customType: "pi-web:subagent",
+        customType: "web-pi:subagent",
         id: "s1",
         parentId: null,
         timestamp: "2026-01-01T00:00:00.000Z",
@@ -119,8 +119,25 @@ describe("session file edits", () => {
     expect(
       readFileSync(fileOf(child), "utf8").split("\n").slice(1).join("\n"),
     ).toBe(childEntriesBefore);
-    // Legacy subagent transcripts are left byte for byte alone.
+    // Marked subagent transcripts are left byte for byte alone.
     expect(readFileSync(subagentFile, "utf8")).toBe(before);
+  });
+
+  it("does not treat the old subagent marker as a reparenting exemption", () => {
+    const parent = makeSession(["parent"]);
+    const child = makeSession(["child"], { parentSession: fileOf(parent) });
+    child.appendCustomEntry("pi-web:subagent", {});
+    const file = fileOf(child);
+    const entriesBefore = readFileSync(file, "utf8").split("\n").slice(1);
+
+    removeSessionFile(fileOf(parent));
+
+    expect(
+      SessionManager.open(file).getHeader()?.parentSession,
+    ).toBeUndefined();
+    expect(readFileSync(file, "utf8").split("\n").slice(1)).toEqual(
+      entriesBefore,
+    );
   });
 
   it("rewinds to a user message, keeping earlier lines verbatim", () => {
@@ -130,7 +147,7 @@ describe("session file edits", () => {
     const firstAnswer = entries[1];
     const secondPrompt = entries[2];
     if (!firstAnswer || !secondPrompt) throw new Error("missing entries");
-    manager.appendCustomEntry("pi-web:star", {
+    manager.appendCustomEntry("web-pi:star", {
       targetId: firstAnswer.id,
       starred: true,
     });
@@ -154,6 +171,10 @@ describe("session file edits", () => {
     ]);
     const reopened = SessionManager.open(file);
     expect(reopened.getSessionName()).toBe("Named later");
+    expect(reopened.getEntries().at(-1)).toMatchObject({
+      type: "custom",
+      customType: "web-pi-rewind",
+    });
     expect(readStars(reopened.getEntries())).toEqual(new Set([firstAnswer.id]));
     // The reopened branch no longer contains the removed message.
     expect(
@@ -167,7 +188,7 @@ describe("session file edits", () => {
     const entries = manager.getEntries();
     const firstAnswer = entries[1];
     if (!firstAnswer) throw new Error("missing entry");
-    manager.appendCustomEntry("pi-web:star", {
+    manager.appendCustomEntry("web-pi:star", {
       targetId: firstAnswer.id,
       starred: true,
     });
@@ -257,7 +278,7 @@ describe("Pi session catalog", () => {
       .filter((entry) => entry.type === "message" && entry.id);
     const target = answers[1];
     if (!target) throw new Error("missing answer");
-    manager.appendCustomEntry("pi-web:star", {
+    manager.appendCustomEntry("web-pi:star", {
       targetId: target.id,
       starred: true,
     });
@@ -284,6 +305,28 @@ describe("Pi session catalog", () => {
     });
   });
 
+  it("ignores old star metadata without rewriting it on read", async () => {
+    const manager = makeSession(["old star"]);
+    const reply = manager.getEntries()[1];
+    if (!reply) throw new Error("missing answer");
+    manager.appendCustomEntry("pi-web:star", {
+      targetId: reply.id,
+      starred: true,
+    });
+    const file = fileOf(manager);
+    const before = readFileSync(file, "utf8");
+    const catalog = createPiSessionCatalog({ agentDir: root });
+    await catalog.list();
+
+    expect(
+      (await catalog.rowMetadata(manager.getSessionId()))?.metadata.starCount,
+    ).toBe(0);
+    expect(
+      readStars((await catalog.read(manager.getSessionId()))?.entries ?? []),
+    ).toEqual(new Set());
+    expect(readFileSync(file, "utf8")).toBe(before);
+  });
+
   it("renames, stars only answers, and deletes", async () => {
     const manager = makeSession(["hello"]);
     const catalog = createPiSessionCatalog({ agentDir: root });
@@ -302,6 +345,13 @@ describe("Pi session catalog", () => {
     );
     await catalog.setStar(id, reply.id, true);
     expect((await catalog.rowMetadata(id))?.metadata.starCount).toBe(1);
+    expect(
+      SessionManager.open(fileOf(manager)).getEntries().at(-1),
+    ).toMatchObject({
+      type: "custom",
+      customType: "web-pi:star",
+      data: { targetId: reply.id, starred: true },
+    });
 
     await catalog.remove(id);
     expect(await catalog.read(id)).toBeUndefined();

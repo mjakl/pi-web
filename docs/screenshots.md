@@ -43,7 +43,7 @@ Set dark appearance through Settings → General. For scripted captures, the
 existing preference can be set before reloading:
 
 ```bash
-agent-browser eval 'localStorage.setItem("pi-theme", "dark"); location.reload()'
+agent-browser eval 'localStorage.setItem("web-pi-theme", "dark"); location.reload()'
 ```
 
 Refresh the accessibility snapshot after navigation and lazy row loading, then
@@ -60,8 +60,8 @@ Capture these states:
 - **file-diff.png**, 1440 × 1000, dark: Release checklist. Keep the sidebar
   open, select the changed-files button above the explorer, then
   **src/release.ts** in the fictional project. Keep its Diff tab visible at the
-  default 600 px panel width. Enter “Add a regression test for surrounding
-  whitespace.” without sending it.
+  default 605 px panel width at this viewport. Enter “Add a regression test for
+  surrounding whitespace.” without sending it.
 - **session-navigation.png**, 1440 × 1000, dark: Decisions worth keeping. Hide
   the file panel and show the three requests, saved decision, sidebar star
   counts, and conversation rail.

@@ -84,7 +84,7 @@ release.entries.push({
   id: "release-star",
   parentId: "release-a",
   timestamp,
-  customType: "pi-web:star",
+  customType: "web-pi:star",
   data: { targetId: "release-a", starred: true },
 });
 const navigation = session(
@@ -121,7 +121,7 @@ navigation.entries.push({
   id: "nav-star",
   parentId: "nav-a2",
   timestamp,
-  customType: "pi-web:star",
+  customType: "web-pi:star",
   data: { targetId: "nav-a2", starred: true },
 });
 const tools = session(

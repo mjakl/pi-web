@@ -392,22 +392,23 @@ describe("the explorer fold", () => {
     return byId("explorer-toggle");
   }
 
-  it("folds on click, remembers it under pi-web's key, and stays folded after a reload", async () => {
+  it("ignores the old key, remembers folding, and stays folded after a reload", async () => {
+    localStorage.setItem("pi-web:file-explorer:open", "false");
     let toggle = await mounted();
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(localStorage.getItem("pi-web:file-explorer:open")).toBe("false");
+    expect(localStorage.getItem("web-pi:file-explorer:open")).toBe("false");
     // The next page load: the server renders it open, the module folds it.
     toggle = await mounted();
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(localStorage.getItem("pi-web:file-explorer:open")).toBe("true");
+    expect(localStorage.getItem("web-pi:file-explorer:open")).toBe("true");
   });
 
   it("re-folds a section that a whole-page swap rendered open", async () => {
-    localStorage.setItem("pi-web:file-explorer:open", "false");
+    localStorage.setItem("web-pi:file-explorer:open", "false");
     await mounted();
     byId("sidebar").innerHTML = section;
     htmxEvent(byId("sidebar"), "htmx:after:process");

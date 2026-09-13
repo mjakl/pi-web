@@ -1,7 +1,7 @@
 /*
   Element defaults, kept in a cascade layer so every unlayered rule in the
   app stylesheets wins over them. Copied from Tailwind CSS v4.2.2 preflight
-  (MIT) when Tailwind was removed, minus rules for elements Pi Web never
+  (MIT) when Tailwind was removed, minus rules for elements web-pi never
   renders (visible file inputs, date/time/search inputs, multi-select
   optgroups, progress, datalist pickers, abbr, small, menu, video, embed,
   object).

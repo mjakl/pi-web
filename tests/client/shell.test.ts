@@ -33,15 +33,15 @@ const SIDEBAR =
 describe("the title", () => {
   it("names the opened folder, then the product", async () => {
     await load('<main data-cwd="/home/me/proj" data-session-id="s1"></main>');
-    expect(document.title).toBe("proj - Pi Web");
+    expect(document.title).toBe("proj - web-pi");
   });
 
   it("stays plain on the index, unless the URL names a folder", async () => {
     await load('<main data-cwd="/home/me/proj" data-session-id=""></main>');
-    expect(document.title).toBe("Pi Web");
+    expect(document.title).toBe("web-pi");
     location.assign("/?cwd=%2Fhome%2Fme%2Fproj");
     await load('<main data-cwd="/home/me/proj" data-session-id=""></main>');
-    expect(document.title).toBe("proj - Pi Web");
+    expect(document.title).toBe("proj - web-pi");
   });
 });
 
@@ -83,12 +83,13 @@ describe("the sidebar width", () => {
     document.documentElement.style.getPropertyValue("--sidebar-width");
 
   it("steps with the arrows, jumps with Home, End and Enter, and remembers", async () => {
+    localStorage.setItem("pi-sidebar-width", "400");
     await load(SIDEBAR);
     const handle = query(".sidebar-resize-handle");
     expect(width()).toBe("260px");
     expect(keydown(handle, "ArrowRight").defaultPrevented).toBe(true);
     expect(width()).toBe("272px");
-    expect(localStorage.getItem("pi-sidebar-width")).toBe("272");
+    expect(localStorage.getItem("web-pi-sidebar-width")).toBe("272");
     keydown(handle, "ArrowRight", { shiftKey: true });
     expect(width()).toBe("304px");
     keydown(handle, "ArrowLeft");
@@ -103,7 +104,7 @@ describe("the sidebar width", () => {
   });
 
   it("restores a stored width, clamped to what fits", async () => {
-    localStorage.setItem("pi-sidebar-width", "9999");
+    localStorage.setItem("web-pi-sidebar-width", "9999");
     await load(SIDEBAR);
     expect(width()).toBe("480px");
     window.innerWidth = 600;
@@ -124,16 +125,16 @@ describe("the sidebar width", () => {
       new PointerEvent("pointermove", { clientX: 333, pointerId: 1 }),
     );
     expect(width()).toBe("333px");
-    expect(localStorage.getItem("pi-sidebar-width")).toBeNull();
+    expect(localStorage.getItem("web-pi-sidebar-width")).toBeNull();
     handle.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
-    expect(localStorage.getItem("pi-sidebar-width")).toBe("333");
+    expect(localStorage.getItem("web-pi-sidebar-width")).toBe("333");
     handle.dispatchEvent(
       new PointerEvent("pointermove", { clientX: 400, pointerId: 1 }),
     );
     expect(width()).toBe("333px");
     handle.dispatchEvent(new MouseEvent("dblclick"));
     expect(width()).toBe("260px");
-    expect(localStorage.getItem("pi-sidebar-width")).toBe("260");
+    expect(localStorage.getItem("web-pi-sidebar-width")).toBe("260");
   });
 });
 

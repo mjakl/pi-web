@@ -15,7 +15,7 @@ import { setUpTheme } from "./theme.ts";
 import { setUpToasts } from "./toasts.ts";
 import { setUpViewport } from "./viewport.ts";
 
-const SIDEBAR_WIDTH_KEY = "pi-sidebar-width";
+const SIDEBAR_WIDTH_KEY = "web-pi-sidebar-width";
 const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 480;
 const SIDEBAR_DEFAULT = 260;
@@ -38,7 +38,7 @@ function setUpTitle(): void {
     new URLSearchParams(location.search).has("cwd");
   const name = cwd.split(/[\\/]/).filter(Boolean).pop();
   document.title =
-    name === undefined || !opened ? "Pi Web" : `${name} - Pi Web`;
+    name === undefined || !opened ? "web-pi" : `${name} - web-pi`;
 }
 
 export function closeMobileSidebar(): void {

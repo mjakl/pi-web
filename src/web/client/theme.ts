@@ -1,9 +1,9 @@
 // pi-web's theme mechanism, ported from hooks/useTheme.ts: a class on <html>,
-// the preference in localStorage under the same key and the same three values,
+// the preference in localStorage with the same three values,
 // with immediate theme changes and no decorative transition.
 // The pre-paint script in HtmlLayout reads the same key before the first paint.
 
-export const THEME_KEY = "pi-theme";
+export const THEME_KEY = "web-pi-theme";
 
 export type ThemePreference = "light" | "dark" | "auto";
 

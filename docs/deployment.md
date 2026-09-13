@@ -55,12 +55,14 @@ Instead of the global package's `ExecStart`, use these service settings,
 adjusted to your checkout:
 
 ```ini
-WorkingDirectory=%h/Projects/pi-web
+WorkingDirectory=%h/Projects/web-pi
 ExecStart=/usr/bin/mise exec -- node bin/web-pi.js
 ```
 
-On lab, `~/.local/bin/pi-web-deploy` rebuilds the current checkout and restarts
-`web-pi.service`:
+On lab, `~/.local/bin/web-pi-deploy` rebuilds the primary checkout and restarts
+`web-pi.service`. The checkout stays at `/home/mjakl/Projects/pi-web` while the
+live service and linked worktrees depend on that path; the unit's
+`WorkingDirectory` stays there too. The helper contains:
 
 ```sh
 #!/bin/sh
@@ -70,10 +72,12 @@ cd /home/mjakl/Projects/pi-web
 /usr/bin/systemctl --user restart web-pi.service
 ```
 
-The command does not pull, merge, or install dependencies. Update the checkout
-and run `pnpm install --frozen-lockfile` before deploying dependency changes.
-`pi-web-deploy` replaces `web-pi-deploy` and the old Next.js deployment script;
-the service name, `WEB_PI_*` variables, loopback port 30142, and existing
+Run `~/.local/bin/web-pi-deploy` only when ready to interrupt the service and
+all its Pi workers. The command does not pull, merge, or install dependencies.
+First update the primary checkout to the merged commit, and run
+`pnpm install --frozen-lockfile` if dependencies changed. The old helper name is
+not an alias. Renaming the helper or repository does not deploy anything; the
+service name, `WEB_PI_*` variables, loopback port 30142, and existing
 `svc:web-pi` Tailnet mapping stay unchanged.
 
 When moving a running installation, build the destination before downtime, stop
@@ -106,13 +110,13 @@ you would rather keep them apart.
 
 ## Migration from Next.js
 
-[mjakl/pi-web](https://github.com/mjakl/pi-web) now contains web-pi's Hono
+[mjakl/web-pi](https://github.com/mjakl/web-pi) contains web-pi's Hono
 application. The history-preserving integration joins the old pi-web main as its
 first parent and web-pi main as its second parent; neither history is squashed
 or rebased.
 
 The final Next.js main is
-[`archive/nextjs-final`](https://github.com/mjakl/pi-web/tree/archive/nextjs-final),
+[`archive/nextjs-final`](https://github.com/mjakl/web-pi/tree/archive/nextjs-final),
 commit `2e27b3ea067b654a8f28c2a16a44aa3a748e5eb0`. That tag retains the old
 application and its documentation. The imported web-pi main is
 `997b7374d6d06d5231f9ffffe8523fad0ea08a93`, including the performance hot-path
@@ -153,12 +157,11 @@ For a local trial without touching live state:
 
 ### Compatibility and rollback limits
 
-Source and local adapter tests establish the shared Pi session JSONL format,
-`pi-web:star` entries, and `pi-web-rewind` marker. Both apps use the host Pi
-SDK; compatibility therefore also depends on the installed Pi version. No
-database conversion is required, but this is not a guarantee that an older Pi
-can read files changed by a newer Pi, nor a guarantee of all extension/UI
-behavior.
+Both apps use Pi's session JSONL format and the host Pi SDK; compatibility
+therefore also depends on the installed Pi version. App-owned custom metadata is
+no longer shared, as described below. No database conversion is required, but
+this is not a guarantee that an older Pi can read files changed by a newer Pi,
+nor a guarantee of all extension/UI behavior.
 
 Both implementations use `web-worktree-projects.json` for remembered worktree
 identity and `web-push.json` for push keys/subscriptions. Pi settings, model
@@ -177,6 +180,37 @@ Rollback means stopping web-pi and restarting the verified old version with a
 compatible Pi install. Rewind/delete and newer writes are not undone by changing
 the executable. Restore a backup only after deciding which later work would be
 lost; never overwrite a live agent directory as an automatic rollback step.
+
+### Clean-cut naming
+
+The repository is `mjakl/web-pi`, renamed from `mjakl/pi-web`. Existing clones
+should set their remote and GitHub CLI default explicitly:
+
+```bash
+git remote set-url origin git@github.com:mjakl/web-pi.git
+gh repo set-default mjakl/web-pi
+```
+
+Owned runtime names use `web-pi`, without migration or compatibility aliases:
+
+- Stars use `web-pi:star`. Old `pi-web:star` entries no longer count as stars;
+  star an answer again to record it under the new name.
+- New rewinds write `web-pi-rewind`, not `pi-web-rewind`. Existing rewind leaves
+  remain ordinary Pi custom entries; the parent chain still defines the branch.
+- Only `web-pi:subagent` exempts a child transcript from reparenting when its
+  parent is deleted. Old `pi-web:subagent` markers no longer grant that
+  exemption.
+- Explorer folding uses `web-pi:file-explorer:open`; theme and panel widths use
+  `web-pi-theme`, `web-pi-sidebar-width`, and `web-pi-right-panel-width`. The
+  former `pi-web:file-explorer:open`, `pi-theme`, `pi-sidebar-width`, and
+  `pi-right-panel-width` keys are ignored. Explorer visibility, theme, and
+  widths return to their defaults until chosen again. Other browser preferences
+  and drafts keep their existing keys.
+
+The naming change does not rewrite existing session files, remove old browser
+keys, or alter Git history. Normal explicit session edits still write files. Pi
+SDK identifiers, `web-worktree-projects.json`, `web-push.json`, license notices,
+and historical upstream references retain their names.
 
 ### Validation workflow
 
