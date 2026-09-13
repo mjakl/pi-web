@@ -39,6 +39,38 @@ function keyBytes(base64: string): ArrayBuffer {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0)).buffer;
 }
 
+class PushRequestError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super("Push server request failed");
+    this.status = status;
+  }
+}
+
+function failureDetail(error: unknown): string {
+  if (error instanceof PushRequestError)
+    return ` (HTTP ${String(error.status)})`;
+  // Exception messages can contain URLs or browser internals. Only show known names.
+  if (
+    (error instanceof Error || error instanceof DOMException) &&
+    [
+      "AbortError",
+      "NotAllowedError",
+      "NotSupportedError",
+      "InvalidStateError",
+      "NetworkError",
+      "TimeoutError",
+      "SecurityError",
+      "TypeError",
+      "InvalidAccessError",
+      "OperationError",
+    ].includes(error.name)
+  )
+    return ` (${error.name})`;
+  return "";
+}
+
 async function request(path: string, body?: unknown): Promise<Response> {
   const response = await fetch(path, {
     cache: "no-store",
@@ -51,10 +83,7 @@ async function request(path: string, body?: unknown): Promise<Response> {
           body: JSON.stringify(body),
         }),
   });
-  if (!response.ok)
-    throw new Error(
-      "Server request failed. Check the connection, then reload settings to check enrollment.",
-    );
+  if (!response.ok) throw new PushRequestError(response.status);
   return response;
 }
 
@@ -192,12 +221,14 @@ export function setUpPush(): void {
         // Invoke subscribe synchronously from the click, with the worker and key
         // already prepared. Awaiting permission/config first loses Apple's gesture.
         let operation: Promise<void>;
+        let enrollmentStage: "browser" | "server" = "browser";
         if (action === "subscribe") {
           try {
             operation = registration.pushManager
               .subscribe({ userVisibleOnly: true, applicationServerKey })
               .then(async (created) => {
                 subscription = created;
+                enrollmentStage = "server";
                 await request("/push/subscribe", {
                   subscription: created.toJSON(),
                   publicKey,
@@ -207,7 +238,7 @@ export function setUpPush(): void {
               });
           } catch (error) {
             operation = Promise.reject(
-              error instanceof Error
+              error instanceof Error || error instanceof DOMException
                 ? error
                 : new Error("Browser subscription failed"),
             );
@@ -233,12 +264,14 @@ export function setUpPush(): void {
           })();
         }
         changing = operation
-          .catch(() => {
+          .catch((error: unknown) => {
             if (!blocked())
               show(
                 action === "unsubscribe"
                   ? "Could not finish unsubscribing. Try Unsubscribe again."
-                  : "Subscription not confirmed by the server. Try Subscribe again, or reload to check enrollment.",
+                  : enrollmentStage === "browser"
+                    ? `Browser push subscription failed${failureDetail(error)}. Nothing was sent to the server. Try Subscribe again.`
+                    : `Browser subscription obtained, but server registration was not confirmed${failureDetail(error)}. Try Subscribe again, or reload to check enrollment.`,
                 true,
               );
           })

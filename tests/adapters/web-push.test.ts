@@ -9,7 +9,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import webpush from "web-push";
 
 const directories: string[] = [];
 
@@ -40,6 +41,7 @@ const MESSAGE: PushMessage = {
 };
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -102,6 +104,62 @@ describe("web push store", () => {
       true,
     );
   });
+
+  it("uses the project HTTPS identity with existing keys in the default sender", async () => {
+    const directory = agentDir();
+    const notifier = createWebPushNotifier({ agentDir: directory });
+    const target = subscription("https://push.example/a");
+    notifier.subscribe(target);
+    const before = readFileSync(join(directory, "web-pi", "push.json"), "utf8");
+    const send = vi.spyOn(webpush, "sendNotification").mockResolvedValue({
+      statusCode: 201,
+      body: "",
+      headers: {},
+    });
+    await createWebPushNotifier({ agentDir: directory }).send(MESSAGE);
+    expect(send).toHaveBeenCalledWith(target, JSON.stringify(MESSAGE), {
+      vapidDetails: {
+        subject: "https://github.com/mjakl/web-pi",
+        ...stored(directory).vapidKeys,
+      },
+    });
+    expect(readFileSync(join(directory, "web-pi", "push.json"), "utf8")).toBe(
+      before,
+    );
+  });
+
+  it.each([403, 503, undefined, "secret-token"])(
+    "reports only a safe delivery status for %s and preserves enrollment",
+    async (statusCode) => {
+      const directory = agentDir();
+      const report = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+      const notifier = createWebPushNotifier({
+        agentDir: directory,
+        send: () =>
+          Promise.reject(
+            Object.assign(new Error("secret endpoint and auth"), {
+              statusCode,
+              body: "private response",
+              endpoint: "secret-token",
+            }),
+          ),
+      });
+      notifier.subscribe(subscription("https://push.example/secret-token"));
+      const before = readFileSync(
+        join(directory, "web-pi", "push.json"),
+        "utf8",
+      );
+      await notifier.send(MESSAGE);
+      expect(report).toHaveBeenCalledExactlyOnceWith(
+        typeof statusCode === "number"
+          ? `[web-pi] push delivery failed (HTTP ${String(statusCode)}); subscription retained\n`
+          : "[web-pi] push delivery failed (no HTTP status); subscription retained\n",
+      );
+      expect(readFileSync(join(directory, "web-pi", "push.json"), "utf8")).toBe(
+        before,
+      );
+    },
+  );
 
   it("sends the payload to every subscription", async () => {
     const sent: string[] = [];

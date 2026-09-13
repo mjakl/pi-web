@@ -195,13 +195,66 @@ describe("manual browser push enrollment", () => {
     expect(reg.pushManager.subscribe).not.toHaveBeenCalled();
   });
 
-  it("leaves an enrollment failure actionable, without claiming success", async () => {
+  it.each([400, 409, 500])(
+    "identifies server registration failure with HTTP %s",
+    async (code) => {
+      await load();
+      const fetch = mockFetch(() => text("private response", code));
+      click(toggle());
+      await flush();
+      expect(fetch).toHaveBeenCalledWith("/push/subscribe", expect.anything());
+      expect(status()).toBe(
+        `Browser subscription obtained, but server registration was not confirmed (HTTP ${String(code)}). Try Subscribe again, or reload to check enrollment.`,
+      );
+      expect(toggle().disabled).toBe(false);
+      expect(toggle().textContent).toBe("Subscribe");
+    },
+  );
+
+  it.each([false, true])(
+    "identifies browser enrollment failure without a POST (synchronous: %s)",
+    async (synchronous) => {
+      const { reg, fetch } = await load(undefined, "granted");
+      const error = new DOMException("private browser details", "AbortError");
+      reg.pushManager.subscribe.mockImplementation(() => {
+        if (synchronous) throw error;
+        return Promise.reject(error);
+      });
+      fetch.mockClear();
+      click(toggle());
+      await flush();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(status()).toBe(
+        "Browser push subscription failed (AbortError). Nothing was sent to the server. Try Subscribe again.",
+      );
+      expect(toggle().disabled).toBe(false);
+    },
+  );
+
+  it("keeps transport failure distinct from browser enrollment and hides exception details", async () => {
     await load();
-    mockFetch(() => text("failed", 500));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("secret endpoint")),
+    );
     click(toggle());
     await flush();
-    expect(status()).toContain("not confirmed");
+    expect(status()).toBe(
+      "Browser subscription obtained, but server registration was not confirmed (TypeError). Try Subscribe again, or reload to check enrollment.",
+    );
     expect(toggle().disabled).toBe(false);
+  });
+
+  it("does not display arbitrary browser exception names or messages", async () => {
+    const { reg } = await load();
+    reg.pushManager.subscribe.mockRejectedValue(
+      Object.assign(new Error("secret message"), { name: "secret name" }),
+    );
+    click(toggle());
+    await flush();
+    expect(status()).toBe(
+      "Browser push subscription failed. Nothing was sent to the server. Try Subscribe again.",
+    );
   });
 
   it("keeps unsubscribe available if browser cleanup fails", async () => {
