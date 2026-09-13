@@ -744,7 +744,7 @@ export function deferThinking(items: readonly TranscriptItem[]): void {
   for (const item of [...items].reverse()) {
     if (item.kind !== "assistant") continue;
     for (const block of [...item.blocks].reverse()) {
-      if (block.kind !== "thinking" || block.text === "") continue;
+      if (block.kind !== "thinking" || block.text.trim() === "") continue;
       if (budget > 0) {
         budget -= block.text.length;
         continue;

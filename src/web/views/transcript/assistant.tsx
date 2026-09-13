@@ -24,6 +24,13 @@ function ThinkingBlock({
   block: Extract<AssistantBlock, { kind: "thinking" }>;
   actions?: ItemActions;
 }) {
+  if (!block.deferred && block.text.trim() === "") {
+    return item.entryId === "partial" && actions?.streaming ? (
+      <div class="chat-activity">
+        <span class="chat-activity-label">Thinking</span>
+      </div>
+    ) : null;
+  }
   const fetchUrl =
     block.deferred && actions
       ? `/sessions/${actions.sessionId}/entries/${item.entryId}/thinking/${String(block.index)}`
