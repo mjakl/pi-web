@@ -1,4 +1,7 @@
-import { DEFAULT_WEB_SETTINGS } from "@core/web-settings";
+import {
+  DEFAULT_SYSTEM_PROMPT_ADDITION,
+  DEFAULT_WEB_SETTINGS,
+} from "@core/web-settings";
 import { SettingsBody } from "@web/views/Settings";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -21,6 +24,68 @@ async function load() {
 }
 
 describe("shared preferences", () => {
+  it("explicitly saves exact prompt text, empty text, and resets to the default", async () => {
+    const fetch = mockFetch((_url, init) => {
+      if (typeof init?.body !== "string")
+        throw new Error("Expected JSON settings");
+      return json({ ...DEFAULT_WEB_SETTINGS, ...JSON.parse(init.body) });
+    });
+    await load();
+    const input = byId("system-prompt-addition") as HTMLTextAreaElement;
+    expect(input.value).toBe(DEFAULT_SYSTEM_PROMPT_ADDITION);
+    for (const value of ["  Custom\naddition.  ", ""]) {
+      input.value = value;
+      input.dispatchEvent(new Event("input"));
+      expect(fetch).toHaveBeenCalledTimes(value === "" ? 1 : 0);
+      click(byId("system-prompt-save"));
+      expect(input.disabled).toBe(true);
+      await flush();
+      expect(fetch).toHaveBeenLastCalledWith(
+        "/settings/web",
+        expect.objectContaining({
+          body: JSON.stringify({ systemPromptAddition: value }),
+        }),
+      );
+      expect(input.value).toBe(value);
+      expect(input.disabled).toBe(false);
+    }
+    click(byId("system-prompt-reset"));
+    await flush();
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/settings/web",
+      expect.objectContaining({ body: '{"systemPromptAddition":null}' }),
+    );
+    expect(input.value).toBe(DEFAULT_SYSTEM_PROMPT_ADDITION);
+    expect(byId("system-prompt-status").textContent).toBe("Saved.");
+  });
+
+  it("preserves an unsaved prompt through focus refresh, unrelated saves and failed writes", async () => {
+    mockFetch(() =>
+      json({
+        ...DEFAULT_WEB_SETTINGS,
+        systemPromptAddition: "Another browser's edit",
+      }),
+    );
+    await load();
+    const input = byId("system-prompt-addition") as HTMLTextAreaElement;
+    window.dispatchEvent(new Event("focus"));
+    await flush();
+    expect(input.value).toBe("Another browser's edit");
+    input.value = "Unsent draft";
+    window.dispatchEvent(new Event("focus"));
+    await flush();
+    click(byId("sound-toggle"));
+    await flush();
+    expect(input.value).toBe("Unsent draft");
+    mockFetch(() => text("failed", 500));
+    click(byId("system-prompt-save"));
+    await flush();
+    expect(input.value).toBe("Unsent draft");
+    expect(byId("system-prompt-status").textContent).toContain(
+      "Could not save",
+    );
+  });
+
   it("ignores legacy values and saves sound on the server before applying it", async () => {
     localStorage.setItem("web-pi:sound", "false");
     const fetch = mockFetch(() =>

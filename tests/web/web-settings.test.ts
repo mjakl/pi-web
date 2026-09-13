@@ -19,6 +19,13 @@ function fixture() {
   return { app, world, save };
 }
 
+const defaults = {
+  warnTokens: 100000,
+  theme: "auto",
+  sound: true,
+  systemPromptAddition: null,
+};
+
 describe("shared web settings routes", () => {
   it("renders shared defaults, ignoring the old preference cookie", async () => {
     const { app } = fixture();
@@ -26,11 +33,7 @@ describe("shared web settings routes", () => {
       headers: { cookie: "web-pi-warn-tokens=1" },
     });
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({
-      warnTokens: 100000,
-      theme: "auto",
-      sound: true,
-    });
+    expect(await response.json()).toEqual(defaults);
   });
 
   it("saves independently from browser cookies and renders the same values for another browser", async () => {
@@ -45,10 +48,28 @@ describe("shared web settings routes", () => {
     expect(html).toContain('aria-checked="true" data-theme-option="dark"');
     expect(html).toContain('id="push-toggle"');
     expect(await (await app.request("/settings/web")).json()).toEqual({
+      ...defaults,
       warnTokens: 12345,
       theme: "dark",
       sound: false,
     });
+  });
+
+  it("renders custom prompt text safely and supports empty and default reset", async () => {
+    const { app, save } = fixture();
+    const custom = '</textarea><script>alert("hi")</script>\nKeep spaces.  ';
+    expect((await save({ systemPromptAddition: custom })).status).toBe(200);
+    const html = await (await app.request("/settings?section=general")).text();
+    expect(html).toContain("&lt;/textarea&gt;&lt;script&gt;");
+    expect(html).not.toContain(custom);
+    expect(html).toContain("stopped sessions when activated again");
+    for (const value of ["", null]) {
+      expect((await save({ systemPromptAddition: value })).status).toBe(200);
+      expect(await (await app.request("/settings/web")).json()).toEqual({
+        ...defaults,
+        systemPromptAddition: value,
+      });
+    }
   });
 
   it.each([
@@ -59,15 +80,12 @@ describe("shared web settings routes", () => {
     { warnTokens: 9007199254740992 },
     { theme: "sepia" },
     { sound: "true" },
+    { systemPromptAddition: 123, sound: false },
     { other: true },
     null,
   ])("rejects the whole invalid edit %j", async (invalid) => {
     const { save, world } = fixture();
     expect((await save(invalid)).status).toBe(400);
-    expect(world.webSettings.get()).toEqual({
-      warnTokens: 100000,
-      theme: "auto",
-      sound: true,
-    });
+    expect(world.webSettings.get()).toEqual(defaults);
   });
 });

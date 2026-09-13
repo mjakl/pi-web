@@ -32,6 +32,59 @@ afterEach(async () => {
 });
 
 describe("opening", () => {
+  it("replaces only web-pi's addition at runtime start, retaining Pi and user instructions", async () => {
+    h = await createHarness();
+    await writeFile(
+      join(h.agentDir, "APPEND_SYSTEM.md"),
+      "Keep the user's appended instruction.",
+    );
+    const original = await h.open();
+    const defaultAddition =
+      "The interface renders Markdown with tables, task lists, links, and fenced code blocks. LaTeX/math typesetting is not supported; use plain text or code for math.";
+    expect(original.systemPrompt()).toContain(defaultAddition);
+    expect(original.systemPrompt()).toContain(
+      "You are an expert coding assistant",
+    );
+    expect(original.systemPrompt()).toContain(
+      "Keep the user's appended instruction.",
+    );
+
+    h.webSettings.update({ systemPromptAddition: "Custom web instruction." });
+    await original.reload();
+    expect(original.systemPrompt()).toContain(defaultAddition);
+    expect(original.systemPrompt()).not.toContain("Custom web instruction.");
+    const custom = await h.open();
+    expect(custom.systemPrompt()).toContain("Custom web instruction.");
+    expect(custom.systemPrompt()).not.toContain(defaultAddition);
+    expect(custom.systemPrompt()).toContain(
+      "You are an expert coding assistant",
+    );
+    expect(custom.systemPrompt()).toContain(
+      "Keep the user's appended instruction.",
+    );
+    h.script(reply("answer"));
+    const done = next(custom, "turn_done");
+    await custom.prompt("question");
+    await done;
+    expect(h.calls[0]?.context.systemPrompt).toContain(
+      "Custom web instruction.",
+    );
+    h.webSettings.update({ systemPromptAddition: "" });
+    expect(await h.open({ sessionId: custom.id })).toBe(custom);
+    await custom.stop();
+    const reopened = await h.open({ sessionId: custom.id });
+    expect(reopened.systemPrompt()).not.toContain("Custom web instruction.");
+    expect(reopened.systemPrompt()).not.toContain(defaultAddition);
+    expect(reopened.systemPrompt()).toContain(
+      "You are an expert coding assistant",
+    );
+    expect(reopened.systemPrompt()).toContain(
+      "Keep the user's appended instruction.",
+    );
+    h.webSettings.update({ systemPromptAddition: null });
+    expect((await h.open()).systemPrompt()).toContain(defaultAddition);
+  });
+
   it("starts a new session on the configured model with nothing said yet", async () => {
     h = await createHarness();
     const announced: RuntimeEvent[] = [];

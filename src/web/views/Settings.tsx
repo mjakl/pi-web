@@ -10,7 +10,11 @@ import {
   type SkillSearchHit,
   type SkillUpdate,
 } from "@core/skills";
-import { DEFAULT_WEB_SETTINGS, type WebSettings } from "@core/web-settings";
+import {
+  DEFAULT_SYSTEM_PROMPT_ADDITION,
+  DEFAULT_WEB_SETTINGS,
+  type WebSettings,
+} from "@core/web-settings";
 import { shortPath } from "@core/workspaces";
 import { ConfigButton, ConfigField, ConfigSwitch } from "./ConfigControls.tsx";
 import {
@@ -163,7 +167,8 @@ function GeneralSettings({ settings }: { settings: WebSettings }) {
     <div class="settings-general" data-web-settings={JSON.stringify(settings)}>
       <h2 class="settings-general-title">General</h2>
       <p class="settings-general-description">
-        Appearance, token threshold and sound are shared across browsers.
+        Appearance, token threshold, sound and system prompt addition are shared
+        across browsers and projects.
       </p>
       <p
         id="web-settings-status"
@@ -226,6 +231,42 @@ function GeneralSettings({ settings }: { settings: WebSettings }) {
             checked={settings.sound}
             label="Completion sound"
           />
+        </div>
+      </section>
+      <section class="settings-general-section">
+        <h3 class="settings-general-heading">
+          <label for="system-prompt-addition">System prompt addition</label>
+        </h3>
+        <p id="system-prompt-help" class="settings-general-description">
+          Replaces only web-pi’s addition, not Pi’s base system prompt or your
+          other instructions. Save empty text to add nothing. Reset restores the
+          built-in default.
+        </p>
+        <p id="system-prompt-timing" class="settings-general-description">
+          Applies to new sessions and stopped sessions when activated again.
+          Already active sessions keep their addition, including after /reload
+          or a browser refresh. Use Stop, then Activate in the session menu to
+          apply it to an active session.
+        </p>
+        <textarea
+          id="system-prompt-addition"
+          class="settings-prompt-input"
+          rows={6}
+          aria-describedby="system-prompt-help system-prompt-timing"
+        >
+          {settings.systemPromptAddition ?? DEFAULT_SYSTEM_PROMPT_ADDITION}
+        </textarea>
+        <div class="settings-prompt-actions">
+          <ConfigButton id="system-prompt-save" variant="primary">
+            Save
+          </ConfigButton>
+          <ConfigButton id="system-prompt-reset">Reset to default</ConfigButton>
+          <span
+            id="system-prompt-status"
+            class="settings-general-description"
+            role="status"
+            aria-live="polite"
+          ></span>
         </div>
       </section>
       <section class="settings-general-section" id="push-settings">

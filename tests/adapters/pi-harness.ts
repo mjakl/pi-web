@@ -1,3 +1,4 @@
+import { createWebSettingsStore } from "@adapters/fs/web-settings";
 import { createPiAgentRuntime } from "@adapters/pi/agent-runtime";
 import { createPiSessionCatalog } from "@adapters/pi/session-catalog";
 import type {
@@ -289,7 +290,9 @@ export async function createHarness(
     },
   };
   const catalog = createPiSessionCatalog({ agentDir });
+  const webSettings = createWebSettingsStore(agentDir);
   const runtime: AgentRuntime = createPiAgentRuntime({
+    webSettings,
     agentDir,
     catalog,
     extensions: [provider, ...(options.extensions ?? [])],
@@ -309,6 +312,7 @@ export async function createHarness(
     cwd,
     runtime,
     catalog,
+    webSettings,
     /** Provider calls so far: what the SDK sent, in order. */
     calls,
     /** Queues replies for the next provider calls. */

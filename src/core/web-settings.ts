@@ -1,15 +1,21 @@
 import { DEFAULT_WARN_TOKENS } from "@core/context-usage";
 
+export const DEFAULT_SYSTEM_PROMPT_ADDITION =
+  "The interface renders Markdown with tables, task lists, links, and fenced code blocks. LaTeX/math typesetting is not supported; use plain text or code for math.";
+
 export type WebSettings = {
   warnTokens: number;
   theme: "light" | "dark" | "auto";
   sound: boolean;
+  /** Null follows the built-in default; an empty string disables the addition. */
+  systemPromptAddition: string | null;
 };
 
 export const DEFAULT_WEB_SETTINGS: WebSettings = {
   warnTokens: DEFAULT_WARN_TOKENS,
   theme: "auto",
   sound: true,
+  systemPromptAddition: null,
 };
 
 /** Reject the whole edit rather than quietly saving only some fields. */
@@ -33,6 +39,11 @@ export function webSettingsPatch(value: unknown): Partial<WebSettings> {
       patch.theme = setting;
     } else if (key === "sound" && typeof setting === "boolean") {
       patch.sound = setting;
+    } else if (
+      key === "systemPromptAddition" &&
+      (setting === null || typeof setting === "string")
+    ) {
+      patch.systemPromptAddition = setting;
     } else {
       throw new Error(`Invalid web setting: ${key}`);
     }

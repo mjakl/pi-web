@@ -227,10 +227,15 @@ export function createDeps(config: Config): { workspace: Workspace } {
     };
   }
   const catalog = createPiSessionCatalog({ agentDir: config.agentDir });
+  const webSettings = createWebSettingsStore(config.agentDir);
   return {
     workspace: createWorkspace({
       sessions: catalog,
-      runtime: createPiAgentRuntime({ agentDir: config.agentDir, catalog }),
+      runtime: createPiAgentRuntime({
+        agentDir: config.agentDir,
+        catalog,
+        webSettings,
+      }),
       models: createPiModelCatalog({ agentDir: config.agentDir }),
       projects: createPiProjectResolver({ agentDir: config.agentDir }),
       browser: createDirectoryBrowser(),
@@ -242,7 +247,7 @@ export function createDeps(config: Config): { workspace: Workspace } {
       git: createGit(),
       watcher: createWatcher(),
       push: createWebPushNotifier({ agentDir: config.agentDir }),
-      webSettings: createWebSettingsStore(config.agentDir),
+      webSettings,
       tmpdir: tmpdir(),
     }),
   };

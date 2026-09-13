@@ -1,3 +1,7 @@
+import {
+  DEFAULT_SYSTEM_PROMPT_ADDITION,
+  type WebSettingsStore,
+} from "@core/web-settings";
 import { mergeQueue, type SlashCommand } from "@core/composer";
 import type {
   AgentRuntime,
@@ -53,9 +57,6 @@ import { defaultSessionDir, type PiSessionCatalog } from "./session-catalog.ts";
 
 /** Streaming tool arguments kept for the card; the entry holds the rest. */
 const PARTIAL_ARGUMENT_CHARS = 4096;
-
-const RENDER_NOTE =
-  "The interface renders Markdown with tables, task lists, links, and fenced code blocks. LaTeX/math typesetting is not supported; use plain text or code for math.";
 
 type Partial = Extract<AgentMessage, { role: "assistant" }>;
 
@@ -790,6 +791,7 @@ const DRAFT_IDLE_MS = 10 * 60 * 1000;
 export function createPiAgentRuntime(options: {
   agentDir: string;
   catalog: PiSessionCatalog;
+  webSettings: WebSettingsStore;
   /** Loaded into every session besides the user's own; tests script a provider through one. */
   extensions?: InlineExtension[];
   /** Inject the shell backend for offline hosts and tests. */
@@ -809,6 +811,10 @@ export function createPiAgentRuntime(options: {
     manager: SessionManager,
     startup: StartupChoice = {},
   ): Promise<PiLiveSession> {
+    // Capture once: even resource reloads keep this runtime's addition stable.
+    const addition =
+      options.webSettings.get().systemPromptAddition ??
+      DEFAULT_SYSTEM_PROMPT_ADDITION;
     const cwd = manager.getCwd();
     const settingsManager = SettingsManager.create(cwd, options.agentDir);
     const trust = projectTrustReloadOptions(cwd, options.agentDir);
@@ -817,7 +823,8 @@ export function createPiAgentRuntime(options: {
       agentDir: options.agentDir,
       settingsManager,
       resourceLoaderOptions: {
-        appendSystemPromptOverride: (base) => [...base, RENDER_NOTE],
+        appendSystemPromptOverride: (base) =>
+          addition === "" ? base : [...base, addition],
         extensionFactories: [
           createProjectBashExtension({
             cwd,

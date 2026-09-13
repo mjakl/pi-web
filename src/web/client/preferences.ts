@@ -1,6 +1,7 @@
 import { setUpRegion } from "./lifecycle.ts";
 import { requestContext } from "./htmx.ts";
 import {
+  DEFAULT_SYSTEM_PROMPT_ADDITION,
   DEFAULT_WEB_SETTINGS,
   webSettingsPatch,
   type WebSettings,
@@ -41,7 +42,19 @@ export function setSwitch(element: Element, on: boolean): void {
 
 let confirmed = { ...DEFAULT_WEB_SETTINGS };
 
-function apply(settings: WebSettings): void {
+function apply(settings: WebSettings, replacePrompt = false): void {
+  const prompt = document.querySelector<HTMLTextAreaElement>(
+    "#system-prompt-addition",
+  );
+  if (
+    prompt &&
+    (replacePrompt ||
+      prompt.value ===
+        (confirmed.systemPromptAddition ?? DEFAULT_SYSTEM_PROMPT_ADDITION))
+  ) {
+    prompt.value =
+      settings.systemPromptAddition ?? DEFAULT_SYSTEM_PROMPT_ADDITION;
+  }
   confirmed = settings;
   document.documentElement.dataset["theme"] = settings.theme;
   document.documentElement.dataset["sound"] = String(settings.sound);
@@ -92,16 +105,22 @@ export function setUpPreferences(): void {
     });
     const status = region.querySelector<HTMLElement>("#web-settings-status");
     const controls = () =>
-      document.querySelectorAll<HTMLButtonElement | HTMLInputElement>(
-        "[data-theme-option], #sound-toggle, #dumb-zone-tokens",
+      document.querySelectorAll<
+        HTMLButtonElement | HTMLInputElement | HTMLTextAreaElement
+      >(
+        "[data-theme-option], #sound-toggle, #dumb-zone-tokens, #system-prompt-addition, #system-prompt-save, #system-prompt-reset",
       );
     for (const control of controls()) control.disabled = saving;
     const save = async (patch: Partial<WebSettings>) => {
       if (saving) return;
+      const promptEdit = "systemPromptAddition" in patch;
+      const feedback = promptEdit
+        ? region.querySelector<HTMLElement>("#system-prompt-status")
+        : status;
       saving = true;
       revision += 1;
       for (const control of controls()) control.disabled = true;
-      if (status) status.textContent = "Saving…";
+      if (feedback) feedback.textContent = "Saving…";
       try {
         const response = await fetch("/settings/web", {
           method: "POST",
@@ -113,15 +132,18 @@ export function setUpPreferences(): void {
           throw new Error(
             "Could not save settings. Check the connection and try again.",
           );
-        apply({
-          ...DEFAULT_WEB_SETTINGS,
-          ...webSettingsPatch(await response.json()),
-        });
-        if (status) status.textContent = "Saved.";
+        apply(
+          {
+            ...DEFAULT_WEB_SETTINGS,
+            ...webSettingsPatch(await response.json()),
+          },
+          promptEdit,
+        );
+        if (feedback) feedback.textContent = "Saved.";
       } catch (error) {
         apply(confirmed);
-        if (status)
-          status.textContent =
+        if (feedback)
+          feedback.textContent =
             error instanceof Error
               ? error.message
               : "Could not save settings. Try again.";
@@ -136,10 +158,21 @@ export function setUpPreferences(): void {
         const target =
           event.target instanceof Element
             ? event.target.closest<HTMLElement>(
-                "[data-theme-option], #sound-toggle",
+                "[data-theme-option], #sound-toggle, #system-prompt-save, #system-prompt-reset",
               )
             : null;
         if (!target) return;
+        if (target.id === "system-prompt-save") {
+          const prompt = region.querySelector<HTMLTextAreaElement>(
+            "#system-prompt-addition",
+          );
+          if (prompt) void save({ systemPromptAddition: prompt.value });
+          return;
+        }
+        if (target.id === "system-prompt-reset") {
+          void save({ systemPromptAddition: null });
+          return;
+        }
         const theme = target.dataset["themeOption"];
         if (theme === "light" || theme === "dark" || theme === "auto")
           void save({ theme });

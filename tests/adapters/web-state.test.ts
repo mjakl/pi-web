@@ -143,6 +143,7 @@ describe("web state cutover", () => {
     });
     rmSync(join(f.agentDir, "web-pi"), { recursive: true });
     expect(createWebSettingsStore(f.agentDir).get()).toEqual({
+      systemPromptAddition: null,
       warnTokens: 100000,
       theme: "auto",
       sound: true,
@@ -156,11 +157,32 @@ describe("web state cutover", () => {
 });
 
 describe("shared settings storage", () => {
+  it("reads pre-customization files and preserves exact prompt text, empty and reset across restarts", () => {
+    const { agentDir } = fixture();
+    writeFileSync(
+      join(agentDir, "web-pi", "settings.json"),
+      JSON.stringify({ theme: "light", sound: false, warnTokens: 42 }),
+    );
+    expect(
+      createWebSettingsStore(agentDir).get().systemPromptAddition,
+    ).toBeNull();
+    for (const value of ["  Keep this.\n\nAnd this.  ", "", null]) {
+      createWebSettingsStore(agentDir).update({ systemPromptAddition: value });
+      expect(createWebSettingsStore(agentDir).get()).toEqual({
+        theme: "light",
+        sound: false,
+        warnTokens: 42,
+        systemPromptAddition: value,
+      });
+    }
+  });
+
   it("persists across adapters, merges independent edits, and writes privately", () => {
     const { agentDir } = fixture();
     const one = createWebSettingsStore(agentDir);
     const two = createWebSettingsStore(agentDir);
     expect(one.get()).toEqual({
+      systemPromptAddition: null,
       warnTokens: 100000,
       theme: "auto",
       sound: true,
@@ -168,6 +190,7 @@ describe("shared settings storage", () => {
     one.update({ theme: "dark" });
     two.update({ sound: false });
     expect(one.get()).toEqual({
+      systemPromptAddition: null,
       warnTokens: 100000,
       theme: "dark",
       sound: false,
