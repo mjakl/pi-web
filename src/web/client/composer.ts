@@ -670,7 +670,7 @@ function setUpShelf(): void {
       if (open === undefined) {
         open =
           shelf.querySelector<HTMLElement>(
-            ".extension-widget-trigger.is-expanded",
+            '.extension-widget-trigger[aria-expanded="true"]',
           )?.dataset["widget"] ?? null;
       }
       let shown = false;
@@ -679,7 +679,6 @@ function setUpShelf(): void {
       )) {
         const key = trigger.dataset["widget"] ?? "";
         const expanded = key === open;
-        trigger.classList.toggle("is-expanded", expanded);
         trigger.setAttribute("aria-expanded", String(expanded));
         const panel = document.getElementById(
           trigger.getAttribute("aria-controls") ?? "",

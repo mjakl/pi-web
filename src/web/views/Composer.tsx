@@ -23,17 +23,6 @@ import {
 // bundle owns only the keyboard, the local file index, and the image previews,
 // which cannot come from a round trip.
 
-/** The two anchored menus above the surface share pi-web's panel box. */
-const MENU_PANEL =
-  "position:absolute; left:0; right:0; bottom:calc(100% + 8px);" +
-  " z-index:120; overflow:hidden; box-sizing:border-box; display:flex;" +
-  " flex-direction:column; max-height:min(48vh, 400px)";
-
-const MENU_HEADER =
-  "padding:8px 10px; border-bottom:1px solid var(--border); display:flex;" +
-  " align-items:center; justify-content:space-between; gap:8px;" +
-  " font-size:11px; color:var(--text-dim); flex-shrink:0";
-
 const SOURCE_LABEL: Record<SlashSource, string> = {
   builtin: "Built-in",
   extension: "Extensions",
@@ -78,24 +67,21 @@ export function CommandMenu({
   let index = -1;
   return (
     <>
-      <div style={MENU_HEADER}>
+      <div class="composer-menu-header">
         <span>Slash commands · {commandLabel(commands.length, query)}</span>
-        <span style="font-family:var(--font-mono)">Tab / Enter</span>
+        <span class="composer-menu-hint">Tab / Enter</span>
       </div>
-      <div style="flex:1 1 auto; min-height:0; overflow-y:auto; padding:4px">
+      <div class="composer-command-list">
         {commands.length === 0 ? (
-          <div style="padding:2px 2px 4px; font-size:12px; color:var(--text-dim)">
+          <div class="composer-command-empty">
             No extension, prompt, or skill commands found
           </div>
         ) : (
           groups.map((group) => (
-            <section style="margin-bottom:8px">
-              <div
-                class="menu-section-label"
-                style="position:sticky; top:-10px; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--bg)"
-              >
+            <section class="composer-command-group">
+              <div class="menu-section-label composer-command-heading">
                 <span>{SOURCE_LABEL[group.source]}</span>
-                <span style="font-family:var(--font-mono); font-weight:500">
+                <span class="composer-command-count">
                   {String(group.items.length)}
                 </span>
               </div>
@@ -105,21 +91,18 @@ export function CommandMenu({
                   return (
                     <button
                       type="button"
-                      class="menu-item"
-                      style="align-items:baseline"
+                      class="menu-item composer-command"
                       data-command={command.name}
                       data-index={String(index)}
                     >
-                      <span style="flex-shrink:0; font-size:12.5px; font-family:var(--font-mono); overflow-wrap:anywhere">
+                      <span class="composer-command-name">
                         /{command.name}
                         {command.manual ? (
-                          <span style="margin-left:6px; padding:0 4px; border:1px solid var(--border); border-radius:3px; font-size:9px; color:var(--text-muted); white-space:nowrap">
-                            Manual
-                          </span>
+                          <span class="composer-command-manual">Manual</span>
                         ) : null}
                       </span>
                       {command.description ? (
-                        <span style="min-width:0; flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; color:var(--text-dim)">
+                        <span class="composer-command-description">
                           {command.description}
                         </span>
                       ) : null}
@@ -135,44 +118,17 @@ export function CommandMenu({
   );
 }
 
-/** pi-web's notice dot colours (§4.8). */
-const TOAST_COLOUR = {
-  info: "var(--accent)",
-  warning: "var(--warning)",
-  error: "var(--danger)",
-} as const;
-
-/** pi-web's `NoticeShelf` card, floating over the transcript (§4.8). */
-const NOTICE_ITEM_STYLE =
-  "display:flex; align-items:flex-start; gap:10px; min-height:60px;" +
-  " height:auto; max-height:500px; pointer-events:auto; overflow:hidden;" +
-  " border-radius:14px;" +
-  " border:1px solid color-mix(in srgb, var(--border) 70%, transparent);" +
-  " background:var(--bg); color:var(--text-muted); width:fit-content;" +
-  " max-width:min(100%, 620px);" +
-  " box-shadow:0 1px 2px rgba(15,23,42,0.05), 0 10px 28px -14px rgba(15,23,42,0.24);" +
-  " font-size:14px; line-height:1.5; transform-origin:top right;" +
-  " animation:notice-shelf-in 0.18s ease-out backwards; padding:0 12px";
-
-const NOTICE_TEXT_STYLE =
-  "padding:14px 0; min-width:0; max-width:100%; max-height:470px;" +
-  " overflow-y:auto; scrollbar-width:thin; white-space:pre-line;" +
-  " word-break:break-word";
-
 /** One batch of notices, appended to the shelf by the session's SSE stream. */
 export function Toasts({ notices }: { notices: Notice[] }) {
   return (
     <>
       {notices.map((notice) => (
         <div
-          class="notice-shelf-item"
+          class={`notice-shelf-item is-${notice.level}`}
           role={notice.level === "error" ? "alert" : "status"}
-          style={NOTICE_ITEM_STYLE}
         >
-          <span
-            style={`width:7px; height:7px; border-radius:50%; background:${TOAST_COLOUR[notice.level]}; flex-shrink:0; margin-top:21px`}
-          />
-          <span tabindex={0} style={NOTICE_TEXT_STYLE}>
+          <span class="notice-shelf-dot" />
+          <span tabindex={0} class="notice-shelf-text">
             {notice.message}
           </span>
         </div>
@@ -226,20 +182,15 @@ export function ComposerText({ draft }: { draft?: string }) {
 export function ModelScopeWarning({ warnings }: { warnings: string[] }) {
   if (warnings.length === 0) return <></>;
   return (
-    <div
-      role="alert"
-      style="display:flex; align-items:flex-start; gap:8px; max-height:120px; margin-bottom:8px; padding:7px 10px; overflow-y:auto; border:1px solid rgba(234,179,8,0.3); border-radius:6px; background:rgba(234,179,8,0.07); color:rgb(234,179,8); font-size:11px; line-height:1.45"
-    >
-      <span style="flex-shrink:0; margin-top:1px; display:flex">
+    <div role="alert" class="composer-model-warning">
+      <span class="composer-model-warning-icon">
         <WarningTriangleIcon />
       </span>
-      <div style="min-width:0">
-        <div style="font-weight:600">
+      <div class="composer-model-warning-body">
+        <div class="composer-model-warning-title">
           Model scope warning{warnings.length === 1 ? "" : "s"}
         </div>
-        <div style="white-space:pre-wrap; overflow-wrap:anywhere">
-          {warnings.join("\n")}
-        </div>
+        <div class="composer-model-warning-text">{warnings.join("\n")}</div>
       </div>
     </div>
   );
@@ -409,7 +360,6 @@ export function ModelSelector({
     <div
       id="model-selector"
       class={`model-selector is-composer${disabled === true ? " is-disabled" : ""}`}
-      style="position:relative; min-width:0"
       {...(oob === true ? { "hx-swap-oob": "outerHTML" } : {})}
     >
       {/* `/new` posts the pick with the first prompt instead of applying it. */}
@@ -437,9 +387,7 @@ export function ModelSelector({
               : "No available models"
         }
       >
-        <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-          {name}
-        </span>
+        <span class="composer-model-name">{name}</span>
         <span class="composer-model-detail">{detail}</span>
         <ChevronDownIcon />
       </button>
@@ -452,11 +400,10 @@ export function ModelSelector({
       >
         <ReasoningField pick={pick} />
         {models.length > FILTER_FROM ? (
-          <div style="flex-shrink:0; padding:6px 8px; border-bottom:1px solid var(--border)">
+          <div class="composer-model-filter">
             <input
               id="model-filter"
-              class="menu-filter"
-              style="min-width:220px"
+              class="menu-filter composer-model-filter-input"
               placeholder="Filter models…"
               aria-label="Filter models…"
               autocomplete="off"
@@ -470,20 +417,15 @@ export function ModelSelector({
         <div
           role="listbox"
           aria-label="Select model"
-          style="min-height:0; overflow-y:auto"
+          class="composer-model-list"
         >
           {models.length === 0 ? (
-            <div style="padding:8px 12px; color:var(--text-dim); font-size:12px; white-space:nowrap">
-              No available models
-            </div>
+            <div class="composer-model-empty">No available models</div>
           ) : (
-            providers.map((provider, index) => (
-              <div data-provider={provider}>
+            providers.map((provider) => (
+              <div class="composer-model-provider" data-provider={provider}>
                 {providers.length > 1 ? (
-                  <div
-                    class="menu-section-label"
-                    style={`border-top:${index > 0 ? "1px solid var(--border)" : "none"}`}
-                  >
+                  <div class="menu-section-label composer-model-provider-heading">
                     {provider}
                   </div>
                 ) : null}
@@ -497,8 +439,7 @@ export function ModelSelector({
                       <button
                         type="button"
                         role="option"
-                        class="menu-item"
-                        style="white-space:nowrap"
+                        class="menu-item composer-model-option"
                         aria-selected={active ? "true" : "false"}
                         data-model-name={model.name}
                         {...pickAttributes(pick, modelValue(model))}
@@ -506,11 +447,11 @@ export function ModelSelector({
                         {active ? (
                           <ModelCheckIcon />
                         ) : (
-                          <span style="width:10px; flex-shrink:0" />
+                          <span class="composer-model-check-space" />
                         )}
                         <span
                           title={model.name}
-                          style="min-width:0; overflow:hidden; text-overflow:ellipsis"
+                          class="composer-model-option-name"
                         >
                           {model.name}
                         </span>
@@ -561,8 +502,8 @@ function MoreControls({ sessionId }: { sessionId?: string }) {
             Stop agent
           </button>
         )}
-        {/* The shelf's own status line is sr-only on a phone (globals.css
-            L2262); this is the copy pi-web shows instead. The client keeps it
+        {/* The shelf's own status line is sr-only on a phone; this is the
+            visible copy. The client keeps it
             in step with the shelf, and it stays out of the accessibility tree
             because the live region below already announces the same text. */}
         <section
@@ -586,14 +527,6 @@ function MoreControls({ sessionId }: { sessionId?: string }) {
 export function DropZone() {
   return (
     <div class="chat-drop-zone" hidden>
-      <div class="chat-drop-zone-ripples">
-        {["0s", "0.8s", "1.6s"].map((delay) => (
-          <div
-            class="chat-drop-zone-ripple"
-            style={`transform-origin:center; animation-delay:${delay}`}
-          />
-        ))}
-      </div>
       <DropZoneIcon />
     </div>
   );
@@ -658,9 +591,9 @@ export function Composer({
         name="images[]"
         accept="image/*"
         multiple
-        style="display:none"
+        hidden
       />
-      <div style="max-width:820px; margin:0 auto">
+      <div class="composer-column">
         {sessionId === undefined && cwd !== undefined ? (
           <input type="hidden" name="cwd" value={cwd} />
         ) : null}
@@ -678,25 +611,19 @@ export function Composer({
           {status}
           {start ? <ModelScopeWarning warnings={start.modelWarnings} /> : null}
         </div>
-        <div style="position:relative; min-width:0">
+        <div class="composer-input-host">
           <div
             id="slash-menu"
-            class="menu-surface menu-panel"
-            style={MENU_PANEL}
+            class="menu-surface menu-panel composer-completion-panel"
             hidden
           />
           <div
             id="at-menu"
-            class="menu-surface menu-panel"
-            style={MENU_PANEL}
+            class="menu-surface menu-panel composer-completion-panel"
             hidden
           />
           <div class="composer-surface">
-            <div
-              id="image-previews"
-              style="display:flex; gap:6px; margin-bottom:6px; flex-wrap:wrap"
-              hidden
-            />
+            <div id="image-previews" class="composer-image-previews" hidden />
             <ComposerText draft={draft} />
             <div class="composer-toolbar">
               <button

@@ -1413,10 +1413,10 @@ describe("the composer, as pi-web draws it", () => {
     order(composer, [
       'class="chat-input"',
       'id="image-input"',
-      "max-width:820px; margin:0 auto",
+      'class="composer-column"',
       'id="status"',
-      'id="slash-menu" class="menu-surface menu-panel"',
-      'id="at-menu" class="menu-surface menu-panel"',
+      'id="slash-menu" class="menu-surface menu-panel composer-completion-panel"',
+      'id="at-menu" class="menu-surface menu-panel composer-completion-panel"',
       'class="composer-surface"',
       'id="image-previews"',
       'class="composer-textarea"',
@@ -1428,10 +1428,6 @@ describe("the composer, as pi-web draws it", () => {
       'class="composer-action-primary"',
       'class="composer-shell-mode" id="shell-hint"',
     ]);
-    // The surface's own metrics come from globals.css, so the markup only has
-    // to carry the classes; the strips, though, are pi-web's inline styles.
-    expect(composer).toContain("bottom:calc(100% + 8px)");
-    expect(composer).toContain("max-height:min(48vh, 400px)");
     // The stream swaps into the status div, not into the form's toast target.
     expect(composer).toContain('id="status"');
   });
@@ -1443,9 +1439,9 @@ describe("the composer, as pi-web draws it", () => {
       "Slash commands · ",
       " commands",
       "Tab / Enter",
-      'class="menu-section-label"',
+      'class="menu-section-label composer-command-heading"',
       "Built-in",
-      'class="menu-item"',
+      'class="menu-item composer-command"',
       "/clone",
       "Clone the current branch into a new session",
       // pi-web's group order: built-in, extension, prompt, skill.
@@ -1456,7 +1452,7 @@ describe("the composer, as pi-web draws it", () => {
       "Skills",
       "/skill:testing",
     ]);
-    expect(menu).toContain("font-size:12.5px");
+    expect(menu).toContain('class="composer-command-name"');
     expect(menu).toContain('data-index="0"');
   });
 
@@ -1485,7 +1481,9 @@ describe("the composer, as pi-web draws it", () => {
     expect(selector).toContain(
       "anchored-menu menu-surface opens-up menu-model-selector",
     );
-    expect(selector).toContain('class="menu-filter"');
+    expect(selector).toContain(
+      'class="menu-filter composer-model-filter-input"',
+    );
     expect(selector).toContain('placeholder="Filter models…"');
     // Showing a popover focuses the first autofocus element inside it.
     expect(selector).toContain("autofocus");
@@ -1553,11 +1551,11 @@ describe("the composer, as pi-web draws it", () => {
     const page = await (await app.request("/sessions/s1")).text();
     const status = page.slice(page.indexOf('id="status"'));
     order(status, [
-      "text-transform:uppercase",
+      'class="composer-queue-label"',
       "Queued · 1",
       "Remove all queued messages",
       "Recall to input",
-      "border-radius:999px",
+      'class="composer-queued-kind"',
       "follow-up",
       "and then this",
     ]);
@@ -1690,7 +1688,9 @@ describe("conversation rail, shelf, and written files", () => {
       'class="extension-status-shelf has-widgets has-status"',
     );
     expect(received).toContain('class="extension-widget-triggers"');
-    expect(received).toContain('class="extension-widget-trigger is-expanded"');
+    expect(received).toMatch(
+      /class="extension-widget-trigger"[^>]*aria-expanded="true"/,
+    );
     expect(received).toContain('class="extension-widget-panel-heading"');
     expect(received).toContain('class="extension-status-text"');
     expect(received).not.toContain("\u001B[");
@@ -1972,11 +1972,10 @@ describe("transcript rendering", () => {
       received += decoder.decode(chunk.value);
     }
     await reader.cancel();
-    expect(received).toContain('class="notice-shelf-item"');
-    expect(received).toContain("border-radius:14px");
-    expect(received).toContain("min-height:60px");
-    // The type dot, then the message in its own scrolling span.
-    expect(received).toContain("background:var(--accent)");
+    expect(received).toContain('class="notice-shelf-item is-info"');
+    // Streamed notices use the same presentation hooks as browser notices.
+    expect(received).toContain('class="notice-shelf-dot"');
+    expect(received).toContain('class="notice-shelf-text"');
     expect(received).toContain("Resources reloaded.");
   });
 

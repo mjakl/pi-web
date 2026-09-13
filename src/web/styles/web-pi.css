@@ -1,6 +1,4 @@
-/* Rules web-pi needs that pi-web does not ship in its own stylesheets.
-   Everything else in this folder is pi-web's CSS verbatim and is the pixel
-   spec: never edit those files, add here (or in areas/) instead, and say why. */
+/* Self-hosted fonts and global HTMX behavior. */
 
 /* pi-web loads Noto Sans Mono through next/font, which generates both the
    @font-face rules and the --font-noto-mono family name its CSS reads. web-pi
@@ -38,13 +36,4 @@
 
 .htmx-indicator.htmx-request {
   display: block;
-}
-
-/* pi-web mounts the model panel only while it is open, so the `display: flex`
-   globals.css gives it never met a closed popover. web-pi renders the popover
-   with the page and leaves it there, and an author `display` beats the UA's
-   `[popover]:not(:popover-open){display:none}` — which left an invisible,
-   full-width panel over the composer, swallowing taps on a phone. */
-.anchored-menu.opens-up.menu-model-selector:not(:popover-open) {
-  display: none;
 }

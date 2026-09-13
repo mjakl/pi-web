@@ -121,16 +121,14 @@ export function setUpImages(
     previews.hidden = attached.length === 0;
     for (const file of attached) {
       const wrapper = document.createElement("div");
-      wrapper.style.cssText = "position:relative; flex-shrink:0";
+      wrapper.className = "composer-image-preview";
       const image = document.createElement("img");
       image.src = URL.createObjectURL(file);
       image.alt = "";
-      image.style.cssText =
-        "width:56px; height:56px; object-fit:cover; border-radius:6px; border:1px solid var(--border); display:block";
+      image.className = "composer-image-thumbnail";
       const remove = document.createElement("button");
       remove.type = "button";
-      remove.style.cssText =
-        "position:absolute; top:-4px; right:-4px; width:16px; height:16px; border-radius:50%; background:var(--bg-panel); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; color:var(--text-muted)";
+      remove.className = "composer-image-remove";
       // views/icons.tsx #49, drawn here because the strip is built in the
       // browser: the files never reach the server before they are sent.
       remove.innerHTML =
