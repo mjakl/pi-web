@@ -1,31 +1,10 @@
 import { ansiToHtml, normalizeFrame } from "@core/ansi";
 import type { CustomFrame, DialogRequest } from "@core/extension-ui";
 import { raw } from "hono/html";
+import { ConfigButton } from "./ConfigControls.tsx";
 
-// What an extension puts on screen while it waits for the reader: one modal
-// dialog, and one panel holding the frames of a terminal component. Both are
-// server-rendered and arrive on the session stream, so a second tab sees the
-// same dialog and loses it the moment another tab answers. The markup is
-// pi-web's (components/ChatWindow.tsx L1696-L2100), kebab-cased.
-
-const PANEL =
-  "width:min(560px, 100%); max-height:min(760px, 100%); display:flex;" +
-  " flex-direction:column; border:1px solid var(--border); border-radius:8px;" +
-  " background:var(--bg); box-shadow:0 20px 60px rgba(0,0,0,0.28);" +
-  " overflow:hidden";
-
-const FIELD =
-  "width:100%; padding:9px 10px; border-radius:7px;" +
-  " border:1px solid var(--border); background:var(--bg-panel);" +
-  " color:var(--text); outline:none; font-size:13px";
-
-const CANCEL_BUTTON =
-  "padding:6px 10px; border-radius:6px; border:1px solid var(--border);" +
-  " background:var(--bg); color:var(--text-muted); cursor:pointer";
-
-const CONFIRM_BUTTON =
-  "padding:6px 10px; border-radius:6px; border:1px solid var(--accent);" +
-  " background:var(--accent); color:var(--on-accent); cursor:pointer";
+// Dialogs and terminal panels arrive on the session stream. Their owner
+// subtrees stay mounted while frame content changes, preserving focus/input.
 
 /** Seconds left on an extension-set timeout, for the line under the title. */
 function remaining(expiresAt: number): string {
@@ -33,31 +12,23 @@ function remaining(expiresAt: number): string {
   return `Closes in ${String(seconds)}s if unanswered.`;
 }
 
-/**
- * Second in the row but first to the eye: Enter in a text field submits the
- * first submit button in the document, so the primary one has to come first
- * and `order` puts it back on the left, where pi-web draws Cancel.
- */
+/** Enter chooses the first submit button. CSS places Cancel visually first. */
 function Cancel() {
   return (
-    <button
+    <ConfigButton
       type="submit"
       name="cancelled"
       value="1"
-      style={`${CANCEL_BUTTON}; order:-1`}
+      class="extension-dialog-cancel"
       data-dialog-cancel
     >
       Cancel
-    </button>
+    </ConfigButton>
   );
 }
 
 function Footer({ children }: { children?: unknown }) {
-  return (
-    <div style="flex-shrink:0; display:flex; justify-content:flex-end; gap:8px; padding:10px 14px; border-top:1px solid var(--border); background:var(--bg-panel)">
-      {children}
-    </div>
-  );
+  return <div class="dialog-actions extension-dialog-actions">{children}</div>;
 }
 
 function Body({ dialog }: { dialog: DialogRequest }) {
@@ -65,14 +36,14 @@ function Body({ dialog }: { dialog: DialogRequest }) {
     case "select":
       return (
         <>
-          <div style="padding:14px; flex:1 1 auto; min-height:0; overflow-y:auto">
-            <div style="display:grid; gap:8px">
+          <div class="extension-dialog-body is-scrollable">
+            <div class="extension-dialog-options">
               {(dialog.options ?? []).map((option) => (
                 <button
                   type="submit"
                   name="value"
                   value={option}
-                  style="width:100%; padding:9px 10px; border-radius:7px; border:1px solid var(--border); background:var(--bg-panel); color:var(--text); cursor:pointer; text-align:left; font-size:13px; overflow-wrap:anywhere"
+                  class="extension-dialog-option"
                 >
                   {option}
                 </button>
@@ -87,20 +58,18 @@ function Body({ dialog }: { dialog: DialogRequest }) {
     case "confirm":
       return (
         <>
-          <div style="padding:14px">
-            <div style="color:var(--text-muted); font-size:13px; line-height:1.6; white-space:pre-wrap">
-              {dialog.message ?? ""}
-            </div>
+          <div class="extension-dialog-body">
+            <div class="extension-dialog-message">{dialog.message ?? ""}</div>
           </div>
           <Footer>
-            <button
+            <ConfigButton
               type="submit"
               name="confirmed"
               value="1"
-              style={CONFIRM_BUTTON}
+              variant="primary"
             >
               Confirm
-            </button>
+            </ConfigButton>
             <Cancel />
           </Footer>
         </>
@@ -108,19 +77,19 @@ function Body({ dialog }: { dialog: DialogRequest }) {
     case "input":
       return (
         <>
-          <div style="padding:14px">
+          <div class="extension-dialog-body">
             <input
               type="text"
               name="value"
-              style={FIELD}
+              class="extension-dialog-input"
               placeholder={dialog.placeholder ?? ""}
               autofocus
             />
           </div>
           <Footer>
-            <button type="submit" style={CONFIRM_BUTTON}>
+            <ConfigButton type="submit" variant="primary">
               Submit
-            </button>
+            </ConfigButton>
             <Cancel />
           </Footer>
         </>
@@ -128,10 +97,10 @@ function Body({ dialog }: { dialog: DialogRequest }) {
     case "editor":
       return (
         <>
-          <div style="padding:14px">
+          <div class="extension-dialog-body">
             <textarea
               name="value"
-              style="width:100%; min-height:220px; padding:10px; border-radius:7px; border:1px solid var(--border); background:var(--bg-panel); color:var(--text); outline:none; resize:vertical; font-size:13px; line-height:1.55; font-family:var(--font-mono)"
+              class="extension-dialog-editor"
               data-dialog-submit
               autofocus
             >
@@ -139,9 +108,9 @@ function Body({ dialog }: { dialog: DialogRequest }) {
             </textarea>
           </div>
           <Footer>
-            <button type="submit" style={CONFIRM_BUTTON}>
+            <ConfigButton type="submit" variant="primary">
               Submit
-            </button>
+            </ConfigButton>
             <Cancel />
           </Footer>
         </>
@@ -163,15 +132,13 @@ export function ExtensionDialogBody({
   return (
     <dialog class="extension-dialog" aria-label={dialog.title} data-modal open>
       <form
-        style={PANEL}
+        class="extension-dialog-panel"
         hx-post={`/sessions/${sessionId}/ui/${dialog.id}`}
         hx-swap="none"
       >
-        <div style="flex-shrink:0; padding:12px 14px; border-bottom:1px solid var(--border)">
-          <div style="color:var(--text); font-size:14px; font-weight:650">
-            {dialog.title}
-          </div>
-          <div style="margin-top:3px; color:var(--text-dim); font-size:11px; font-family:var(--font-mono)">
+        <div class="extension-dialog-heading">
+          <div class="extension-dialog-title">{dialog.title}</div>
+          <div class="extension-dialog-timeout">
             {dialog.expiresAt === undefined
               ? "extension request"
               : remaining(dialog.expiresAt)}
@@ -197,17 +164,13 @@ export function ExtensionDialog({
   );
 }
 
-/** The frame, converted once; the panel around it never moves. */
+/** ANSI colors are runtime content, not a finite UI presentation state. */
 export function CustomFrameBody({ frame }: { frame: CustomFrame | null }) {
   if (!frame) return <></>;
   return <>{raw(ansiToHtml(normalizeFrame(frame.lines).join("\n")))}</>;
 }
 
-/**
- * The custom-UI panel. The shell is swapped only when a component opens or
- * closes; the frame inside it is swapped on every render, so focus and the
- * reader's scroll position stay put while the component redraws.
- */
+/** Only the frame swaps on redraw, so the panel keeps focus and scroll. */
 export function CustomPanelBody({
   sessionId,
   frame,
@@ -225,25 +188,21 @@ export function CustomPanelBody({
       open
     >
       <section
-        style="position:relative; width:min(920px, 100%); max-height:min(760px, calc(100vh - 40px)); border:1px solid var(--border); border-radius:8px; background:var(--bg); box-shadow:0 20px 60px rgba(0,0,0,0.28); overflow:hidden; outline:none"
+        class="extension-custom-panel"
         data-custom-ui={`/sessions/${sessionId}/ui/${frame.id}/input`}
       >
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border-bottom:1px solid var(--border)">
-          <div style="color:var(--text); font-size:13px; font-weight:650">
-            Extension panel
-          </div>
-          <button
-            type="button"
-            style="padding:5px 9px; border-radius:6px; border:1px solid var(--border); background:var(--bg-panel); color:var(--text-muted); cursor:pointer; font-size:12px"
+        <div class="extension-custom-heading">
+          <div class="extension-custom-title">Extension panel</div>
+          <ConfigButton
             data-custom-close
             title="Sends Ctrl+C, which is how a component is asked to finish"
           >
             Close
-          </button>
+          </ConfigButton>
         </div>
         <pre
           id="custom-frame"
-          style="margin:0; padding:14px; max-height:calc(min(760px, 100vh - 40px) - 48px); overflow:auto; background:var(--bg-panel); color:var(--text); font-family:var(--font-mono); font-size:13px; line-height:1.45; white-space:pre"
+          class="extension-custom-frame"
           tabindex={0}
           role="application"
           aria-label="Extension terminal UI"

@@ -29,14 +29,9 @@ import {
 
 // The sidebar: pi-web's header block, workspace pill, 54px session rows and
 // explorer section (components/SessionSidebar.tsx §3.1, SessionItem.tsx §3.4,
-// ProjectFolderGroup.tsx §3.3). Inline styles are pi-web's own objects with
-// camelCase turned to kebab and numbers to px; the class names are what its
-// stylesheets key on.
+// ProjectFolderGroup.tsx §3.3). Presentation lives in areas/sidebar.css.
 
 export type Row = { summary: SessionSummary; metadata: SessionRowMetadata };
-
-/** pi-web's SESSION_ITEM_HEIGHT. */
-const ROW_HEIGHT = 54;
 
 /** The last path segment, which is what pi-web labels a project with. */
 function baseName(path: string): string {
@@ -55,22 +50,17 @@ function baseName(path: string): string {
  * tint on top of what is rendered here.
  */
 function SessionIndicator({ summary }: { summary: SessionSummary }) {
-  const [label, colour, icon] = summary.running
-    ? (["Agent running…", "var(--accent)", <SpinnerIcon />] as const)
+  const [label, state, icon] = summary.running
+    ? (["Agent running…", "running", <SpinnerIcon />] as const)
     : summary.live
-      ? (["Session active", "var(--success)", <ActiveDotIcon />] as const)
-      : (["Session stopped", "var(--text-dim)", <StoppedRingIcon />] as const);
+      ? (["Session active", "active", <ActiveDotIcon />] as const)
+      : (["Session stopped", "stopped", <StoppedRingIcon />] as const);
   return (
     <span
-      class="session-indicator"
+      class={`session-indicator is-${state}`}
       data-status={label}
-      /* The unread tint is the browser's (client/sidebar.ts): pi-web renders
-         --info in place of this colour, so the state's own colour has to
-         survive being painted over. */
-      data-colour={colour}
       title={label}
       aria-label={label}
-      style={`width:14px; height:14px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; color:${colour}`}
     >
       {icon}
     </span>
@@ -97,13 +87,10 @@ function RowMenu({ summary, metadata }: Row) {
   return (
     <div
       id={`row-menu-${id}`}
-      class="menu-surface"
+      class="session-row-menu menu-surface"
       popover="auto"
       role="group"
       aria-label={`Session actions for ${sessionTitle(summary, metadata)}`}
-      /* inset/margin reset the UA popover sheet, which centres itself and
-         would ignore the top/left client/sidebar.ts measures. */
-      style="position:fixed; inset:auto; margin:0; z-index:1000; width:min(144px, calc(100vw - 16px)); max-height:calc(100vh - 16px); overflow-y:auto"
     >
       {summary.live === true
         ? item("Stop", "stop")
@@ -132,12 +119,11 @@ export function RenameRow({ summary, metadata }: Row) {
   return (
     <form
       id={`row-${id}`}
-      class="session-row"
+      class="session-row is-renaming"
       data-session-id={id}
       hx-post={`/sessions/${id}/rename`}
       hx-target="this"
       hx-swap="outerHTML"
-      style={`height:${String(ROW_HEIGHT)}px; display:flex; align-items:center; padding-left:14px; padding-right:8px; border-left:2px solid transparent; transition:background 0.1s; gap:6px; overflow:hidden`}
     >
       <input
         name="name"
@@ -149,7 +135,7 @@ export function RenameRow({ summary, metadata }: Row) {
         hx-trigger="keyup[key=='Escape']"
         hx-target={`#row-${id}`}
         hx-swap="outerHTML"
-        style="flex:1; font-size:12px; padding:5px 8px; border:1px solid var(--accent); border-radius:5px; outline:none; background:var(--bg); color:var(--text); height:30px"
+        class="session-rename-input"
       />
     </form>
   );
@@ -169,32 +155,22 @@ export function SessionRow({
   return (
     <div
       id={`row-${id}`}
-      class="session-row"
+      class={`session-row${selected ? " is-selected" : ""}${summary.live === true ? " is-live" : ""}`}
       data-session-id={id}
       data-title={title.toLowerCase()}
       {...(oob === true ? { "hx-swap-oob": "true" } : {})}
-      style={`height:${String(ROW_HEIGHT)}px; display:flex; align-items:center; padding-left:14px; padding-right:8px; cursor:pointer; ${selected ? "background:var(--bg-selected); " : ""}border-left:2px solid ${selected ? "var(--accent)" : "transparent"}; transition:background 0.1s; gap:6px; overflow:hidden`}
     >
-      <a
-        href={`/sessions/${id}`}
-        style="flex:1; min-width:0; display:block; color:inherit; text-decoration:none"
-      >
-        <div
-          title={title}
-          data-session-title
-          style={`display:flex; align-items:center; gap:5px; min-width:0; font-size:12px; font-weight:${selected ? "500" : "400"}; line-height:1.4; color:var(${summary.live === true ? "--text" : "--text-muted"})`}
-        >
-          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0">
-            {title}
-          </span>
+      <a href={`/sessions/${id}`} class="session-row-link">
+        <div title={title} data-session-title class="session-row-title">
+          <span class="session-title-text">{title}</span>
         </div>
-        <div style="margin-top:2px; display:flex; align-items:center; gap:8px; color:var(--text-dim); font-size:11px; min-width:0">
+        <div class="session-row-meta">
           <SessionIndicator summary={summary} />
-          <span style="display:flex; align-items:center; gap:8px; min-width:0; overflow:hidden">
+          <span class="session-row-location">
             <span
               title={summary.modifiedAt}
               data-session-modified-at={summary.modifiedAt}
-              style="white-space:nowrap; flex-shrink:0"
+              class="session-row-time"
             >
               {relativeTime(summary.modifiedAt)}
             </span>
@@ -202,40 +178,27 @@ export function SessionRow({
             summary.branch === undefined ? null : (
               <span
                 title={`Worktree: ${summary.cwd}`}
-                style="display:flex; align-items:center; gap:3px; color:var(--accent); min-width:0; overflow:hidden"
+                class="session-row-branch"
               >
                 <BranchBadgeIcon />
-                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-                  {summary.branch}
-                </span>
+                <span class="session-branch-name">{summary.branch}</span>
               </span>
             )}
           </span>
         </div>
       </a>
-      <div
-        style={`min-width:64px; height:${String(ROW_HEIGHT)}px; padding:4px 0 5px; box-sizing:border-box; display:flex; flex-direction:column; align-items:flex-end; justify-content:space-between; flex-shrink:0; color:var(--text-dim); font-size:11px`}
-      >
+      <div class="session-row-actions">
         {/* ⌘1…⌘0 take the menu trigger's place on the first ten rows while a
             modifier is held. Which row is which is a browser-side count — a
             row re-rendered on its own does not know its position — so
             client/sidebar.ts fills this in and decides what shows. */}
-        <kbd
-          class="session-shortcut"
-          aria-hidden="true"
-          style="display:none; align-items:center; justify-content:center; width:28px; height:28px; color:var(--text-dim); font-family:var(--font-mono); font-size:10px"
-        />
+        <kbd class="session-shortcut" aria-hidden="true" hidden />
         <button
           type="button"
           class="session-menu-trigger"
           popovertarget={menuId}
           aria-label={`Session actions for ${title}`}
           aria-controls={menuId}
-          /* pi-web sets `background: transparent` inline and flips it to
-               --bg-selected while the menu is open; an inline value would
-               outrank the rule in areas/sidebar.css that does that here, and
-               base.css already makes a button transparent. */
-          style="display:flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; border:1px solid transparent; border-radius:6px; color:var(--text-muted); cursor:pointer"
         >
           <MoreDotsIcon size={16} radius={1.8} />
         </button>
@@ -253,7 +216,6 @@ export function SessionRow({
           <span
             class="session-message-count"
             title={`${String(metadata.messageCount)} msgs`}
-            style="white-space:nowrap"
           >
             {String(metadata.messageCount)} msgs
           </span>
@@ -287,7 +249,7 @@ export function SessionRows({
       ))}
       {view.nextOffset !== undefined ? (
         <div
-          style="padding:8px 12px; font-size:11px; color:var(--text-dim)"
+          class="session-rows-loading"
           hx-get={`/sidebar/rows?${query.toString()}`}
           hx-trigger="intersect once"
           hx-target="this"
@@ -314,9 +276,7 @@ export function SessionList({
   const body = (
     <>
       {view.rows.length === 0 && view.nextOffset === undefined ? (
-        <div style="padding:16px 14px; color:var(--text-muted); font-size:12px">
-          No sessions found
-        </div>
+        <div class="session-list-empty">No sessions found</div>
       ) : null}
       <SessionRows
         view={view}
@@ -329,7 +289,7 @@ export function SessionList({
   ) : (
     <div
       id="session-list"
-      style="flex:1 1 auto; overflow-y:auto; padding:0; min-height:80px"
+      class="session-list"
       {...(oob === true ? { "hx-swap-oob": "innerHTML" } : {})}
     >
       {body}
@@ -368,31 +328,28 @@ export function ProjectSelect({
   return (
     <div
       id="project-picker"
-      style="position:relative"
+      class="sidebar-project-picker"
       {...(oob === true ? { "hx-swap-oob": "true" } : {})}
     >
       <button
         type="button"
         id="project-select"
-        class="anchor-sidebar-project"
+        class={`sidebar-project-select anchor-sidebar-project${chosen ? " is-chosen" : ""}`}
         popovertarget="sidebar-project-menu"
         data-project-key={view.selected ?? ""}
         data-cwd={folder}
         title={folder}
-        style={`width:100%; display:flex; align-items:center; padding:6px 10px; background:${chosen ? "var(--bg-hover)" : "rgba(37,99,235,0.06)"}; border:1px solid ${chosen ? "var(--border)" : "rgba(37,99,235,0.4)"}; border-radius:7px; cursor:pointer; font-size:12px; color:var(--text); text-align:left; transition:border-color 0.15s, background 0.15s`}
       >
         {chosen ? (
           <PathLabel text={shortPath(folder, home)} />
         ) : (
-          <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--font-mono); font-size:11px; color:var(--text-dim)">
-            Select project…
-          </span>
+          <span class="sidebar-project-placeholder">Select project…</span>
         )}
         <span
           id="project-activity"
           title="New activity"
           aria-label="New activity"
-          style="width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-left:6px; background:var(--accent)"
+          class="sidebar-project-activity-dot"
           hidden={!view.activityElsewhere}
         />
       </button>
@@ -400,15 +357,11 @@ export function ProjectSelect({
         id="sidebar-project-menu"
         class="anchored-menu menu-surface opens-down menu-sidebar-project"
         popover="auto"
-        style="z-index:100; overflow:hidden"
         hx-get="/sidebar/projects"
         hx-trigger="toggle once"
         hx-swap="innerHTML"
       >
-        <div
-          style="padding:8px 10px; font-size:11px; color:var(--text-dim)"
-          role="status"
-        >
+        <div class="sidebar-project-message" role="status">
           Loading...
         </div>
       </div>
@@ -422,8 +375,8 @@ export function ProjectSelect({
  */
 function PathLabel({ text }: { text: string }) {
   return (
-    <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; min-width:0; line-height:1.35; direction:rtl; text-align:left; font-family:var(--font-mono); font-size:11px; color:var(--text)">
-      <span style="unicode-bidi:plaintext">{text}</span>
+    <span class="sidebar-project-path">
+      <span>{text}</span>
     </span>
   );
 }
@@ -441,7 +394,7 @@ export function ProjectPicker({
   return (
     <>
       {view.projects.length > FILTER_FROM ? (
-        <div style="padding:6px 8px; border-bottom:1px solid var(--border)">
+        <div class="sidebar-project-filter">
           {/* No autofocus: pi-web renders this field with the sidebar, long
               before the popover opens, so React's autoFocus never fires and
               the box opens unfocused, with no ring and no caret. */}
@@ -453,7 +406,7 @@ export function ProjectPicker({
           />
         </div>
       ) : null}
-      <div style="max-height:min(50vh, 380px); overflow-y:auto">
+      <div class="sidebar-project-list">
         {view.projects.map((project) => (
           <ProjectFolderGroup
             project={project}
@@ -462,11 +415,7 @@ export function ProjectPicker({
             {...(home === undefined ? {} : { home })}
           />
         ))}
-        <div
-          id="project-empty"
-          style="padding:8px 10px; font-size:11px; color:var(--text-dim)"
-          hidden
-        >
+        <div id="project-empty" class="sidebar-project-message" hidden>
           No matching projects
         </div>
       </div>
@@ -491,27 +440,19 @@ export function ProjectPicker({
  */
 function ProjectActivity({ running }: { running: number }) {
   return (
-    <span
-      class="project-activity"
-      style={`display:${running > 0 ? "inline-flex" : "none"}; align-items:center; gap:5px; flex-shrink:0; margin-left:6px`}
-    >
+    <span class="project-activity" hidden={running === 0}>
       {running > 0 ? (
         <span
           class="project-running"
           title="Agent running…"
           aria-label={`Agent running… (${String(running)})`}
-          style="display:inline-flex; align-items:center; gap:3px; color:var(--accent); font-size:10px; font-family:var(--font-mono)"
         >
           <SpinnerIcon size={10} />
           {String(running)}
         </span>
       ) : null}
-      <span
-        class="project-unread"
-        title="New session activity"
-        style="display:none; align-items:center; gap:3px; color:var(--info); font-size:10px; font-family:var(--font-mono)"
-      >
-        <span style="width:6px; height:6px; border-radius:50%; background:currentColor; display:inline-block" />
+      <span class="project-unread" title="New session activity" hidden>
+        <span class="project-unread-dot" />
         <span class="project-unread-count" />
       </span>
     </span>
@@ -665,10 +606,7 @@ export function ProjectNav({
   cwd?: string | undefined;
 }) {
   return (
-    <div
-      id="project-nav"
-      style="display:flex; min-height:0; flex:1 1 0; flex-direction:column"
-    >
+    <div id="project-nav" class="sidebar-project-nav">
       <SidebarEvents project={view.selected} cwd={cwd} />
       <SessionList
         view={view}
@@ -716,22 +654,16 @@ export function ExplorerSection({
   // are pi-web's per-state inline values; areas/sidebar.css writes them from
   // aria-expanded, which client/sidebar.ts flips and remembers.
   return (
-    <div
-      id="explorer-section"
-      style="border-top:1px solid var(--border); display:flex; flex-direction:column; min-height:0; overflow:hidden"
-    >
-      <div style="display:flex; align-items:center; flex-shrink:0">
+    <div id="explorer-section" class="sidebar-explorer">
+      <div class="sidebar-explorer-header">
         <button
           type="button"
           id="explorer-toggle"
           aria-expanded="true"
           aria-controls="explorer-body"
-          style="display:flex; align-items:center; gap:6px; flex:1; padding:6px 10px; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:11px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; text-align:left"
+          class="sidebar-explorer-toggle"
         >
-          <span
-            data-explorer-chevron
-            style="display:flex; transition:transform 0.15s"
-          >
+          <span data-explorer-chevron class="sidebar-explorer-chevron">
             <SmallChevronIcon />
           </span>
           Explorer
@@ -761,8 +693,7 @@ export function ExplorerSection({
         </button>
         <button
           type="button"
-          class="sidebar-toolbar-button"
-          style="margin-right:6px"
+          class="sidebar-toolbar-button is-refresh"
           title="Refresh explorer"
           aria-label="Refresh explorer"
           hx-get={explorerUrl}
@@ -772,19 +703,12 @@ export function ExplorerSection({
           <RefreshIcon size={13} width={2} />
         </button>
       </div>
-      <div
-        id="explorer-body"
-        style="flex:1; overflow-y:auto; overflow-x:hidden"
-      >
+      <div id="explorer-body" class="sidebar-explorer-body">
         {/* pi-web keeps the field out of the tree until the magnifier in the
             header opens it (FileExplorer.tsx, `fileSearchOpen`). */}
-        <div
-          id="file-search-field"
-          style="padding:6px 8px; border-bottom:1px solid var(--border)"
-          hidden
-        >
-          <div style="position:relative">
-            <span style="position:absolute; left:8px; top:50%; transform:translateY(-50%); display:flex; color:var(--text-dim); pointer-events:none">
+        <div id="file-search-field" class="sidebar-file-search" hidden>
+          <div class="sidebar-file-search-field">
+            <span class="sidebar-file-search-icon">
               <SearchIcon size={12} />
             </span>
             <input
@@ -794,7 +718,7 @@ export function ExplorerSection({
               placeholder="Search files…"
               aria-label="Search files"
               autocomplete="off"
-              style="width:100%; box-sizing:border-box; padding:6px 24px; border:1px solid var(--border); border-radius:5px; outline:none; background:var(--bg); color:var(--text); font-family:var(--font-mono); font-size:11px"
+              class="sidebar-file-search-input"
               hx-get={`/files/search?${scope}`}
               hx-trigger="input changed delay:150ms, search"
               hx-target="#file-tree"
@@ -827,16 +751,11 @@ export function Sidebar({
   home?: string;
 }) {
   return (
-    <div
-      id="sidebar"
-      style="display:flex; flex-direction:column; height:100%; overflow:hidden"
-    >
-      <div style="padding:12px 10px 10px; border-bottom:1px solid var(--border); flex-shrink:0">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px">
-          <span style="font-weight:700; font-size:15px; letter-spacing:-0.01em; color:var(--text); font-family:var(--font-mono); min-width:6ch">
-            Pi Web
-          </span>
-          <div style="display:flex; gap:6px">
+    <div id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-header-row">
+          <span class="sidebar-brand">Pi Web</span>
+          <div class="sidebar-header-actions">
             <a
               class="sidebar-icon-button"
               href="/new"
@@ -847,13 +766,13 @@ export function Sidebar({
             >
               <kbd
                 class="new-session-shortcut"
+                hidden
                 data-shortcut="K"
                 aria-hidden="true"
-                style="display:none; font-family:var(--font-mono); font-size:10px"
               >
                 ⌘K
               </kbd>
-              <span class="new-session-plus" style="display:flex">
+              <span class="new-session-plus">
                 <PlusIcon />
               </span>
             </a>
@@ -868,12 +787,11 @@ export function Sidebar({
               hx-get="/sidebar"
               hx-target="#project-nav"
               hx-swap="outerHTML"
-              style="display:flex; align-items:center; justify-content:center; background:var(--bg-hover); border:1px solid var(--border); color:var(--text-muted); cursor:pointer; width:32px; height:32px; border-radius:7px; padding:0; flex-shrink:0; transition:background 0.3s, color 0.3s, border-color 0.3s"
             >
-              <span class="sidebar-refresh-done" style="display:none">
+              <span class="sidebar-refresh-done">
                 <CheckIcon size={15} width={2.5} />
               </span>
-              <span class="sidebar-refresh-idle" style="display:flex">
+              <span class="sidebar-refresh-idle">
                 <RefreshIcon size={15} width={2} />
               </span>
             </button>

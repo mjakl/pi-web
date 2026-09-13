@@ -5,6 +5,7 @@ import {
   FolderIcon,
   PlusIcon,
   StarIcon,
+  SpinnerIcon,
   ThemeIcon,
 } from "@web/views/icons";
 
@@ -31,6 +32,13 @@ describe("icons", () => {
 
     expect(render(ThemeIcon({ preference: "dark" }))).toContain(
       "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z",
+    );
+  });
+
+  it("marks running spinners but leaves compaction's parent-owned spinner idle", () => {
+    expect(render(SpinnerIcon({}))).toContain('class="pi-spinner is-animated"');
+    expect(render(SpinnerIcon({ animated: false }))).toContain(
+      'class="pi-spinner"',
     );
   });
 

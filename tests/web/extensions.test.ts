@@ -171,18 +171,31 @@ describe("extension dialogs", () => {
     expect(page).toContain("Fix it");
   });
 
-  it("puts the answering button before cancel, so Enter answers", async () => {
-    const { app } = testApp(() => [
-      { dialog: { method: "input", title: "Name it" } },
-    ]);
-    await send(app, "go");
-    await settle();
-    const page = await (await app.request("/sessions/s1")).text();
-    const form = /<form[^>]*\/ui\/[\S\s]*?<\/form>/.exec(page)?.[0] ?? "";
-    expect(form).not.toBe("");
-    // Implicit submission picks the first submit button in the document.
-    expect(form.indexOf(">Send<")).toBeLessThan(form.indexOf(">Cancel<"));
-  });
+  it.each([
+    ["input", "Submit"],
+    ["editor", "Submit"],
+    ["confirm", "Confirm"],
+    ["select", "Local preview"],
+  ] as const)(
+    "puts the %s answer before cancel, so Enter answers",
+    async (method, label) => {
+      const { app } = testApp(() => [
+        { dialog: { method, title: "Name it", options: ["Local preview"] } },
+      ]);
+      await send(app, "go");
+      await settle();
+      const page = await (await app.request("/sessions/s1")).text();
+      const form = /<form[^>]*\/ui\/[\S\s]*?<\/form>/.exec(page)?.[0] ?? "";
+      expect(form).not.toBe("");
+      // Implicit submission picks the first submit button in the document.
+      const buttons = [...form.matchAll(/<button\b([^>]*)>([^<]+)<\/button>/g)];
+      expect(buttons.map((button) => button[2])).toEqual([label, "Cancel"]);
+      expect(buttons[0]?.[1]).toContain('type="submit"');
+      expect(buttons[0]?.[1]).not.toContain('name="cancelled"');
+      expect(buttons[1]?.[1]).toContain('name="cancelled"');
+      expect(buttons[1]?.[1]).toContain('value="1"');
+    },
+  );
 
   it("forwards keystrokes to the custom UI and redraws the frame", async () => {
     const { app, world } = testApp(() => [{ custom: counter() }]);

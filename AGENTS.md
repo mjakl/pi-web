@@ -60,7 +60,7 @@ src/web        Hono routes, JSX views, HTMX/SSE delivery, client bundle, the
                once; routes/shared.ts holds what they all need, and
                views/transcript/ holds the transcript's views one module per
                item kind behind the views/Items.tsx barrel
-src/web/styles pi-web's stylesheets, verbatim, plus areas/<area>.css
+src/web/styles plain CSS, grouped by component owner; index.css fixes cascade
 src/container.ts  the only file that wires adapters into the core
 src/server.ts  process entrypoint; src/cli.ts the flags and startup behind the
                bin, src/host-pi.ts the SDK resolution both of them use,
@@ -98,21 +98,35 @@ Rules enforced by `.oxlintrc.json`:
 
 ## Styling
 
-web-pi is a pixel port of the Next.js pi-web preserved at
-`archive/nextjs-final`, so that version's CSS is the specification, not an
-inspiration:
+Preserve rendered appearance and behavior, not legacy CSS source placement.
+`archive/nextjs-final` remains the historical reference. Minor consistency
+changes follow the established Settings patterns, not a blanket redesign.
 
-- `src/web/styles/base.css`, `globals.css`, `settings.css` and `embedded.css`
-  are copied from Next.js pi-web. **Never edit them.** Use the archive tag for
-  the original stylesheets and component styles, not this repository's main.
-- Markup carries pi-web's class names and pi-web's inline styles (camelCase to
-  kebab, numbers to px), so those stylesheets apply unchanged. Follow the
-  existing owner view and its stylesheet when choosing a region's classes.
-- There is no utility framework. A `class="flex gap-2 text-sm"` is a bug: reach
-  for the pi-web class, or an inline style with the values pi-web uses.
-- New rules go in `src/web/styles/areas/<area>.css`, the one stylesheet an area
-  may edit, or in `web-pi.css` for something pi-web gets from Next.js — with a
-  comment saying why. `index.css` fixes the cascade order.
+- Keep plain CSS and component/role-named, owner-scoped classes. Reuse existing
+  tokens and demonstrated patterns, not utility classes or a new framework.
+  Standard action buttons are 32px, compact actions 28px; dialogs use standard
+  actions. Preserve meaningful density, hierarchy, semantic colors and focus.
+- Put static presentation in CSS. Use semantic state (`disabled`, `open`,
+  `aria-expanded`) where it fits, otherwise owner-scoped state classes. Remove
+  replaced inline declarations and compensating overrides in the same change,
+  including browser-created and streamed markup.
+- Runtime depth, gutter widths, measured bounds, rail positions, keyboard
+  viewport values and arbitrary ANSI colors may use narrow inline values or
+  custom properties. Keep their surrounding static styling in CSS.
+- `base.css`, `globals.css` and `web-pi.css` own reset, tokens, fonts and global
+  browser/HTMX concerns. `settings.css` owns Settings/config components;
+  `areas/shell.css` owns shell and shared dialog actions; the sidebar, composer
+  (including extension shelf), files and transcript each own their area file.
+  Move component rules to their owner rather than adding fallback layers. Keep
+  the explicit cascade in `index.css`.
+- Remove decorative entrance, sweep and repeating highlight effects. Use a
+  static accent tint for widget updates, preserving their update duration. Keep
+  restrained hover/focus and functional loading/compaction feedback, with
+  reduced-motion support.
+- Compare baseline and changed rendering in both themes and at desktop/mobile
+  sizes, including affected breakpoints, overflow, focus/disabled states and
+  HTMX/SSE updates. Fixture screenshots need visual inspection; snapshots and
+  happy-dom do not prove pixel preservation.
 - Icons come from `src/web/views/icons.tsx`, which holds every SVG pi-web draws.
   Add one there, copied from pi-web, rather than inline in a view.
 - An HTMX swap has to replace a whole owner subtree (`.chat-transcript`,

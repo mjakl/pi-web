@@ -74,20 +74,15 @@ describe("theme", () => {
     ).toBe("true");
   });
 
-  it("uses a view transition for the wipe when the browser has one", async () => {
-    const ready = Promise.resolve();
-    const start = vi.fn((apply: () => void) => {
-      apply();
-      return { ready };
-    });
+  it("applies a theme immediately without a decorative transition", async () => {
+    const start = vi.fn();
     Object.assign(document, { startViewTransition: start });
     const animate = vi.fn();
     document.documentElement.animate = animate;
     const { setThemePreference } = await load();
     setThemePreference("dark");
-    expect(start).toHaveBeenCalledOnce();
-    await ready;
-    expect(animate).toHaveBeenCalledOnce();
+    expect(start).not.toHaveBeenCalled();
+    expect(animate).not.toHaveBeenCalled();
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     Object.assign(document, { startViewTransition: undefined });
   });

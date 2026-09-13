@@ -55,14 +55,8 @@ const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(\r?\n|$)/;
 function codeBlock(code: string, language: string, live: boolean): string {
   const label = language === "" ? "text" : language;
   const body =
-    `<pre class="markdown-code-body" style="margin:0; padding:11px 13px; font-size:12.5px;` +
-    // border/radius are pi-web's customStyle reset: the light Prism theme and
-    // `.markdown-file-preview pre` both give the element a border that would
-    // double up inside .markdown-code-block's own.
-    ` line-height:1.62; border:0; border-radius:0; overflow-x:auto;` +
-    ` font-family:var(--code-theme-font);` +
-    ` background:color-mix(in srgb, var(--bg) 92%, var(--bg-panel))">` +
-    `<code class="language-${attribute(label)}" style="font-family:var(--font-mono)">${escapeHtml(code)}</code></pre>`;
+    `<pre class="markdown-code-body">` +
+    `<code class="language-${attribute(label)}">${escapeHtml(code)}</code></pre>`;
   const copy = `<button type="button" class="markdown-code-action" data-copy-code>Copy</button>`;
   const header = (actions: string) =>
     `<div class="markdown-code-header"><span class="markdown-code-lang">${escapeHtml(label)}</span>` +
@@ -186,12 +180,9 @@ export function renderMarkdown(
     // pi-web's SafeMarkdownBody reveal (§4.4.2), as a disclosure.
     const size = escapeHtml(formatBytes(source.length));
     return (
-      `<details class="markdown-oversized"><summary style="display:block; width:100%; margin:4px 0; padding:7px 10px;` +
-      ` border:1px solid var(--border); border-radius:6px; background:var(--bg-panel); color:var(--text-muted);` +
-      ` cursor:pointer; font-size:12px; text-align:left">⚠ Message content is very large (${size}).` +
+      `<details class="markdown-oversized"><summary class="markdown-oversized-summary">⚠ Message content is very large (${size}).` +
       ` Click to view as plain text — markdown rendering is disabled to keep the page responsive.</summary>` +
-      `<div style="max-height:420px; overflow:auto; font-size:12px; line-height:1.5"><pre style="margin:0; padding:8px 10px;` +
-      ` white-space:pre-wrap; word-break:break-word; font-family:var(--font-mono); color:var(--text-muted)">${escapeHtml(source)}</pre></div></details>`
+      `<div class="markdown-oversized-body"><pre class="markdown-oversized-text">${escapeHtml(source)}</pre></div></details>`
     );
   }
   const text = source.replace(FRONTMATTER, "");

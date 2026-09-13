@@ -111,7 +111,7 @@ async function preview(block: HTMLElement): Promise<void> {
     const { svg } = await mermaid.render(`mermaid-${String(counter)}`, code);
     target.classList.remove("mermaid-block-loading", "mermaid-block-error");
     target.innerHTML = svg;
-    target.style.cursor = "zoom-in";
+    target.classList.add("is-rendered");
     block.dataset["rendered"] = code;
     target.addEventListener("click", () => {
       zoomDialog(target.innerHTML);

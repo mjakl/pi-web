@@ -86,14 +86,11 @@ export function Transcript({ view }: { view: SessionView }) {
       >
         <JumpToLatestIcon />
       </button>
-      {/* The rail column of pi-web's two-column chat body. pi-web puts
-        the surface on the element itself (§5), not in a class. */}
       <div
         id="rail-column"
         class="chat-minimap"
         role="navigation"
         aria-label="Conversation paths"
-        style="width:36px; flex-shrink:0; position:relative; cursor:pointer; user-select:none; border-left:1px solid var(--border); background:var(--bg-panel)"
       >
         <Rail view={view} />
       </div>

@@ -23,7 +23,7 @@ const SEARCH_DEBOUNCE_MS = 150;
 function icon(entry: FileEntry): string {
   const name = entry.isDir ? "_folder" : catppuccinIcon(entry.path);
   const root = "/static/icons/catppuccin";
-  return `<span aria-hidden="true" class="catppuccin-file-icon" style="width: 14px; height: 14px; --catppuccin-icon-light: url(${root}/latte/${name}.svg); --catppuccin-icon-dark: url(${root}/mocha/${name}.svg)"></span>`;
+  return `<span aria-hidden="true" class="catppuccin-file-icon composer-file-icon" style="--catppuccin-icon-light: url(${root}/latte/${name}.svg); --catppuccin-icon-dark: url(${root}/mocha/${name}.svg)"></span>`;
 }
 
 /** One row: the directory prefix dim, the name plain, "/" dim for folders. */
@@ -31,34 +31,28 @@ function row(entry: FileEntry, index: number): string {
   const name = entry.path.split(/[\\/]/).pop() ?? entry.path;
   const prefix = entry.path.slice(0, entry.path.length - name.length);
   const dim = (text: string) =>
-    `<span style="color:var(--text-dim)">${escapeHtml(text)}</span>`;
+    `<span class="composer-file-prefix">${escapeHtml(text)}</span>`;
   return (
-    `<button type="button" class="menu-item" style="font-family:var(--font-mono)"` +
+    `<button type="button" class="menu-item composer-file-option"` +
     ` data-index="${String(index)}" data-path="${escapeHtml(entry.path)}" data-dir="${entry.isDir ? "1" : ""}">` +
-    `<span style="flex-shrink:0; display:flex; align-items:center">${icon(entry)}</span>` +
-    `<span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">` +
+    `<span class="composer-file-icon-host">${icon(entry)}</span>` +
+    `<span class="composer-file-name">` +
     `${prefix === "" ? "" : dim(prefix)}${escapeHtml(name)}${entry.isDir ? dim("/") : ""}` +
     `</span></button>`
   );
 }
 
-/** Mirrors `MENU_HEADER` in views/Composer.tsx: the slash menu's own header. */
-const MENU_HEADER =
-  "padding:8px 10px; border-bottom:1px solid var(--border); display:flex;" +
-  " align-items:center; justify-content:space-between; gap:8px;" +
-  " font-size:11px; color:var(--text-dim); flex-shrink:0";
-
 /** pi-web's `@` panel: the count header, then the matches (§6.4). */
 function panel(title: string, body: string): string {
   return (
-    `<div style="${MENU_HEADER}"><span>${escapeHtml(title)}</span>` +
-    `<span style="font-family:var(--font-mono)">Tab / Enter</span></div>` +
-    `<div style="max-height:calc(min(48vh, 400px) - 34px); overflow-y:auto; padding:4px">${body}</div>`
+    `<div class="composer-menu-header"><span>${escapeHtml(title)}</span>` +
+    `<span class="composer-menu-hint">Tab / Enter</span></div>` +
+    `<div class="composer-file-list">${body}</div>`
   );
 }
 
 function note(text: string): string {
-  return `<div style="padding:6px 8px; font-size:12px; color:var(--text-dim)">${escapeHtml(text)}</div>`;
+  return `<div class="composer-file-note">${escapeHtml(text)}</div>`;
 }
 
 function renderEntries(entries: FileEntry[], hint = ""): string {

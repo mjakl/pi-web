@@ -122,11 +122,7 @@ export function ToolsPanel({
             active.map((tool) => (
               <button
                 type="button"
-                class={
-                  tool.name === shown?.name
-                    ? "tool-definitions-item selected"
-                    : "tool-definitions-item"
-                }
+                class="tool-definitions-item"
                 aria-pressed={tool.name === shown?.name ? "true" : "false"}
                 hx-get={`/sessions/${sessionId ?? ""}/tools?tool=${encodeURIComponent(tool.name)}`}
                 hx-target="#top-panel"

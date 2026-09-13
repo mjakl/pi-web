@@ -9,7 +9,7 @@ describe("ansi to html", () => {
       '<span style="color:#13703a">ok</span> done',
     );
     expect(ansiToHtml(`${ESC}[1mloud${ESC}[22m quiet`)).toBe(
-      '<span style="font-weight:600">loud</span> quiet',
+      '<span class="terminal-bold">loud</span> quiet',
     );
     expect(ansiToHtml(`${ESC}[38;2;10;20;30mrgb${ESC}[39m`)).toBe(
       '<span style="color:rgb(10,20,30)">rgb</span>',

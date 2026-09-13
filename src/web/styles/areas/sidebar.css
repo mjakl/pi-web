@@ -1,29 +1,548 @@
-/* Sidebar area.
+/* Sidebar rows, project navigation and explorer header. */
 
-   pi-web's stylesheets in ../ are the pixel spec; this file is the only CSS
-   this area may edit. Everything here is a value pi-web writes from React —
-   an inline style on an element rendered per state, or a hover handler that
-   assigns element.style — which a server-rendered page has to express as a
-   rule instead. */
+.session-indicator-unread {
+  position: relative;
+}
+.session-indicator-unread circle {
+  opacity: 1;
+}
+.session-indicator-unread::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  pointer-events: none;
+  --notification-halo: color-mix(in srgb, var(--info) 25%, transparent);
+  box-shadow:
+    0 0 0 4px var(--notification-halo),
+    0 0 8px 2px var(--notification-halo);
+}
+.session-row:not(.is-selected):hover {
+  background: var(--bg-hover);
+}
+.sidebar-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+.sidebar-icon-button:enabled:hover {
+  background: var(--bg-selected);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.sidebar-icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.sidebar-toolbar-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    color 0.3s,
+    background 0.3s;
+}
+.sidebar-toolbar-button[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--bg-selected);
+}
+.sidebar-toolbar-button:enabled:hover {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+.sidebar-toolbar-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.anchor-sidebar-project {
+  anchor-name: --sidebar-project;
+}
+.menu-sidebar-project {
+  position-anchor: --sidebar-project;
+}
+.project-folder-group + .project-folder-group {
+  border-top: 1px solid var(--border);
+}
+.project-folder-child {
+  padding-left: 28px;
+}
+.project-folder-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.project-folder-path {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.session-counts,
+.session-star-count {
+  display: inline-flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+.session-counts {
+  gap: 8px;
+}
+.session-star-count {
+  gap: 4px;
+}
+.session-star-count svg {
+  color: var(--warning);
+}
+.session-message-count {
+  min-width: 8ch;
+  text-align: right;
+  white-space: nowrap;
+}
 
-/* The new-session and settings buttons are links here, because they navigate
-   and web-pi renders without script; globals.css scopes the header button's
-   hover to :enabled, which never matches a link. */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.sidebar-header {
+  padding: 12px 10px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sidebar-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.sidebar-brand {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  font-family: var(--font-mono);
+  min-width: 6ch;
+}
+.sidebar-header-actions {
+  display: flex;
+  gap: 6px;
+}
+.new-session-shortcut {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.new-session-plus,
+.sidebar-refresh-idle {
+  display: flex;
+}
+.sidebar-refresh-done {
+  display: none;
+}
+.sidebar-refresh-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  padding: 0;
+  flex-shrink: 0;
+  transition:
+    background 0.3s,
+    color 0.3s,
+    border-color 0.3s;
+}
+.session-indicator {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+.session-indicator.is-running {
+  color: var(--accent);
+}
+.session-indicator.is-active {
+  color: var(--success);
+}
+.session-indicator.session-indicator-unread {
+  color: var(--info);
+}
+/* Reset the UA popover sheet so measured top/left position the row menu. */
+.session-row-menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  z-index: 1000;
+  width: min(144px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}
+.session-row {
+  height: 54px;
+  display: flex;
+  align-items: center;
+  padding-left: 14px;
+  padding-right: 8px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background 0.1s;
+  gap: 6px;
+  overflow: hidden;
+}
+.session-row.is-selected {
+  background: var(--bg-selected);
+  border-left-color: var(--accent);
+}
+.session-row.is-renaming {
+  cursor: default;
+}
+.session-rename-input {
+  flex: 1;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  height: 32px;
+}
+.session-row-link {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.session-row-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.session-row.is-selected .session-row-title {
+  font-weight: 500;
+}
+.session-row.is-live .session-row-title {
+  color: var(--text);
+}
+.session-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.session-row-meta {
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+  min-width: 0;
+}
+.session-row-location {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+.session-row-time {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.session-row-branch {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent);
+  min-width: 0;
+  overflow: hidden;
+}
+.session-branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-row-actions {
+  min-width: 64px;
+  height: 54px;
+  padding: 4px 0 5px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.session-shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.session-menu-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.session-rows-loading {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.session-list-empty {
+  padding: 16px 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.session-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0;
+  min-height: 80px;
+}
+.sidebar-project-picker {
+  position: relative;
+}
+.sidebar-project-select {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.4);
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+  text-align: left;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.sidebar-project-select.is-chosen {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+.sidebar-project-placeholder {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.sidebar-project-activity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: 6px;
+  background: var(--accent);
+}
+.menu-sidebar-project {
+  z-index: 100;
+  overflow: hidden;
+}
+.sidebar-project-message {
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.sidebar-project-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  min-width: 0;
+  line-height: 1.35;
+  direction: rtl;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+}
+.sidebar-project-path > span {
+  unicode-bidi: plaintext;
+}
+.sidebar-project-filter {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-project-list {
+  max-height: min(50vh, 380px);
+  overflow-y: auto;
+}
+.project-activity {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+.project-running,
+.project-unread {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+.project-running {
+  color: var(--accent);
+}
+.project-unread {
+  color: var(--info);
+}
+.project-unread-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
+.sidebar-project-nav {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+.sidebar-explorer {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.sidebar-explorer-header {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.sidebar-explorer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: left;
+}
+.sidebar-explorer-chevron {
+  display: flex;
+  transition: transform 0.15s;
+}
+.sidebar-toolbar-button.is-refresh {
+  margin-right: 6px;
+}
+.sidebar-explorer-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.sidebar-file-search {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-file-search-field {
+  position: relative;
+}
+.sidebar-file-search-icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+.sidebar-file-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 24px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* Navigation links do not match :enabled. */
 a.sidebar-icon-button:hover {
   background: var(--bg-selected);
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
 
-/* pi-web puts `flex-shrink: 0` inline on the folder icon and the group
-   chevron (ProjectFolderGroup.tsx L27, L143); icons.tsx takes no style. */
+/* Keep folder icons and chevrons intact beside long paths. */
 .project-folder-row > svg {
   flex-shrink: 0;
 }
 
-/* ...and rotates that chevron when the group is expanded. The browser never
-   reflects popover/disclosure state in the DOM, so aria-expanded, which
-   client/sidebar.ts flips, is the hook. */
+/* The client keeps expansion state on the folder button. */
 .project-folder-row[aria-expanded="true"] > svg:first-child {
   transform: rotate(90deg);
 }
@@ -34,9 +553,7 @@ a.sidebar-icon-button:hover {
   background: var(--bg-selected);
 }
 
-/* SessionSidebar.tsx L1381-L1406: the header refresh button is the one
-   sidebar button pi-web styles entirely inline, including its hover and the
-   green "done" flash it holds for two seconds after a refresh. */
+/* Refresh confirmation remains visible for two seconds. */
 .sidebar-refresh-button:hover:not([data-done]) {
   background: var(--bg-selected);
   color: var(--accent);

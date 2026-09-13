@@ -1,6 +1,6 @@
 // pi-web's theme mechanism, ported from hooks/useTheme.ts: a class on <html>,
 // the preference in localStorage under the same key and the same three values,
-// and the switch itself drawn as a circular wipe by the View Transitions API.
+// with immediate theme changes and no decorative transition.
 // The pre-paint script in HtmlLayout reads the same key before the first paint.
 
 export const THEME_KEY = "pi-theme";
@@ -32,51 +32,14 @@ function applyDomTheme(theme: "light" | "dark"): void {
   document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
-/** The wipe: a circle growing from the viewport centre to its far corner. */
-function wipe(apply: () => void): void {
-  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduceMotion || typeof document.startViewTransition !== "function") {
-    apply();
-    return;
-  }
-  const x = window.innerWidth / 2;
-  const y = window.innerHeight / 2;
-  const endRadius = Math.hypot(
-    Math.max(x, window.innerWidth - x),
-    Math.max(y, window.innerHeight - y),
-  );
-  document
-    .startViewTransition(apply)
-    .ready.then(() => {
-      document.documentElement.animate(
-        {
-          clipPath: [
-            `circle(0px at ${String(x)}px ${String(y)}px)`,
-            `circle(${String(endRadius)}px at ${String(x)}px ${String(y)}px)`,
-          ],
-        },
-        {
-          duration: 450,
-          easing: "cubic-bezier(0.22, 0.61, 0.36, 1)",
-          pseudoElement: "::view-transition-new(root)",
-        },
-      );
-    })
-    .catch(() => {
-      // The transition was cancelled; the theme is applied either way.
-    });
-}
-
 export function setThemePreference(preference: ThemePreference): void {
   if (preference === storedPreference()) return;
-  wipe(() => {
-    applyDomTheme(resolve(preference));
-    try {
-      localStorage.setItem(THEME_KEY, preference);
-    } catch {
-      // Without storage the choice lasts for this page only.
-    }
-  });
+  applyDomTheme(resolve(preference));
+  try {
+    localStorage.setItem(THEME_KEY, preference);
+  } catch {
+    // Without storage the choice lasts for this page only.
+  }
 }
 
 /** Marks the option the stored preference names; the server cannot know it. */

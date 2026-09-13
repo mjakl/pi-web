@@ -690,10 +690,7 @@ describe("the extension shelf", () => {
     page();
     document.body.insertAdjacentHTML(
       "beforeend",
-      SHELF.replace('data-widget="a"', 'data-widget="a" ').replace(
-        'class="extension-widget-trigger" data-widget="a" ',
-        'class="extension-widget-trigger is-expanded" data-widget="a"',
-      ),
+      SHELF.replace('data-widget="a"', 'data-widget="a" aria-expanded="true"'),
     );
     const { setUpComposer } = await load();
     setUpComposer();

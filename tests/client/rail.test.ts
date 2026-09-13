@@ -205,19 +205,17 @@ describe("the branch graph", () => {
     await load({ branched: true });
     const rail = byId("rail-column");
     expect(rail.classList.contains("has-branches")).toBe(true);
-    expect(rail.style.width).toBe("36px");
+    expect(rail.classList.contains("is-expanded")).toBe(false);
     expect(rail.tabIndex).toBe(0);
     pointer("pointerenter");
     expect(rail.classList.contains("is-expanded")).toBe(true);
-    expect(rail.style.width).toBe("120px");
-    expect(rail.style.overflow).toBe("auto");
     expect(
       query(".chat-window").style.getPropertyValue(
         "--expanded-conversation-rail-width",
       ),
     ).toBe("120px");
     pointer("pointerleave");
-    expect(rail.style.width).toBe("36px");
+    expect(rail.classList.contains("is-expanded")).toBe(false);
     rail.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     expect(rail.classList.contains("is-expanded")).toBe(true);
     rail.dispatchEvent(

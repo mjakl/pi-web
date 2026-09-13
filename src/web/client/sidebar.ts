@@ -44,10 +44,7 @@ function paintSelection(): void {
     ".session-row[data-session-id]",
   )) {
     const selected = row.dataset["sessionId"] === active;
-    row.style.background = selected ? "var(--bg-selected)" : "";
-    row.style.borderLeftColor = selected ? "var(--accent)" : "transparent";
-    const title = row.querySelector<HTMLElement>("[data-session-title]");
-    if (title) title.style.fontWeight = selected ? "500" : "400";
+    row.classList.toggle("is-selected", selected);
   }
 }
 
@@ -66,12 +63,6 @@ function paintUnread(): void {
     const label = unread ? `${status} · New activity` : status;
     indicator.title = label;
     indicator.setAttribute("aria-label", label);
-    // Removing the property would drop the colour the server painted the
-    // running spinner and the live dot with, leaving both the dim of the
-    // meta row they sit in.
-    indicator.style.color = unread
-      ? "var(--info)"
-      : (indicator.dataset["colour"] ?? "");
   }
   const shown =
     document.getElementById("project-select")?.dataset["projectKey"] ?? "";
@@ -93,8 +84,8 @@ function paintUnread(): void {
     // The wrapper is what the label's flex space is measured against, so it
     // stays out of the layout entirely while a project is quiet.
     const running = group.querySelector(".project-running") !== null;
-    wrapper.style.display = running || count > 0 ? "inline-flex" : "none";
-    badge.style.display = count === 0 ? "none" : "inline-flex";
+    wrapper.hidden = !running && count === 0;
+    badge.hidden = count === 0;
     if (count === 0) {
       number.textContent = "";
       badge.removeAttribute("aria-label");
@@ -315,8 +306,8 @@ function setUpShortcuts(): void {
   ) => {
     const shown = modifier !== null && text !== "";
     badge.textContent = text;
-    badge.style.display = shown ? "flex" : "none";
-    if (other) other.style.display = shown ? "none" : "flex";
+    badge.hidden = !shown;
+    if (other) other.hidden = shown;
   };
 
   const paint = () => {

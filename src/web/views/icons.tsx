@@ -12,6 +12,11 @@
 
 import { type CatppuccinIconName, catppuccinIcon } from "@core/file-types";
 
+// Browser-created controls use the same inventory without a JSX renderer.
+export const TAB_CLOSE_ICON = `<svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="2" x2="8" y2="8"></line><line x1="8" y1="2" x2="2" y2="8"></line></svg>`;
+export const ATTACHMENT_REMOVE_ICON = `<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="1" y1="1" x2="7" y2="7"></line><line x1="7" y1="1" x2="1" y2="7"></line></svg>`;
+export const IMAGE_PREVIEW_CLOSE_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>`;
+
 type IconProps = { size?: number };
 
 /** The shape every stroked icon shares. */
@@ -43,7 +48,7 @@ function Stroked({
       stroke-width={String(width)}
       stroke-linecap={cap}
       {...(join === undefined ? {} : { "stroke-linejoin": join })}
-      style="flex-shrink:0"
+      class="pi-icon"
       aria-hidden="true"
     >
       {children}
@@ -350,7 +355,7 @@ export function SearchIcon({ size = 13 }: IconProps) {
   );
 }
 
-/* 22 · running spinner (SMIL, so it spins without script) */
+/* 22 · running spinner; CSS honors reduced motion without script. */
 export function SpinnerIcon({
   size = 14,
   animated = true,
@@ -362,7 +367,7 @@ export function SpinnerIcon({
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
-      style="display: block"
+      class={`pi-spinner${animated ? " is-animated" : ""}`}
     >
       <g>
         <path
@@ -371,16 +376,6 @@ export function SpinnerIcon({
           stroke-width="2.8"
           stroke-linecap="round"
         />
-        {animated ? (
-          <animateTransform
-            attributeName="transform"
-            type="rotate"
-            from="0 12 12"
-            to="360 12 12"
-            dur="0.9s"
-            repeatCount="indefinite"
-          />
-        ) : null}
       </g>
     </svg>
   );
@@ -818,7 +813,7 @@ export function ModelSwitchingIcon({ size = 11 }: IconProps) {
       stroke-width="2.4"
       stroke-linecap="round"
       aria-hidden="true"
-      style="animation: spin 0.8s linear infinite"
+      class="model-switching-icon"
     >
       <path d="M21 12a9 9 0 1 1-2.64-6.36" />
     </svg>
@@ -1027,7 +1022,7 @@ export function PiDevLogoIcon({ size = 28 }: IconProps) {
       viewBox="0 0 800 800"
       aria-hidden="true"
       focusable="false"
-      style="flex-shrink: 0"
+      class="pi-icon"
     >
       <path
         fill="#000"
@@ -1064,36 +1059,27 @@ export function TrustDialogShieldIcon({ size = 20 }: IconProps) {
 
 // --- Catppuccin file icons -------------------------------------------------
 //
-// Not shown in their own colours: `.catppuccin-file-icon` (globals.css) masks
+// Not shown in their own colours: `.catppuccin-file-icon` (shell.css) masks
 // the SVG with `var(--text-dim)`, and `html.dark` swaps in the mocha file. The
 // two URLs are set per icon, inline, exactly as pi-web does it.
 
 const CATPPUCCIN_ROOT = "/static/icons/catppuccin";
 
-function CatppuccinIcon({
-  name,
-  size = 14,
-}: IconProps & { name: CatppuccinIconName }) {
-  const box = `${String(size)}px`;
+function CatppuccinIcon({ name }: { name: CatppuccinIconName }) {
   return (
     <span
       aria-hidden="true"
       class="catppuccin-file-icon"
-      style={`width: ${box}; height: ${box}; --catppuccin-icon-light: url(${CATPPUCCIN_ROOT}/latte/${name}.svg); --catppuccin-icon-dark: url(${CATPPUCCIN_ROOT}/mocha/${name}.svg)`}
+      style={`--catppuccin-icon-light: url(${CATPPUCCIN_ROOT}/latte/${name}.svg); --catppuccin-icon-dark: url(${CATPPUCCIN_ROOT}/mocha/${name}.svg)`}
     />
   );
 }
 
-export function FolderIcon({
-  size = 14,
-  open = false,
-}: IconProps & { open?: boolean }) {
-  return (
-    <CatppuccinIcon name={open ? "_folder_open" : "_folder"} size={size} />
-  );
+export function FolderIcon({ open = false }: { open?: boolean }) {
+  return <CatppuccinIcon name={open ? "_folder_open" : "_folder"} />;
 }
 
 /** The icon for a file name; `catppuccinIcon` in the core picks which. */
-export function FileIcon({ name, size = 14 }: IconProps & { name: string }) {
-  return <CatppuccinIcon name={catppuccinIcon(name)} size={size} />;
+export function FileIcon({ name }: { name: string }) {
+  return <CatppuccinIcon name={catppuccinIcon(name)} />;
 }

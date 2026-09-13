@@ -1,10 +1,434 @@
-/* Files area.
+/* Explorer, file tabs and viewers. Tree indentation is runtime depth. */
 
-   pi-web's stylesheets in ../ are the pixel spec and already carry every
-   `.file-viewer-*`, `.tab-close` and `.file-explorer-change-row` rule. What is
-   left here is only what pi-web writes from React: inline styles it derives
-   from hover or state, which a server-rendered page has to reach through CSS
-   instead. Nothing below invents a value; each one is pi-web's. */
+.file-tree-body {
+  padding: 2px 4px;
+}
+.file-tree-body.is-changes {
+  padding: 0 4px 2px;
+}
+.file-tree-message {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.file-tree-message.is-error {
+  color: var(--danger);
+}
+.file-tree-search {
+  padding-top: 3px;
+}
+.file-tree-search-empty {
+  padding: 6px 2px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.file-tree-empty {
+  font-size: 11px;
+  color: var(--text-dim);
+  height: 22px;
+  display: flex;
+  align-items: center;
+}
+.file-tree-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 8px;
+  height: 24px;
+  cursor: pointer;
+  border-radius: 4px;
+  user-select: none;
+}
+.file-tree-chevron {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--text-dim);
+  transition: transform 0.1s;
+}
+.file-tree-spacer {
+  width: 10px;
+  flex-shrink: 0;
+}
+.file-tree-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.file-tree-icon.is-change {
+  opacity: 0.85;
+}
+.file-tree-name {
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.file-tree-changed-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+.file-tree-badge {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+.file-tree-badge.is-M {
+  color: var(--warning);
+}
+.file-tree-badge.is-A,
+.file-tree-badge.is-U {
+  color: var(--success);
+}
+.file-tree-badge.is-D,
+.file-tree-badge.is-C {
+  color: var(--danger);
+}
+.file-tree-badge.is-R {
+  color: #60a5fa;
+}
+.file-tree-action {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  gap: 4px;
+  height: 20px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.file-tree-action.is-mention {
+  right: 28px;
+  padding: 0 8px;
+  color: var(--accent);
+}
+.file-tree-action.is-directory {
+  right: 4px;
+}
+.file-tree-action.is-download {
+  right: 4px;
+  padding: 0 5px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.file-changes-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.file-changes-count {
+  color: var(--text-dim);
+}
+.file-changes-added {
+  color: var(--success);
+  font-family: var(--font-mono);
+}
+.file-changes-removed {
+  color: var(--danger);
+  font-family: var(--font-mono);
+}
+.file-explorer-change-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 10px;
+  padding-right: 8px;
+  height: 24px;
+  cursor: pointer;
+  border-radius: 4px;
+  user-select: none;
+}
+.file-explorer-change-row:hover {
+  background: var(--bg-hover);
+}
+
+.file-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding-left: 12px;
+  padding-right: 6px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  max-width: 180px;
+  min-width: 80px;
+  flex-shrink: 0;
+  user-select: none;
+  transition:
+    background 0.1s,
+    color 0.1s;
+}
+.file-tab[aria-selected="true"] {
+  background: var(--bg);
+  color: var(--text);
+}
+.file-tab-icon .catppuccin-file-icon,
+.file-tree-icon.is-change .catppuccin-file-icon {
+  width: 13px;
+  height: 13px;
+}
+.file-tab-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+  display: flex;
+  align-items: center;
+}
+.file-tab[aria-selected="true"] .file-tab-icon {
+  opacity: 1;
+}
+.file-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  font-weight: 400;
+}
+.file-tab[aria-selected="true"] .file-tab-name {
+  font-weight: 500;
+}
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition:
+    background 0.1s,
+    color 0.1s;
+  background: transparent;
+  color: var(--text-dim);
+}
+.tab-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.file-line-number {
+  width: 48px;
+  min-width: 48px;
+  padding: 0 10px;
+  text-align: right;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  line-height: 20.8px;
+  user-select: none;
+  flex-shrink: 0;
+  vertical-align: top;
+}
+.file-source-view,
+.file-diff-view {
+  min-width: 100%;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.file-source-view {
+  min-height: 100%;
+  background: var(--bg);
+}
+.file-source-line {
+  display: flex;
+  min-width: 100%;
+}
+.file-diff-view {
+  width: max-content;
+}
+.file-diff-empty {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+.file-diff-collapsed {
+  padding: 2px 16px;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  font-size: 11px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.file-diff-line {
+  display: flex;
+  min-width: 100%;
+  background: transparent;
+  border-left: 3px solid transparent;
+}
+.file-diff-line.is-added {
+  background: rgba(0, 200, 80, 0.12);
+  border-left-color: var(--success);
+}
+.file-diff-line.is-removed {
+  background: rgba(240, 60, 60, 0.14);
+  border-left-color: var(--danger);
+}
+.file-diff-sign {
+  min-width: 16px;
+  padding: 0 6px;
+  color: var(--text-dim);
+  user-select: none;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+.file-diff-line.is-added .file-diff-sign {
+  color: var(--success);
+}
+.file-diff-line.is-removed .file-diff-sign {
+  color: var(--danger);
+}
+.file-diff-line-content {
+  flex-shrink: 0;
+  padding: 0 8px 0 0;
+  white-space: pre;
+  color: var(--text);
+}
+
+.file-viewer-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.file-viewer-content {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg);
+}
+.file-viewer-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.file-viewer-empty.is-too-large {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.file-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+.file-viewer-toolbar.is-media {
+  gap: 12px;
+  padding: 4px 16px;
+}
+.file-viewer-path {
+  font-family: var(--font-mono);
+}
+.file-viewer-media-label {
+  margin-left: auto;
+}
+.file-viewer-live {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.file-viewer-live.is-live {
+  color: var(--success);
+}
+.file-viewer-live-indicator {
+  background: var(--border);
+  box-shadow: none;
+}
+.file-viewer-live .file-viewer-live-indicator {
+  display: inline-block;
+}
+.file-viewer-live-indicator.is-live {
+  background: var(--success);
+  box-shadow: 0 0 4px var(--success);
+}
+.file-viewer-media-body {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-image:
+    linear-gradient(45deg, var(--bg) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--bg) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--bg) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--bg) 75%);
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+}
+.file-viewer-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.file-viewer-audio-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg-panel);
+}
+.file-viewer-audio-player {
+  width: min(680px, 100%);
+}
+.file-viewer-audio-player audio {
+  width: 100%;
+}
+.file-viewer-pdf-body {
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+.file-viewer-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: var(--bg);
+}
+.markdown-file-preview-shell {
+  padding: 24px 32px;
+}
 
 /* The explorer fragment stands in for FileExplorer's root div, which is
    `minHeight: 100%` so a short tree still fills the section it scrolls in. */
@@ -66,33 +490,6 @@
   outline-offset: -2px;
 }
 
-/* The explorer header's icon buttons. pi-web passes the resting colours to
-   ToolbarIconButton as props (SessionSidebar.tsx L1763-L1828);
-   `.sidebar-toolbar-button` reads them from these two custom properties, so
-   they are set here rather than left to fall back to the inherited colour. */
-.sidebar-toolbar-button {
-  --toolbar-button-color: var(--text-dim);
-  --toolbar-button-background: none;
-}
-
-#explorer-changes-toggle[aria-pressed="true"] {
-  --toolbar-button-color: var(--accent);
-  --toolbar-button-background: var(--bg-selected);
-}
-
-#explorer-search-toggle[aria-pressed="true"] {
-  --toolbar-button-color: var(--accent);
-  --toolbar-button-background: var(--bg-selected);
-}
-
-/* pi-web's top-bar toggle wears the selected pill while the panel is open
-   (AppShell.tsx L1706-L1709). Both colours sit on the button's inline style,
-   so the open state needs the weight to take them back. */
-#file-panel-toggle[aria-expanded="true"] {
-  background: var(--bg-selected) !important;
-  color: var(--text) !important;
-}
-
 /* The slot the media toolbar keeps for a measurement only the browser has
    (an image's pixels, an audio file's length). pi-web renders no element at
    all until it knows one, and an empty box here would spend a 12px gap. */
@@ -134,6 +531,219 @@
 .file-source-view.is-wrapped .file-source-line-content {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.file-viewer-toolbar {
+  min-width: 0;
+  min-height: 35px;
+}
+.file-viewer-path {
+  flex: 1 1 auto;
+  min-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-viewer-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-viewer-live-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 7px;
+}
+.file-viewer-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.file-viewer-actions {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  gap: 4px;
+  flex-shrink: 0;
+  order: -1;
+}
+.file-viewer-mode-switch {
+  display: flex;
+  height: 28px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.file-viewer-mode-button {
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.file-viewer-mode-button:first-child {
+  border-left: 0;
+}
+.file-viewer-mode-button:hover {
+  filter: brightness(1.08);
+}
+.file-viewer-mode-button[aria-pressed="true"] {
+  background: var(--bg-selected);
+  color: var(--text);
+}
+.file-viewer-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  box-sizing: border-box;
+  flex: 0 0 28px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: none;
+}
+.file-viewer-icon-button[aria-pressed="true"] {
+  background: var(--bg-selected);
+  color: var(--text);
+}
+.file-viewer-icon-button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.file-viewer-icon-button:disabled {
+  color: var(--text-dim);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.file-viewer-icon-button:disabled:hover {
+  background: transparent;
+  color: var(--text-dim);
+}
+.file-viewer-mode-button:focus-visible,
+.file-viewer-icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+@media (max-width: 640px) {
+  .file-viewer-meta {
+    display: none;
+  }
+}
+@media (max-width: 380px) {
+  .file-viewer-toolbar,
+  .file-viewer-toolbar.is-media {
+    gap: 6px;
+    padding-inline: 8px;
+  }
+  .file-viewer-mode-button {
+    padding-inline: 6px;
+  }
+}
+
+.markdown-file-preview h1 {
+  font-size: 1.8em;
+}
+.markdown-file-preview h2 {
+  font-size: 1.4em;
+}
+.markdown-file-preview h3 {
+  font-size: 1.15em;
+}
+.markdown-file-preview p {
+  margin: 0 0 12px;
+}
+.markdown-file-preview pre {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  margin: 12px 0;
+}
+.markdown-file-preview code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--bg-panel);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.markdown-file-preview pre code {
+  background: none;
+  padding: 0;
+}
+.markdown-frontmatter {
+  margin-bottom: 20px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+.markdown-frontmatter-title {
+  font-size: 1.3em;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+}
+.markdown-frontmatter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.markdown-frontmatter-tag {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 10px;
+}
+.markdown-frontmatter-rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px 14px;
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.markdown-frontmatter-row {
+  display: contents;
+}
+.markdown-frontmatter-row dt {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  white-space: nowrap;
+}
+.markdown-frontmatter-row dd {
+  margin: 0;
+  color: var(--text);
+  min-width: 0;
+  word-break: break-word;
+}
+.markdown-frontmatter-row dd a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* The viewer fills the panel body below the tab bar. */

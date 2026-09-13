@@ -44,26 +44,15 @@ export function ContextReadout({
     return empty === false ? (
       <span id="context-readout" hidden {...swap} />
     ) : (
-      <span
-        id="context-readout"
-        style="overflow:hidden; text-overflow:ellipsis; color:var(--text-dim)"
-        {...swap}
-      >
+      <span id="context-readout" class="shell-context-empty" {...swap}>
         Session info
       </span>
     );
   }
-  const colour =
-    usage.level === "critical"
-      ? "var(--danger)"
-      : usage.level === "warn"
-        ? "rgba(234,179,8,0.95)"
-        : "var(--text-muted)";
   return (
     <span
       id="context-readout"
-      class="mobile-session-context"
-      style={`display:flex; align-items:center; gap:4px; color:${colour}`}
+      class={`mobile-session-context is-${usage.level}`}
       data-context-readout
       {...swap}
     >
@@ -145,18 +134,11 @@ function QueuedRow({
 }) {
   const steer = behavior === "steer";
   return (
-    <div
-      title={text}
-      style="display:flex; align-items:center; gap:8px; padding:3px 10px; font-size:12px; color:var(--text-muted); min-width:0"
-    >
-      <span
-        style={`flex-shrink:0; font-size:10px; font-family:var(--font-mono); padding:1px 7px; border-radius:999px; border:1px solid ${steer ? "color-mix(in srgb, var(--accent) 45%, transparent)" : "var(--border)"}; color:var(${steer ? "--accent" : "--text-dim"})`}
-      >
+    <div title={text} class="composer-queued-row">
+      <span class={`composer-queued-kind${steer ? " is-steer" : ""}`}>
         {steer ? "steer" : "follow-up"}
       </span>
-      <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-        {text}
-      </span>
+      <span class="composer-queued-text">{text}</span>
     </div>
   );
 }
@@ -170,16 +152,15 @@ function QueuePanel({
 }) {
   if (queue.length === 0) return <></>;
   return (
-    <div style="margin-bottom:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg-panel); padding:5px 0">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:2px 8px 4px 10px">
-        <span style="font-size:10px; font-family:var(--font-mono); color:var(--text-dim); text-transform:uppercase; letter-spacing:0.4px">
+    <div class="composer-queue">
+      <div class="composer-queue-header">
+        <span class="composer-queue-label">
           Queued · {String(queue.length)}
         </span>
         <button
           type="button"
           class="composer-queue-recall"
           title="Remove all queued messages and put them back into the input box for editing"
-          style="display:flex; align-items:center; gap:6px; padding:4px 12px; font-size:12px; color:var(--text); background:transparent; border:1px solid var(--border); border-radius:7px; cursor:pointer; transition:background 0.12s, border-color 0.12s; white-space:nowrap"
           hx-post={`/sessions/${sessionId}/queue/recall`}
           // The button sits inside the composer form; without this htmx would
           // post the draft and its attachments with the recall.
@@ -223,22 +204,17 @@ export function Status({
         <QueuePanel sessionId={summary.id} queue={status.queue} />
       ) : null}
       {status?.retry ? (
-        <div style="margin-bottom:8px; padding:5px 10px; background:rgba(234,179,8,0.08); border:1px solid rgba(234,179,8,0.25); border-radius:6px; font-size:12px; color:rgba(180,130,0,0.9); display:flex; align-items:center; gap:6px">
+        <div class="composer-retry">
           <RefreshIcon size={11} width={2} />
           Retrying ({String(status.retry.attempt)}/
           {String(status.retry.maxAttempts)})…
           {status.retry.message ? (
-            <span style="opacity:0.7; margin-left:4px">
-              — {status.retry.message}
-            </span>
+            <span class="composer-retry-message">— {status.retry.message}</span>
           ) : null}
         </div>
       ) : null}
       {status?.compactionError ? (
-        <div
-          role="alert"
-          style="margin-bottom:8px; padding:7px 10px; background:rgba(239,68,68,0.07); border:1px solid rgba(239,68,68,0.3); border-radius:6px; color:var(--danger); font-family:var(--font-mono); font-size:12px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere"
-        >
+        <div role="alert" class="composer-compaction-error">
           {status.compactionError}
         </div>
       ) : null}

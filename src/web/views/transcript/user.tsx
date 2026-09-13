@@ -25,8 +25,8 @@ export function UserMessage({
       entryId={item.entryId}
       indices={item.images}
       actions={actions}
-      size="thumb"
-      marginBottom={item.text === "" ? 0 : 8}
+      variant="user"
+      separated={item.text !== ""}
     />
   );
   const command = item.command;
@@ -41,15 +41,14 @@ export function UserMessage({
     command !== undefined && space !== -1 ? command.slice(space + 1) : "";
   return (
     <div
-      class="message-row"
+      class="message-row user-message"
       id={`entry-${item.entryId}`}
       data-role="user"
-      style="margin-bottom:16px; display:flex; flex-direction:column; align-items:flex-end"
     >
       <div class="user-message-band">
         <div class="user-message-band-content">
-          <div style="min-width:0; max-width:85%; padding:14px 0; display:flex; flex-direction:column; font-size:14px; line-height:1.6; color:var(--text); word-break:break-word">
-            <div style="margin-right:4px; padding:0 8px 0 12px">
+          <div class="user-message-content">
+            <div class="user-message-text">
               {command === undefined ? (
                 <>
                   {images}
@@ -64,29 +63,19 @@ export function UserMessage({
                   />
                 </>
               ) : (
-                <details
-                  class="transcript-details"
-                  style="display:flex; flex-direction:column; gap:6px; min-width:0"
-                >
-                  <summary style="display:flex; align-items:flex-start; gap:8px; flex-wrap:wrap">
+                <details class="transcript-details user-command">
+                  <summary class="user-command-summary">
                     <span hidden data-user-text>
                       {command}
                     </span>
-                    <span style="display:flex; align-items:center; gap:6px; flex-shrink:0; color:var(--accent); font-family:var(--font-mono); font-size:13px; text-align:left">
-                      <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-                        {name}
-                      </span>
-                      <span
-                        class="card-chevron"
-                        style="display:flex; flex-shrink:0; opacity:0.75; transition:transform 0.15s"
-                      >
+                    <span class="user-command-label">
+                      <span class="user-command-name">{name}</span>
+                      <span class="card-chevron user-command-chevron">
                         <ExpandChevronIcon />
                       </span>
                     </span>
                     {args === "" ? null : (
-                      <span style="color:var(--text); font-size:14px; line-height:1.6; white-space:pre-wrap; word-break:break-word; min-width:0; flex:1">
-                        {args}
-                      </span>
+                      <span class="user-command-arguments">{args}</span>
                     )}
                   </summary>
                   {images}
@@ -101,15 +90,12 @@ export function UserMessage({
           </div>
         </div>
       </div>
-      <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px; margin-top:3px; flex-wrap:wrap">
-        <div class="message-actions" style="display:flex; gap:3px">
+      <div class="user-message-footer">
+        <div class="message-actions user-message-copy">
           <CopyButton text={item.command ?? item.text} />
         </div>
         {editable && actions ? (
-          <div
-            class="message-actions"
-            style="display:flex; gap:3px; flex-wrap:wrap; justify-content:flex-end"
-          >
+          <div class="message-actions user-message-history">
             {actions.busy === true ? null : (
               <button
                 type="button"
@@ -127,10 +113,7 @@ export function UserMessage({
             )}
           </div>
         ) : null}
-        <Time
-          value={item.timestamp}
-          style="font-size:10px; color:var(--text-dim)"
-        />
+        <Time value={item.timestamp} />
       </div>
     </div>
   );

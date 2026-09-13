@@ -30,10 +30,9 @@ function Trigger({
 }) {
   const lines = widget.lines.length;
   const label = `${placementLabel(widget)}: ${widget.key}, ${String(lines)} ${lines === 1 ? "line" : "lines"}`;
-  const classes = `extension-widget-trigger${expanded ? " is-expanded" : ""}${updated ? " is-updating" : ""}`;
+  const classes = `extension-widget-trigger${updated ? " is-updating" : ""}`;
   const body = (
     <>
-      <span class="extension-widget-update-pulse" aria-hidden="true" />
       <span class="extension-widget-placement" aria-hidden="true">
         <WidgetPlacementIcon
           placement={widget.placement === "belowEditor" ? "below" : "above"}

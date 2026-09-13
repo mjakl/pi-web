@@ -215,8 +215,14 @@ describe("opening files", () => {
     streams()[0]?.dispatchEvent(new Event("connected"));
     expect(query(".file-viewer-live-indicator").title).toBe("Live sync active");
     expect(query(".file-viewer-live-label").textContent).toBe("live");
+    expect(
+      query(".file-viewer-live-indicator").classList.contains("is-live"),
+    ).toBe(true);
     streams()[0]?.dispatchEvent(new Event("error"));
     expect(query(".file-viewer-live-label").textContent).toBe("static");
+    expect(
+      query(".file-viewer-live-indicator").classList.contains("is-live"),
+    ).toBe(false);
   });
 
   it("works from the picked folder when there is no session", async () => {
