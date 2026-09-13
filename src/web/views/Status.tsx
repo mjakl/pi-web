@@ -44,26 +44,15 @@ export function ContextReadout({
     return empty === false ? (
       <span id="context-readout" hidden {...swap} />
     ) : (
-      <span
-        id="context-readout"
-        style="overflow:hidden; text-overflow:ellipsis; color:var(--text-dim)"
-        {...swap}
-      >
+      <span id="context-readout" class="shell-context-empty" {...swap}>
         Session info
       </span>
     );
   }
-  const colour =
-    usage.level === "critical"
-      ? "var(--danger)"
-      : usage.level === "warn"
-        ? "rgba(234,179,8,0.95)"
-        : "var(--text-muted)";
   return (
     <span
       id="context-readout"
-      class="mobile-session-context"
-      style={`display:flex; align-items:center; gap:4px; color:${colour}`}
+      class={`mobile-session-context is-${usage.level}`}
       data-context-readout
       {...swap}
     >

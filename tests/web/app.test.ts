@@ -148,7 +148,7 @@ describe("web app", () => {
       })
     ).text();
     expect(warned).toContain("data-warning");
-    expect(warned).toContain("rgba(234,179,8,0.95)");
+    expect(warned).toContain('class="mobile-session-context is-warn"');
   });
 
   it("tints the System and Tools icons from the attached session", async () => {
@@ -156,22 +156,19 @@ describe("web app", () => {
     // A stored session tells the page nothing about either, so pi-web leaves
     // both icons dim until something attaches.
     const stored = await (await app.request("/sessions/s1")).text();
-    const dim = stored.slice(stored.indexOf('data-top-panel="system"'));
-    expect(dim).toContain(
-      'data-panel-icon="true" style="display:flex; color:var(--text-dim)"',
+    const dim = stored.slice(
+      stored.indexOf('data-top-panel="system"'),
+      stored.indexOf('id="stats-trigger"'),
     );
+    expect(dim).not.toContain("data-panel-loaded");
     await world.runtime.open({ sessionId: "s1" });
     const live = await (await app.request("/sessions/s1")).text();
     const tabs = live.slice(
       live.indexOf('data-top-panel="system"'),
       live.indexOf('id="stats-trigger"'),
     );
-    expect(tabs).toContain(
-      'data-panel-icon="true" style="display:flex; color:var(--accent)"',
-    );
-    // Both of them, and neither left dim.
-    expect(tabs.split("var(--accent)").length - 1).toBe(2);
-    expect(tabs).not.toContain("color:var(--text-dim)");
+    // Both buttons carry the same loaded state before a browser opens them.
+    expect(tabs.match(/data-panel-loaded="true"/g)).toHaveLength(2);
   });
 
   it("renders the top panels with pi-web's menu-panel classes", async () => {
@@ -184,7 +181,9 @@ describe("web app", () => {
     const tools = await (await app.request("/sessions/s1/tools")).text();
     expect(tools).toContain("tool-definitions-panel menu-surface menu-panel");
     expect(tools).toContain("tool-definitions-sidebar");
-    expect(tools).toContain("tool-definitions-item selected");
+    expect(tools).toMatch(
+      /class="tool-definitions-item"[^>]*aria-pressed="true"/,
+    );
     expect(tools).toContain("tool-definition-field-name");
     expect(tools).toContain('hx-target="#top-panel"');
     // Before there is a session both panels are their own empty state, as
@@ -208,7 +207,7 @@ describe("web app", () => {
     ]) {
       expect([title, stats.includes(title)]).toStrictEqual([title, true]);
     }
-    expect(stats).toContain("minmax(360px, 1.7fr)");
+    expect(stats).toContain('class="session-info-grid"');
     expect(stats).toContain('data-session-copy="s1"');
     expect(stats).toContain("Copy session ID");
   });
@@ -2173,7 +2172,7 @@ describe("phase 8 fixes", () => {
     await world.runtime.open({ sessionId: "s1" });
     const plain = await (await app.request("/sessions/s1")).text();
     expect(plain).toContain("data-context-readout");
-    expect(plain).toContain("color:var(--text-muted)");
+    expect(plain).toContain('class="mobile-session-context is-ok"');
     // 40 000 tokens of a 100 000 window is 40 %: below every percent rule,
     // above a threshold the reader set at 30 000.
     const warned = await (
@@ -2181,7 +2180,7 @@ describe("phase 8 fixes", () => {
         headers: { cookie: "web-pi-warn-tokens=30000" },
       })
     ).text();
-    expect(warned).toContain("rgba(234,179,8,0.95)");
+    expect(warned).toContain('class="mobile-session-context is-warn"');
   });
 
   it("refuses to compact while a turn owns the context", async () => {
@@ -2493,7 +2492,7 @@ describe("the shell chrome, on every route", () => {
     expect(bar).not.toContain('id="stats-trigger"');
     // The toggle takes the free space when no stats cluster does.
     expect(bar).toContain(
-      'id="file-panel-toggle" style="display:flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0; background:none; border:none; color:var(--text-muted); cursor:pointer; flex-shrink:0; transition:color 0.12s, background 0.12s; border-left:1px solid var(--border); margin-left:auto"',
+      'id="file-panel-toggle" class="shell-icon-button is-right-control is-sessionless"',
     );
     // The panel itself stays mounted, collapsed, as pi-web keeps it.
     expect(html).toContain('id="file-panel"');

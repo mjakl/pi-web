@@ -1,5 +1,421 @@
 /* Shell, modal surfaces and shared Settings/dialog actions. */
 
+.context-compact-button,
+.page-refresh-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  align-self: center;
+  margin-right: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.context-compact-button:hover:not(:disabled),
+.page-refresh-button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.context-compact-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.context-compact-button[data-warning] {
+  color: var(--success);
+}
+.context-compact-button[data-compacting] {
+  color: var(--danger);
+}
+
+/* The border remains the separator; the handle expands its hit target. */
+.panel-resize-handle {
+  position: relative;
+  z-index: 220;
+  width: 12px;
+  margin: 0 -6px;
+  flex: 0 0 12px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.panel-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 2px;
+  pointer-events: none;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.panel-resize-handle:hover::after,
+.panel-resize-handle:focus-visible::after,
+.panel-resize-handle.is-resizing::after {
+  background: color-mix(in srgb, var(--text-muted) 70%, var(--border));
+}
+.right-panel-overlay-backdrop {
+  display: none;
+}
+
+@media (min-width: 641px) {
+  .sidebar-overlay-backdrop {
+    display: none;
+  }
+  .sidebar-container {
+    position: relative;
+    overflow: hidden;
+    transition:
+      width 0.2s ease,
+      min-width 0.2s ease;
+  }
+  .sidebar-container.sidebar-open {
+    width: var(--sidebar-width, 260px);
+    min-width: var(--sidebar-width, 260px);
+  }
+  .sidebar-container.sidebar-closed {
+    width: 0;
+    min-width: 0;
+    border-right: none;
+  }
+  /* Keep content stable while its column animates. */
+  .sidebar-container > * {
+    width: var(--sidebar-width, 260px);
+    min-width: var(--sidebar-width, 260px);
+  }
+  .sidebar-container.sidebar-resizing,
+  .sidebar-container.sidebar-resizing > * {
+    transition: none;
+  }
+}
+@media (min-width: 960px) {
+  .right-panel-container {
+    overflow: hidden;
+    transition:
+      width 0.2s ease,
+      min-width 0.2s ease;
+    flex-shrink: 0;
+  }
+  .right-panel-container.right-panel-open {
+    width: var(--right-panel-width, clamp(360px, 42vw, 640px));
+    min-width: 300px;
+  }
+  .right-panel-container.right-panel-closed {
+    width: 0;
+    min-width: 0;
+    border-left: none;
+  }
+  .right-panel-container > * {
+    width: var(--right-panel-width, clamp(360px, 42vw, 640px));
+    min-width: 300px;
+  }
+  .right-panel-container.right-panel-resizing,
+  .right-panel-container.right-panel-resizing > * {
+    transition: none;
+  }
+}
+@media (min-width: 641px) and (max-width: 959px) {
+  .right-panel-resize-handle {
+    display: none;
+  }
+  .right-panel-overlay-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 240;
+    display: block;
+    background: rgba(0, 0, 0, 0.24);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .right-panel-overlay-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .right-panel-container {
+    position: fixed;
+    top: 0;
+    right: env(safe-area-inset-right);
+    bottom: 0;
+    z-index: 250;
+    width: min(560px, calc(100vw - 48px));
+    min-width: 300px;
+    overflow: hidden;
+    box-shadow: -12px 0 32px rgba(0, 0, 0, 0.18);
+    transition: transform 0.2s ease;
+  }
+  .right-panel-container.right-panel-open {
+    transform: translateX(0);
+  }
+  .right-panel-container.right-panel-closed {
+    transform: translateX(100%);
+    pointer-events: none;
+  }
+  .right-panel-container > * {
+    width: 100%;
+    min-width: 0;
+  }
+}
+@media (max-width: 640px) {
+  .sidebar-container {
+    position: fixed;
+    top: 0;
+    left: env(safe-area-inset-left);
+    bottom: 0;
+    width: 280px;
+    max-width: 85vw;
+    height: var(--app-viewport-height, 100dvh);
+    transition:
+      transform 0.25s ease,
+      box-shadow 0.25s ease;
+  }
+  .sidebar-container.sidebar-open {
+    transform: translateX(0);
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+  }
+  .sidebar-container.sidebar-closed {
+    transform: translateX(calc(-100% - env(safe-area-inset-left)));
+    box-shadow: none;
+  }
+  .right-panel-container {
+    position: fixed;
+    inset: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
+    height: var(--app-viewport-height, 100dvh);
+    z-index: 250;
+    overflow: hidden;
+    transition: transform 0.2s ease;
+  }
+  .right-panel-container.right-panel-open {
+    width: auto;
+    min-width: 0;
+  }
+  .right-panel-container.right-panel-closed {
+    width: 0;
+    min-width: 0;
+    border-left: none;
+    display: none;
+  }
+  .right-panel-container > * {
+    width: 100%;
+    min-width: 0;
+  }
+  .panel-resize-handle,
+  .right-panel-overlay-backdrop {
+    display: none;
+  }
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .page-refresh-button {
+    width: 36px;
+    height: 36px;
+    margin-right: 0;
+  }
+}
+@media (pointer: coarse) {
+  .context-compact-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+.project-folder-message.is-new-session {
+  padding: 12px 16px;
+}
+
+.tool-definitions-panel {
+  display: grid;
+  grid-template-columns: clamp(112px, 26%, 220px) minmax(0, 1fr);
+  height: min(600px, 75dvh);
+  min-height: 240px;
+  overflow: hidden;
+}
+.tool-definitions-sidebar,
+.tool-definition-detail {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+.tool-definitions-sidebar {
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-panel) 94%, var(--bg));
+}
+.tool-definitions-list,
+.tool-definition-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+.tool-definitions-item {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  align-items: center;
+  padding: 8px 12px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+}
+.tool-definitions-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.tool-definitions-item[aria-pressed="true"] {
+  background: var(--bg-selected);
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--text);
+}
+.tool-definitions-item code {
+  max-width: 100%;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tool-definition-scroll {
+  padding: 14px 16px 20px;
+}
+.tool-definition-section + .tool-definition-section {
+  margin-top: 18px;
+}
+.tool-definition-section-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+}
+.tool-definition-section-label > span:last-child {
+  font-weight: 400;
+  white-space: nowrap;
+}
+.tool-definition-description {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.tool-definition-fields {
+  border-top: 1px solid var(--border);
+}
+.tool-definition-field {
+  display: grid;
+  grid-template-columns: minmax(88px, 0.75fr) minmax(0, 1.5fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.tool-definition-field-name {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--text);
+}
+.tool-definition-field-name code {
+  overflow-wrap: anywhere;
+}
+.tool-definition-field-name span {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+.tool-definition-field-name span.required {
+  color: var(--accent);
+}
+.tool-definition-field-value {
+  min-width: 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.tool-definition-type {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text);
+}
+.tool-definition-meta {
+  margin-top: 4px;
+  color: var(--text-dim);
+}
+.tool-definition-meta code {
+  color: var(--text-muted);
+}
+.tool-definition-no-parameters {
+  padding: 2px 0 10px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.tool-definition-guidelines {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.tool-definitions-empty {
+  padding: 14px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .tool-definitions-panel {
+    grid-template-columns: 112px minmax(0, 1fr);
+  }
+  .tool-definitions-item {
+    padding: 8px 10px;
+  }
+  .tool-definition-scroll {
+    padding: 12px;
+  }
+  .tool-definition-field {
+    grid-template-columns: minmax(74px, 0.7fr) minmax(0, 1.3fr);
+    gap: 9px;
+  }
+}
+
+.system-prompt-panel {
+  display: flex;
+  height: min(600px, 75dvh);
+  min-height: 220px;
+  flex-direction: column;
+}
+.system-prompt-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 12px 16px;
+}
+.system-prompt-text {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.system-prompt-empty {
+  padding: 10px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
 .config-button {
   display: inline-flex;
   align-items: center;
@@ -349,148 +765,407 @@
   animation: spin 0.9s linear infinite;
 }
 
-/* pi-web puts `mobile-session-stats` and its two children's classes on the
-   stats cluster only on the phone (AppShell.tsx L1468); web-pi serves one
-   button to both viewports, so above the phone breakpoint the mobile rules in
-   embedded.css have to be taken back off. `container-type: inline-size` is the
-   one that matters: it contains the button's inline size, collapsing it to its
-   own padding and then hiding the token groups through its own container
-   query. */
-@media (min-width: 641px) {
-  #stats-trigger.mobile-session-stats {
-    container-type: normal;
-  }
-
-  #top-bar .mobile-session-context {
-    /* `min-width: 0` lets the readout shrink to nothing, so a narrow chat
-       column clipped the gauge text away and left the token groups standing.
-       pi-web clips the cluster from its left edge instead, keeping the
-       readout whole. */
-    min-width: auto;
-    white-space: nowrap;
-    line-height: inherit;
-    text-align: inherit;
-  }
+.shell-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  overflow: hidden;
+  background: var(--bg);
 }
 
-/* pi-web builds the phone top bar from JS: the three panel tabs become 36px
-   icon squares without a label, the cache-read and gauge groups drop out of
-   the stats cluster, and the cluster takes the free space
-   (AppShell.tsx, `mobile ? 36 : undefined`). The server cannot see the
-   viewport, so the same shape comes from a media query here. */
+.shell-session-region {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.shell-main {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.shell-top-bar {
+  flex-shrink: 0;
+  background: var(--bg-panel);
+}
+
+.shell-top-bar-row,
+.shell-file-panel-header {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  height: calc(36px + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+}
+
+.shell-top-bar-row {
+  position: relative;
+}
+.shell-file-panel-header {
+  flex-shrink: 0;
+  background: var(--bg-panel);
+}
+.shell-file-tabs-host {
+  flex: 1;
+  overflow: hidden;
+}
+.shell-file-panel-body {
+  flex: 1;
+  overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.shell-top-panel {
+  position: fixed;
+  left: 0;
+  top: calc(36px + env(safe-area-inset-top));
+  width: 100%;
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+  z-index: 500;
+}
+
+.shell-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    color 0.12s,
+    background 0.12s;
+}
+.shell-icon-button.is-left-control {
+  border-right: 1px solid var(--border);
+}
+.shell-icon-button.is-right-control {
+  border-left: 1px solid var(--border);
+}
+.shell-icon-button.is-sessionless {
+  margin-left: auto;
+}
+.shell-icon-button.is-selected,
+#file-panel-toggle[aria-expanded="true"] {
+  background: var(--bg-selected);
+  color: var(--text);
+}
+
+.shell-top-bar-tabs {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+.shell-top-bar-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 12px;
+  background: none;
+  border: none;
+  border-top: 2px solid transparent;
+  border-right: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 11px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    color 0.1s,
+    background 0.1s;
+}
+.shell-top-bar-tab:disabled {
+  color: var(--text-dim);
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.shell-panel-icon {
+  display: flex;
+  color: var(--text-dim);
+}
+[data-top-panel][data-panel-loaded] .shell-panel-icon {
+  color: var(--accent);
+}
+
+.shell-session-stats {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  gap: 10px;
+  padding: 0 12px;
+  height: 100%;
+  overflow: hidden;
+  background: none;
+  border: none;
+  border-top: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  transition:
+    color 0.1s,
+    background 0.1s;
+}
+.mobile-session-stat-io,
+.shell-cache-read,
+.mobile-session-context {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mobile-session-context {
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.mobile-session-context.is-critical {
+  color: var(--danger);
+}
+.mobile-session-context.is-warn {
+  color: rgba(234, 179, 8, 0.95);
+}
+.shell-context-empty {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+}
+
+#sidebar-toggle:hover,
+#file-panel-toggle:hover,
+.shell-session-stats:hover,
+.shell-top-bar-tab:not(:disabled):hover {
+  color: var(--text);
+}
+a.shell-top-bar-tab:hover {
+  background: var(--bg-hover);
+}
+[data-top-panel][aria-pressed="true"] {
+  background: var(--bg-selected);
+  border-top-color: var(--accent);
+  color: var(--text);
+}
+
+.sidebar-container {
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 200;
+}
+.sidebar-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.sidebar-overlay-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.right-panel-container {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+}
+.shell-empty-session {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.session-info-popover {
+  position: relative;
+  overflow: hidden;
+  padding: 12px 16px;
+}
+.session-info-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 1.7fr) minmax(140px, 0.55fr) minmax(
+      190px,
+      0.75fr
+    );
+  gap: 24px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+}
+.session-info-details {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.session-info-section {
+  min-width: 0;
+}
+.session-info-heading {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.session-info-fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 12px;
+  row-gap: 8px;
+  align-items: start;
+}
+.session-info-row {
+  display: contents;
+}
+.session-info-label {
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.session-info-value {
+  color: var(--text-muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+.session-info-counts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 4px;
+}
+.session-info-counts.is-compact {
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 14px;
+  justify-content: start;
+}
+.session-info-counts.is-compact .session-info-value {
+  overflow-wrap: normal;
+  word-break: normal;
+  text-align: right;
+}
+/* Copy icons retain the readout's compact density. */
+.session-info-copy {
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-top: -2px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition:
+    color 0.12s,
+    border-color 0.12s,
+    background 0.12s;
+}
+.session-info-copy.is-copied {
+  color: var(--accent);
+}
+
 @media (max-width: 640px) {
   .project-trust-badge:not(.is-banner) {
     display: none;
   }
-
   .project-trust-badge.is-banner {
     display: flex;
   }
-
-  /* Both carry pi-web's inline styles, which outrank a plain rule. */
-  #top-bar [data-cache-read],
-  #top-bar .mobile-session-context > svg {
-    display: none !important;
+  .shell-cache-read,
+  .mobile-session-context > svg {
+    display: none;
   }
-
-  /* The phone's token pair is tighter and its arrows smaller than the
-     desktop's (AppShell.tsx L1510-L1523 against L1585-L1592); the gap is
-     inline, the arrow only a presentation attribute. */
-  #top-bar .mobile-session-stat-io {
-    gap: 2px !important;
+  .mobile-session-stat-io {
+    gap: 2px;
     flex-shrink: 0;
   }
-
-  #top-bar .mobile-session-stat-io > svg {
+  .mobile-session-stat-io > svg {
     width: 10px;
     height: 10px;
   }
-
-  #top-bar [data-top-bar-tab] {
-    width: 36px !important;
-    padding: 0 !important;
+  .shell-top-bar-tab {
+    width: 36px;
+    padding: 0;
   }
-
-  #top-bar [data-top-bar-tab] > span {
+  .shell-top-bar-tab > span:not(.shell-panel-icon) {
     display: none;
   }
-
-  /* pi-web's phone values (AppShell.tsx L1471-L1479); gap and padding are
-     inline there, so the rule needs the weight to take them back. */
-  #stats-trigger {
+  .shell-session-stats {
+    container-type: inline-size;
     flex: 1;
-    gap: 7px !important;
-    padding-right: 6px !important;
-    padding-left: 6px !important;
+    gap: 7px;
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+  .mobile-session-context {
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.2;
+    text-align: right;
+  }
+  .sidebar-overlay-backdrop.sidebar-mobile-pending {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .sidebar-container.sidebar-mobile-pending.sidebar-open {
+    transform: translateX(calc(-100% - env(safe-area-inset-left)));
+    box-shadow: none;
+  }
+}
+@container (max-width: 240px) {
+  .mobile-session-stat-io {
+    display: none;
   }
 }
 
-/* The System and Tools icons carry the accent once the session has told the
-   page what they hold. An attached session says so in its status and the
-   server paints it (SessionPage.tsx); this covers the other way pi-web finds
-   out — opening a panel resumes a dormant session, and the answer is what
-   says there was something in it (client/shell.ts).
-   The colour is on an inline style, so this rule needs the weight. */
-[data-top-panel][data-panel-loaded] [data-panel-icon] {
-  color: var(--accent) !important;
-}
-
-/* The narrow-phone toolbar. pi-web renders the three tabs into an overlay
-   that slides over the bar from behind a "more" button, and renders neither
-   on a wider viewport (AppShell.tsx L1978-L2090). The server cannot see the
-   viewport, so both live in the page and this query picks the shape:
-   36px sidebar toggle + 36px more button = the overlay's left edge. */
-/* Both carry pi-web's own inline styles, so the display each viewport does
-   not use has to be overridden with more weight than an attribute has. */
 #mobile-toolbar-more {
-  display: none !important;
+  display: none;
 }
-
 @media (max-width: 480px) {
   #mobile-toolbar-more {
-    display: flex !important;
-    /* pi-web's phone bar stretches its row, so this 36px button starts at the
-       top of the 35px row instead of straddling it half a pixel high. */
+    display: flex;
     align-self: flex-start;
   }
-
   #mobile-toolbar-more[aria-expanded="true"] {
     z-index: 21;
     background: var(--bg-selected);
     color: var(--text);
   }
-
-  #top-bar-tabs {
-    display: none !important;
+  .shell-top-bar-tabs {
+    display: none;
     position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 72px;
+    inset: 0 0 0 72px;
     z-index: 20;
     background: color-mix(in srgb, var(--bg-panel) 94%, var(--bg));
     box-shadow: 4px 0 18px rgba(0, 0, 0, 0.12);
     backdrop-filter: blur(10px);
   }
-
-  #top-bar-tabs[data-open] {
-    display: flex !important;
+  .shell-top-bar-tabs[data-open] {
+    display: flex;
   }
-}
-
-/* pi-web hovers the top bar's controls from JS (AppShell.tsx onMouseEnter):
-   the icon squares and the three tabs go muted -> text, and Full history
-   also takes the hover background. Those colours are inline there, and the
-   panel buttons get an inline colour again whenever a panel opens
-   (client/shell.ts), so the rules need the weight. pi-web gives the
-   narrow-phone "more" button and the disabled history tab no hover at all. */
-#top-bar #sidebar-toggle:hover,
-#top-bar #file-panel-toggle:hover,
-#top-bar #stats-trigger:hover,
-#top-bar [data-top-bar-tab]:not([disabled]):hover {
-  color: var(--text) !important;
-}
-
-#top-bar a[data-top-bar-tab]:hover {
-  background: var(--bg-hover) !important;
 }

@@ -35,40 +35,14 @@ import {
 } from "./Status.tsx";
 import { DialogHost, MissingFolderNotice, TrustBadge } from "./Dialogs.tsx";
 
-// The application shell, with pi-web's DOM: the sidebar column, the 36px top
-// bar, the chat window with its rail, and the right-hand file panel. The
-// inline styles are pi-web's own (components/AppShell.tsx), kebab-cased;
-// everything with a class name is styled by src/web/styles/globals.css.
+// The shell owns the columns and top bar; each area's body keeps its own styles.
 
 /** The cumulative token totals the stats button reads. */
 type SessionTokens = SessionStats["tokens"];
 
-/** pi-web's top bar and both panel headers are exactly this tall. */
-const BAR_HEIGHT = "calc(36px + env(safe-area-inset-top))";
-
-const TOP_BAR_BUTTON =
-  "display:flex; align-items:center; justify-content:center; gap:6px;" +
-  " height:100%; padding:0 12px; background:none; border:none;" +
-  " border-top:2px solid transparent; border-right:1px solid var(--border);" +
-  " color:var(--text-muted); cursor:pointer; flex-shrink:0; font-size:11px;" +
-  " white-space:nowrap; text-decoration:none;" +
-  " transition:color 0.1s, background 0.1s";
-
-const ICON_BUTTON_36 =
-  "display:flex; align-items:center; justify-content:center; width:36px;" +
-  " height:36px; padding:0; background:none; border:none;" +
-  " color:var(--text-muted); cursor:pointer; flex-shrink:0;" +
-  " transition:color 0.12s, background 0.12s";
-
 /** The panel one of the top-bar buttons opens, one at a time. */
 function TopPanelHost() {
-  return (
-    <div
-      id="top-panel"
-      style={`position:fixed; left:0; top:${BAR_HEIGHT}; width:100%; max-height:calc(100dvh - 36px); overflow-y:auto; z-index:500`}
-      hidden
-    />
-  );
+  return <div id="top-panel" class="shell-top-panel" hidden />;
 }
 
 function TopBar({
@@ -93,17 +67,13 @@ function TopBar({
   compactOff?: boolean;
   compacting?: boolean;
 }) {
-  const panelIcon = (lit: boolean) =>
-    `display:flex; color:var(${lit ? "--accent" : "--text-dim"})`;
   return (
-    <div id="top-bar" style="flex-shrink:0; background:var(--bg-panel)">
-      <div
-        style={`display:flex; align-items:center; position:relative; border-bottom:1px solid var(--border); height:${BAR_HEIGHT}; padding-top:env(safe-area-inset-top)`}
-      >
+    <div id="top-bar" class="shell-top-bar">
+      <div class="shell-top-bar-row">
         <button
           type="button"
           id="sidebar-toggle"
-          style={`${ICON_BUTTON_36}; border-right:1px solid var(--border)`}
+          class="shell-icon-button is-left-control"
           aria-controls="session-sidebar"
           aria-expanded="true"
           title="Hide sidebar"
@@ -125,7 +95,7 @@ function TopBar({
         <button
           type="button"
           id="mobile-toolbar-more"
-          style={`${ICON_BUTTON_36}; border-right:1px solid var(--border)`}
+          class="shell-icon-button is-left-control"
           aria-controls="top-bar-tabs"
           aria-expanded="false"
           title="More controls"
@@ -141,14 +111,11 @@ function TopBar({
         {/* pi-web draws the group whenever the chat area does, so a page
             with no session yet still has it (AppShell.tsx L1224), with
             Full history disabled until there is a history to export. */}
-        <div
-          id="top-bar-tabs"
-          style="display:flex; align-items:stretch; height:100%"
-        >
+        <div id="top-bar-tabs" class="shell-top-bar-tabs">
           {sessionId === undefined ? (
             <button
               type="button"
-              style={`${TOP_BAR_BUTTON}; color:var(--text-dim); cursor:not-allowed; opacity:0.45`}
+              class="shell-top-bar-tab"
               data-top-bar-tab
               disabled
               title="Full history is available after the session is saved"
@@ -159,7 +126,7 @@ function TopBar({
             </button>
           ) : (
             <a
-              style={TOP_BAR_BUTTON}
+              class="shell-top-bar-tab"
               data-top-bar-tab
               href={`/sessions/${sessionId}/export`}
               target="_blank"
@@ -173,9 +140,10 @@ function TopBar({
           )}
           <button
             type="button"
-            style={TOP_BAR_BUTTON}
+            class="shell-top-bar-tab"
             data-top-bar-tab
             data-top-panel="system"
+            data-panel-loaded={panels?.system === true ? "true" : undefined}
             aria-pressed="false"
             title="System prompt"
             aria-label="System prompt"
@@ -191,16 +159,17 @@ function TopBar({
                 told it what they hold, and leaves them dim until then
                 (AppShell.tsx L1341, L1406). Only an attached session knows,
                 which is why a stored one stays dim in pi-web too. */}
-            <span data-panel-icon style={panelIcon(panels?.system === true)}>
+            <span data-panel-icon class="shell-panel-icon">
               <SystemPromptIcon />
             </span>
             <span>System</span>
           </button>
           <button
             type="button"
-            style={TOP_BAR_BUTTON}
+            class="shell-top-bar-tab"
             data-top-bar-tab
             data-top-panel="tools"
+            data-panel-loaded={panels?.tools === true ? "true" : undefined}
             aria-pressed="false"
             title="Tool definitions"
             aria-label="Tool definitions"
@@ -212,7 +181,7 @@ function TopBar({
             hx-target="#top-panel"
             hx-swap="innerHTML"
           >
-            <span data-panel-icon style={panelIcon(panels?.tools === true)}>
+            <span data-panel-icon class="shell-panel-icon">
               <WrenchIcon />
             </span>
             <span>Tools</span>
@@ -261,7 +230,7 @@ function TopBar({
         <button
           type="button"
           id="file-panel-toggle"
-          style={`${ICON_BUTTON_36}; border-left:1px solid var(--border)${sessionId === undefined ? "; margin-left:auto" : ""}`}
+          class={`shell-icon-button is-right-control${sessionId === undefined ? " is-sessionless" : ""}`}
           aria-controls="file-panel"
           aria-expanded="false"
           title="Show file panel"
@@ -311,10 +280,9 @@ function SessionStatsButton({
     <button
       type="button"
       id="stats-trigger"
-      class="mobile-session-stats"
+      class="shell-session-stats mobile-session-stats"
       data-top-panel="stats"
       aria-pressed="false"
-      style="margin-left:auto; display:flex; align-items:center; justify-content:flex-end; min-width:0; gap:10px; padding-left:12px; padding-right:12px; height:100%; overflow:hidden; background:none; border:none; border-top:2px solid transparent; color:var(--text-muted); cursor:pointer; font-size:11px; white-space:nowrap; font-variant-numeric:tabular-nums; transition:color 0.1s, background 0.1s"
       title={parts.length === 0 ? "Session info" : parts.join("  |  ")}
       aria-label="Session info"
       hx-get={`/sessions/${sessionId}/stats`}
@@ -322,25 +290,19 @@ function SessionStatsButton({
       hx-swap="innerHTML"
     >
       {tokens !== undefined && tokens.input > 0 ? (
-        <span
-          class="mobile-session-stat-io"
-          style="display:flex; align-items:center; gap:4px"
-        >
+        <span class="mobile-session-stat-io">
           <TokenArrowIcon direction="in" />
           {formatCompactCount(tokens.input)}
         </span>
       ) : null}
       {tokens !== undefined && tokens.output > 0 ? (
-        <span
-          class="mobile-session-stat-io"
-          style="display:flex; align-items:center; gap:4px"
-        >
+        <span class="mobile-session-stat-io">
           <TokenArrowIcon direction="out" />
           {formatCompactCount(tokens.output)}
         </span>
       ) : null}
       {tokens !== undefined && tokens.cacheRead > 0 ? (
-        <span data-cache-read style="display:flex; align-items:center; gap:4px">
+        <span data-cache-read class="shell-cache-read">
           <CacheReadIcon />
           {formatCompactCount(tokens.cacheRead)}
         </span>
@@ -394,7 +356,7 @@ export function Shell({
       id="session-region"
       hx-history-elt
       hx-sync="this:replace"
-      style="flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0"
+      class="shell-session-region"
     >
       <TopBar
         {...(activeId === undefined ? {} : { sessionId: activeId })}
@@ -407,7 +369,7 @@ export function Shell({
         compacting={compacting ?? false}
       />
       <main
-        style="flex:1; overflow:hidden; position:relative"
+        class="shell-main"
         data-session-id={activeId}
         data-cwd={cwd}
         data-cwd-available={cwdAvailable === false ? "false" : undefined}
@@ -429,15 +391,11 @@ export function Shell({
   );
   if (fragment) return region;
   return (
-    <div style="display:flex; width:100%; height:100%; padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); overflow:hidden; background:var(--bg)">
-      <div
-        class="sidebar-overlay-backdrop sidebar-mobile-pending"
-        style="position:fixed; inset:0; z-index:199; background:rgba(0,0,0,0.4); opacity:0; pointer-events:none; transition:opacity 0.25s ease"
-      />
+    <div class="shell-layout">
+      <div class="sidebar-overlay-backdrop sidebar-mobile-pending" />
       <div
         id="session-sidebar"
         class="sidebar-container sidebar-open sidebar-mobile-pending"
-        style="background:var(--bg-panel); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); z-index:200"
       >
         {sidebar && (
           <Sidebar
@@ -495,25 +453,22 @@ function FilePanel({ sessionId, cwd }: { sessionId?: string; cwd?: string }) {
       class="right-panel-container right-panel-closed"
       data-session={sessionId ?? ""}
       data-cwd={cwd ?? ""}
-      style="display:flex; flex-direction:column; border-left:1px solid var(--border); background:var(--bg)"
     >
-      <div
-        style={`display:flex; align-items:center; flex-shrink:0; height:${BAR_HEIGHT}; padding-top:env(safe-area-inset-top); background:var(--bg-panel); border-bottom:1px solid var(--border)`}
-      >
-        <div style="flex:1; overflow:hidden">
+      <div class="shell-file-panel-header">
+        <div class="shell-file-tabs-host">
           <div id="file-tabs" class="file-tabs" role="tablist" hidden />
         </div>
         <button
           type="button"
           id="file-panel-close"
-          style={`${ICON_BUTTON_36}; background:var(--bg-selected); border-left:1px solid var(--border); color:var(--text)`}
+          class="shell-icon-button is-right-control is-selected"
           title="Hide file panel"
           aria-label="Hide file panel"
         >
           <PanelRightIcon />
         </button>
       </div>
-      <div style="flex:1; overflow:hidden; padding-bottom:env(safe-area-inset-bottom)">
+      <div class="shell-file-panel-body">
         <FilePanelBody />
       </div>
     </div>
@@ -539,7 +494,7 @@ export function IndexPage({
       {...(overlay === undefined ? {} : { overlay })}
     >
       {/* §2.5: nothing selected yet — the arrow points at the sidebar. */}
-      <div style="height:100%; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:15px">
+      <div class="shell-empty-session">
         Select a session to view the conversation
       </div>
     </Shell>
@@ -591,11 +546,7 @@ export function NewSessionPage({
           {view.available ? (
             <Composer cwd={view.cwd} draft={draft} start={view} />
           ) : (
-            <div
-              class="project-folder-message"
-              role="status"
-              style="padding:12px 16px; color:var(--text-muted); font-size:12px"
-            >
+            <div class="project-folder-message is-new-session" role="status">
               That folder is gone. Pick another one to start a session.
             </div>
           )}
@@ -652,11 +603,7 @@ export function SessionPage({
       {...(trust === undefined ? {} : { trust })}
       {...(overlay === undefined ? {} : { overlay })}
     >
-      <section
-        class="chat-window"
-        aria-label="Messages"
-        style="--expanded-conversation-rail-width:36px"
-      >
+      <section class="chat-window" aria-label="Messages">
         <DropZone />
         <Transcript view={view} />
         <footer class="chat-composer">
