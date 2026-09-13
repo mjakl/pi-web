@@ -10,6 +10,7 @@ import {
   ContextGaugeIcon,
   RecallQueueIcon,
   RefreshIcon,
+  SpinnerIcon,
 } from "./icons.tsx";
 
 // Everything about a running session that is not the transcript: the banners
@@ -84,11 +85,13 @@ export function CompactButton({
   usage,
   oob,
   disabled,
+  compacting = false,
 }: {
   sessionId: string;
   usage?: ContextUsage;
   oob?: boolean;
   disabled?: boolean;
+  compacting?: boolean;
 }) {
   const warn =
     usage !== undefined &&
@@ -99,14 +102,15 @@ export function CompactButton({
       id="context-compact"
       class="context-compact-button"
       {...(warn ? { "data-warning": "true" } : {})}
-      {...(disabled === true ? { disabled: true } : {})}
+      {...(disabled === true || compacting ? { disabled: true } : {})}
+      {...(compacting ? { "aria-busy": "true" } : {})}
       {...(oob === true ? { "hx-swap-oob": "true" } : {})}
-      title="Compact context"
-      aria-label="Compact context"
+      title={compacting ? "Compacting context…" : "Compact context"}
+      aria-label={compacting ? "Compacting context…" : "Compact context"}
       hx-post={`/sessions/${sessionId}/compact`}
       hx-swap="none"
     >
-      <CompactIcon />
+      {compacting ? <SpinnerIcon animated={false} /> : <CompactIcon />}
     </button>
   );
 }
@@ -125,14 +129,11 @@ export function turnBusy(status: LiveStatus | null): boolean {
 /**
  * Whether compacting is refused right now, as pi-web decides it
  * (ChatWindow.tsx `compactionControl`): a session whose folder is gone is
- * read-only, and a turn in flight owns the context until it settles, unless
- * the turn is the compaction itself.
+ * read-only, and any running operation owns the context until it settles.
  */
 export function compactDisabled(view: SessionView): boolean {
   if (view.summary.cwdAvailable === false) return true;
-  const { status } = view;
-  if (status === null || status.compacting) return false;
-  return status.running || status.bashRunning;
+  return turnBusy(view.status);
 }
 
 /** One queued message: the kind as a pill, then the text (§6.1). */
@@ -285,6 +286,7 @@ export function Status({
             usage={view.usage}
             oob
             disabled={compactDisabled(view)}
+            compacting={status?.compacting ?? false}
           />
         </>
       ) : null}

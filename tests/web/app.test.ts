@@ -2154,6 +2154,69 @@ describe("phase 8 fixes", () => {
     expect(settled).not.toMatch(/id="context-compact"[^>]*disabled/);
   });
 
+  it.each(["success", "failure"])(
+    "streams compact progress and restores the button after %s",
+    async (outcome) => {
+      const { app, world } = testApp({ delayMs: 200 });
+      await world.runtime.open({ sessionId: "s1" });
+      const res = await app.request("/sessions/s1/events");
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("no body");
+      const decoder = new TextDecoder();
+      const readUntil = async (marker: string) => {
+        let html = "";
+        while (!html.includes(marker)) {
+          const chunk = await reader.read();
+          if (chunk.done) throw new Error(`Stream ended before ${marker}`);
+          html += decoder.decode(chunk.value);
+        }
+        return html;
+      };
+      function compactButton(html: string) {
+        return (
+          /<button[^>]*id="context-compact"[\s\S]*?<\/button>/.exec(
+            html,
+          )?.[0] ?? ""
+        );
+      }
+      try {
+        await readUntil('id="context-compact"');
+        const form = new FormData();
+        form.set("text", "/compact fail");
+        const response = await app.request(
+          outcome === "success"
+            ? "/sessions/s1/compact"
+            : "/sessions/s1/prompt",
+          { method: "POST", ...(outcome === "failure" ? { body: form } : {}) },
+        );
+        expect(response.status).toBe(204);
+        const running = compactButton(
+          await readUntil('data-compacting="true"'),
+        );
+        expect(running).toContain('hx-swap-oob="true"');
+        expect(running).toContain("disabled");
+        expect(running).toContain('aria-busy="true"');
+        expect(running).toContain('aria-label="Compacting context…"');
+        expect(running).toContain("<svg");
+        expect(running).not.toContain("<animateTransform");
+        const revisited = compactButton(
+          await (await app.request("/sessions/s1")).text(),
+        );
+        expect(revisited).toContain("disabled");
+        expect(revisited).toContain('aria-busy="true"');
+        const settled = await readUntil(
+          outcome === "success" ? "Compacted 40k" : "Compaction failed:",
+        );
+        const restored = compactButton(settled);
+        expect(restored).toContain('aria-label="Compact context"');
+        expect(restored).not.toContain("disabled");
+        expect(restored).not.toContain('aria-busy="true"');
+      } finally {
+        await reader.cancel();
+      }
+    },
+  );
+
   it("keeps the history row while a turn runs, with branching disabled", async () => {
     // pi-web leaves the row rendered and disables only what the turn owns:
     // New branch waits, Rewind goes away, New session stays
