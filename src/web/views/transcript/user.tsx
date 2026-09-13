@@ -2,7 +2,6 @@ import type { UserItem } from "@core/transcript";
 import { ExpandChevronIcon, RewindIcon } from "@web/views/icons";
 import {
   CopyButton,
-  HistoryActionButtons,
   Images,
   type ItemActions,
   Markdown,
@@ -10,7 +9,7 @@ import {
 } from "./shared.tsx";
 
 // pi-web's user message band: the question, its attachments, and the
-// rewind and branch actions under it. A skill expansion folds into a
+// copy and rewind actions under it. A skill expansion folds into a
 // disclosure that shows the command.
 
 export function UserMessage({
@@ -126,7 +125,6 @@ export function UserMessage({
                 Rewind
               </button>
             )}
-            <HistoryActionButtons entryId={item.entryId} actions={actions} />
           </div>
         ) : null}
         <Time

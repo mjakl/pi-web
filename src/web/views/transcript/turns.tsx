@@ -9,7 +9,7 @@ import {
 import { ProcessChevronIcon } from "@web/views/icons";
 import { AssistantMessage, WrittenFiles } from "./assistant.tsx";
 import { Bash, Compaction, Note } from "./notes.tsx";
-import { HistoryActionFrame, type ItemActions, Markdown } from "./shared.tsx";
+import { type ItemActions, Markdown } from "./shared.tsx";
 import { UserMessage } from "./user.tsx";
 
 // One item of any kind, and the turns a settled transcript groups them
@@ -40,11 +40,7 @@ export function Item({
         />
       );
     case "compaction":
-      return (
-        <HistoryActionFrame entryId={item.entryId} actions={actions}>
-          <Compaction item={item} actions={actions} />
-        </HistoryActionFrame>
-      );
+      return <Compaction item={item} actions={actions} />;
     case "branch_summary":
       return (
         <div id={`entry-${item.entryId}`} style="margin-bottom:16px">
@@ -59,20 +55,10 @@ export function Item({
           />
         </div>
       );
-    // pi-web frames every entry a branch can start from: an extension's own
-    // message and a shell run as much as an answer (MessageView.tsx L240-L292).
     case "note":
-      return (
-        <HistoryActionFrame entryId={item.entryId} actions={actions}>
-          <Note item={item} actions={actions} />
-        </HistoryActionFrame>
-      );
+      return <Note item={item} actions={actions} />;
     default:
-      return (
-        <HistoryActionFrame entryId={item.entryId} actions={actions}>
-          <Bash item={item} actions={actions} />
-        </HistoryActionFrame>
-      );
+      return <Bash item={item} actions={actions} />;
   }
 }
 
