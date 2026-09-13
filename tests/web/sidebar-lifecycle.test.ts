@@ -100,7 +100,15 @@ it.each(["session", "draft", "worktree"])(
     });
     const b = await htmxBrowser(
       await (await app.request("/sessions/alpha")).text(),
-      (request) => app.request(request),
+      (request) => {
+        // The harness does not forward cookies. Model another tab's saved
+        // preferences explicitly, so displayed-owner headers must win.
+        request.headers.set(
+          "Cookie",
+          "web-pi-project=%2Fbeta; web-pi-cwd=%2Fbeta",
+        );
+        return app.request(request);
+      },
     );
     browsers.push(b);
     if (mode === "draft") {
@@ -113,9 +121,6 @@ it.each(["session", "draft", "worktree"])(
       );
     }
     const cwd = mode === "worktree" ? "/alpha.wt" : "/alpha";
-    // Another tab's preferences must not override this tab's displayed owners.
-    b.document.cookie = "web-pi-project=%2Fbeta; path=/";
-    b.document.cookie = "web-pi-cwd=%2Fbeta; path=/";
     const main = b.document.querySelector("main");
     const nav = b.document.querySelector("#project-nav");
     b.window.eval(
