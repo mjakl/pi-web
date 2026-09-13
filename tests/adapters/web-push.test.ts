@@ -24,7 +24,7 @@ function stored(directory: string): {
   subscriptions: PushSubscription[];
 } {
   return JSON.parse(
-    readFileSync(join(directory, "web-push.json"), "utf8"),
+    readFileSync(join(directory, "web-pi", "push.json"), "utf8"),
   ) as ReturnType<typeof stored>;
 }
 
@@ -60,7 +60,7 @@ describe("web push store", () => {
   it("writes the private key owner-only", () => {
     const directory = agentDir();
     createWebPushNotifier({ agentDir: directory }).publicKey();
-    const mode = statSync(join(directory, "web-push.json")).mode & 0o777;
+    const mode = statSync(join(directory, "web-pi", "push.json")).mode & 0o777;
     expect(mode).toBe(0o600);
   });
 
@@ -79,6 +79,28 @@ describe("web push store", () => {
       "https://push.example/a",
     ]);
     expect(subscriptions.at(-1)?.keys.p256dh).toBe("new");
+  });
+
+  it("checks complete enrollment and removes only the matching browser record", () => {
+    const directory = agentDir();
+    const notifier = createWebPushNotifier({ agentDir: directory });
+    const first = subscription("https://push.example/a");
+    const second = subscription("https://push.example/b");
+    notifier.subscribe(first);
+    notifier.subscribe(second);
+    const key = notifier.publicKey();
+    expect(notifier.has(first)).toBe(true);
+    const stale = { ...first, keys: { p256dh: "old", auth: "old" } };
+    expect(notifier.has(stale)).toBe(false);
+    notifier.unsubscribe(stale);
+    expect(notifier.has(first)).toBe(true);
+    notifier.unsubscribe(first);
+    expect(notifier.has(first)).toBe(false);
+    expect(notifier.has(second)).toBe(true);
+    expect(notifier.publicKey()).toBe(key);
+    expect(createWebPushNotifier({ agentDir: directory }).has(second)).toBe(
+      true,
+    );
   });
 
   it("sends the payload to every subscription", async () => {
@@ -147,12 +169,14 @@ describe("web push store", () => {
     expect(stored(directory).subscriptions).toHaveLength(1);
   });
 
-  it("starts over with fresh keys when the stored file is unreadable", () => {
+  it("refuses malformed state without rotating keys or overwriting it", () => {
     const directory = agentDir();
     createWebPushNotifier({ agentDir: directory }).publicKey();
-    writeFileSync(join(directory, "web-push.json"), "not json", "utf8");
-    const key = createWebPushNotifier({ agentDir: directory }).publicKey();
-    expect(key).not.toBe("");
-    expect(stored(directory).subscriptions).toEqual([]);
+    const path = join(directory, "web-pi", "push.json");
+    writeFileSync(path, "not json", "utf8");
+    expect(() => createWebPushNotifier({ agentDir: directory })).toThrow(
+      "Invalid web state",
+    );
+    expect(readFileSync(path, "utf8")).toBe("not json");
   });
 });

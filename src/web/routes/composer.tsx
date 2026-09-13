@@ -381,7 +381,6 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
   app.get("/sessions/:id/events", (c) => {
     const id = c.req.param("id");
     if (!isSessionId(id)) return c.notFound();
-    const thresholds = warnTokens(c);
     return streamSSE(c, async (stream) => {
       const ended = Promise.withResolvers<undefined>();
       // The shelf holds open panels, so it is only re-sent when an extension
@@ -405,7 +404,7 @@ export function composerRoutes(app: WebApp, ctx: RouteContext): void {
       const render = async (kind: "activity" | "turn_done") => {
         if (aborted) return;
         const view = await deps.workspace.viewSession(id, {
-          ...thresholds,
+          ...warnTokens(c),
           after: cursor,
         });
         if (aborted) return;

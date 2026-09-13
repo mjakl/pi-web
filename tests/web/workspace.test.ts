@@ -593,8 +593,9 @@ describe("pi-web's settings and trust chrome", () => {
       '<button type="button" id="sound-toggle" class="config-switch" role="switch"',
     );
     expect(html).toContain("config-switch-knob");
-    // pi-web's General ends at Completion sound (SettingsPanel.tsx L123).
-    expect(html).not.toContain("Notifications");
+    expect(html).toContain("Push notifications");
+    expect(html).toContain('id="push-toggle"');
+    expect(html).toContain("Home Screen");
     expect(html).not.toContain(">About<");
   });
 

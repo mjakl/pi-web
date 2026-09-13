@@ -665,8 +665,16 @@ describe("shipped HTMX 4 with the real browser client", () => {
         `<div id="live" hx-sse:connect="/events" hx-trigger="web-pi:sse-start" hx-config="sse.reconnectDelay:1 sse.reconnectJitter:0" hx-swap="none"></div><button id="remove" hx-get="/remove" hx-target="#live" hx-swap="outerHTML">Remove</button>`,
       ),
       (request) => {
-        if (new URL(request.url).pathname === "/remove")
+        const path = new URL(request.url).pathname;
+        if (path === "/remove")
           return new Response("<div id='replacement'></div>");
+        if (path === "/settings/web")
+          return Response.json({
+            warnTokens: 100000,
+            theme: "auto",
+            sound: true,
+          });
+        expect(path).toBe("/events");
         return ++connections === 1 ? first.response : second.response;
       },
     );

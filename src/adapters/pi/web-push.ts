@@ -1,13 +1,15 @@
 import type { PushMessage, PushNotifier, PushSubscription } from "@core/ports";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import {
+  migrateWebState,
+  readWebState,
+  webStatePath,
+  writeWebState,
+} from "@adapters/fs/web-state";
+import { isPushSubscription } from "@core/push";
+import { createECDH } from "node:crypto";
 import webpush from "web-push";
 
-// Web Push state lives beside Pi's own configuration, in the agent directory
-// the caller passes in. Nothing here reads `getAgentDir()`: a test must be
-// able to point the whole store at a temporary folder.
-
-const FILE = "web-push.json";
+const FILE = "push.json";
 
 /** Who the push service sees as the sender; no mail is ever delivered there. */
 const SUBJECT = "mailto:web-pi@localhost";
@@ -16,36 +18,27 @@ type Keys = { publicKey: string; privateKey: string };
 
 type State = { vapidKeys: Keys; subscriptions: PushSubscription[] };
 
-let writes = 0;
-
-/**
- * The private VAPID key is a secret: the file is created owner-only and moved
- * into place, so a reader never sees a half-written store or a wider mode.
- */
-function writePrivate(path: string, text: string): void {
-  mkdirSync(dirname(path), { recursive: true });
-  writes += 1;
-  const temporary = `${path}.${String(process.pid)}.${String(writes)}.tmp`;
-  writeFileSync(temporary, text, { mode: 0o600, flag: "wx" });
-  renameSync(temporary, path);
-}
-
-function read(path: string): State | null {
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (typeof parsed !== "object" || parsed === null) return null;
-    const state = parsed as Partial<State>;
-    if (!state.vapidKeys?.publicKey || !state.vapidKeys.privateKey) return null;
-    return {
-      vapidKeys: state.vapidKeys,
-      subscriptions: Array.isArray(state.subscriptions)
-        ? state.subscriptions
-        : [],
-    };
-  } catch {
-    // No file yet, or one this version cannot read: start over with new keys.
-    return null;
+function parseState(value: unknown): State {
+  if (!value || typeof value !== "object")
+    throw new Error("Invalid push state");
+  const state = value as State;
+  if (
+    typeof state.vapidKeys?.publicKey !== "string" ||
+    typeof state.vapidKeys.privateKey !== "string" ||
+    !Array.isArray(state.subscriptions) ||
+    !state.subscriptions.every(isPushSubscription)
+  ) {
+    throw new Error("Invalid push state");
   }
+  const key = createECDH("prime256v1");
+  key.setPrivateKey(Buffer.from(state.vapidKeys.privateKey, "base64url"));
+  if (
+    !key
+      .getPublicKey()
+      .equals(Buffer.from(state.vapidKeys.publicKey, "base64url"))
+  )
+    throw new Error("Invalid VAPID pair");
+  return state;
 }
 
 /** A subscription the push service has retired; anything else is transient. */
@@ -68,8 +61,9 @@ export type WebPushOptions = {
 };
 
 export function createWebPushNotifier(options: WebPushOptions): PushNotifier {
-  const path = join(options.agentDir, FILE);
-  const state: State = read(path) ?? {
+  migrateWebState(options.agentDir, "web-push.json", FILE, parseState);
+  const path = webStatePath(options.agentDir, FILE);
+  let state: State = readWebState(path, parseState) ?? {
     vapidKeys: webpush.generateVAPIDKeys(),
     subscriptions: [],
   };
@@ -84,8 +78,9 @@ export function createWebPushNotifier(options: WebPushOptions): PushNotifier {
         },
       });
     });
-  const save = () => {
-    writePrivate(path, JSON.stringify(state));
+  const save = (next: State = state) => {
+    writeWebState(path, next);
+    state = next;
   };
 
   return {
@@ -96,7 +91,7 @@ export function createWebPushNotifier(options: WebPushOptions): PushNotifier {
       return state.vapidKeys.publicKey;
     },
     subscribe(subscription): void {
-      state.subscriptions = [
+      const subscriptions = [
         ...state.subscriptions.filter(
           (known) => known.endpoint !== subscription.endpoint,
         ),
@@ -105,7 +100,28 @@ export function createWebPushNotifier(options: WebPushOptions): PushNotifier {
           keys: { ...subscription.keys },
         },
       ];
-      save();
+      save({ ...state, subscriptions });
+    },
+    has(subscription): boolean {
+      return state.subscriptions.some(
+        (known) =>
+          known.endpoint === subscription.endpoint &&
+          known.keys.p256dh === subscription.keys.p256dh &&
+          known.keys.auth === subscription.keys.auth,
+      );
+    },
+    unsubscribe(subscription): void {
+      save({
+        ...state,
+        subscriptions: state.subscriptions.filter(
+          (known) =>
+            !(
+              known.endpoint === subscription.endpoint &&
+              known.keys.p256dh === subscription.keys.p256dh &&
+              known.keys.auth === subscription.keys.auth
+            ),
+        ),
+      });
     },
     async send(message: PushMessage): Promise<void> {
       if (state.subscriptions.length === 0) return;

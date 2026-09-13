@@ -1,144 +1,277 @@
+import { SettingsBody } from "@web/views/Settings";
 import { describe, expect, it, vi } from "vitest";
-import { json, mockFetch, mount, serviceWorker, text } from "./helpers.ts";
+import {
+  byId,
+  click,
+  json,
+  mockFetch,
+  mount,
+  serviceWorker,
+  text,
+} from "./helpers.ts";
 
-// The service worker and Web Push: registered from the page's data attribute,
-// and a granted browser subscribed on every load.
-
-class FakeNotification {
-  static permission: NotificationPermission = "granted";
+async function flush() {
+  await vi.advanceTimersByTimeAsync(0);
 }
 
-/** A registration with an active worker and a push manager. */
-function registration(existing: unknown = null) {
-  const subscription = { toJSON: () => ({ endpoint: "https://push/x" }) };
+class FakeNotification {
+  static permission: NotificationPermission = "default";
+  static requestPermission = vi.fn();
+}
+
+function registration() {
+  const subscription = {
+    options: { applicationServerKey: new Uint8Array([1, 2, 3]).buffer },
+    toJSON: () => ({
+      endpoint: "https://push/x",
+      keys: { p256dh: "p", auth: "a" },
+    }),
+    unsubscribe: vi.fn(() => Promise.resolve(true)),
+  };
   return {
-    active: {},
+    active: { state: "activated" },
     pushManager: {
-      getSubscription: vi.fn(() => Promise.resolve(existing)),
-      subscribe: vi.fn(
-        (_options: {
-          userVisibleOnly: boolean;
-          applicationServerKey: ArrayBuffer;
-        }) => Promise.resolve(subscription),
+      getSubscription: vi.fn(() =>
+        Promise.resolve<null | typeof subscription>(null),
+      ),
+      subscribe: vi.fn((_options: PushSubscriptionOptionsInit) =>
+        Promise.resolve(subscription),
       ),
     },
+    subscription,
   };
 }
 
-async function load(options: { granted?: boolean; src?: string } = {}) {
-  FakeNotification.permission =
-    options.granted === false ? "default" : "granted";
+async function load(
+  reg = registration(),
+  permission: NotificationPermission = "default",
+  enrolled = false,
+  registrationError?: Error,
+) {
+  FakeNotification.permission = permission;
   vi.stubGlobal("Notification", FakeNotification);
   vi.stubGlobal("PushManager", class {});
-  mount("");
-  if (options.src !== undefined) document.body.dataset["swSrc"] = options.src;
-  return import("@web/client/push");
+  vi.stubGlobal("isSecureContext", true);
+  const worker = serviceWorker(reg);
+  if (registrationError) worker.register.mockRejectedValue(registrationError);
+  else worker.register.mockResolvedValue(reg);
+  const fetch = mockFetch((url) =>
+    url === "/push/config"
+      ? json({ publicKey: "AQID" })
+      : url === "/push/status"
+        ? json({ subscribed: enrolled })
+        : json({ ok: true }),
+  );
+  mount(SettingsBody({ section: "general", cwd: "/repo" }));
+  document.body.dataset["swSrc"] = "/sw.js";
+  const { setUpPush } = await import("@web/client/push");
+  setUpPush();
+  await flush();
+  return { reg, worker, fetch };
 }
 
-describe("the service worker", () => {
-  it("is registered from the page's script, bypassing the HTTP cache", async () => {
-    const worker = serviceWorker(null);
-    const { setUpPush } = await load({ granted: false, src: "/sw.js" });
-    setUpPush();
+function status() {
+  return byId("push-status").textContent;
+}
+function toggle() {
+  return byId("push-toggle") as HTMLButtonElement;
+}
+
+describe("manual browser push enrollment", () => {
+  it("prepares the worker and key without subscribing or prompting, even with permission", async () => {
+    const { reg, worker, fetch } = await load(undefined, "granted");
     expect(worker.register).toHaveBeenCalledWith("/sw.js", {
       scope: "/",
       updateViaCache: "none",
     });
+    expect(fetch).toHaveBeenCalledWith("/push/config", expect.anything());
+    expect(status()).toBe("Not subscribed on this browser.");
+    expect(reg.pushManager.subscribe).not.toHaveBeenCalled();
+    expect(FakeNotification.requestPermission).not.toHaveBeenCalled();
   });
 
-  it("is left alone on a page that ships none", async () => {
-    const worker = serviceWorker(null);
-    const { setUpPush } = await load({ granted: false });
-    setUpPush();
-    expect(worker.register).not.toHaveBeenCalled();
-  });
-});
-
-describe("subscribing", () => {
-  it("subscribes a granted browser with the server's key and saves the subscription", async () => {
-    const fetch = mockFetch((url) =>
-      url === "/push/config" ? json({ publicKey: "AQID" }) : text("", 204),
-    );
-    const worker = serviceWorker(registration());
-    const { setUpPush } = await load({ src: "/sw.js" });
-    setUpPush();
-    await vi.waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith("/push/subscribe", expect.anything());
+  it("calls subscribe within the click and reports success only after server enrollment", async () => {
+    const { reg } = await load();
+    const saved = Promise.withResolvers<Response>();
+    const fetch = vi.fn(() => saved.promise);
+    vi.stubGlobal("fetch", fetch);
+    click(toggle());
+    expect(reg.pushManager.subscribe).toHaveBeenCalledWith({
+      userVisibleOnly: true,
+      applicationServerKey: new Uint8Array([1, 2, 3]).buffer,
     });
-    const saved = fetch.mock.calls.find(
-      (call) => call[0] === "/push/subscribe",
+    expect(toggle().disabled).toBe(true);
+    await flush();
+    expect(status()).toBe("Subscribing…");
+    saved.resolve(json({ ok: true }));
+    await flush();
+    expect(status()).toBe("Subscribed on this browser.");
+    expect(fetch).toHaveBeenCalledWith(
+      "/push/subscribe",
+      expect.objectContaining({
+        body: JSON.stringify({
+          subscription: reg.subscription.toJSON(),
+          publicKey: "AQID",
+        }),
+      }),
     );
-    expect(saved?.[1]?.body).toBe(
-      JSON.stringify({ subscription: { endpoint: "https://push/x" } }),
-    );
-    expect(worker.getRegistration).toHaveBeenCalled();
   });
 
-  it("hands the push manager the server's key as bytes", async () => {
-    mockFetch((url) =>
-      url === "/push/config" ? json({ publicKey: "AQID" }) : text(""),
+  it("waits for an in-flight enrollment when General is reopened", async () => {
+    const { reg } = await load();
+    const saved = Promise.withResolvers<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url === "/push/subscribe"
+          ? saved.promise
+          : Promise.resolve(
+              url === "/push/config"
+                ? json({ publicKey: "AQID" })
+                : json({ subscribed: true }),
+            ),
+      ),
     );
+    click(toggle());
+    await flush();
+    reg.pushManager.getSubscription.mockResolvedValue(reg.subscription);
+    mount(SettingsBody({ section: "general", cwd: "/repo" }));
+    document.body.dispatchEvent(
+      new Event("htmx:after:process", { bubbles: true }),
+    );
+    await flush();
+    expect(toggle().disabled).toBe(true);
+    saved.resolve(json({ ok: true }));
+    await flush();
+    expect(status()).toBe("Subscribed on this browser.");
+    expect(toggle().disabled).toBe(false);
+    expect(reg.pushManager.subscribe).toHaveBeenCalledOnce();
+  });
+
+  it("does not mistake browser subscription or permission for server registration", async () => {
     const reg = registration();
-    serviceWorker(reg);
-    const { subscribePush } = await load();
-    expect(await subscribePush()).toBe(true);
-    const options = reg.pushManager.subscribe.mock.calls[0]?.[0];
-    expect(options?.userVisibleOnly).toBe(true);
-    expect([...new Uint8Array(options?.applicationServerKey ?? [])]).toEqual([
-      1, 2, 3,
-    ]);
-  });
-
-  it("reuses an existing subscription", async () => {
-    mockFetch((url) =>
-      url === "/push/config" ? json({ publicKey: "AQID" }) : text(""),
-    );
-    const existing = { toJSON: () => ({ endpoint: "https://push/old" }) };
-    const reg = registration(existing);
-    serviceWorker(reg);
-    const { subscribePush } = await load();
-    expect(await subscribePush()).toBe(true);
+    reg.pushManager.getSubscription.mockResolvedValue(reg.subscription);
+    const { fetch } = await load(reg, "granted", false);
+    expect(status()).toBe("Not subscribed on this browser.");
+    expect(fetch).toHaveBeenCalledWith("/push/status", expect.anything());
     expect(reg.pushManager.subscribe).not.toHaveBeenCalled();
   });
 
-  it("answers false for every reason it cannot happen, and tries again next time", async () => {
-    const fetch = mockFetch((url) =>
-      url === "/push/config" ? json({ publicKey: "AQID" }) : text("", 500),
-    );
-    const { subscribePush } = await load({ granted: false });
-    expect(await subscribePush()).toBe(false);
-    FakeNotification.permission = "granted";
-    serviceWorker(null);
-    expect(await subscribePush()).toBe(false);
-    serviceWorker(registration());
-    expect(await subscribePush()).toBe(false);
-    expect(fetch).toHaveBeenCalledWith("/push/subscribe", expect.anything());
+  it("requires explicit cleanup of a stale server identity before a fresh subscribe gesture", async () => {
+    const reg = registration();
+    reg.subscription.options.applicationServerKey = new Uint8Array([
+      4, 5, 6,
+    ]).buffer;
+    reg.pushManager.getSubscription.mockResolvedValue(reg.subscription);
+    await load(reg, "granted");
+    expect(status()).toContain("Server identity changed");
+    expect(toggle().textContent).toBe("Unsubscribe");
+    click(toggle());
+    await flush();
+    expect(reg.subscription.unsubscribe).toHaveBeenCalledOnce();
+    expect(reg.pushManager.subscribe).not.toHaveBeenCalled();
+    expect(toggle().textContent).toBe("Subscribe");
+    click(toggle());
+    expect(reg.pushManager.subscribe).toHaveBeenCalledOnce();
+    await flush();
   });
 
-  it("shares one attempt while it is in flight and keeps a success", async () => {
-    const fetch = mockFetch((url) =>
-      url === "/push/config" ? json({ publicKey: "AQID" }) : text(""),
+  it("unsubscribes only this browser and never silently re-subscribes", async () => {
+    const reg = registration();
+    reg.pushManager.getSubscription.mockResolvedValue(reg.subscription);
+    const { fetch } = await load(reg, "granted", true);
+    expect(status()).toBe("Subscribed on this browser.");
+    click(toggle());
+    await flush();
+    expect(fetch).toHaveBeenCalledWith(
+      "/push/unsubscribe",
+      expect.objectContaining({
+        body: JSON.stringify({ subscription: reg.subscription.toJSON() }),
+      }),
     );
-    serviceWorker(registration());
-    const { subscribePush } = await load();
-    const [first, second] = await Promise.all([
-      subscribePush(),
-      subscribePush(),
-    ]);
-    expect(first).toBe(true);
-    expect(second).toBe(true);
-    expect(await subscribePush()).toBe(true);
-    expect(
-      fetch.mock.calls.filter((call) => call[0] === "/push/config"),
-    ).toHaveLength(1);
+    expect(reg.subscription.unsubscribe).toHaveBeenCalledOnce();
+    expect(status()).toBe("Not subscribed on this browser.");
+    window.dispatchEvent(new Event("focus"));
+    expect(reg.pushManager.subscribe).not.toHaveBeenCalled();
   });
 
-  it("gives up quietly when the key is missing or the worker is not there", async () => {
-    mockFetch(() => json({}));
-    serviceWorker(registration());
-    const { subscribePush } = await load();
-    expect(await subscribePush()).toBe(false);
-    vi.stubGlobal("PushManager", undefined);
-    expect(await subscribePush()).toBe(false);
+  it("leaves an enrollment failure actionable, without claiming success", async () => {
+    await load();
+    mockFetch(() => text("failed", 500));
+    click(toggle());
+    await flush();
+    expect(status()).toContain("not confirmed");
+    expect(toggle().disabled).toBe(false);
+  });
+
+  it("keeps unsubscribe available if browser cleanup fails", async () => {
+    const reg = registration();
+    reg.pushManager.getSubscription.mockResolvedValue(reg.subscription);
+    reg.subscription.unsubscribe.mockRejectedValue(new Error("failed"));
+    await load(reg, "granted", true);
+    click(toggle());
+    await flush();
+    expect(status()).toContain("Could not finish unsubscribing");
+    expect(toggle().textContent).toBe("Unsubscribe");
+  });
+
+  it("disables blocked permission with recovery instructions", async () => {
+    const { reg } = await load(undefined, "denied");
+    expect(status()).toContain("Blocked:");
+    expect(toggle().disabled).toBe(true);
+    expect(reg.pushManager.subscribe).not.toHaveBeenCalled();
+  });
+
+  it.each(["Notification", "PushManager", "isSecureContext"])(
+    "explains unavailable %s",
+    async (feature) => {
+      await load();
+      if (feature === "isSecureContext") vi.stubGlobal(feature, false);
+      else Reflect.deleteProperty(window, feature);
+      const old = byId("push-settings");
+      const replacement = old.cloneNode(true);
+      old.replaceWith(replacement);
+      document.body.dispatchEvent(
+        new Event("htmx:after:process", { bubbles: true }),
+      );
+      await flush();
+      expect(status()).toContain("Unavailable");
+      expect(toggle().disabled).toBe(true);
+    },
+  );
+
+  it("reports registration rejection without waiting on serviceWorker.ready", async () => {
+    await load(undefined, "default", false, new Error("Registration failed"));
+    expect(status()).toContain("reload");
+    expect(toggle().disabled).toBe(true);
+  });
+
+  it("detects a missing registration push manager", async () => {
+    const reg = registration();
+    Reflect.deleteProperty(reg, "pushManager");
+    await load(reg);
+    expect(status()).toContain("no push support");
+    expect(toggle().disabled).toBe(true);
+  });
+
+  it("waits for activation before enabling Subscribe", async () => {
+    const reg = registration();
+    const active = Object.assign(new EventTarget(), { state: "activating" });
+    reg.active = active;
+    await load(reg);
+    expect(toggle().disabled).toBe(true);
+    active.state = "activated";
+    active.dispatchEvent(new Event("statechange"));
+    await flush();
+    expect(toggle().disabled).toBe(false);
+  });
+
+  it("ends failed activation with a reload instruction instead of waiting forever", async () => {
+    const reg = registration();
+    reg.active = Object.assign(new EventTarget(), { state: "activating" });
+    await load(reg);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(status()).toContain("reload");
+    expect(toggle().disabled).toBe(true);
   });
 });

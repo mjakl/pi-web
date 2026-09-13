@@ -95,10 +95,11 @@ read and write the same `~/.pi/agent`. That is the point — each sees the other
 sessions — but it has consequences:
 
 - **Give them different ports.** pi-web defaults to 30141 and web-pi to 30142.
-- **They share `web-push.json`**: one VAPID key pair and one list of browser
-  subscriptions, in a file each app rewrites whole. Subscribing in one app can
-  drop the other's subscriptions, and either app may notify a browser that
-  subscribed through the other. Enable notifications in one of them.
+- **Web state is no longer shared with old interfaces.** Current web-pi uses
+  `<agentDir>/web-pi/`; older web runtimes use top-level legacy files. Stop all
+  affected old web runtimes before the cutover below, and do not restart them
+  against that agent directory. Run only one web-pi server per agent directory;
+  push state is held in memory and whole-file writes do not coordinate servers.
 - **Use one writer per session.** The apps and terminal Pi do not coordinate
   cross-process writes or live in-memory state. Do not run simultaneous live
   turns, rename, star, rewind, delete, or otherwise edit the same session from
@@ -107,6 +108,72 @@ sessions — but it has consequences:
 
 Point either app at a different agent directory with `PI_CODING_AGENT_DIR` if
 you would rather keep them apart.
+
+## Web state cutover and reset
+
+Pi resolves the agent directory normally: `PI_CODING_AGENT_DIR` when set,
+otherwise usually `~/.pi/agent`. Current web-pi owns these standalone files:
+
+- `<agentDir>/web-pi/settings.json`: shared `warnTokens` (default **100000**,
+  positive safe integer), `theme` (**auto**, or light/dark), and `sound`
+  (**true**, or false). Auto follows each device's OS appearance.
+- `<agentDir>/web-pi/push.json`: private VAPID identity and browser
+  subscriptions.
+- `<agentDir>/web-pi/worktree-projects.json`: remembered folder/project
+  mappings.
+
+Writes use private **0600** files and atomic replacement. The folder is created
+with mode **0700**. Shared Pi sessions, `settings.json`, trust, auth, models,
+skills and packages are not relocated or reset. Session-embedded web metadata,
+such as stars, stays in Pi's session files.
+
+### Upgrade an existing installation
+
+1. Build the new version without starting it against live state. Identify the
+   agent directory and every old web runtime using it. Stop those runtimes
+   before starting the new version, including any old Next.js interface. Keep a
+   private backup of the two legacy files outside the new `web-pi` folder.
+2. Start the new version once. It moves `<agentDir>/web-push.json` to
+   `web-pi/push.json` and `<agentDir>/web-worktree-projects.json` to
+   `web-pi/worktree-projects.json`. Valid keys, subscriptions and mappings are
+   preserved. Originals are retired only after the destination is durably
+   written. If interrupted with equal source and destination copies, the next
+   startup finishes retirement. There is no permanent fallback to the old paths.
+3. If startup reports malformed or conflicting files, preserve both and resolve
+   them deliberately before restarting. It does not discard bad entries, choose
+   a winning identity or merge conflicting state. A partially completed cutover
+   can have one file moved and the other still at its old path.
+4. Reload browsers and open **Settings → General**. Legacy `web-pi-warn-tokens`,
+   `web-pi-theme`, and `web-pi:sound` values are ignored, with no import: custom
+   values deliberately reset once to shared defaults. Reapply any wanted
+   preferences there. Drafts and navigation remain local. Existing push
+   enrollment is recognized only when the browser subscription matches the
+   server record.
+
+### Reset or remove web state
+
+After a successful cutover, stop the web-pi server and delete only
+`<agentDir>/web-pi/`. Starting again restores shared defaults and creates a new
+push identity on first use. Pi data is untouched; removed-worktree grouping may
+be lost until rediscovered. Do not restore legacy files beside Pi's settings,
+because a legacy source is an explicit pending cutover, not a reset marker.
+
+Browser permissions and subscriptions survive a server-folder deletion. General
+checks actual server enrollment, not permission alone. If the server identity
+changed, use **Unsubscribe** to clear this browser's old subscription, then
+**Subscribe** again. Neither action changes other browsers or revokes
+permission. Nothing silently re-subscribes. An already queued notification may
+still arrive.
+
+### Rollback
+
+Older web versions do not read the new folder. Stopping current web-pi and
+restarting an old executable does not reverse the cutover. A rollback needs an
+explicit choice of which private backup to restore to the legacy paths, with all
+affected web runtimes stopped. Later subscriptions, unsubscribe decisions and
+mappings are not in that backup. Do not overwrite newer state or copy files back
+automatically. Returning to the new version with different legacy and new copies
+will stop on a conflict. Shared Pi writes are not undone by either path.
 
 ## Migration from Next.js
 
@@ -163,18 +230,18 @@ no longer shared, as described below. No database conversion is required, but
 this is not a guarantee that an older Pi can read files changed by a newer Pi,
 nor a guarantee of all extension/UI behavior.
 
-Both implementations use `web-worktree-projects.json` for remembered worktree
-identity and `web-push.json` for push keys/subscriptions. Pi settings, model
+Web-owned push and worktree state now has a one-time cutover into `web-pi/`,
+with the reset and rollback limits described above. Pi settings, model
 configuration, and trust remain user-owned. The installed-package smoke test
 reads a disposable SessionManager session without a provider call.
 
 The old and new HTTP interfaces differ. Ports also create different browser
-origins: localStorage drafts, theme preferences, service workers, PWA installs,
-and notification permissions are not automatically transferred from port 30141
-to 30142. Cookies are **not port-scoped**; do not treat two ports on one
-hostname as cookie isolation. If a later cutover reuses an origin, remove the
-old PWA and service-worker registration and reload before installing the new
-one. Re-enable notifications only in the chosen app.
+origins: localStorage drafts, service workers, PWA installs, and notification
+permissions are not automatically transferred from port 30141 to 30142. Cookies
+are **not port-scoped**; do not treat two ports on one hostname as cookie
+isolation. If a later cutover reuses an origin, remove the old PWA and
+service-worker registration and reload before installing the new one. Re-enable
+notifications only in the chosen app.
 
 Rollback means stopping web-pi and restarting the verified old version with a
 compatible Pi install. Rewind/delete and newer writes are not undone by changing
@@ -200,17 +267,17 @@ Owned runtime names use `web-pi`, without migration or compatibility aliases:
 - Only `web-pi:subagent` exempts a child transcript from reparenting when its
   parent is deleted. Old `pi-web:subagent` markers no longer grant that
   exemption.
-- Explorer folding uses `web-pi:file-explorer:open`; theme and panel widths use
-  `web-pi-theme`, `web-pi-sidebar-width`, and `web-pi-right-panel-width`. The
-  former `pi-web:file-explorer:open`, `pi-theme`, `pi-sidebar-width`, and
-  `pi-right-panel-width` keys are ignored. Explorer visibility, theme, and
-  widths return to their defaults until chosen again. Other browser preferences
-  and drafts keep their existing keys.
+- Explorer folding uses `web-pi:file-explorer:open`; panel widths use
+  `web-pi-sidebar-width` and `web-pi-right-panel-width`. Their former
+  `pi-web:file-explorer:open`, `pi-sidebar-width` and `pi-right-panel-width`
+  keys are ignored. Theme is now a shared web setting; neither `pi-theme` nor
+  `web-pi-theme` is read. Other local presentation state and drafts keep their
+  existing keys.
 
 The naming change does not rewrite existing session files, remove old browser
 keys, or alter Git history. Normal explicit session edits still write files. Pi
-SDK identifiers, `web-worktree-projects.json`, `web-push.json`, license notices,
-and historical upstream references retain their names.
+SDK identifiers, license notices and historical upstream references retain their
+names. The later web-state cutover above supersedes the legacy storage paths.
 
 ### Validation workflow
 

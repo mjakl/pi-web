@@ -1,3 +1,5 @@
+import { isPushSubscription } from "@core/push";
+import { webSettingsPatch } from "@core/web-settings";
 // Pages, the top-bar panels, settings, extension dialogs, trust, push,
 // and the installable-app files. The shell area owns this module.
 
@@ -42,7 +44,6 @@ import {
   currentSessionId,
   errorText,
   field,
-  isPushSubscription,
   rawField,
   toastHeader,
 } from "./shared.ts";
@@ -331,6 +332,26 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
     return {};
   }
 
+  app.get("/settings/web", (c) => {
+    c.header("Cache-Control", "no-store");
+    return c.json(deps.workspace.webSettings());
+  });
+  app.post("/settings/web", async (c) => {
+    let patch;
+    try {
+      patch = webSettingsPatch(await c.req.json());
+    } catch {
+      return c.json(
+        {
+          error:
+            "Use a positive safe integer threshold, light/dark/auto theme, and boolean sound.",
+        },
+        400,
+      );
+    }
+    return c.json(deps.workspace.updateWebSettings(patch));
+  });
+
   app.get("/settings", async (c) => {
     const sidebar = await sidebarOf(c, currentSessionId(c));
     const cwd = currentCwd(c, sidebar);
@@ -353,7 +374,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
       <SettingsDialog
         section={section}
         cwd={usable}
-        warnTokens={warnTokens(c).warnTokens}
+        settings={deps.workspace.webSettings()}
         back={back === undefined ? "/" : `/sessions/${back}`}
         {...(deps.home === undefined ? {} : { home: deps.home })}
         {...sections}
@@ -701,11 +722,15 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
   app.get(OFFLINE_URL, (c) => c.html(offlinePage()));
 
   /** The key a browser needs before it can subscribe; the private one stays. */
-  app.get("/push/config", (c) =>
-    c.json({ publicKey: deps.workspace.pushKey() }),
-  );
+  app.get("/push/config", (c) => {
+    c.header("Cache-Control", "no-store");
+    return c.json({ publicKey: deps.workspace.pushKey() });
+  });
 
-  app.post("/push/subscribe", async (c) => {
+  app.post("/push/:action", async (c) => {
+    const action = c.req.param("action");
+    if (!["subscribe", "unsubscribe", "status"].includes(action))
+      return c.notFound();
     const body: unknown = await c.req.json().catch(() => undefined);
     const subscription =
       typeof body === "object" && body !== null && "subscription" in body
@@ -714,10 +739,29 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
     if (!isPushSubscription(subscription)) {
       return c.json({ error: "Invalid push subscription" }, 400);
     }
-    deps.workspace.subscribePush({
-      endpoint: subscription.endpoint,
-      keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth },
-    });
+    c.header("Cache-Control", "no-store");
+    if (action === "status")
+      return c.json({ subscribed: deps.workspace.hasPush(subscription) });
+    if (action === "unsubscribe") deps.workspace.unsubscribePush(subscription);
+    else {
+      if (
+        (body as { publicKey?: unknown }).publicKey !== deps.workspace.pushKey()
+      )
+        return c.json(
+          {
+            error:
+              "Server identity changed. Reload settings before subscribing.",
+          },
+          409,
+        );
+      deps.workspace.subscribePush({
+        endpoint: subscription.endpoint,
+        keys: {
+          p256dh: subscription.keys.p256dh,
+          auth: subscription.keys.auth,
+        },
+      });
+    }
     return c.json({ ok: true });
   });
 }

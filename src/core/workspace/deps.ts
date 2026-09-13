@@ -45,6 +45,7 @@ export type WorkspaceDeps = {
   git: Git;
   watcher: Watcher;
   push: PushNotifier;
+  webSettings: import("@core/web-settings").WebSettingsStore;
   /** os.tmpdir(); shell captures may live nowhere else. */
   tmpdir: string;
 };

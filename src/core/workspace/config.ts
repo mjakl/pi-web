@@ -71,6 +71,10 @@ export function configUseCases({
 
   return {
     validateFolder,
+    webSettings: () => deps.webSettings.get(),
+    updateWebSettings: (
+      patch: Partial<import("@core/web-settings").WebSettings>,
+    ) => deps.webSettings.update(patch),
 
     // --- Workspace selection ---------------------------------------------
 

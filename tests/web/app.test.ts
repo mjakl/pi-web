@@ -67,7 +67,8 @@ describe("web app", () => {
   it("ships the shell: theme before paint, pi-web's containers, hashed assets", async () => {
     const { app } = testApp();
     const html = await (await app.request("/sessions/s1")).text();
-    expect(html).toContain('localStorage.getItem("web-pi-theme")');
+    expect(html).toContain('data-theme="auto"');
+    expect(html).not.toContain('localStorage.getItem("web-pi-theme")');
     expect(html).toContain("<title>web-pi</title>");
     expect(html).toContain(
       'name="apple-mobile-web-app-title" content="web-pi"',
@@ -146,11 +147,8 @@ describe("web app", () => {
     expect(bar).toContain("Context: 40,000 / 100,000 tokens (40%)");
     // Compact carries the dumb-zone marker only above the threshold.
     expect(bar).not.toContain("data-warning");
-    const warned = await (
-      await app.request("/sessions/s1", {
-        headers: { cookie: "web-pi-warn-tokens=1000" },
-      })
-    ).text();
+    world.webSettings.update({ warnTokens: 1000 });
+    const warned = await (await app.request("/sessions/s1")).text();
     expect(warned).toContain("data-warning");
     expect(warned).toContain('class="mobile-session-context is-warn"');
   });
@@ -2160,9 +2158,10 @@ describe("phase 8 fixes", () => {
     expect(plain).toContain('class="mobile-session-context is-ok"');
     // 40 000 tokens of a 100 000 window is 40 %: below every percent rule,
     // above a threshold the reader set at 30 000.
+    world.webSettings.update({ warnTokens: 30000 });
     const warned = await (
       await app.request("/sessions/s1", {
-        headers: { cookie: "web-pi-warn-tokens=30000" },
+        headers: { cookie: "web-pi-warn-tokens=1000000" },
       })
     ).text();
     expect(warned).toContain('class="mobile-session-context is-warn"');
@@ -2269,17 +2268,15 @@ describe("phase 8 fixes", () => {
   it("keeps the compact button's warning in step with the readout", async () => {
     const { app, world } = testApp();
     await world.runtime.open({ sessionId: "s1" });
-    const warn = { cookie: "web-pi-warn-tokens=1000" };
-    const page = await (
-      await app.request("/sessions/s1", { headers: warn })
-    ).text();
+    world.webSettings.update({ warnTokens: 1000 });
+    const page = await (await app.request("/sessions/s1")).text();
     expect(page).toMatch(/id="context-compact"[^>]*data-warning/);
     // The stream re-renders the button beside the readout, so a turn that
     // moves the context tints it without a reload.
     const form = new FormData();
     form.set("text", "go");
     await app.request("/sessions/s1/prompt", { method: "POST", body: form });
-    const res = await app.request("/sessions/s1/events", { headers: warn });
+    const res = await app.request("/sessions/s1/events");
     const reader = res.body?.getReader();
     if (!reader) throw new Error("no body");
     let received = "";

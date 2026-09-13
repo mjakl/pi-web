@@ -39,12 +39,9 @@ agent-browser set viewport 1440 1000
 agent-browser snapshot -i
 ```
 
-Set dark appearance through Settings → General. For scripted captures, the
-existing preference can be set before reloading:
-
-```bash
-agent-browser eval 'localStorage.setItem("web-pi-theme", "dark"); location.reload()'
-```
+Set dark appearance through Settings → General. This changes the fixture's
+shared in-memory settings, not your real Pi agent directory. Theme is no longer
+read from localStorage; use the same General controls for scripted captures.
 
 Refresh the accessibility snapshot after navigation and lazy row loading, then
 use the current references. Wait for fonts, requested file content, Mermaid

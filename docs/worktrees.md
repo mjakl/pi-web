@@ -40,11 +40,13 @@ entries. Those filtering guarantees do not apply to the session-derived picker,
 which can retain a missing folder because its history still exists.
 
 web-pi records observed folder-to-repository associations in
-`web-worktree-projects.json` inside the Pi agent directory. This keeps history
-grouped after Git forgets a removed worktree and after web-pi restarts, without
-editing transcripts. If the worktree disappeared before its association was
-recorded, history remains under its original folder; the repository is not
-guessed from the folder name.
+`web-pi/worktree-projects.json` inside the Pi agent directory. This keeps
+history grouped after Git forgets a removed worktree and after web-pi restarts,
+without editing transcripts. If the worktree disappeared before its association
+was recorded, history remains under its original folder; the repository is not
+guessed from the folder name. Existing top-level mappings move once during the
+[web-state cutover](deployment.md#web-state-cutover-and-reset); deleting the new
+folder resets remembered mappings without editing Pi transcripts.
 
 ## Sessions whose folders are missing
 

@@ -1,12 +1,10 @@
 import { setUpRegion } from "./lifecycle.ts";
 import { requestContext } from "./htmx.ts";
-// The settings that belong to this browser rather than to Pi's configuration.
-// Every accessor treats storage as optional: a private window still gets a
-// working settings page.
-
-import { WARN_TOKENS_COOKIE } from "@core/context-usage";
-
-export const SOUND_KEY = "web-pi:sound";
+import {
+  DEFAULT_WEB_SETTINGS,
+  webSettingsPatch,
+  type WebSettings,
+} from "@core/web-settings";
 
 function read(key: string): string | null {
   try {
@@ -26,7 +24,7 @@ function write(key: string, value: string): void {
 
 /** Unset means on, as in pi-web: the tone is the useful default. */
 export function soundEnabled(): boolean {
-  return read(SOUND_KEY) !== "false";
+  return document.documentElement.dataset["sound"] !== "false";
 }
 
 /**
@@ -41,37 +39,129 @@ export function setSwitch(element: Element, on: boolean): void {
   element.setAttribute("aria-checked", String(on));
 }
 
+let confirmed = { ...DEFAULT_WEB_SETTINGS };
+
+function apply(settings: WebSettings): void {
+  confirmed = settings;
+  document.documentElement.dataset["theme"] = settings.theme;
+  document.documentElement.dataset["sound"] = String(settings.sound);
+  for (const button of document.querySelectorAll<HTMLElement>(
+    "[data-theme-option]",
+  )) {
+    setSwitch(button, button.dataset["themeOption"] === settings.theme);
+  }
+  const sound = document.getElementById("sound-toggle");
+  if (sound) setSwitch(sound, settings.sound);
+  const tokens = document.querySelector<HTMLInputElement>("#dumb-zone-tokens");
+  if (tokens) tokens.value = String(settings.warnTokens);
+  document.dispatchEvent(new Event("web-pi:settings"));
+}
+
+let revision = 0;
+let saving = false;
+
+async function refresh(): Promise<void> {
+  if (saving) return;
+  const started = ++revision;
+  try {
+    const response = await fetch("/settings/web", { cache: "no-store" });
+    if (!response.ok) return;
+    const settings = {
+      ...DEFAULT_WEB_SETTINGS,
+      ...webSettingsPatch(await response.json()),
+    };
+    if (started === revision) apply(settings);
+  } catch {
+    /* Keep the last server-rendered settings while offline. */
+  }
+}
+
 export function setUpPreferences(): void {
-  setUpRegion("#sound-toggle", (sound, signal) => {
-    setSwitch(sound, soundEnabled());
-    sound.addEventListener(
-      "click",
-      () => {
-        const on = !switchOn(sound);
-        setSwitch(sound, on);
-        write(SOUND_KEY, on ? "true" : "false");
-      },
-      { signal },
-    );
+  window.addEventListener("focus", () => {
+    void refresh();
   });
-  // The context-warning threshold is the one browser preference the server
-  // reads: it colours a badge the server renders, so it lives in a cookie
-  // rather than in localStorage, and the input arrives already filled in.
-  setUpRegion("#dumb-zone-tokens", (warnTokens, signal) => {
-    if (!(warnTokens instanceof HTMLInputElement)) return;
-    const previous = warnTokens.value;
-    warnTokens.addEventListener(
-      "change",
-      () => {
-        const value = Number(warnTokens.value);
-        if (!Number.isSafeInteger(value) || value <= 0) {
-          warnTokens.value = previous;
-          return;
-        }
-        document.cookie = `${WARN_TOKENS_COOKIE}=${String(value)}; path=/; max-age=31536000; samesite=lax`;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void refresh();
+  });
+  setUpRegion("[data-web-settings]", (region, signal) => {
+    apply({
+      ...DEFAULT_WEB_SETTINGS,
+      ...webSettingsPatch(
+        JSON.parse(region.getAttribute("data-web-settings") ?? "{}"),
+      ),
+    });
+    const status = region.querySelector<HTMLElement>("#web-settings-status");
+    const controls = () =>
+      document.querySelectorAll<HTMLButtonElement | HTMLInputElement>(
+        "[data-theme-option], #sound-toggle, #dumb-zone-tokens",
+      );
+    for (const control of controls()) control.disabled = saving;
+    const save = async (patch: Partial<WebSettings>) => {
+      if (saving) return;
+      saving = true;
+      revision += 1;
+      for (const control of controls()) control.disabled = true;
+      if (status) status.textContent = "Saving…";
+      try {
+        const response = await fetch("/settings/web", {
+          method: "POST",
+          signal: AbortSignal.timeout(10_000),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (!response.ok)
+          throw new Error(
+            "Could not save settings. Check the connection and try again.",
+          );
+        apply({
+          ...DEFAULT_WEB_SETTINGS,
+          ...webSettingsPatch(await response.json()),
+        });
+        if (status) status.textContent = "Saved.";
+      } catch (error) {
+        apply(confirmed);
+        if (status)
+          status.textContent =
+            error instanceof Error
+              ? error.message
+              : "Could not save settings. Try again.";
+      } finally {
+        saving = false;
+        for (const control of controls()) control.disabled = false;
+      }
+    };
+    region.addEventListener(
+      "click",
+      (event) => {
+        const target =
+          event.target instanceof Element
+            ? event.target.closest<HTMLElement>(
+                "[data-theme-option], #sound-toggle",
+              )
+            : null;
+        if (!target) return;
+        const theme = target.dataset["themeOption"];
+        if (theme === "light" || theme === "dark" || theme === "auto")
+          void save({ theme });
+        else if (target.id === "sound-toggle")
+          void save({ sound: !soundEnabled() });
       },
       { signal },
     );
+    region
+      .querySelector<HTMLInputElement>("#dumb-zone-tokens")
+      ?.addEventListener(
+        "change",
+        (event) => {
+          const input = event.target as HTMLInputElement;
+          const value = Number(input.value);
+          if (!Number.isSafeInteger(value) || value <= 0) {
+            input.value = String(confirmed.warnTokens);
+            if (status) status.textContent = "Enter a positive safe integer.";
+          } else void save({ warnTokens: value });
+        },
+        { signal },
+      );
   });
 }
 
