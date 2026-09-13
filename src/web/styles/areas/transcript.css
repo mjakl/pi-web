@@ -1,0 +1,344 @@
+/* Transcript area.
+
+   pi-web's stylesheets in ../ are the pixel spec and hold every class this
+   area renders. What is left here is what pi-web does not put in a
+   stylesheet: the state React drives (an expanded card, the mark under the
+   pointer, a copied button), the inline styles react-syntax-highlighter
+   writes, and the Prism palette mapped onto highlight.js's class names. */
+
+/* ── Disclosures ────────────────────────────────────────────────────────
+   pi-web expands a card from React state and renders one chevron rotated;
+   web-pi uses <details>, so the open state comes from the element. */
+.transcript-details > summary {
+  list-style: none;
+}
+.transcript-details > summary::-webkit-details-marker {
+  display: none;
+}
+.transcript-details[open] > summary .card-chevron {
+  transform: rotate(180deg);
+}
+.transcript-details[open] > summary .process-chevron {
+  transform: rotate(90deg);
+}
+/* The preview only labels a collapsed extension card, as in pi-web. */
+.note-card[open] > summary .note-preview {
+  visibility: hidden;
+}
+/* pi-web draws the border under the header only while the card is open. */
+.note-card[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+/* A user command's disclosure is a plain row, not a card. */
+.user-message-band details > summary {
+  cursor: pointer;
+}
+
+/* ── Copy buttons ───────────────────────────────────────────────────────
+   pi-web holds `copied` in React state and swaps colour, icon and label. */
+.message-copy,
+[data-copy] {
+  color: var(--text-dim);
+}
+.message-copy:hover,
+[data-copy]:hover,
+[data-copy][data-copied] {
+  color: var(--accent);
+}
+[data-copy][data-copied] [data-copy-idle] {
+  display: none !important;
+}
+[data-copy][data-copied] [data-copy-done] {
+  display: flex !important;
+}
+
+/* pi-web swaps the extension card's "Show details" for "Hide details" from
+   React state; the disclosure's own state says the same thing here. */
+.note-details-open,
+.note-details[open] .note-details-closed {
+  display: none;
+}
+.note-details[open] .note-details-open {
+  display: inline;
+}
+
+/* A local path in an answer. pi-web renders it as an ordinary Markdown link
+   that opens the viewer, so it carries the Markdown link's own decoration. */
+.markdown-file-ref {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  cursor: pointer;
+}
+.markdown-file-ref:hover {
+  text-decoration-color: currentColor;
+}
+.written-file:hover {
+  background: var(--bg-hover);
+}
+
+.markdown-file-image {
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+.markdown-file-image img {
+  max-width: min(100%, 720px);
+  max-height: 520px;
+}
+
+/* ── Code blocks ────────────────────────────────────────────────────────
+   react-syntax-highlighter writes the gutter's metrics inline; only its
+   colour is in pi-web's stylesheet. */
+.markdown-code-body span.linenumber {
+  display: inline-block;
+  /* react-syntax-highlighter sizes the gutter from the widest line number
+     ("<digits>.25em"); client/highlight.ts sets the property per block. */
+  min-width: var(--linenumber-width, 1.25em);
+  padding-right: 1em;
+  text-align: right;
+  user-select: none;
+}
+
+/* The Prism theme's own font stack. Only the <pre> strut uses it -- the <code>
+   inside sets var(--font-mono) for the text itself, as pi-web's codeTagProps
+   do -- but the strut decides the baseline, and leaving it off dropped every
+   line 1px against pi-web. pi-web gets it from the theme object it applies
+   inline, so the <pre> reads this through its own inline font-family; a class
+   rule here would lose to `.markdown-file-preview pre`. */
+.markdown-code-body {
+  --code-theme-font:
+    Consolas, "Bitstream Vera Sans Mono", "Courier New", Courier, monospace;
+}
+html.dark .markdown-code-body {
+  --code-theme-font:
+    Menlo, Monaco, Consolas, "Andale Mono", "Ubuntu Mono", "Courier New",
+    monospace;
+}
+
+/* Prism's `vs` (light) and `vscDarkPlus` (dark) palettes, which pi-web loads
+   as themes, mapped onto the class names highlight.js emits. */
+.hljs-comment,
+.hljs-quote {
+  color: #008000;
+}
+.hljs-string,
+.hljs-addition,
+.hljs-attribute {
+  color: #a31515;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-type,
+.hljs-doctag,
+.hljs-meta .hljs-keyword {
+  color: #0000ff;
+}
+/* `literal` is Prism's `boolean`, which `vs` paints with the numbers, not with
+   the keywords (its `.language-json .token.boolean` override is a descendant
+   selector react-syntax-highlighter never matches). highlight.js nests the
+   word itself in a `keyword` span, so the inner span needs the colour too. */
+.hljs-number,
+.hljs-symbol,
+.hljs-literal,
+.hljs-literal .hljs-keyword,
+.hljs-bullet,
+.hljs-link {
+  color: #36acaa;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section {
+  color: #393a34;
+}
+.hljs-title.class_,
+.hljs-class .hljs-title {
+  color: #2b91af;
+}
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: #800000;
+}
+.hljs-attr,
+.hljs-property,
+.hljs-regexp,
+.hljs-variable,
+.hljs-template-variable {
+  color: #ff0000;
+}
+.hljs-deletion {
+  color: #9a050f;
+}
+.hljs-meta {
+  color: #808080;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}
+
+/* The theme's own base colour: react-syntax-highlighter writes it onto the
+   `code[class*="language-"]` element it renders, so every token Prism does not
+   classify takes it. highlight.js leaves those spans bare, which would inherit
+   the page's foreground instead, so the coloured surfaces carry it. A block in
+   the running turn is not tokenised yet, and pi-web's plain `<pre>` for that
+   frame inherits the message colour, so it is left out. */
+.markdown-code-body code[data-highlighted="1"],
+.file-source-view {
+  color: #393a34;
+}
+
+html.dark .hljs-comment,
+html.dark .hljs-quote {
+  color: #6a9955;
+}
+html.dark .hljs-string,
+html.dark .hljs-addition,
+html.dark .hljs-attribute {
+  color: #ce9178;
+}
+html.dark .hljs-keyword,
+html.dark .hljs-selector-tag,
+html.dark .hljs-literal,
+html.dark .hljs-type,
+html.dark .hljs-doctag,
+html.dark .hljs-tag,
+html.dark .hljs-name,
+html.dark .hljs-meta .hljs-keyword {
+  color: #569cd6;
+}
+html.dark .hljs-number,
+html.dark .hljs-symbol,
+html.dark .hljs-bullet,
+html.dark .hljs-link {
+  color: #b5cea8;
+}
+html.dark .hljs-title,
+html.dark .hljs-title.function_,
+html.dark .hljs-section {
+  color: #dcdcaa;
+}
+html.dark .hljs-title.class_,
+html.dark .hljs-class .hljs-title {
+  color: #4ec9b0;
+}
+html.dark .hljs-attr,
+html.dark .hljs-property,
+html.dark .hljs-variable,
+html.dark .hljs-template-variable,
+html.dark .hljs-selector-id,
+html.dark .hljs-selector-class {
+  color: #9cdcfe;
+}
+html.dark .hljs-regexp {
+  color: #d16969;
+}
+html.dark .hljs-deletion {
+  color: #ce9178;
+}
+html.dark .hljs-meta {
+  color: #9b9b9b;
+}
+html.dark .markdown-code-body code[data-highlighted="1"],
+html.dark .file-source-view {
+  color: #d4d4d4;
+}
+
+/* ── Conversation rail ──────────────────────────────────────────────────
+   pi-web measures the rail and writes every mark's pixel top; web-pi hands
+   the browser the same expression, so only the states React held are left. */
+.minimap-layer {
+  position: absolute;
+  inset: 0;
+}
+.minimap-graph {
+  position: absolute;
+  left: 0;
+  pointer-events: none;
+}
+.minimap-graph path {
+  stroke: var(--text-dim);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+.minimap-graph path.is-active {
+  stroke-width: 2;
+  opacity: 0.8;
+}
+/* Collapsed, pi-web draws the active path alone. */
+#rail[data-branched="true"] .minimap-branch,
+#rail[data-branched="true"] .minimap-graph path:not(.is-active) {
+  opacity: 0;
+  pointer-events: none;
+}
+#rail-column.is-expanded #rail[data-branched="true"] .minimap-branch {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* Expanding reveals the other branches; the path being read keeps pi-web's
+   0.8 (ChatMinimap.tsx: `opacity={node.active ? 0.8 : 0.55}`). */
+#rail-column.is-expanded
+  #rail[data-branched="true"]
+  .minimap-graph
+  path:not(.is-active) {
+  opacity: 0.55;
+}
+.minimap-row {
+  position: absolute;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.minimap-dot {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid rgba(128, 128, 128, 0.58);
+  border-radius: 2px;
+  background: rgba(128, 128, 128, 0.58);
+  transition:
+    transform 0.1s,
+    background 0.1s;
+}
+.minimap-row.is-active .minimap-dot {
+  border-color: rgba(128, 128, 128, 0.95);
+  background: rgba(128, 128, 128, 0.95);
+  box-shadow: 0 0 0 2px var(--bg-panel);
+}
+.minimap-row.is-near .minimap-dot {
+  transform: scale(1.25);
+}
+.minimap-compaction {
+  opacity: 0.6;
+}
+.minimap-row.is-active .minimap-compaction,
+.minimap-row.is-near .minimap-compaction {
+  opacity: 1;
+}
+
+/* ── Notice shelf ───────────────────────────────────────────────────────
+   pi-web's shelf is a right-anchored column whose cards keep their own
+   widths; the gap is its `marginBottom: index === last ? 0 : 6`. */
+#toasts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}

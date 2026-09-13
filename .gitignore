@@ -1,21 +1,12 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
 /node_modules
-
-# next.js
-/.next/
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# typescript
+.env
+.env.*
 *.tsbuildinfo
-next-env.d.ts
+.DS_Store
+/static/app.css
+/static/client.js
+/static/mermaid.js
+/static/client.js.map
+/coverage
+*.log
+/dist

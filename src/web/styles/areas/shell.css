@@ -1,0 +1,165 @@
+/* Shell area.
+
+   pi-web's stylesheets in ../ are the pixel spec; this file is the only
+   CSS this area may edit. Add a rule only when pi-web's own CSS cannot
+   express it, and say why. */
+
+/* Settings is a page in web-pi and a React modal in pi-web, so its surface
+   takes the initial focus: without that, `showModal()` focuses the first
+   section tab and rings it, which pi-web never shows. The surface is only a
+   focus holder, never a control, so it draws no ring of its own. */
+.settings-dialog-surface:focus {
+  outline: none;
+}
+
+/* pi-web puts `mobile-session-stats` and its two children's classes on the
+   stats cluster only on the phone (AppShell.tsx L1468); web-pi serves one
+   button to both viewports, so above the phone breakpoint the mobile rules in
+   embedded.css have to be taken back off. `container-type: inline-size` is the
+   one that matters: it contains the button's inline size, collapsing it to its
+   own padding and then hiding the token groups through its own container
+   query. */
+@media (min-width: 641px) {
+  #stats-trigger.mobile-session-stats {
+    container-type: normal;
+  }
+
+  #top-bar .mobile-session-context {
+    /* `min-width: 0` lets the readout shrink to nothing, so a narrow chat
+       column clipped the gauge text away and left the token groups standing.
+       pi-web clips the cluster from its left edge instead, keeping the
+       readout whole. */
+    min-width: auto;
+    white-space: nowrap;
+    line-height: inherit;
+    text-align: inherit;
+  }
+}
+
+/* pi-web builds the phone top bar from JS: the three panel tabs become 36px
+   icon squares without a label, the cache-read and gauge groups drop out of
+   the stats cluster, and the cluster takes the free space
+   (AppShell.tsx, `mobile ? 36 : undefined`). The server cannot see the
+   viewport, so the same shape comes from a media query here. */
+/* Both warnings carry pi-web's own inline styles, so the variant this
+   viewport does not use has to be hidden with more weight than they have. */
+[data-mobile-trust-banner] {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  [data-trust-warning]:not([data-mobile-trust-banner]) {
+    display: none !important;
+  }
+
+  [data-mobile-trust-banner] {
+    display: flex !important;
+  }
+
+  /* Both carry pi-web's inline styles, which outrank a plain rule. */
+  #top-bar [data-cache-read],
+  #top-bar .mobile-session-context > svg {
+    display: none !important;
+  }
+
+  /* The phone's token pair is tighter and its arrows smaller than the
+     desktop's (AppShell.tsx L1510-L1523 against L1585-L1592); the gap is
+     inline, the arrow only a presentation attribute. */
+  #top-bar .mobile-session-stat-io {
+    gap: 2px !important;
+    flex-shrink: 0;
+  }
+
+  #top-bar .mobile-session-stat-io > svg {
+    width: 10px;
+    height: 10px;
+  }
+
+  #top-bar [data-top-bar-tab] {
+    width: 36px !important;
+    padding: 0 !important;
+  }
+
+  #top-bar [data-top-bar-tab] > span {
+    display: none;
+  }
+
+  /* pi-web's phone values (AppShell.tsx L1471-L1479); gap and padding are
+     inline there, so the rule needs the weight to take them back. */
+  #stats-trigger {
+    flex: 1;
+    gap: 7px !important;
+    padding-right: 6px !important;
+    padding-left: 6px !important;
+  }
+}
+
+/* The System and Tools icons carry the accent once the session has told the
+   page what they hold. An attached session says so in its status and the
+   server paints it (SessionPage.tsx); this covers the other way pi-web finds
+   out — opening a panel resumes a dormant session, and the answer is what
+   says there was something in it (client/shell.ts).
+   The colour is on an inline style, so this rule needs the weight. */
+[data-top-panel][data-panel-loaded] [data-panel-icon] {
+  color: var(--accent) !important;
+}
+
+/* The narrow-phone toolbar. pi-web renders the three tabs into an overlay
+   that slides over the bar from behind a "more" button, and renders neither
+   on a wider viewport (AppShell.tsx L1978-L2090). The server cannot see the
+   viewport, so both live in the page and this query picks the shape:
+   36px sidebar toggle + 36px more button = the overlay's left edge. */
+/* Both carry pi-web's own inline styles, so the display each viewport does
+   not use has to be overridden with more weight than an attribute has. */
+#mobile-toolbar-more {
+  display: none !important;
+}
+
+@media (max-width: 480px) {
+  #mobile-toolbar-more {
+    display: flex !important;
+    /* pi-web's phone bar stretches its row, so this 36px button starts at the
+       top of the 35px row instead of straddling it half a pixel high. */
+    align-self: flex-start;
+  }
+
+  #mobile-toolbar-more[aria-expanded="true"] {
+    z-index: 21;
+    background: var(--bg-selected);
+    color: var(--text);
+  }
+
+  #top-bar-tabs {
+    display: none !important;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 72px;
+    z-index: 20;
+    background: color-mix(in srgb, var(--bg-panel) 94%, var(--bg));
+    box-shadow: 4px 0 18px rgba(0, 0, 0, 0.12);
+    backdrop-filter: blur(10px);
+  }
+
+  #top-bar-tabs[data-open] {
+    display: flex !important;
+  }
+}
+
+/* pi-web hovers the top bar's controls from JS (AppShell.tsx onMouseEnter):
+   the icon squares and the three tabs go muted -> text, and Full history
+   also takes the hover background. Those colours are inline there, and the
+   panel buttons get an inline colour again whenever a panel opens
+   (client/shell.ts), so the rules need the weight. pi-web gives the
+   narrow-phone "more" button and the disabled history tab no hover at all. */
+#top-bar #sidebar-toggle:hover,
+#top-bar #file-panel-toggle:hover,
+#top-bar #stats-trigger:hover,
+#top-bar [data-top-bar-tab]:not([disabled]):hover {
+  color: var(--text) !important;
+}
+
+#top-bar a[data-top-bar-tab]:hover {
+  background: var(--bg-hover) !important;
+}
