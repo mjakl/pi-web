@@ -1,4 +1,6 @@
+import { createFakeWorld } from "@adapters/fake/index";
 import type { RuntimeEvent } from "@core/ports";
+import { createWorkspace } from "@core/workspace";
 import { STAR_TYPE } from "@core/session-entries";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { existsSync } from "node:fs";
@@ -128,6 +130,43 @@ describe("opening", () => {
 });
 
 describe("session commands", () => {
+  it("reopens rewritten history, including an empty branch, without a provider call", async () => {
+    h = await createHarness();
+    const workspace = createWorkspace({
+      ...createFakeWorld(),
+      runtime: h.runtime,
+      sessions: h.catalog,
+    });
+    const first = await h.open();
+    for (const text of ["first", "second"]) {
+      h.script(reply(`${text} answer`));
+      const done = next(first, "turn_done");
+      await first.prompt(text);
+      await done;
+    }
+    const users = first
+      .snapshot()
+      .branch.filter(
+        (entry) => entry.type === "message" && entry.message.role === "user",
+      );
+    let previous = first;
+    for (const index of [1, 0]) {
+      const target = users[index];
+      if (!target) throw new Error("Missing fixture prompt");
+      const draft = await workspace.rewind(first.id, target.id);
+      expect(draft.text).toBe(index === 1 ? "second" : "first");
+      const resumed = h.runtime.get(first.id);
+      if (!resumed) throw new Error("Rewind left the session inactive");
+      expect(resumed).not.toBe(previous);
+      expect(resumed.snapshot().status.running).toBe(false);
+      expect(messages(resumed)).toEqual(
+        index === 1 ? ["user:first", "assistant:first answer"] : [],
+      );
+      expect(h.calls).toHaveLength(2);
+      previous = resumed;
+    }
+  });
+
   it("names, stars, switches model, and refuses what it cannot", async () => {
     h = await createHarness();
     const session = await h.open();

@@ -1,3 +1,4 @@
+import type { HTMLButtonElement } from "happy-dom";
 import { afterEach, expect, it } from "vitest";
 import { htmxBrowser } from "#/web/htmx4-browser";
 import { disconnectable } from "#/web/fixtures/disconnect";
@@ -152,6 +153,60 @@ it.each(["u31", "u1"])(
     expect(document.querySelectorAll(`#${answer.id}`)).toHaveLength(1);
   },
 );
+
+it("restores the rewound prompt when SSE replaces history before the action response arrives", async () => {
+  const f = await rewritableSession();
+  const release = Promise.withResolvers<undefined>();
+  let pending: Request | undefined;
+  const browser = await htmxBrowser(
+    await (await f.app.request(`/sessions/${f.id}`)).text(),
+    async (request) => {
+      if (new URL(request.url).pathname === "/events") return new Response("");
+      const response = await f.app.request(request);
+      if (new URL(request.url).pathname.endsWith("/rewind")) {
+        pending = request;
+        await release.promise;
+      }
+      return response;
+    },
+  );
+  browsers.push(browser);
+  const { document, window } = browser;
+  window.eval("window.confirm = () => true");
+  const oldLog = required(document.querySelector("#log"));
+  const oldComposer = required(document.querySelector("#composer"));
+  const button = required(
+    document.querySelector<HTMLButtonElement>(
+      '#entry-u51 [hx-post$="/rewind"]',
+    ),
+  );
+  try {
+    button.click();
+    await expect.poll(() => pending !== undefined).toBe(true);
+    await expect
+      .poll(() => document.querySelector("#log") !== oldLog)
+      .toBe(true);
+    expect(document.querySelector("#entry-u51")).toBeNull();
+    expect(document.querySelector("#entry-a60")).toBeNull();
+    expect(document.querySelector("#entry-a50")).not.toBeNull();
+    expect(required(pending).signal.aborted).toBe(false);
+  } finally {
+    release.resolve(undefined);
+  }
+  await expect
+    .poll(() => document.querySelector("#composer") !== oldComposer)
+    .toBe(true);
+  expect(document.querySelector("textarea")?.value).toBe("Question 51");
+  expect(f.world.runtime.get(f.id)?.snapshot().status.running).toBe(false);
+  expect(
+    document.querySelector(`[hx-post="/sessions/${f.id}/stop"]`),
+  ).not.toBeNull();
+  expect(document.querySelector("#status [data-running]")).toBeNull();
+  expect(document.querySelector("#turn")?.textContent).toBe("");
+  expect(window.localStorage.getItem(`web-pi:draft:${f.id}`)).toBe(
+    "Question 51",
+  );
+});
 
 it("aborts the old owner's pending history request and rejects its late content after replacement", async () => {
   const f = await rewritableSession();

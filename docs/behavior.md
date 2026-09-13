@@ -15,9 +15,10 @@ old `pi-web:star` entries are not recognized or migrated.
 Session actions include rename, delete with child reparenting, export, fork,
 clone, rewind, and branch navigation. Fork and rewind restore the selected
 request's text and images into the composer. Rewind is destructive: it removes
-later entries rather than merely hiding them. Rail branch selection changes the
-session's active leaf and can return a prompt for editing; it is not read-only
-historical browsing.
+later entries rather than merely hiding them. It stops the runtime before the
+rewrite, then reactivates the session without sending the recalled request. Rail
+branch selection changes the session's active leaf and can return a prompt for
+editing; it is not read-only historical browsing.
 
 Tool cards load their settled bodies on first opening, initially limited to **16
 KiB text and 200 diff rows**, with a control to fetch the rest. Older thinking
