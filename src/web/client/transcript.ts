@@ -92,14 +92,21 @@ export function setUpTranscript(): void {
   setUpMermaid();
   // Native cleanup removes triggers, but does not abort ordinary requests.
   // A rewritten transcript must not keep fetching or accept a late old page.
+  // Body-targeted history actions belong to navigation: their response restores
+  // the composer even when their own SSE update has already removed the button.
   document.addEventListener("htmx:before:cleanup", (event) => {
     const owner = event.target;
-    if (owner instanceof Element && owner.closest("#log"))
+    if (
+      owner instanceof Element &&
+      owner.closest("#log") &&
+      owner.getAttribute("hx-target") !== "body"
+    )
       owner.dispatchEvent(new Event("htmx:abort"));
   });
   document.addEventListener("htmx:before:response", (event) => {
-    const { sourceElement, request } = requestContext(event);
+    const { sourceElement, request, target } = requestContext(event);
     if (
+      target !== document.body &&
       sourceElement.closest("#log") &&
       (!sourceElement.isConnected || request.signal.aborted)
     )
