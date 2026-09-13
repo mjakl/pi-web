@@ -22,7 +22,6 @@
     "prepare": "scripts/prepare.sh"
   },
   "dependencies": {
-    "mammoth": "^1.12.2",
     "undici": "8.10.0",
     "web-push": "3.6.7"
   },

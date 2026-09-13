@@ -53,9 +53,9 @@ model or a second context formula.
 ## Files and Git
 
 The explorer loads directories on demand, previews source, Markdown, images,
-audio, PDF and docx, offers downloads and line references, and displays Git
-status and per-file diffs. Tabs and panel preferences belong to the browser;
-file changes use a server watcher. Settled turns refresh the tree and changes.
+audio and PDF, offers downloads and line references, and displays Git status and
+per-file diffs. Tabs and panel preferences belong to the browser; file changes
+use a server watcher. Settled turns refresh the tree and changes.
 
 Every file request uses `authorize` in `src/core/workspace/deps.ts`: lexical
 containment before filesystem access, followed by realpath containment against

@@ -28,8 +28,8 @@ the browser keeps drafts and presentation preferences, not a second transcript.
   separately; `just doctor` reports which install was resolved. Never add an
   `@earendil-works/*` dependency to `package.json`.
 - `dependencies` are only what stays external in `dist/server.js` (the Pi SDK,
-  `mammoth`, `web-push`, `undici`); everything else esbuild bundles and belongs
-  in `devDependencies`. Changing either list means running `just smoke`.
+  `web-push`, `undici`); everything else esbuild bundles and belongs in
+  `devDependencies`. Changing either list means running `just smoke`.
 - `CLAUDE.md` is a symlink to this file. Repository workflow skills live in
   `.agents/skills/`; `.claude/skills/` contains compatibility symlinks, not
   copies. Keep each skill's references, license, and provenance with it.

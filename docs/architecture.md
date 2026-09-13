@@ -25,7 +25,7 @@ Internal interfaces, all consumers in this repository. Defined in
 | `ModelCatalog`     | Models Pi has credentials for, narrowed by `enabledModels`, with the configured default and per-pattern reasoning pins       | `src/adapters/pi/model-catalog.ts`   |
 | `ProjectResolver`  | The repository a working folder belongs to, and its branch                                                                   | `src/adapters/pi/projects.ts`        |
 | `ProjectResources` | Prompt templates and skills of a folder, without starting an agent                                                           | `src/adapters/pi/resources.ts`       |
-| `Files`            | The `@` completion index, directory listings, file bytes and text, `.docx` conversion, shell-output captures                 | `src/adapters/fs/file-tree.ts`       |
+| `Files`            | The `@` completion index, directory listings, file bytes and text, shell-output captures                                     | `src/adapters/fs/file-tree.ts`       |
 | `Git`              | `git status` of a folder and the patch for one file                                                                          | `src/adapters/git/git.ts`            |
 | `Watcher`          | One file's changes on disk, deduplicated                                                                                     | `src/adapters/fs/watch.ts`           |
 | `PushNotifier`     | VAPID keys and browser subscriptions in the agent directory; one encrypted message per finished run                          | `src/adapters/pi/web-push.ts`        |
@@ -299,16 +299,15 @@ composition root and the only importer of Pi adapters.
   succeeds, and an installed package needs a writable install directory.
 - **The package ships a bundle; the checkout runs the sources.** `just build`
   bundles `src/server.ts` and `src/cli.ts` with esbuild into `dist/`, leaving
-  only the Pi SDK, `mammoth`, `web-push`, and `undici` external, so the
-  published `dependencies` list the latter three and a consumer install has no
-  toolchain in it. `just dev` and every test still run the TypeScript through
-  `tsx`: tests that ran against `dist/` would test the bundler. The one check
-  that does run against the package is `just smoke`
-  (`tests/smoke/packaging.smoke.test.ts`), which packs, installs into a
-  throwaway project, and serves a fixture session from the result — the only way
-  to catch a missing `files` entry or an import that resolves solely in a
-  checkout. `dist/` is not minified: a stack trace from an install should name
-  real functions.
+  only the Pi SDK, `web-push`, and `undici` external, so the published
+  `dependencies` list the latter two and a consumer install has no toolchain in
+  it. `just dev` and every test still run the TypeScript through `tsx`: tests
+  that ran against `dist/` would test the bundler. The one check that does run
+  against the package is `just smoke` (`tests/smoke/packaging.smoke.test.ts`),
+  which packs, installs into a throwaway project, and serves a fixture session
+  from the result — the only way to catch a missing `files` entry or an import
+  that resolves solely in a checkout. `dist/` is not minified: a stack trace
+  from an install should name real functions.
 - **The bin is composition only.** `bin/web-pi.js` is three lines of JavaScript
   that need no build; `src/cli.ts` parses the flags into the environment
   `loadConfig()` already reads, links the host Pi, warns when the bind address

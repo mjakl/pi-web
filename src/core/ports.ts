@@ -445,8 +445,6 @@ export type Files = {
     path: string,
     range?: { start: number; end: number },
   ): ReadableStream<Uint8Array>;
-  /** A .docx converted to a standalone HTML body. */
-  docxHtml(path: string): Promise<string>;
 };
 
 /** One file the working tree changed, as `git status` reports it. */

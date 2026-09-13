@@ -1,7 +1,6 @@
 import type { FileEntry } from "@core/composer";
 import { FileAccessError } from "@core/path-access";
 import type { DirEntry, Files, FileStat } from "@core/ports";
-import mammoth from "mammoth";
 import { execFile } from "node:child_process";
 import { createReadStream } from "node:fs";
 import { constants, open, readdir, realpath, stat } from "node:fs/promises";
@@ -256,18 +255,6 @@ export function createFileTree(): Files {
         range === undefined ? {} : { start: range.start, end: range.end },
       );
       return Readable.toWeb(node) as ReadableStream<Uint8Array>;
-    },
-
-    async docxHtml(path) {
-      const { value } = await mammoth.convertToHtml(
-        { path },
-        {
-          // The converter must never reach for anything outside this file.
-          externalFileAccess: false,
-          convertImage: mammoth.images.dataUri,
-        },
-      );
-      return value;
     },
   };
 }

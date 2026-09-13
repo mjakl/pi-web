@@ -207,21 +207,6 @@ export function fileUseCases({ deps, authorize, cwdOf }: Shared) {
       return { size: info.size, stream: deps.files.stream(path, range) };
     },
 
-    /** A .docx as HTML, for the sandboxed preview frame. */
-    async docxPreview(
-      sessionId: string | undefined,
-      path: string,
-    ): Promise<string> {
-      const info = await authorize(path, { sessionId });
-      if (info === undefined || fileKind(path) !== "docx") {
-        throw new FileAccessError("Not a Word document", 400);
-      }
-      if (info.size > MEDIA_LIMIT) {
-        throw new FileAccessError("Document too large (>10MB)", 413);
-      }
-      return deps.files.docxHtml(path);
-    },
-
     /** Tells the viewer when the file changed under it. */
     async watchFile(
       sessionId: string | undefined,

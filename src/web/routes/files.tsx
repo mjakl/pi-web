@@ -1,7 +1,7 @@
 // The file explorer, the viewer, the watch stream, and Git changes. The
 // files area owns this module.
 
-import { extensionOf, mimeOf } from "@core/file-types";
+import { mimeOf } from "@core/file-types";
 import { FileAccessError } from "@core/path-access";
 import { type GitStatus } from "@core/ports";
 import { isSessionId } from "@core/sessions";
@@ -246,29 +246,6 @@ export function filesRoutes(app: WebApp, ctx: RouteContext): void {
         "Content-Range": `bytes ${String(start)}-${String(end)}/${String(size)}`,
         "Content-Length": String(end - start + 1),
       });
-    } catch (error) {
-      return fileFailure(c, error);
-    }
-  });
-
-  app.get("/files/docx", async (c) => {
-    const sessionId = sessionParameter(c);
-    const path = c.req.query("path") ?? "";
-    if (extensionOf(path) !== "docx") return c.text("Not a Word document", 400);
-    try {
-      const body = await deps.workspace.docxPreview(sessionId, path);
-      return c.body(
-        `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>body{font:14px/1.6 system-ui,sans-serif;margin:1rem;color:#1a1a1a;background:#fff}img{max-width:100%}</style></head><body>${body}</body></html>`,
-        200,
-        {
-          "Content-Type": "text/html; charset=utf-8",
-          "Content-Security-Policy":
-            "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
-          "Referrer-Policy": "no-referrer",
-          "X-Content-Type-Options": "nosniff",
-          "Cache-Control": "no-cache",
-        },
-      );
     } catch (error) {
       return fileFailure(c, error);
     }

@@ -1304,7 +1304,6 @@ export function createFakeWorld(
       realpath: (path) => realFiles.realpath(path),
       readText: (path, maxBytes) => realFiles.readText(path, maxBytes),
       stream: (path, range) => realFiles.stream(path, range),
-      docxHtml: (path) => realFiles.docxHtml(path),
     },
     git: createGit(),
     watcher: createWatcher(),
