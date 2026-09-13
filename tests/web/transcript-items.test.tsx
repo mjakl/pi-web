@@ -204,7 +204,7 @@ describe("transcript items", () => {
       /aria-label="New branch"[\s\S]*?<path d="M6 3v12M18 9a9 9 0 0 1-9 9"><\/path>[\s\S]*?<\/svg>Branch<\/button>/,
     );
     expect(buttons).toMatch(
-      /title="New session[^>]*>[\s\S]*?<svg width="11" height="11" viewBox="0 0 12 12"[^>]*stroke-width="1.2"[\s\S]*?<line x1="6" y1="1" x2="6" y2="11"><\/line>[\s\S]*?<\/svg>Session<\/button>/,
+      /title="New session[^>]*>[\s\S]*?<svg width="11" height="11" viewBox="0 0 12 12"[^>]*stroke-width="1.2"[\s\S]*?<line x1="6" y1="1" x2="6" y2="11"><\/line>[\s\S]*?<\/svg>Clone<\/button>/,
     );
   });
 

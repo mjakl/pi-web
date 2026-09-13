@@ -277,7 +277,7 @@ export function HistoryActionButtons({
         {...swap}
       >
         <PlusIcon size={11} width={1.2} />
-        Session
+        Clone
       </button>
     </>
   );
