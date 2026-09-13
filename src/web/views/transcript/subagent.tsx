@@ -51,7 +51,7 @@ function SubagentDisclosure({
     <details id={id} class={className}>
       <summary>
         <span class="subagent-summary-label">{label}</span>
-        <span class="subagent-chevron" style="display:flex">
+        <span class="subagent-chevron">
           <CardChevronIcon colour="currentColor" />
         </span>
       </summary>
@@ -268,7 +268,7 @@ export function SubagentContent({
                   />
                 </span>
               </span>
-              <span class="subagent-chevron" style="display:flex">
+              <span class="subagent-chevron">
                 <CardChevronIcon colour="currentColor" />
               </span>
             </summary>

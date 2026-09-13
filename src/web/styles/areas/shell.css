@@ -1169,3 +1169,84 @@ a.shell-top-bar-tab:hover {
     display: flex;
   }
 }
+
+/* chat window */
+.chat-window {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding-bottom: var(--app-safe-area-bottom, env(safe-area-inset-bottom));
+  overflow: hidden;
+}
+
+.chat-window.is-empty {
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+  overflow-y: auto;
+}
+
+.chat-window {
+  --conversation-rail-width: 36px;
+}
+.chat-window:has(.chat-minimap.is-expanded) {
+  --conversation-rail-width: min(
+    var(--expanded-conversation-rail-width, 36px),
+    50%
+  );
+}
+
+/* Continue the minimap strip beside the composer and safe-area padding.
+   Only the transcript's ChatMinimap owns navigation and pointer handling. */
+.chat-window:has(.chat-minimap) {
+  background-image: linear-gradient(
+    to right,
+    var(--border) 1px,
+    var(--bg-panel) 1px
+  );
+  background-size: var(--conversation-rail-width) 100%;
+  background-position: right;
+  background-repeat: no-repeat;
+}
+
+.chat-window.is-empty::after {
+  content: "";
+}
+
+.chat-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+}
+
+.chat-status.is-error {
+  color: var(--danger);
+}
+
+.chat-empty {
+  display: flex;
+  min-height: 100%;
+  align-items: flex-end;
+  padding: 2rem 16px 0;
+  font-family: var(--font-mono);
+}
+
+.chat-empty h1 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  margin: 0 36px 0 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.chat-empty h1 span:first-child {
+  font-size: 28px;
+}

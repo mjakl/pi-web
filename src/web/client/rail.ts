@@ -100,7 +100,7 @@ function mountRail(view: HTMLElement, signal: AbortSignal): void {
   /**
    * pi-web widens the rail to the branch graph while it is hovered or
    * focused, and the chat window reads the width back for its grid column.
-   * The width is inline there too, so it has to be inline here.
+   * The graph width is runtime geometry; CSS owns the expanded state.
    */
   const expand = (open: boolean) => {
     const layer = rail.querySelector<HTMLElement>("#rail");
@@ -113,9 +113,6 @@ function mountRail(view: HTMLElement, signal: AbortSignal): void {
       "--expanded-conversation-rail-width",
       `${width}px`,
     );
-    rail.style.width = open ? `${width}px` : "36px";
-    rail.style.maxWidth = open ? "100%" : "";
-    rail.style.overflow = open ? "auto" : "visible";
     if (!open) rail.scrollLeft = 0;
   };
 

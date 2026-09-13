@@ -17,15 +17,12 @@ describe("renderMarkdown", () => {
     expect(html).toContain("const a = 1;");
   });
 
-  it("resets the border the file-preview stylesheet puts on a pre", () => {
+  it("gives fenced code its own body inside the shared Markdown wrapper", () => {
     const html = renderMarkdown("```ts\nconst a = 1;\n```");
-    // .markdown-file-preview pre gives every pre a 1px border, which would sit
-    // inside .markdown-code-block's own and push the code a pixel down and
-    // right. pi-web's SyntaxHighlighter clears it inline; so does this.
-    expect(html).toContain("border:0; border-radius:0;");
-    // The strut's font comes from the Prism theme, not var(--font-mono): it
-    // sets the baseline every line in the block sits on.
-    expect(html).toContain("font-family:var(--code-theme-font)");
+    expect(html).toContain('<div class="markdown-code-block">');
+    expect(html).toContain(
+      '<pre class="markdown-code-body"><code class="language-ts">const a = 1;</code></pre>',
+    );
   });
 
   it("marks a mermaid fence for the preview toggle, disabled while live", () => {

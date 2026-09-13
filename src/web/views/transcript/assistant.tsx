@@ -36,25 +36,17 @@ function ThinkingBlock({
       ? `/sessions/${actions.sessionId}/entries/${item.entryId}/thinking/${String(block.index)}`
       : undefined;
   return (
-    <details
-      class="transcript-details"
-      style="border:1px solid var(--border); border-radius:6px; overflow:hidden; font-size:13px"
-    >
-      <summary style="display:flex; align-items:center; gap:6px; width:100%; padding:6px 10px; background:var(--bg-panel); color:var(--text-muted); cursor:pointer; font-size:12px; text-align:left">
-        <span>Thinking</span>
+    <details class="transcript-details thinking-card">
+      <summary class="thinking-heading">
+        <span class="thinking-label">Thinking</span>
         {block.seconds === undefined ? null : (
-          <span style="margin-left:auto; font-size:11px; color:var(--text-dim); font-variant-numeric:tabular-nums">
-            {String(block.seconds)}s
-          </span>
+          <span class="thinking-duration">{String(block.seconds)}s</span>
         )}
-        <span
-          class="card-chevron"
-          style={`display:flex; flex-shrink:0; transition:transform 0.15s${block.seconds === undefined ? "; margin-left:auto" : ""}`}
-        >
+        <span class="card-chevron">
           <CardChevronIcon />
         </span>
       </summary>
-      <div style="padding:8px 10px; color:var(--text-muted); font-size:12px; line-height:1.6; background:var(--bg-panel); border-top:1px solid var(--border)">
+      <div class="thinking-body">
         {fetchUrl === undefined ? (
           <Markdown
             source={block.text}
@@ -83,7 +75,7 @@ function Blocks({
   actions?: ItemActions;
 }) {
   return (
-    <div style="display:flex; flex-direction:column; gap:8px">
+    <div class="assistant-blocks">
       {item.blocks.map((block) => {
         switch (block.kind) {
           case "text":
@@ -104,7 +96,7 @@ function Blocks({
                 entryId={item.entryId}
                 indices={[block.index]}
                 actions={actions}
-                size="full"
+                variant="assistant"
               />
             );
           default:
@@ -169,11 +161,6 @@ export function AssistantMessage({
     editable === true &&
     actions !== undefined &&
     (starrable === true || actions.starred.has(item.entryId));
-  const columns = streaming
-    ? "minmax(0, 1fr) 9ch 10ch"
-    : star
-      ? "auto minmax(0, 1fr)"
-      : "minmax(0, 1fr)";
   return (
     <HistoryActionFrame
       entryId={item.entryId}
@@ -181,7 +168,7 @@ export function AssistantMessage({
       copyText={streaming ? undefined : answerText(item)}
     >
       <div
-        class="message-row"
+        class="message-row assistant-message"
         {...(item.processHalf
           ? {}
           : {
@@ -193,25 +180,21 @@ export function AssistantMessage({
                   : `entry-${item.entryId}`,
             })}
         data-role="assistant"
-        style="margin-bottom:16px"
       >
         <div
-          style={`font-size:11px; color:var(--text-dim); margin-bottom:4px; display:grid; grid-template-columns:${columns}; align-items:center; column-gap:6px`}
+          class={`assistant-message-header${streaming ? " is-streaming" : ""}`}
         >
           {star && actions ? (
             <StarButton entryId={item.entryId} actions={actions} />
           ) : null}
-          <span
-            title={item.model}
-            style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"
-          >
+          <span title={item.model} class="assistant-model-name">
             {item.model}
           </span>
           {streaming ? (
             <>
               <span
                 title="Estimated token count while streaming"
-                style="display:flex; align-items:center; justify-content:flex-end; gap:2px; color:var(--text); font-variant-numeric:tabular-nums; white-space:nowrap"
+                class="assistant-streaming-tokens"
               >
                 {streaming.tokens > 0 ? (
                   <>
@@ -220,7 +203,7 @@ export function AssistantMessage({
                   </>
                 ) : null}
               </span>
-              <span style="text-align:right; color:var(--text-dim); font-size:11px; font-weight:400; font-variant-numeric:tabular-nums; white-space:nowrap">
+              <span class="assistant-streaming-speed">
                 {streaming.tokensPerSecond === null
                   ? ""
                   : `${streaming.tokensPerSecond.toFixed(1)} t/s`}
@@ -233,20 +216,18 @@ export function AssistantMessage({
         item.stopReason !== "error" ? null : (
           <div
             role="alert"
-            style={`margin-top:${item.blocks.length > 0 ? "8px" : "0"}; padding:7px 10px; border:1px solid rgba(239,68,68,0.3); border-radius:6px; background:rgba(239,68,68,0.07); color:var(--danger); font-family:var(--font-mono); font-size:12px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere`}
+            class={`assistant-error${item.blocks.length > 0 ? " has-preceding-blocks" : ""}`}
           >
             Error: {item.errorMessage ?? "Unknown provider error"}
           </div>
         )}
         {item.stopReason !== "aborted" ? null : (
-          <div style="margin-top:8px; font-size:11px; color:var(--text-dim)">
-            Stopped
-          </div>
+          <div class="assistant-stopped">Stopped</div>
         )}
         <WrittenFiles files={written ?? []} actions={actions} />
-        <div style="display:flex; align-items:center; gap:8px; margin-top:4px">
+        <div class="assistant-message-footer">
           {usage === "" || streaming ? null : (
-            <div style="font-size:11px; color:var(--text-dim)">{usage}</div>
+            <div class="assistant-usage">{usage}</div>
           )}
           {streaming || editable ? null : (
             <CopyButton
@@ -257,10 +238,7 @@ export function AssistantMessage({
           {streaming ||
           item.processHalf === true ||
           actions?.timestamps?.has(item.entryId) !== true ? null : (
-            <Time
-              value={item.timestamp}
-              style="font-size:10px; color:var(--text-dim); margin-left:auto"
-            />
+            <Time value={item.timestamp} />
           )}
         </div>
       </div>
@@ -278,10 +256,7 @@ export function WrittenFiles({
 }) {
   if (files.length === 0 || actions?.live) return <></>;
   return (
-    <div
-      aria-label="Files changed"
-      style="display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:6px"
-    >
+    <div aria-label="Files changed" class="written-files">
       {files.map((path) => {
         const name = path.split("/").pop() ?? path;
         return (
@@ -291,7 +266,6 @@ export function WrittenFiles({
             data-file-path={path}
             title={path}
             aria-label={`Open ${name}`}
-            style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; font-size:12px; font-family:var(--font-mono); color:var(--text); background:var(--bg-subtle); border:1px solid var(--border); border-radius:6px; cursor:pointer"
           >
             <FileIcon name={name} size={12} />
             <span>{name}</span>

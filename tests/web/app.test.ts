@@ -300,13 +300,11 @@ describe("web app", () => {
     // pi-web's streaming header: the model, the running token estimate, and
     // the rate, in its three fixed columns. web-pi gets both from the
     // runtime instead of a meter in the browser.
-    expect(received).toContain("grid-template-columns:minmax(0, 1fr) 9ch 10ch");
+    expect(received).toContain('class="assistant-message-header is-streaming"');
     expect(received).toContain("Estimated token count while streaming");
     // The rate column is there from the start; it stays blank until half a
     // second of the message has arrived, which this turn never reaches.
-    expect(received).toContain(
-      "text-align:right; color:var(--text-dim); font-size:11px",
-    );
+    expect(received).toContain('class="assistant-streaming-speed"');
   });
 
   it("renders metadata and actions in the initial response, including on revisit", async () => {
@@ -1604,8 +1602,6 @@ describe("conversation rail, shelf, and written files", () => {
     expect(page).toContain('class="minimap-row"');
     expect(page).toContain('class="minimap-message"');
     expect(page).toContain('class="minimap-dot"');
-    // A mark is never taller than pi-web's 32px cap.
-    expect(page).toContain("height:max(1px, min(32px, 100%))");
   });
 
   it("draws the spine between marks on a linear session too", async () => {
@@ -1824,10 +1820,11 @@ describe("transcript rendering", () => {
     // The user prompt: a full-width band with the 820px column inside it.
     expect(page).toContain('class="user-message-band"');
     expect(page).toContain('class="user-message-band-content"');
-    expect(page).toContain('class="message-row"');
+    expect(page).toContain('class="message-row user-message"');
+    expect(page).toContain('class="message-row assistant-message"');
     // The answer: star toggle, model label, then the shared action row.
     expect(page).toContain('class="answer-star-toggle"');
-    expect(page).toContain("grid-template-columns:auto minmax(0, 1fr)");
+    expect(page).toContain('class="assistant-message-header"');
     expect(page).toContain('class="message-copy"');
     expect(page).toContain('class="history-action-host"');
     expect(page).toContain('class="history-actions"');
@@ -1837,7 +1834,7 @@ describe("transcript rendering", () => {
     expect(page).toContain("markdown-body markdown-user-message");
     // Usage, then the timestamp pushed to the right at 10px.
     expect(page).toContain("39,990 in · 10 out");
-    expect(page).toContain("font-size:10px; color:var(--text-dim)");
+    expect(page).toContain('class="transcript-time"');
   });
 
   it("keeps an extension card's copy button and details toggle on one row", async () => {
@@ -1867,8 +1864,7 @@ describe("transcript rendering", () => {
     );
     // The word alone, with no icon, is what pi-web copies with here.
     expect(page).toContain(
-      '<button type="button" class="message-copy" style="padding:3px 7px;' +
-        ' border:none; background:none; cursor:pointer; font-size:11px"' +
+      '<button type="button" class="message-copy is-bare"' +
         ' data-copy="true" title="Copy message">Copy</button>',
     );
   });
@@ -1920,12 +1916,9 @@ describe("transcript rendering", () => {
       .poll(() => world.runtime.get("s1")?.snapshot().status.running)
       .toBe(false);
     const page = await (await app.request("/sessions/s1")).text();
-    expect(page).toContain("border:1px solid rgba(34,197,94,0.25)");
-    expect(page).toContain("background:rgba(34,197,94,0.04)");
-    // Name in mono green, preview in dim mono, chevron last.
-    expect(page).toContain(
-      "color:var(--success); font-family:var(--font-mono)",
-    );
+    expect(page).toContain('class="transcript-details tool-card"');
+    expect(page).toContain('class="tool-name"');
+    expect(page).toContain('class="tool-preview"');
     expect(page).toContain('class="card-chevron"');
     // The process disclosure keeps its own chevron and count line.
     expect(page).toContain('class="process-chevron"');
@@ -1950,9 +1943,7 @@ describe("transcript rendering", () => {
     const page = await (await app.request("/sessions/s1")).text();
     expect(page).toContain("Loading output…");
     // The rule under the header follows the card, never the green default.
-    expect(page).toContain(
-      "background:var(--bg-subtle); border-top:1px solid rgba(248,113,113,0.25)",
-    );
+    expect(page).toContain('class="tool-deferred-output is-error"');
   });
 
   it("renders a notice as pi-web's shelf card", async () => {
@@ -2025,9 +2016,7 @@ describe("transcript rendering", () => {
     const body = await (await app.request(deferredUrl(page))).text();
     expect(body).toContain("const a = 1;");
     expect(body).toContain("const a = 2;");
-    expect(body).toContain(
-      "grid-template-columns:minmax(0, 1fr) minmax(0, 1fr)",
-    );
+    expect(body).toContain('class="tool-diff-lines"');
     // Edit tools show the diff instead of repeating their arguments.
     expect(body).not.toContain("&quot;file_path&quot;");
   });

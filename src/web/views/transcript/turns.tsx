@@ -43,8 +43,8 @@ export function Item({
       return <Compaction item={item} actions={actions} />;
     case "branch_summary":
       return (
-        <div id={`entry-${item.entryId}`} style="margin-bottom:16px">
-          <div style="margin-bottom:10px; color:var(--text-muted); font-size:12px">
+        <div id={`entry-${item.entryId}`} class="transcript-branch-summary">
+          <div class="transcript-branch-intro">
             The conversation briefly explored another branch and returned with
             this summary:
           </div>
@@ -79,23 +79,14 @@ function TurnView({ turn, actions }: { turn: Turn; actions?: ItemActions }) {
         <details
           class="transcript-details process-details"
           open={turn.expanded}
-          style="margin-bottom:14px"
         >
-          <summary
-            title="Expand process details"
-            style="display:flex; align-items:center; gap:8px; width:auto; min-height:24px; padding:2px 0; color:var(--text-muted); cursor:pointer; font-size:12px; text-align:left"
-          >
-            <span
-              class="process-chevron"
-              style="display:flex; flex-shrink:0; transition:transform 0.15s"
-            >
+          <summary title="Expand process details" class="process-summary">
+            <span class="process-chevron">
               <ProcessChevronIcon />
             </span>
-            <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-              {label}
-            </span>
+            <span class="process-label">{label}</span>
           </summary>
-          <div style="margin-top:8px">
+          <div class="process-body">
             {turn.process.map((item) => (
               <Item item={item} actions={actions} />
             ))}

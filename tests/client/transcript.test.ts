@@ -127,9 +127,7 @@ describe("copy buttons", () => {
       const metadata = query(".message-row > div:last-child");
       expect(metadata.textContent).toContain("1,200 in · 34 out · 500 cache R");
       expect(metadata.querySelector("[data-copy]")).toBeNull();
-      expect(
-        metadata.querySelector('span[style*="margin-left:auto"]'),
-      ).not.toBeNull();
+      expect(metadata.querySelector(".transcript-time")).not.toBeNull();
       click(copy);
       await flush();
       expect(write).toHaveBeenCalledWith(

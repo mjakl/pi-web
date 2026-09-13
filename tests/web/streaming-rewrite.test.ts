@@ -55,7 +55,7 @@ it.each([false, true])(
     const rail = required(document.querySelector("#rail-column"));
     expect(rail).not.toBe(oldRail);
     await expect.poll(() => rail.classList.contains("is-expanded")).toBe(false);
-    expect(rail.getAttribute("style")).toMatch(/(?:^|;)\s*width:\s*36px/);
+    expect(rail.classList.contains("chat-minimap")).toBe(true);
     expect(document.querySelector("#entry-a60")).toBeNull();
     expect(document.querySelector("#entry-a30")).not.toBeNull();
     expect(
