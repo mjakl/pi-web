@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { click, device, htmxEvent, mount } from "./helpers.ts";
 
-// pi-web's theme, down to the storage key: `pi-theme` holds light/dark/auto,
+// `web-pi-theme` holds light/dark/auto,
 // `dark` on <html> is what the stylesheets key on, and "auto" follows the
 // system scheme.
 
@@ -20,17 +20,18 @@ const OPTIONS = `<div role="radiogroup">
 </div>`;
 
 describe("theme", () => {
-  it("reads pi-theme and falls back to auto", async () => {
+  it("reads web-pi-theme, ignores the old key, and falls back to auto", async () => {
     const { storedPreference } = await load();
-    expect(storedPreference()).toBe("auto");
     localStorage.setItem("pi-theme", "dark");
+    expect(storedPreference()).toBe("auto");
+    localStorage.setItem("web-pi-theme", "dark");
     expect(storedPreference()).toBe("dark");
-    localStorage.setItem("pi-theme", "sepia");
+    localStorage.setItem("web-pi-theme", "sepia");
     expect(storedPreference()).toBe("auto");
   });
 
   it("applies a stored dark preference to <html>", async () => {
-    localStorage.setItem("pi-theme", "dark");
+    localStorage.setItem("web-pi-theme", "dark");
     const { setUpTheme } = await load();
     setUpTheme();
     expect(document.documentElement.classList.contains("dark")).toBe(true);
@@ -55,14 +56,14 @@ describe("theme", () => {
     const dark = document.querySelector('[data-theme-option="dark"]');
     if (!dark) throw new Error("no option");
     click(dark);
-    expect(localStorage.getItem("pi-theme")).toBe("dark");
+    expect(localStorage.getItem("web-pi-theme")).toBe("dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(dark.getAttribute("aria-checked")).toBe("true");
     expect(auto?.getAttribute("aria-checked")).toBe("false");
   });
 
   it("paints a radio group that arrives as a fragment", async () => {
-    localStorage.setItem("pi-theme", "light");
+    localStorage.setItem("web-pi-theme", "light");
     const { setUpTheme } = await load();
     setUpTheme();
     mount(OPTIONS);

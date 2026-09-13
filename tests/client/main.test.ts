@@ -18,7 +18,7 @@ it("sets up every area of the page", async () => {
   );
   await import("@web/client/main");
   frame();
-  expect(document.title).toBe("proj - Pi Web");
+  expect(document.title).toBe("proj - web-pi");
   expect(document.body.dataset["filePanel"]).toBe("closed");
   expect(document.activeElement).toBe(area());
   type(area(), "hi");

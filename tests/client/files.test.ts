@@ -9,6 +9,7 @@ import {
   keydown,
   mount,
   query,
+  setRect,
 } from "./helpers.ts";
 
 // The file panel's browser half: tabs and their per-tab state, what the
@@ -113,6 +114,23 @@ function ajaxUrls(): string[] {
   return htmx().ajax.mock.calls.map((call) => call[1]);
 }
 
+describe("file panel width", () => {
+  it.each([
+    ["pi-right-panel-width", "420px"],
+    ["web-pi-right-panel-width", "450px"],
+  ])("restores only the current preference key: %s", async (key, expected) => {
+    localStorage.setItem(key, "450");
+    window.innerWidth = 1000;
+    page();
+    setRect(query("main"), { width: 1000 });
+    const { setUpFiles } = await load();
+    setUpFiles();
+    expect(
+      document.documentElement.style.getPropertyValue("--right-panel-width"),
+    ).toBe(expected);
+  });
+});
+
 describe("file panel replacement", () => {
   it("releases the old watcher and tabs, then binds the replacement without duplicate opens", async () => {
     page();
@@ -138,9 +156,9 @@ describe("file panel replacement", () => {
     );
     expect(byId("file-view").textContent).toBe("No file open");
     keydown(oldHandle, "Home");
-    expect(localStorage.getItem("pi-right-panel-width")).toBeNull();
+    expect(localStorage.getItem("web-pi-right-panel-width")).toBeNull();
     keydown(query(".right-panel-resize-handle"), "Home");
-    expect(localStorage.getItem("pi-right-panel-width")).toBe("300");
+    expect(localStorage.getItem("web-pi-right-panel-width")).toBe("300");
     click(byId("file-panel-toggle"));
     expect(byId("file-panel").classList.contains("right-panel-open")).toBe(
       true,

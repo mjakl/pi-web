@@ -754,7 +754,7 @@ export function Sidebar({
     <div id="sidebar" class="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-header-row">
-          <span class="sidebar-brand">Pi Web</span>
+          <span class="sidebar-brand">web-pi</span>
           <div class="sidebar-header-actions">
             <a
               class="sidebar-icon-button"

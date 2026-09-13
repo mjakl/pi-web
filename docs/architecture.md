@@ -286,13 +286,12 @@ composition root and the only importer of Pi adapters.
   and nothing else: it imports the same five modules. The split exists so five
   agents can port five regions of pi-web at once without touching each other's
   files.
-- **The theme is pi-web's, down to the storage key.** A pre-paint script in
-  `<head>` reads `pi-theme` (`light` / `dark` / `auto`) and adds `dark` to
-  `<html>` before the first paint; `src/web/client/theme.ts` keeps it in step
-  with the system scheme and animates a switch as a circular clip-path wipe
-  through the View Transitions API. The control lives in Settings → General, as
-  a radio group the client marks on arrival — the server cannot know what the
-  browser stored.
+- **The theme uses web-pi's own preference key.** A pre-paint script in `<head>`
+  reads `web-pi-theme` (`light` / `dark` / `auto`) and adds `dark` to `<html>`
+  before the first paint; `src/web/client/theme.ts` keeps it in step with the
+  system scheme and applies changes without animation. The control lives in
+  Settings → General, as a radio group the client marks on arrival — the server
+  cannot know what the browser stored.
 
 - **Pi SDK resolved from the host `pi` on `PATH`**, never pinned. web-pi reads
   and writes the same session files as the installed CLI, so a pin would let the
@@ -421,14 +420,14 @@ composition root and the only importer of Pi adapters.
   rendered through the same headless pi-tui as a custom UI.
 - **Session edits go through Pi's `SessionManager`.** Renames, stars, forks and
   clones are appends the SDK writes, so the CLI and web-pi never disagree about
-  the format; stars are `pi-web:star` custom entries, the same ones pi-web
-  reads. Only delete (re-parenting children) and rewind rewrite a file, because
-  the SDK cannot remove entries. Fork and rewind return an `EditableMessage`
-  containing the selected user's text and images, extracted before any rewrite.
-  The replacement composer consumes images through the queue-recall slot,
-  without recompressing stored bytes. A restored-draft marker makes even empty
-  history text authoritative over localStorage. Images still do not persist as
-  drafts across reloads.
+  the JSONL format; stars are `web-pi:star` custom entries. The old
+  `pi-web:star` type is not recognized or migrated. Only delete (re-parenting
+  children) and rewind rewrite a file, because the SDK cannot remove entries.
+  Fork and rewind return an `EditableMessage` containing the selected user's
+  text and images, extracted before any rewrite. The replacement composer
+  consumes images through the queue-recall slot, without recompressing stored
+  bytes. A restored-draft marker makes even empty history text authoritative
+  over localStorage. Images still do not persist as drafts across reloads.
 - **HTML export spawns the Pi CLI**, as pi-web does: the SDK's exporter is
   behind the package export map. The exported page's recursive tree walks are
   rewritten as iterative ones, or a long session overflows the browser's stack;
@@ -483,8 +482,8 @@ composition root and the only importer of Pi adapters.
   directory is fetched when it is opened (`hx-get` per node), the changes list
   and the tree re-render when a turn settles (`settled from:body`), and the
   viewer is one fragment per mode. `src/web/client/files.ts` owns what the
-  server cannot know: the panel width (`pi-right-panel-width`), which paths are
-  open, each tab's mode, wrap and scroll position, the `EventSource` on the
+  server cannot know: the panel width (`web-pi-right-panel-width`), which paths
+  are open, each tab's mode, wrap and scroll position, the `EventSource` on the
   active tab, and the text selection a line-range mention comes from. Syntax
   colouring for a file happens on the server (`src/web/syntax.ts`, shared with
   the transcript's browser-side highlighter), because a whole file has to be

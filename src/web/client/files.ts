@@ -12,8 +12,7 @@ import { TAB_CLOSE_ICON } from "@web/views/icons";
 // Everything the panel shows is rendered by the server; this decides what to
 // ask for and keeps the reading position while it arrives.
 
-// pi-web remembers both panel widths under these keys; same key, same value.
-const WIDTH_KEY = "pi-right-panel-width";
+const WIDTH_KEY = "web-pi-right-panel-width";
 const MIN_WIDTH = 300;
 const MAX_WIDTH = 1200;
 

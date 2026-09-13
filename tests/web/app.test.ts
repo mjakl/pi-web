@@ -67,7 +67,11 @@ describe("web app", () => {
   it("ships the shell: theme before paint, pi-web's containers, hashed assets", async () => {
     const { app } = testApp();
     const html = await (await app.request("/sessions/s1")).text();
-    expect(html).toContain('localStorage.getItem("pi-theme")');
+    expect(html).toContain('localStorage.getItem("web-pi-theme")');
+    expect(html).toContain("<title>web-pi</title>");
+    expect(html).toContain(
+      'name="apple-mobile-web-app-title" content="web-pi"',
+    );
     expect(html).toContain('classList.add("dark")');
     expect(html).toContain('<script type="module" src="/static/client.js?v=');
     expect(html).toContain('<link rel="stylesheet" href="/static/app.css?v=');
@@ -84,7 +88,7 @@ describe("web app", () => {
     expect(html).toContain('class="sidebar-container sidebar-open');
     expect(html).toContain("panel-resize-handle sidebar-resize-handle");
     expect(html).toContain("sidebar-overlay-backdrop");
-    expect(html).toContain("Pi Web");
+    expect(html).toContain('class="sidebar-brand">web-pi</span>');
     expect(html).toMatch(/class="[^"]*\banchor-sidebar-project\b[^"]*"/);
     expect(html).toContain('id="session-list"');
     expect(html).toContain('id="explorer-section"');
@@ -1169,7 +1173,7 @@ describe("the sidebar", () => {
     const html = await (await app.request("/sessions/s1")).text();
     const header = html.slice(html.indexOf('id="sidebar"'));
     const order = [
-      ">Pi Web<",
+      ">web-pi<",
       'aria-label="New session"',
       'id="sidebar-refresh"',
       'aria-label="Settings"',
