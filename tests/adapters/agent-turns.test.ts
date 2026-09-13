@@ -425,7 +425,7 @@ describe("compaction", () => {
     await done;
   }
 
-  it("compacts on request and reports the context as unknown until the next answer", async () => {
+  it("compacts on request and estimates the rebuilt context until the next answer", async () => {
     h = await createHarness({ settings });
     const session = await h.open();
     await talk(session, "one", reply("first answer ".repeat(20)));
@@ -456,7 +456,10 @@ describe("compaction", () => {
     expect(after.status.compacting).toBe(false);
     expect(after.status.compaction).toMatchObject({ reason: "manual" });
     expect(after.status.compaction?.tokensBefore).toBeGreaterThan(0);
-    expect(after.status.contextTokens).toBeNull();
+    expect(after.status.contextTokens).toBe(
+      after.status.compaction?.tokensAfter,
+    );
+    expect(after.status.contextTokensEstimated).toBe(true);
     const compaction = after.branch.find(
       (entry) => entry.type === "compaction",
     );
@@ -483,7 +486,10 @@ describe("compaction", () => {
     await session.prompt("two");
     await done;
     await until(session, (s) => s.status.compaction !== null);
-    expect(session.snapshot().status.compaction?.reason).toBe("threshold");
+    const status = session.snapshot().status;
+    expect(status.compaction?.reason).toBe("threshold");
+    expect(status.contextTokens).toBe(status.compaction?.tokensAfter);
+    expect(status.contextTokensEstimated).toBe(true);
     expect(
       session.snapshot().branch.some((entry) => entry.type === "compaction"),
     ).toBe(true);
@@ -494,7 +500,11 @@ describe("compaction", () => {
     h = await createHarness({ settings });
     const session = await h.open();
     await talk(session, "one", reply("first answer ".repeat(20)));
-    await talk(session, "two", reply("second answer ".repeat(20)));
+    await talk(
+      session,
+      "two",
+      reply("second answer ".repeat(20), { input: 500, output: 5 }),
+    );
     h.script((turn) => {
       turn.error("summary failed");
     });
@@ -502,6 +512,10 @@ describe("compaction", () => {
     expect(session.snapshot().status.compactionError).toContain(
       "summary failed",
     );
+    expect(session.snapshot().status).toMatchObject({
+      contextTokens: 505,
+      contextTokensEstimated: false,
+    });
     expect(session.snapshot().status.compacting).toBe(false);
 
     h.script(async () => {
@@ -513,5 +527,9 @@ describe("compaction", () => {
     await expect(aborted).rejects.toThrow();
     expect(session.snapshot().status.compacting).toBe(false);
     expect(session.snapshot().status.compaction).toBeNull();
+    expect(session.snapshot().status).toMatchObject({
+      contextTokens: 505,
+      contextTokensEstimated: false,
+    });
   });
 });

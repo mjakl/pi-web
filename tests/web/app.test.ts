@@ -684,15 +684,58 @@ describe("web app", () => {
     expect(world.store.get("s1")?.summary.name).toBe("Renamed by command");
   });
 
-  it("compacts on request and shows the result", async () => {
-    const { app } = testApp({ delayMs: 1 });
+  it("compacts on request without a success banner", async () => {
+    const { app, world } = testApp({ delayMs: 1 });
     expect(
       (await app.request("/sessions/s1/compact", { method: "POST" })).status,
     ).toBe(204);
-    await new Promise((resolve) => setTimeout(resolve, 40));
+    await expect
+      .poll(() => world.runtime.get("s1")?.snapshot().status.compaction)
+      .toMatchObject({ reason: "manual", tokensBefore: 40_000 });
     const page = await (await app.request("/sessions/s1")).text();
-    expect(page).toContain("Compacted");
-    expect(page).toContain("40k");
+    expect(page).not.toContain("Compacted 40k");
+  });
+
+  it.each(["manual", "threshold", "overflow"])(
+    "keeps the transcript divider without a %s success banner",
+    async (reason) => {
+      const { app, world } = testApp({ delayMs: 1 });
+      const agent = await world.runtime.open({ sessionId: "s1" });
+      await agent.compact(reason);
+      await expect
+        .poll(() => agent.snapshot().status.compaction)
+        .toMatchObject({ reason });
+      // Fake compaction sets live status only; supply the persisted SDK entry.
+      const stored = world.store.get("s1");
+      if (!stored) throw new Error("no session");
+      stored.entries.push({
+        type: "compaction",
+        id: "c1",
+        parentId: "a1",
+        timestamp: "2026-09-02T00:00:00.000Z",
+        summary: "Preserved compaction summary",
+        tokensBefore: 40_000,
+        firstKeptEntryId: "u1",
+      });
+      const page = await (await app.request("/sessions/s1")).text();
+      expect(page).toContain('class="compaction-marker transcript-details"');
+      expect(page).toContain('class="compaction-rule"');
+      expect(page).toContain("Conversation compacted: 40k");
+      expect(page).toContain("Preserved compaction summary");
+      expect(page).not.toContain("tokens (32k saved)");
+    },
+  );
+
+  it("keeps compaction failures visible", async () => {
+    const { app, world } = testApp({ delayMs: 1 });
+    const agent = await world.runtime.open({ sessionId: "s1" });
+    await agent.compact("fail");
+    await expect
+      .poll(() => agent.snapshot().status.compactionError)
+      .toBe("Compaction failed: the model refused.");
+    const page = await (await app.request("/sessions/s1")).text();
+    expect(page).toContain('role="alert"');
+    expect(page).toContain("Compaction failed: the model refused.");
   });
 
   it("runs a shell command from the composer and shows its output", async () => {
@@ -1506,7 +1549,7 @@ describe("the composer, as pi-web draws it", () => {
     expect(html).toContain("Change reasoning level");
   });
 
-  it("renders the queue panel and the compaction strip pi-web shows", async () => {
+  it("renders the queue panel pi-web shows", async () => {
     const { app } = testApp({ delayMs: 200 });
     const first = new FormData();
     first.set("text", "go");
@@ -2153,6 +2196,71 @@ describe("phase 8 fixes", () => {
     const settled = await (await app.request("/sessions/s1")).text();
     expect(settled).not.toMatch(/id="context-compact"[^>]*disabled/);
   });
+
+  it.each(["success", "failure"])(
+    "streams compact progress and restores the button after %s",
+    async (outcome) => {
+      const { app, world } = testApp({ delayMs: 200 });
+      await world.runtime.open({ sessionId: "s1" });
+      const res = await app.request("/sessions/s1/events");
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("no body");
+      const decoder = new TextDecoder();
+      const readUntil = async (marker: string) => {
+        let html = "";
+        while (!html.includes(marker)) {
+          const chunk = await reader.read();
+          if (chunk.done) throw new Error(`Stream ended before ${marker}`);
+          html += decoder.decode(chunk.value);
+        }
+        return html;
+      };
+      function compactButton(html: string) {
+        return (
+          /<button[^>]*id="context-compact"[\s\S]*?<\/button>/.exec(
+            html,
+          )?.[0] ?? ""
+        );
+      }
+      try {
+        await readUntil('id="context-compact"');
+        const form = new FormData();
+        form.set("text", "/compact fail");
+        const response = await app.request(
+          outcome === "success"
+            ? "/sessions/s1/compact"
+            : "/sessions/s1/prompt",
+          { method: "POST", ...(outcome === "failure" ? { body: form } : {}) },
+        );
+        expect(response.status).toBe(204);
+        const running = compactButton(
+          await readUntil('data-compacting="true"'),
+        );
+        expect(running).toContain('hx-swap-oob="true"');
+        expect(running).toContain("disabled");
+        expect(running).toContain('aria-busy="true"');
+        expect(running).toContain('aria-label="Compacting context…"');
+        expect(running).toContain("<svg");
+        expect(running).not.toContain("<animateTransform");
+        const revisited = compactButton(
+          await (await app.request("/sessions/s1")).text(),
+        );
+        expect(revisited).toContain("disabled");
+        expect(revisited).toContain('aria-busy="true"');
+        const settled = await readUntil(
+          outcome === "success"
+            ? 'aria-label="Compact context"'
+            : "Compaction failed:",
+        );
+        const restored = compactButton(settled);
+        expect(restored).toContain('aria-label="Compact context"');
+        expect(restored).not.toContain("disabled");
+        expect(restored).not.toContain('aria-busy="true"');
+      } finally {
+        await reader.cancel();
+      }
+    },
+  );
 
   it("keeps the history row while a turn runs, with branching disabled", async () => {
     // pi-web leaves the row rendered and disables only what the turn owns:

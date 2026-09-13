@@ -254,10 +254,12 @@ describe("groupTurns", () => {
       assistant("a1", [
         text("  "),
         { kind: "thinking", index: 0, text: "", deferred: false },
+        { kind: "thinking", index: 1, text: " \n\t", deferred: false },
         text("kept"),
       ]),
     ]);
     expect(turn?.answer?.blocks).toEqual([text("kept")]);
+    expect(turn?.process).toEqual([]);
   });
 });
 

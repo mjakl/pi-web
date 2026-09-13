@@ -79,6 +79,7 @@ function TopBar({
   trust,
   panels,
   compactOff,
+  compacting,
 }: {
   sessionId?: string;
   usage?: ContextUsage;
@@ -90,6 +91,7 @@ function TopBar({
   panels?: { system: boolean; tools: boolean };
   /** A read-only or busy session refuses to compact; the button dims. */
   compactOff?: boolean;
+  compacting?: boolean;
 }) {
   const panelIcon = (lit: boolean) =>
     `display:flex; color:var(${lit ? "--accent" : "--text-dim"})`;
@@ -229,6 +231,7 @@ function TopBar({
               sessionId={sessionId}
               {...(usage === undefined ? {} : { usage })}
               {...(compactOff === true ? { disabled: true } : {})}
+              compacting={compacting ?? false}
             />
             <button
               type="button"
@@ -363,6 +366,7 @@ export function Shell({
   trust,
   panels,
   compactOff,
+  compacting,
   children,
   overlay,
 }: {
@@ -380,6 +384,7 @@ export function Shell({
   trust?: { requiresTrust: boolean; trusted: boolean };
   panels?: { system: boolean; tools: boolean };
   compactOff?: boolean;
+  compacting?: boolean;
   children?: unknown;
   /** An overlay over the whole shell: the settings dialog. */
   overlay?: unknown;
@@ -399,6 +404,7 @@ export function Shell({
         {...(trust === undefined ? {} : { trust })}
         {...(panels === undefined ? {} : { panels })}
         {...(compactOff === true ? { compactOff } : {})}
+        compacting={compacting ?? false}
       />
       <main
         style="flex:1; overflow:hidden; position:relative"
@@ -642,6 +648,7 @@ export function SessionPage({
             },
           })}
       {...(compactDisabled(view) ? { compactOff: true } : {})}
+      compacting={view.status?.compacting ?? false}
       {...(trust === undefined ? {} : { trust })}
       {...(overlay === undefined ? {} : { overlay })}
     >

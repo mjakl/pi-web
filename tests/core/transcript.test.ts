@@ -367,7 +367,11 @@ describe("projectTranscript", () => {
   it("defers the oldest reasoning once the page budget is spent", () => {
     const long = "x".repeat(15_000);
     const transcript = projectTranscript([
-      assistantWith("a1", null, [{ type: "thinking", thinking: long }]),
+      assistantWith("empty", null, [{ type: "thinking", thinking: "" }]),
+      assistantWith("blank", "empty", [
+        { type: "thinking", thinking: " \n\t" },
+      ]),
+      assistantWith("a1", "blank", [{ type: "thinking", thinking: long }]),
       assistantWith("a2", "a1", [{ type: "thinking", thinking: long }]),
       assistantWith("a3", "a2", [{ type: "thinking", thinking: long }]),
     ]);
@@ -377,7 +381,7 @@ describe("projectTranscript", () => {
         ? item.blocks[0].deferred
         : null,
     );
-    expect(deferred).toEqual([true, false, false]);
+    expect(deferred).toEqual([false, false, true, false, false]);
   });
 });
 

@@ -140,7 +140,8 @@ function isAnswerBlock(block: AssistantBlock): boolean {
 
 function isEmptyBlock(block: AssistantBlock): boolean {
   if (block.kind === "text") return block.text.trim() === "";
-  if (block.kind === "thinking") return !block.deferred && block.text === "";
+  if (block.kind === "thinking")
+    return !block.deferred && block.text.trim() === "";
   return false;
 }
 

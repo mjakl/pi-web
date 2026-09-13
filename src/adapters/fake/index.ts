@@ -452,6 +452,7 @@ class FakeLiveSession implements LiveSession {
         thinkingLevel: this.thinkingLevel,
         thinkingLevels: FAKE_MODEL.thinkingLevels ?? [],
         contextTokens,
+        contextTokensEstimated: false,
         queue: [...this.queue],
         compaction: this.compaction,
         compactionError: this.compactionError,

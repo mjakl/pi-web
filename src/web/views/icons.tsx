@@ -348,7 +348,10 @@ export function SearchIcon({ size = 13 }: IconProps) {
 }
 
 /* 22 · running spinner (SMIL, so it spins without script) */
-export function SpinnerIcon({ size = 14 }: IconProps) {
+export function SpinnerIcon({
+  size = 14,
+  animated = true,
+}: IconProps & { animated?: boolean }) {
   return (
     <svg
       width={size}
@@ -365,14 +368,16 @@ export function SpinnerIcon({ size = 14 }: IconProps) {
           stroke-width="2.8"
           stroke-linecap="round"
         />
-        <animateTransform
-          attributeName="transform"
-          type="rotate"
-          from="0 12 12"
-          to="360 12 12"
-          dur="0.9s"
-          repeatCount="indefinite"
-        />
+        {animated ? (
+          <animateTransform
+            attributeName="transform"
+            type="rotate"
+            from="0 12 12"
+            to="360 12 12"
+            dur="0.9s"
+            repeatCount="indefinite"
+          />
+        ) : null}
       </g>
     </svg>
   );
