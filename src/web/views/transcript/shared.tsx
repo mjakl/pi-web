@@ -2,8 +2,8 @@ import { renderMarkdown } from "@web/markdown";
 import {
   CheckIcon,
   CopyIcon,
-  EditFromHereIcon,
   ForkIcon,
+  PlusIcon,
   StarIcon,
 } from "@web/views/icons";
 import { raw } from "hono/html";
@@ -265,7 +265,7 @@ export function HistoryActionButtons({
           {...swap}
           {...(actions.busy === true ? { disabled: true } : {})}
         >
-          <EditFromHereIcon />
+          <ForkIcon />
           New branch
         </button>
       </span>
@@ -276,7 +276,7 @@ export function HistoryActionButtons({
         hx-post={post("fork")}
         {...swap}
       >
-        <ForkIcon />
+        <PlusIcon size={11} />
         New session
       </button>
     </>
