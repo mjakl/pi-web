@@ -766,23 +766,14 @@ function MediaViewer({
       </>
     );
   }
-  const pdf = view.kind === "pdf";
-  const url = pdf
-    ? source
-    : `/files/docx?path=${encodeURIComponent(view.path)}&session=${encodeURIComponent(sessionId)}`;
   return (
     <>
-      <MediaToolbar
-        view={view}
-        sessionId={sessionId}
-        label={pdf ? "pdf" : "docx preview"}
-      />
+      <MediaToolbar view={view} sessionId={sessionId} label="pdf" />
       <div style="flex:1; min-height:0; background:var(--bg-panel)">
         <iframe
-          src={url}
-          {...(pdf ? {} : { sandbox: "allow-same-origin" })}
+          src={source}
           title={`Preview ${baseName(view.path)}`}
-          style={`width:100%; height:100%; border:none; background:${pdf ? "var(--bg)" : "#eef1f5"}`}
+          style="width:100%; height:100%; border:none; background:var(--bg)"
         />
       </div>
     </>

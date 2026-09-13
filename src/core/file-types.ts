@@ -3,7 +3,7 @@
 // explorer draws. Extension-only, as pi-web does; content sniffing would need
 // a read before the containment check has run.
 
-export type FileKind = "image" | "audio" | "pdf" | "docx" | "text";
+export type FileKind = "image" | "audio" | "pdf" | "text";
 
 const IMAGE_MIME: Record<string, string> = {
   png: "image/png",
@@ -31,7 +31,6 @@ const AUDIO_MIME: Record<string, string> = {
 
 const DOCUMENT_MIME: Record<string, string> = {
   pdf: "application/pdf",
-  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
 const LANGUAGE: Record<string, string> = {
@@ -47,7 +46,6 @@ const LANGUAGE: Record<string, string> = {
   cxx: "cpp",
   dart: "dart",
   diff: "diff",
-  docx: "word",
   ex: "elixir",
   exs: "elixir",
   go: "go",
@@ -132,7 +130,6 @@ export function fileKind(path: string): FileKind {
   if (extension in IMAGE_MIME) return "image";
   if (extension in AUDIO_MIME) return "audio";
   if (extension === "pdf") return "pdf";
-  if (extension === "docx") return "docx";
   return "text";
 }
 
@@ -182,7 +179,6 @@ export type CatppuccinIconName =
   | "json"
   | "lock"
   | "markdown"
-  | "ms-word"
   | "next"
   | "npm-lock"
   | "pdf"
@@ -226,7 +222,6 @@ const CATPPUCCIN_BY_EXTENSION: Record<string, CatppuccinIconName> = {
   gql: "graphql",
   tf: "terraform",
   hcl: "terraform",
-  docx: "ms-word",
   pdf: "pdf",
   lock: "lock",
 };

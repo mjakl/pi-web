@@ -21,7 +21,6 @@ let repo = "";
 let outside = "";
 let pickable = "";
 let app: ReturnType<typeof createWebApp>;
-let hasZip = true;
 let streams = 0;
 
 function git(...args: string[]): void {
@@ -47,6 +46,7 @@ beforeAll(async () => {
     "---\ntitle: Notes\ntags: [one, two]\n---\n\n# Heading\n\ntext\n",
   );
   await writeFile(join(repo, "logo.png"), PNG);
+  await writeFile(join(repo, "report.pdf"), "%PDF-1.7\n");
   await writeFile(join(repo, "a.svg"), "<svg xmlns='x'/>");
   await symlink(outside, join(repo, "escape"));
   git("init", "-q", "-b", "main");
@@ -57,31 +57,10 @@ beforeAll(async () => {
   await writeFile(join(repo, "src", "main.ts"), "const a = 2;\nexport {};\n");
   await writeFile(join(repo, "fresh.txt"), "new\n");
 
-  // Built outside the repository so its parts do not show up as changes.
-  const docxSource = await mkdtemp(join(tmpdir(), "web-pi-docx-"));
-  try {
-    await mkdir(join(docxSource, "word"), { recursive: true });
-    await mkdir(join(docxSource, "_rels"), { recursive: true });
-    await writeFile(
-      join(docxSource, "[Content_Types].xml"),
-      '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
-    );
-    await writeFile(
-      join(docxSource, "_rels", ".rels"),
-      '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
-    );
-    await writeFile(
-      join(docxSource, "word", "document.xml"),
-      '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Hello docx</w:t></w:r></w:p></w:body></w:document>',
-    );
-    execFileSync("zip", ["-q", "-r", join(repo, "report.docx"), "."], {
-      cwd: docxSource,
-      stdio: "ignore",
-    });
-  } catch {
-    hasZip = false;
-  }
-  await rm(docxSource, { recursive: true, force: true });
+  await writeFile(
+    join(repo, "report.docx"),
+    Buffer.from([0x50, 0x4b, 3, 4, 0, 0xff]),
+  );
 
   const world = createFakeWorld({
     delayMs: 1,
@@ -383,6 +362,21 @@ describe("viewer", () => {
     expect(html).toContain(`cwd=${encodeURIComponent(repo)}&amp;mode=source`);
   });
 
+  it("keeps the PDF iframe pointed at the raw file", async () => {
+    const path = encodeURIComponent(join(repo, "report.pdf"));
+    const res = await app.request(`/files/view?session=s1&path=${path}`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain(
+      `<iframe src="/files/raw?path=${path}&amp;session=s1"`,
+    );
+    expect(html).toContain(">pdf<");
+    expect(html).not.toContain("sandbox=");
+    const raw = await app.request(`/files/raw?session=s1&path=${path}`);
+    expect(raw.headers.get("content-type")).toBe("application/pdf");
+    expect(await raw.text()).toBe("%PDF-1.7\n");
+  });
+
   it("renders an image on the checkerboard with its own toolbar", async () => {
     const url = `/files/view?session=s1&path=${encodeURIComponent(join(repo, "logo.png"))}`;
     const html = await (await app.request(url)).text();
@@ -514,27 +508,43 @@ describe("meta and containment", () => {
   });
 });
 
-describe("docx and watching", () => {
-  it("converts a Word document behind a locked-down policy", async () => {
-    if (!hasZip) return;
+describe("unsupported documents", () => {
+  it("uses the generic viewer and preserves the original download bytes", async () => {
+    const path = encodeURIComponent(join(repo, "report.docx"));
+    const view = await app.request(`/files/view?session=s1&path=${path}`);
+    expect(view.status).toBe(200);
+    const html = await view.text();
+    expect(html).toContain('data-kind="text"');
+    expect(html).toContain('data-mode="source"');
+    expect(html).toContain('aria-label="Download file"');
+    expect(html).not.toContain("<iframe");
+    const download = await app.request(
+      `/files/raw?session=s1&path=${path}&download=1`,
+    );
+    expect(download.status).toBe(200);
+    expect(download.headers.get("content-type")).toBe(
+      "application/octet-stream",
+    );
+    expect(download.headers.get("content-disposition")).toContain(
+      "attachment;",
+    );
+    expect(download.headers.get("content-disposition")).toContain(
+      "report.docx",
+    );
+    expect(new Uint8Array(await download.arrayBuffer())).toEqual(
+      new Uint8Array([0x50, 0x4b, 3, 4, 0, 0xff]),
+    );
+  });
+
+  it("no longer exposes a DOCX conversion endpoint", async () => {
     const res = await app.request(
       `/files/docx?session=s1&path=${encodeURIComponent(join(repo, "report.docx"))}`,
     );
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-security-policy")).toBe(
-      "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
-    );
-    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
-    expect(await res.text()).toContain("Hello docx");
+    expect(res.status).toBe(404);
   });
+});
 
-  it("refuses anything that is not a Word document", async () => {
-    const res = await app.request(
-      `/files/docx?session=s1&path=${encodeURIComponent(join(repo, "notes.md"))}`,
-    );
-    expect(res.status).toBe(400);
-  });
-
+describe("watching", () => {
   it("opens a watch stream and announces itself", async () => {
     const res = await app.request(
       `/files/watch?session=s1&path=${encodeURIComponent(join(repo, "notes.md"))}`,

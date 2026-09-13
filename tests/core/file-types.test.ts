@@ -20,7 +20,6 @@ describe("languageOf", () => {
   it("maps extensions and falls back to text", () => {
     expect(languageOf("a/b/app.tsx")).toBe("tsx");
     expect(languageOf("a/b/app.YML")).toBe("yaml");
-    expect(languageOf("notes.docx")).toBe("word");
     expect(languageOf("report.pdf")).toBe("pdf");
     expect(languageOf("LICENSE")).toBe("text");
     expect(extensionOf(".gitignore")).toBe("");
@@ -32,10 +31,19 @@ describe("fileKind and mimeOf", () => {
     expect(fileKind("a.png")).toBe("image");
     expect(fileKind("a.mp3")).toBe("audio");
     expect(fileKind("a.pdf")).toBe("pdf");
-    expect(fileKind("a.docx")).toBe("docx");
     expect(fileKind("a.ts")).toBe("text");
     expect(mimeOf("a.svg")).toBe("image/svg+xml");
     expect(mimeOf("a.ts")).toBe("application/octet-stream");
+  });
+});
+
+describe("unsupported documents", () => {
+  it("treats DOCX like any unknown extension", () => {
+    expect(fileKind("report.DOCX")).toBe("text");
+    expect(languageOf("report.DOCX")).toBe("text");
+    expect(mimeOf("report.DOCX")).toBe("application/octet-stream");
+    expect(hasPreview("report.DOCX")).toBe(false);
+    expect(catppuccinIcon("report.DOCX")).toBe("_file");
   });
 });
 

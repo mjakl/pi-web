@@ -7,9 +7,9 @@ esbuild-css := "./node_modules/.bin/esbuild src/web/styles/index.css --bundle --
 esbuild := "./node_modules/.bin/esbuild src/web/client/main.ts --bundle --format=esm --target=es2022 --alias:@core=./src/core --outfile=static/client.js"
 esbuild-mermaid := "./node_modules/.bin/esbuild src/web/client/mermaid-lib.ts --bundle --format=esm --target=es2022 --outfile=static/mermaid.js"
 # The published server: everything bundled except the Pi SDK, which the bin
-# links at startup, and the two packages with binary or optional parts. Not
+# links at startup, and the runtime packages listed in AGENTS.md. Not
 # minified, so a stack trace from an install still names real functions.
-esbuild-server := "./node_modules/.bin/esbuild src/server.ts src/cli.ts --bundle --platform=node --format=esm --target=node24 --jsx=automatic --jsx-import-source=hono/jsx --alias:@=./src --alias:@core=./src/core --alias:@adapters=./src/adapters --alias:@web=./src/web '--external:@earendil-works/*' --external:mammoth --external:web-push --external:undici --outdir=dist"
+esbuild-server := "./node_modules/.bin/esbuild src/server.ts src/cli.ts --bundle --platform=node --format=esm --target=node24 --jsx=automatic --jsx-import-source=hono/jsx --alias:@=./src --alias:@core=./src/core --alias:@adapters=./src/adapters --alias:@web=./src/web '--external:@earendil-works/*' --external:web-push --external:undici --outdir=dist"
 smoke := "WEB_PI_SMOKE=1 pnpm exec vitest run tests/smoke"
 
 # INFO: List all available commands
