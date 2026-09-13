@@ -58,10 +58,30 @@ function parseProjects(value: unknown): Record<string, string> {
   return value as Record<string, string>;
 }
 
+/**
+ * The map is consulted once per folder of every sidebar render, and most of
+ * a real store's folders are gone, so it is parsed once per file version
+ * rather than a few hundred times per render.
+ */
+const knownByPath = new Map<
+  string,
+  { stamp: string; projects: Record<string, string> }
+>();
+
 function knownProjects(agentDir: string): Record<string, string> {
-  return (
-    readWebState(webStatePath(agentDir, PROJECTS_FILE), parseProjects) ?? {}
-  );
+  const path = webStatePath(agentDir, PROJECTS_FILE);
+  let stamp = "-";
+  try {
+    const info = statSync(path);
+    stamp = `${String(info.mtimeMs)}:${String(info.size)}`;
+  } catch {
+    // Missing: the empty map, until a write gives it a stamp.
+  }
+  const hit = knownByPath.get(path);
+  if (hit?.stamp === stamp) return hit.projects;
+  const projects = readWebState(path, parseProjects) ?? {};
+  knownByPath.set(path, { stamp, projects });
+  return projects;
 }
 
 /**
@@ -98,6 +118,12 @@ export function createPiProjectResolver(options: {
     parseProjects,
   );
   const cache = new Map<string, { at: number; project: ProjectInfo }>();
+
+  async function lookAndCache(cwd: string): Promise<ProjectInfo> {
+    const project = await look(cwd);
+    cache.set(cwd, { at: Date.now(), project });
+    return project;
+  }
 
   async function look(cwd: string): Promise<ProjectInfo> {
     try {
@@ -143,17 +169,26 @@ export function createPiProjectResolver(options: {
     }
   }
 
-  /** Availability is checked before the cache, so it can never be masked. */
+  /**
+   * Availability is checked before the cache, so it can never be masked. An
+   * expired entry is answered as it stands and refreshed behind the reply:
+   * a sidebar render resolves every folder at once, and waiting on four git
+   * subprocesses per folder every time the minute is up stalls it by a
+   * second. A branch switch shows up one render late.
+   */
   async function resolve(cwd: string, refresh = false): Promise<ProjectInfo> {
     if (!isDirectory(cwd)) {
       cache.delete(cwd);
       return removedProject(cwd, knownProjects(options.agentDir));
     }
     const hit = cache.get(cwd);
-    if (!refresh && hit && Date.now() - hit.at < CACHE_MS) return hit.project;
-    const project = await look(cwd);
-    cache.set(cwd, { at: Date.now(), project });
-    return project;
+    if (refresh || !hit) return lookAndCache(cwd);
+    if (Date.now() - hit.at >= CACHE_MS) {
+      // Stamped now so concurrent callers share one refresh.
+      hit.at = Date.now();
+      void lookAndCache(cwd);
+    }
+    return hit.project;
   }
 
   return {

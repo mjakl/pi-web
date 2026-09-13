@@ -16,7 +16,13 @@ import {
   estimateTokens,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { closeSync, createReadStream, openSync, readSync } from "node:fs";
+import {
+  closeSync,
+  createReadStream,
+  fstatSync,
+  openSync,
+  readSync,
+} from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
@@ -28,11 +34,16 @@ import {
 } from "./session-files.ts";
 
 // Reads Pi's sessions/<encoded-cwd>/*.jsonl store. Listing touches only the
-// first line of every file (the header). Sidebar pages then load their rows'
-// metadata by streaming each file line by line instead of holding it.
+// first line of every file (the header) and the stat of the descriptor it is
+// already holding: a store of thousands of files is listed on every sidebar
+// render, and one awaited stat per file was most of that cost. Sidebar pages
+// then load their rows' metadata by streaming each file line by line instead
+// of holding it.
 
 const HEADER_MAX_BYTES = 8192;
 const METADATA_CACHE_MAX = 4096;
+/** readHeader is synchronous, so one buffer serves every file of a scan. */
+const headerBuffer = Buffer.alloc(HEADER_MAX_BYTES);
 
 type Header = {
   id: string;
@@ -40,17 +51,21 @@ type Header = {
   timestamp: string;
   /** Absolute path of the session this one was forked or branched from. */
   parentSession?: string;
+  modifiedAt: string;
+  fileSize: number;
 };
 
 function readHeader(filePath: string): Header | undefined {
   let fd: number | undefined;
   try {
     fd = openSync(filePath, "r");
-    const buffer = Buffer.alloc(HEADER_MAX_BYTES);
-    const bytes = readSync(fd, buffer, 0, HEADER_MAX_BYTES, 0);
-    const newline = buffer.indexOf(10);
+    const info = fstatSync(fd);
+    const bytes = readSync(fd, headerBuffer, 0, HEADER_MAX_BYTES, 0);
+    const newline = headerBuffer.indexOf(10);
     if (newline < 0 || newline > bytes) return undefined;
-    const parsed: unknown = JSON.parse(buffer.subarray(0, newline).toString());
+    const parsed: unknown = JSON.parse(
+      headerBuffer.subarray(0, newline).toString(),
+    );
     if (typeof parsed !== "object" || parsed === null) return undefined;
     const header = parsed as Partial<Record<keyof Header | "type", unknown>>;
     if (
@@ -71,6 +86,8 @@ function readHeader(filePath: string): Header | undefined {
       isAbsolute(header.parentSession)
         ? { parentSession: header.parentSession }
         : {}),
+      modifiedAt: info.mtime.toISOString(),
+      fileSize: info.size,
     };
   } catch (error) {
     if (error instanceof SyntaxError || isFileReadError(error))
@@ -87,7 +104,8 @@ function isFileReadError(error: unknown): boolean {
     "syscall" in error &&
     (error.syscall === "open" ||
       error.syscall === "read" ||
-      error.syscall === "stat")
+      error.syscall === "stat" ||
+      error.syscall === "fstat")
   );
 }
 
@@ -194,36 +212,37 @@ export function createPiSessionCatalog(options: {
     } catch {
       return summaries;
     }
-    for (const folder of folders) {
-      const dir = join(sessionsDir, folder);
-      let files: string[] = [];
-      try {
-        files = (await readdir(dir)).filter((name) => name.endsWith(".jsonl"));
-      } catch {
-        continue;
-      }
-      for (const file of files) {
-        const filePath = join(dir, file);
+    const listed = await Promise.all(
+      folders.map(async (folder) => {
+        const dir = join(sessionsDir, folder);
         try {
-          const header = readHeader(filePath);
-          if (!header) continue;
-          const info = await stat(filePath);
-          paths.set(header.id, filePath);
-          idByPath.set(pathKey(filePath), header.id);
-          if (header.parentSession !== undefined) {
-            parents.set(header.id, pathKey(header.parentSession));
-          }
-          summaries.push({
-            id: header.id,
-            cwd: header.cwd,
-            createdAt: header.timestamp,
-            modifiedAt: info.mtime.toISOString(),
-            fileSize: info.size,
-            filePath,
-          });
+          return (await readdir(dir))
+            .filter((name) => name.endsWith(".jsonl"))
+            .map((name) => join(dir, name));
         } catch {
-          // Unreadable or concurrently removed files are left out.
+          return [];
         }
+      }),
+    );
+    for (const filePath of listed.flat()) {
+      try {
+        const header = readHeader(filePath);
+        if (!header) continue;
+        paths.set(header.id, filePath);
+        idByPath.set(pathKey(filePath), header.id);
+        if (header.parentSession !== undefined) {
+          parents.set(header.id, pathKey(header.parentSession));
+        }
+        summaries.push({
+          id: header.id,
+          cwd: header.cwd,
+          createdAt: header.timestamp,
+          modifiedAt: header.modifiedAt,
+          fileSize: header.fileSize,
+          filePath,
+        });
+      } catch {
+        // Unreadable or concurrently removed files are left out.
       }
     }
     return summaries.map((summary) => {

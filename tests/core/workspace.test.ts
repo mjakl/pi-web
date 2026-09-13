@@ -4,7 +4,7 @@ import {
   userEntry,
 } from "@adapters/fake/index";
 import { createWorkspace } from "@core/workspace";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 async function sendFirst(
   workspace: ReturnType<typeof createWorkspace>,
@@ -72,6 +72,19 @@ describe("workspace over the fake runtime", () => {
     const remembered = await workspace.sidebar({ remembered: "/repo/a" });
     expect(remembered.selected).toBe("/repo/a");
     expect(remembered.sessions[0]?.cwd).toBe("/repo/a");
+  });
+
+  it("builds a live session's row from the runtime, not its file", async () => {
+    const world = createFakeWorld({ delayMs: 2, reply: () => "answer" });
+    const workspace = createWorkspace(world);
+    const id = await sendFirst(workspace, "/repo/a", "first question");
+    await settle(30);
+    const read = vi.spyOn(world.sessions, "rowMetadata");
+    const row = await workspace.row(id);
+    expect(read).not.toHaveBeenCalled();
+    expect(row?.summary.live).toBe(true);
+    expect(row?.metadata.messageCount).toBe(2);
+    expect(row?.metadata.firstMessage).toBe("first question");
   });
 
   it("does not re-render a settled turn when something else happens", async () => {

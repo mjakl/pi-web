@@ -138,6 +138,8 @@ function mountTopPanels(host: HTMLElement, signal: AbortSignal): void {
   // The host is fixed, so it has to be told where the bar is: it spans the
   // bar exactly, which is the centre column, never the sidebar.
   const place = (): void => {
+    // Every scroll in the page lands here; a hidden host has nothing to place.
+    if (host.hidden) return;
     const box = bar.getBoundingClientRect();
     host.style.top = `${String(box.bottom)}px`;
     host.style.left = `${String(box.left)}px`;
