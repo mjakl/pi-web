@@ -178,16 +178,25 @@ sidebar row summary. The catalog hands the core entries; no rule reads a file.
 
 ### Context usage
 
-`src/core/context-usage.ts` is the only formula: tokens reported by Pi for the
-last completed call (falling back to the transcript's last reported usage,
-flagged as estimated), the model's window, a percent, and the thresholds — warn
-at 60 %, critical at 80 %, and warn again once the count passes the reader's own
-token threshold (pi-web's "dumb zone", 100,000 by default). That last one is a
-browser preference the server has to know, because the server renders the badge,
-so it travels in the `web-pi-warn-tokens` cookie and enters the formula as an
-argument of `contextUsage()`; the settings page renders the current value and
-the input writes the cookie. The badge, the compaction button, the statistics
-panel, and any future warning read this one value.
+`src/core/context-usage.ts` is the only formula: Pi's context count, the model's
+window, a percent, and the thresholds — warn at 60 %, critical at 80 %, and warn
+again once the count passes the reader's own token threshold (pi-web's "dumb
+zone", 100,000 by default). That last one is a browser preference the server has
+to know, because the server renders the badge, so it travels in the
+`web-pi-warn-tokens` cookie and enters the formula as an argument of
+`contextUsage()`; the settings page renders the current value and the input
+writes the cookie. The badge, the compaction button, the statistics panel, and
+any future warning read this one value.
+
+After compaction, Pi withholds its count until a new assistant reports valid
+usage. The runtime then estimates Pi's current rebuilt messages with the SDK's
+`estimateTokens`, the same method used by the compaction divider and success
+status. It marks that count as estimated, including after reopening a session;
+retained assistants' pre-compaction usage must not replace it. New messages are
+included in each estimate, and valid subsequent usage restores Pi's count. The
+transcript usage fallback remains for an unavailable SDK count, while stored
+sessions without a runtime keep their existing empty gauge. Per-message usage
+and session totals are separate and unchanged.
 
 ### Session navigation and drafts
 

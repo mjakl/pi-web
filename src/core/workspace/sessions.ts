@@ -109,7 +109,8 @@ export function sessionUseCases({
       usage: contextUsage({
         tokens: reported ?? fallback,
         contextWindow: status.model?.contextWindow,
-        estimated: reported === null && fallback !== null,
+        estimated:
+          reported === null ? fallback !== null : status.contextTokensEstimated,
         ...(options.warnTokens === undefined
           ? {}
           : { warnTokens: options.warnTokens }),

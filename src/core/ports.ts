@@ -237,8 +237,9 @@ export type LiveStatus = {
   model: ModelOption | null;
   thinkingLevel: ThinkingLevel;
   thinkingLevels: ThinkingChoice[];
-  /** Tokens in context as Pi reports them; null right after compaction. */
+  /** Pi's context count, or an estimate of rebuilt messages after compaction. */
   contextTokens: number | null;
+  contextTokensEstimated: boolean;
   queue: QueuedMessage[];
   /** The last compaction that finished, for the success strip. */
   compaction: CompactionSummary | null;

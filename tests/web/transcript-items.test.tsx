@@ -39,6 +39,7 @@ const status: LiveStatus = {
   thinkingLevel: "off",
   thinkingLevels: [],
   contextTokens: null,
+  contextTokensEstimated: false,
   queue: [],
   compaction: null,
   compactionError: null,

@@ -35,6 +35,7 @@ import {
   type BashOperations,
   createAgentSessionFromServices,
   createAgentSessionServices,
+  estimateTokens as estimateMessageTokens,
   type InlineExtension,
   SessionManager,
   SettingsManager,
@@ -376,6 +377,16 @@ class PiLiveSession implements LiveSession {
         }
       : null;
     const labels = model?.thinkingLevelMap;
+    const context = this.inner.getContextUsage();
+    // Pi withholds usage after compaction because retained assistants still
+    // report the old context. Estimate the rebuilt messages, not their usage.
+    const contextTokensEstimated = context?.tokens === null;
+    const contextTokens = contextTokensEstimated
+      ? this.inner.messages.reduce(
+          (sum, message) => sum + estimateMessageTokens(message),
+          0,
+        )
+      : (context?.tokens ?? null);
     return {
       running: this.inner.isStreaming,
       compacting: this.compacting,
@@ -389,7 +400,8 @@ class PiLiveSession implements LiveSession {
           level,
           label: labels?.[level] ?? level,
         })),
-      contextTokens: this.inner.getContextUsage()?.tokens ?? null,
+      contextTokens,
+      contextTokensEstimated,
       queue: this.queue,
       compaction: this.compaction,
       compactionError: this.compactionError,
