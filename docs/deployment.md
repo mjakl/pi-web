@@ -46,6 +46,44 @@ loginctl enable-linger "$USER"   # keep it running while you are logged out
 Upgrading is a new tarball, `npm install -g`, and
 `systemctl --user restart web-pi`.
 
+## Running from a checkout
+
+For a checkout-based installation, install dependencies with
+`pnpm install --frozen-lockfile` and run `just build` using the tools in
+`mise.toml`. Keep the checkout and its `node_modules` available to the service.
+Instead of the global package's `ExecStart`, use these service settings,
+adjusted to your checkout:
+
+```ini
+WorkingDirectory=%h/Projects/pi-web
+ExecStart=/usr/bin/mise exec -- node bin/web-pi.js
+```
+
+On lab, `~/.local/bin/pi-web-deploy` rebuilds the current checkout and restarts
+`web-pi.service`:
+
+```sh
+#!/bin/sh
+set -eu
+cd /home/mjakl/Projects/pi-web
+/usr/bin/mise exec -- just build
+/usr/bin/systemctl --user restart web-pi.service
+```
+
+The command does not pull, merge, or install dependencies. Update the checkout
+and run `pnpm install --frozen-lockfile` before deploying dependency changes.
+`pi-web-deploy` replaces `web-pi-deploy` and the old Next.js deployment script;
+the service name, `WEB_PI_*` variables, loopback port 30142, and existing
+`svc:web-pi` Tailnet mapping stay unchanged.
+
+When moving a running installation, build the destination before downtime, stop
+the old instance, change the unit's checkout path, run
+`systemctl --user daemon-reload`, then start it. Verify the process working
+directory, listener, and HTTP response through the existing URL before retiring
+the old checkout. Preserve local refs, reflogs, ignored files, and any
+checkout-local runtime data outside that checkout first. The default Pi agent
+directory remains `~/.pi/agent`; do not replace it during a source-path cutover.
+
 ## Two apps, one agent directory
 
 pi-web (the Next.js interface this one replaces) runs the same way, and both
