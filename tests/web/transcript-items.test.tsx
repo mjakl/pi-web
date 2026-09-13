@@ -70,6 +70,23 @@ describe("transcript items", () => {
       now: new Date("2026-01-05T15:00:00.000Z"),
       toFake: ["Date"],
     });
+    // Pin the calendar-day comparison as well as the displayed text. A UTC
+    // timestamp near midnight can otherwise be "today" only on this host.
+    vi.spyOn(Date.prototype, "getFullYear").mockImplementation(
+      function (this: Date) {
+        return this.getUTCFullYear();
+      },
+    );
+    vi.spyOn(Date.prototype, "getMonth").mockImplementation(
+      function (this: Date) {
+        return this.getUTCMonth();
+      },
+    );
+    vi.spyOn(Date.prototype, "getDate").mockImplementation(
+      function (this: Date) {
+        return this.getUTCDate();
+      },
+    );
     // The options the views pass name every component, so Intl's format is
     // what the locale methods return, minus the reader's zone.
     const utc = (locale: unknown, options: unknown) =>
