@@ -998,7 +998,7 @@ a.shell-top-bar-tab:hover {
   font-size: 15px;
 }
 
-.session-info-popover {
+.session-info-popover.menu-surface {
   position: relative;
   overflow: hidden;
   padding: 12px 16px;
