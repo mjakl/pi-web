@@ -1,0 +1,158 @@
+import { createWebPushNotifier } from "@adapters/pi/web-push";
+import type { PushMessage, PushSubscription } from "@core/ports";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+
+const directories: string[] = [];
+
+function agentDir(): string {
+  const directory = mkdtempSync(join(tmpdir(), "web-pi-push-"));
+  directories.push(directory);
+  return directory;
+}
+
+function stored(directory: string): {
+  vapidKeys: { publicKey: string; privateKey: string };
+  subscriptions: PushSubscription[];
+} {
+  return JSON.parse(
+    readFileSync(join(directory, "web-push.json"), "utf8"),
+  ) as ReturnType<typeof stored>;
+}
+
+function subscription(endpoint: string): PushSubscription {
+  return { endpoint, keys: { p256dh: "p", auth: "a" } };
+}
+
+const MESSAGE: PushMessage = {
+  title: "Session complete",
+  body: "Task finished.",
+  url: "/sessions/one",
+  tag: "web-pi:session-complete:one",
+};
+
+afterEach(() => {
+  for (const directory of directories.splice(0)) {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+describe("web push store", () => {
+  it("generates VAPID keys once and keeps them across restarts", () => {
+    const directory = agentDir();
+    const first = createWebPushNotifier({ agentDir: directory }).publicKey();
+    expect(first).not.toBe("");
+    expect(stored(directory).vapidKeys.publicKey).toBe(first);
+    // A second process reads the same keys rather than minting new ones.
+    expect(createWebPushNotifier({ agentDir: directory }).publicKey()).toBe(
+      first,
+    );
+  });
+
+  it("writes the private key owner-only", () => {
+    const directory = agentDir();
+    createWebPushNotifier({ agentDir: directory }).publicKey();
+    const mode = statSync(join(directory, "web-push.json")).mode & 0o777;
+    expect(mode).toBe(0o600);
+  });
+
+  it("upserts a subscription by endpoint", () => {
+    const directory = agentDir();
+    const notifier = createWebPushNotifier({ agentDir: directory });
+    notifier.subscribe(subscription("https://push.example/a"));
+    notifier.subscribe(subscription("https://push.example/b"));
+    notifier.subscribe({
+      endpoint: "https://push.example/a",
+      keys: { p256dh: "new", auth: "new" },
+    });
+    const { subscriptions } = stored(directory);
+    expect(subscriptions.map((entry) => entry.endpoint)).toEqual([
+      "https://push.example/b",
+      "https://push.example/a",
+    ]);
+    expect(subscriptions.at(-1)?.keys.p256dh).toBe("new");
+  });
+
+  it("sends the payload to every subscription", async () => {
+    const sent: string[] = [];
+    const notifier = createWebPushNotifier({
+      agentDir: agentDir(),
+      send: (target, payload) => {
+        sent.push(`${target.endpoint}:${payload}`);
+        return Promise.resolve();
+      },
+    });
+    notifier.subscribe(subscription("https://push.example/a"));
+    notifier.subscribe(subscription("https://push.example/b"));
+    await notifier.send(MESSAGE);
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toContain(JSON.stringify(MESSAGE));
+  });
+
+  it("does nothing when nobody is subscribed", async () => {
+    const sent: string[] = [];
+    const notifier = createWebPushNotifier({
+      agentDir: agentDir(),
+      send: (target) => {
+        sent.push(target.endpoint);
+        return Promise.resolve();
+      },
+    });
+    await notifier.send(MESSAGE);
+    expect(sent).toEqual([]);
+  });
+
+  it("drops a subscription the push service has retired", async () => {
+    const directory = agentDir();
+    const notifier = createWebPushNotifier({
+      agentDir: directory,
+      send: (target) => {
+        if (target.endpoint.endsWith("/gone")) {
+          return Promise.reject(
+            Object.assign(new Error("Gone"), {
+              statusCode: 410,
+            }),
+          );
+        }
+        return Promise.resolve();
+      },
+    });
+    notifier.subscribe(subscription("https://push.example/gone"));
+    notifier.subscribe(subscription("https://push.example/live"));
+    await notifier.send(MESSAGE);
+    expect(stored(directory).subscriptions.map((s) => s.endpoint)).toEqual([
+      "https://push.example/live",
+    ]);
+  });
+
+  it("keeps a subscription whose delivery failed for another reason", async () => {
+    const directory = agentDir();
+    const notifier = createWebPushNotifier({
+      agentDir: directory,
+      send: () =>
+        Promise.reject(
+          Object.assign(new Error("Service unavailable"), { statusCode: 503 }),
+        ),
+    });
+    notifier.subscribe(subscription("https://push.example/a"));
+    await notifier.send(MESSAGE);
+    expect(stored(directory).subscriptions).toHaveLength(1);
+  });
+
+  it("starts over with fresh keys when the stored file is unreadable", () => {
+    const directory = agentDir();
+    createWebPushNotifier({ agentDir: directory }).publicKey();
+    writeFileSync(join(directory, "web-push.json"), "not json", "utf8");
+    const key = createWebPushNotifier({ agentDir: directory }).publicKey();
+    expect(key).not.toBe("");
+    expect(stored(directory).subscriptions).toEqual([]);
+  });
+});

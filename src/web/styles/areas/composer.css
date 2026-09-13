@@ -1,0 +1,41 @@
+/* Composer area.
+
+   pi-web's stylesheets in ../ are the pixel spec; this file is the only CSS
+   this area may edit. What is left here is what React expressed as state or
+   as an inline handler and a server-rendered page has to express as a rule. */
+
+/* pi-web mounts and unmounts the shelf and its open panel; web-pi renders both
+   always, because the strip is the element the session stream swaps. Their
+   `display: flex` beats the UA's `[hidden]`, so say it again here. */
+.extension-status-shelf[hidden],
+.extension-widget-panels[hidden] {
+  display: none;
+}
+
+/* Replaces ChatInput's onMouseEnter/onMouseLeave on the recall button, which
+   wrote background and border-color inline. */
+.composer-queue-recall:hover {
+  background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+/* pi-web's `showControls`: the "more" menu exists on a phone only, and only
+   when it has something to hold — the agent to stop, or the extension status
+   line that the shelf hides at this width. */
+.composer-toolbar > .composer-more {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  #composer[data-running] .composer-toolbar > .composer-more,
+  .chat-composer:has(.extension-status-line)
+    .composer-toolbar
+    > .composer-more {
+    display: flex;
+  }
+}
+
+/* Its one always-rendered item, shown for the state pi-web renders it in. */
+#composer:not([data-running]) .composer-stop {
+  display: none;
+}

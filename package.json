@@ -1,19 +1,53 @@
 {
-  "name": "@mjakl/pi-web",
-  "version": "0.99.0",
+  "name": "web-pi",
+  "version": "0.1.0",
   "private": true,
-  "description": "Web UI for the pi coding agent",
-  "homepage": "https://github.com/mjakl/pi-web#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/mjakl/pi-web.git"
-  },
-  "bugs": {
-    "url": "https://github.com/mjakl/pi-web/issues"
-  },
+  "description": "Server-rendered web UI for the Pi coding agent (Hono + HTMX)",
   "license": "MIT",
-  "engines": {
-    "node": ">=22.19.0"
+  "bin": {
+    "web-pi": "bin/web-pi.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "static",
+    "!static/*.map",
+    "README.md",
+    "docs",
+    "LICENSE",
+    "LICENSE.pi-web"
+  ],
+  "type": "module",
+  "scripts": {
+    "prepare": "scripts/prepare.sh"
+  },
+  "dependencies": {
+    "mammoth": "^1.12.2",
+    "undici": "8.10.0",
+    "web-push": "3.6.7"
+  },
+  "devDependencies": {
+    "@fontsource-variable/noto-sans-mono": "^5.3.0",
+    "@hono/node-server": "2.1.1",
+    "@mjakl/core": "github:mjakl/core#v0.3.0",
+    "@types/node": "^24.13.3",
+    "@types/web-push": "3.6.4",
+    "@vitest/coverage-v8": "^5.0.0",
+    "esbuild": "0.28.2",
+    "happy-dom": "20.14.3",
+    "highlight.js": "11.12.0",
+    "hono": "4.13.7",
+    "htmx.org": "4.0.0",
+    "husky": "9.1.7",
+    "marked": "18.0.12",
+    "mermaid": "11.17.2",
+    "oxfmt": "^0.67.0",
+    "oxlint": "^1.82.0",
+    "oxlint-plugin-eslint": "^1.82.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "tsx": "4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
   },
   "browserslist": [
     "chrome >= 125",
@@ -21,73 +55,8 @@
     "firefox >= 147",
     "safari >= 26"
   ],
-  "bin": {
-    "pi-web": "bin/pi-web.js"
+  "engines": {
+    "node": ">=24"
   },
-  "files": [
-    "bin",
-    "!bin/*.test.mjs",
-    ".next",
-    "!.next/cache",
-    "!.next/dev",
-    "!.next/**/*.js.map",
-    "!.next/**/*.nft.json",
-    "!.next/types",
-    "!.next/trace",
-    "!.next/trace-build",
-    "!.next/diagnostics",
-    "!.next/static/media/KaTeX_*.ttf",
-    "!.next/static/media/KaTeX_*.woff",
-    "public",
-    "!public/*.test.mjs",
-    "next.config.ts",
-    "package.json"
-  ],
-  "scripts": {
-    "dev": "node bin/run-next.js dev -H 127.0.0.1 -p 30141",
-    "dev:lan": "node bin/run-next.js dev -H 0.0.0.0 -p 30141",
-    "build": "node bin/run-next.js build --webpack",
-    "start": "node bin/run-next.js start -H 127.0.0.1 -p 30141",
-    "start:lan": "node bin/run-next.js start -H 0.0.0.0 -p 30141",
-    "fix": "oxlint --fix . && eslint . --fix && oxfmt .",
-    "lint": "oxfmt --check . && oxlint . && eslint .",
-    "typecheck": "tsc --noEmit",
-    "qa": "npm run lint && npm run typecheck && npm test",
-    "ci": "npm run qa",
-    "test:one": "node bin/link-host-pi.js && node --require ./bin/host-pi-runtime.js --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test",
-    "prepare": "node bin/link-host-pi.js",
-    "test": "npm run test:one -- \"*.test.mjs\" \"app/**/*.test.mjs\" \"bin/**/*.test.mjs\" \"components/**/*.test.mjs\" \"hooks/**/*.test.mjs\" \"lib/**/*.test.mjs\" \"public/**/*.test.mjs\""
-  },
-  "dependencies": {
-    "next": "16.3.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "undici": "8.10.0",
-    "web-push": "^3.6.7"
-  },
-  "devDependencies": {
-    "@types/node": "^25",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@types/react-syntax-highlighter": "^15.5.13",
-    "@types/web-push": "^3.6.4",
-    "ansi_up": "^6.0.6",
-    "eslint": "^9",
-    "eslint-config-next": "16.3.1",
-    "happy-dom": "^20.13.2",
-    "jiti": "^2.7.0",
-    "js-yaml": "^5.2.3",
-    "mammoth": "^1.12.0",
-    "mermaid": "^11.16.1",
-    "oxfmt": "0.66.0",
-    "oxlint": "1.81.0",
-    "oxlint-tsgolint": "7.0.2001",
-    "react-markdown": "^10.1.0",
-    "react-syntax-highlighter": "^16.1.1",
-    "rehype-raw": "^7.0.0",
-    "rehype-sanitize": "^6.0.0",
-    "remark-frontmatter": "^5.0.0",
-    "remark-gfm": "^4.0.1",
-    "typescript": "^5"
-  }
+  "packageManager": "pnpm@12.3.4"
 }

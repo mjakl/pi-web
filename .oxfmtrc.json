@@ -12,24 +12,17 @@
   "arrowParens": "always",
   "bracketSameLine": false,
   "bracketSpacing": true,
-  "sortImports": false,
-  "sortPackageJson": false,
-  "embeddedLanguageFormatting": "off",
   "ignorePatterns": [
-    "node_modules/",
-    ".next/",
-    "next-env.d.ts",
-    "*.tsbuildinfo",
-    "package-lock.json",
-    "skills-lock.json",
-    ".agents/skills/",
-    ".claude/skills/",
-    "CLAUDE.md",
-    "public/icons/catppuccin/"
+    "static/vendor",
+    "tsconfig.json",
+    "pnpm-lock.yaml",
+    ".agents/skills",
+    ".claude/skills",
+    "tests/web/fixtures/*.html"
   ],
   "overrides": [
     {
-      "files": ["**/*.md"],
+      "files": ["*.md"],
       "options": {
         "proseWrap": "always"
       }

@@ -1,0 +1,143 @@
+/* Files area.
+
+   pi-web's stylesheets in ../ are the pixel spec and already carry every
+   `.file-viewer-*`, `.tab-close` and `.file-explorer-change-row` rule. What is
+   left here is only what pi-web writes from React: inline styles it derives
+   from hover or state, which a server-rendered page has to reach through CSS
+   instead. Nothing below invents a value; each one is pi-web's. */
+
+/* The explorer fragment stands in for FileExplorer's root div, which is
+   `minHeight: 100%` so a short tree still fills the section it scrolls in. */
+.explorer {
+  min-height: 100%;
+}
+
+/* TreeNode's `background: hovered ? var(--bg-hover) : transparent`, plus the
+   two hover-only buttons and the badge they cover (`!hovered && …`). */
+.file-tree-row:hover {
+  background: var(--bg-hover);
+}
+
+.file-tree-action {
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-tree-row:hover .file-tree-action {
+  display: flex;
+}
+
+.file-tree-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-tree-row:hover .file-tree-badge {
+  display: none;
+}
+
+/* `transform: open ? "rotate(90deg)" : "none"` on the directory chevron. */
+[aria-expanded="true"] > .file-tree-row .file-tree-chevron {
+  transform: rotate(90deg);
+}
+
+/* The static spokes pi-web shows while a directory is loading; htmx marks the
+   node it is fetching for, not the icon inside it. */
+.file-tree-loading {
+  display: none;
+  flex-shrink: 0;
+}
+
+.file-tree-node.htmx-request > .file-tree-row .file-tree-loading {
+  display: flex;
+}
+
+/* Keyboard navigation is web-pi's own: pi-web's rows are mouse-only divs, so
+   it has no focus style to copy. */
+[role="treeitem"]:focus-visible {
+  outline: none;
+}
+
+[role="treeitem"]:focus-visible > .file-tree-row,
+.file-explorer-change-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The explorer header's icon buttons. pi-web passes the resting colours to
+   ToolbarIconButton as props (SessionSidebar.tsx L1763-L1828);
+   `.sidebar-toolbar-button` reads them from these two custom properties, so
+   they are set here rather than left to fall back to the inherited colour. */
+.sidebar-toolbar-button {
+  --toolbar-button-color: var(--text-dim);
+  --toolbar-button-background: none;
+}
+
+#explorer-changes-toggle[aria-pressed="true"] {
+  --toolbar-button-color: var(--accent);
+  --toolbar-button-background: var(--bg-selected);
+}
+
+#explorer-search-toggle[aria-pressed="true"] {
+  --toolbar-button-color: var(--accent);
+  --toolbar-button-background: var(--bg-selected);
+}
+
+/* pi-web's top-bar toggle wears the selected pill while the panel is open
+   (AppShell.tsx L1706-L1709). Both colours sit on the button's inline style,
+   so the open state needs the weight to take them back. */
+#file-panel-toggle[aria-expanded="true"] {
+  background: var(--bg-selected) !important;
+  color: var(--text) !important;
+}
+
+/* The slot the media toolbar keeps for a measurement only the browser has
+   (an image's pixels, an audio file's length). pi-web renders no element at
+   all until it knows one, and an empty box here would spend a 12px gap. */
+.file-viewer-measured:empty {
+  display: none;
+}
+
+/* TabBar's root div, which lives in the shell's panel header. */
+.file-tabs {
+  display: flex;
+  align-items: flex-end;
+  overflow-x: auto;
+  height: 36px;
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+
+.file-tabs[hidden] {
+  display: none;
+}
+
+/* FileViewer re-renders the whole source with different inline styles when
+   word wrap is toggled; the class carries the same four values. */
+.file-source-view {
+  width: max-content;
+}
+
+.file-source-view.is-wrapped {
+  width: 100%;
+}
+
+.file-source-line-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.file-source-view.is-wrapped .file-source-line-content {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* The viewer fills the panel body below the tab bar. */
+.file-view {
+  height: 100%;
+  min-height: 0;
+}
