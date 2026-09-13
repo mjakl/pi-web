@@ -147,18 +147,18 @@ no-swap rules preserve error toasts without replacing the requested region.
 
 A second stream, `GET /events`, belongs to the sidebar rather than to one
 session. It pushes a re-rendered row (`hx-partial`) whenever a session of the
-project on screen starts, finishes, or stops, the whole list when such a session
-appears that has no row yet, the project selector whenever the running counts
-change, and a named `finished` event carrying JSON with the session id and its
-project. The browser turns that into an unread dot in `localStorage` — on the
-row when the session is listed, on the project when it is not; it replaces
-pi-web's 2.5 s polling. The stream reads the project cookie at connect time, and
-the list and its small `#sidebar-events` owner live in `#project-nav`. Switching
-project replaces the nav and reconnects; switching working folder within that
-project replaces only the stream owner and folder controls. The stream URL names
-both project and folder, never a captured selected session. Row selection is
-projected from the displayed `main` on processing and settlement, including
-paginated rows, star responses and stream updates.
+project on screen finishes, the whole sorted list when a session opens or stops
+(or has no row in the current page), the project selector whenever the running
+counts change, and a named `finished` event carrying JSON with the session id
+and its project. The browser turns that into an unread dot in `localStorage` —
+on the row when the session is listed, on the project when it is not; it
+replaces pi-web's 2.5 s polling. The stream reads the project cookie at connect
+time, and the list and its small `#sidebar-events` owner live in `#project-nav`.
+Switching project replaces the nav and reconnects; switching working folder
+within that project replaces only the stream owner and folder controls. The
+stream URL names both project and folder, never a captured selected session. Row
+selection is projected from the displayed `main` on processing and settlement,
+including paginated rows, star responses and stream updates.
 
 `src/core/transcript.ts` projects one branch into items, and `src/core/turns.ts`
 groups those items into turns, pages them, and writes the activity line. Every
