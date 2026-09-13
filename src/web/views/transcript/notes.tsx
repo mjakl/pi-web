@@ -78,14 +78,12 @@ export function Compaction({
         <span class="compaction-rule" aria-hidden="true" />
       </summary>
       <div class="compaction-body">
-        <div style="margin-bottom:10px; color:var(--text); font-size:14px; line-height:1.5">
+        <div class="compaction-intro">
           The conversation history before this point was compacted into the
           following summary:
         </div>
         {item.summary === "" ? (
-          <span style="color:var(--text-dim); font-size:12px">
-            (no summary)
-          </span>
+          <span class="compaction-empty">(no summary)</span>
         ) : (
           <Markdown
             source={item.summary}
@@ -105,21 +103,6 @@ export function Compaction({
   );
 }
 
-/** The footer row of an extension card, with or without a details panel. */
-const NOTE_FOOTER =
-  "display:flex; align-items:center; gap:8px; padding:4px 9px;" +
-  " border-top:1px solid var(--border); background:var(--bg-subtle)";
-
-function NoteCopy({ text }: { text: string }) {
-  return (
-    <CopyButton
-      text={text}
-      bare
-      style="padding:3px 7px; border:none; background:none; cursor:pointer; font-size:11px"
-    />
-  );
-}
-
 export function Note({
   item,
   actions,
@@ -129,49 +112,28 @@ export function Note({
 }) {
   const time = formatTimestamp(item.timestamp);
   return (
-    <div style="margin-bottom:16px" id={`entry-${item.entryId}`}>
-      <details
-        class="transcript-details note-card"
-        style="border:1px solid var(--border); border-radius:8px; overflow:hidden; background:var(--bg)"
-      >
-        <summary
-          title="Expand"
-          style="display:flex; align-items:center; gap:8px; width:100%; min-width:0; padding:7px 10px; background:var(--bg-panel); color:var(--text-muted); font-size:12px; cursor:pointer; text-align:left"
-        >
-          <span style="min-width:0; overflow-wrap:anywhere; color:var(--text-muted); font-family:var(--font-mono); font-size:11px; font-weight:650">
-            {item.customType || "extension"}
-          </span>
-          <span
-            class="note-preview"
-            style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-dim); font-size:11px"
-          >
+    <div class="transcript-note" id={`entry-${item.entryId}`}>
+      <details class="transcript-details note-card">
+        <summary title="Expand" class="note-header">
+          <span class="note-type">{item.customType || "extension"}</span>
+          <span class="note-preview">
             {item.preview === "" ? "Show extension message" : item.preview}
           </span>
-          {time === "" ? null : (
-            <span style="flex-shrink:0; color:var(--text-dim); font-size:10px">
-              {time}
-            </span>
-          )}
-          <span
-            class="card-chevron"
-            style="display:flex; flex-shrink:0; transition:transform 0.15s"
-          >
+          {time === "" ? null : <span class="note-time">{time}</span>}
+          <span class="card-chevron">
             <CardChevronIcon />
           </span>
         </summary>
-        <div style="padding:6px 9px">
+        <div class="note-body">
           <Images
             entryId={item.entryId}
             indices={item.images}
             actions={actions}
-            size="thumb"
-            border="1px solid var(--border)"
-            marginBottom={item.text === "" ? 0 : 8}
+            variant="note"
+            separated={item.text !== ""}
           />
           {item.text === "" ? (
-            <span style="color:var(--text-dim); font-size:12px">
-              (no message)
-            </span>
+            <span class="note-empty">(no message)</span>
           ) : (
             <Markdown
               source={item.text}
@@ -181,24 +143,25 @@ export function Note({
           )}
         </div>
         {item.details === undefined ? (
-          <div style={NOTE_FOOTER}>
-            <NoteCopy text={item.text} />
+          <div class="note-footer">
+            <CopyButton text={item.text} bare />
           </div>
         ) : (
           /* pi-web keeps the copy button and the details toggle on one row
              (MessageView.tsx L2245-L2289). The row is the disclosure here,
              so the copy button inside it must not open the panel. */
           <details class="transcript-details note-details">
-            <summary style={`${NOTE_FOOTER}; cursor:pointer`}>
-              <NoteCopy text={item.text === "" ? item.details : item.text} />
-              <span style="margin-left:auto; padding:3px 7px; color:var(--text-dim); font-size:11px">
+            <summary class="note-footer">
+              <CopyButton
+                text={item.text === "" ? item.details : item.text}
+                bare
+              />
+              <span class="note-details-label">
                 <span class="note-details-closed">Show details</span>
                 <span class="note-details-open">Hide details</span>
               </span>
             </summary>
-            <pre style="margin:0; padding:9px 10px; border-top:1px solid var(--border); background:var(--bg); color:var(--text-muted); font-size:12px; line-height:1.5; white-space:pre-wrap; word-break:break-word; max-height:360px; overflow:auto; font-family:var(--font-mono)">
-              {item.details}
-            </pre>
+            <pre class="note-details-text">{item.details}</pre>
           </details>
         )}
       </details>
@@ -222,57 +185,37 @@ export function Bash({
       ? `/sessions/${actions.sessionId}/bash-output?path=${encodeURIComponent(item.outputPath)}`
       : undefined;
   return (
-    <div style="margin:6px 0" id={`entry-${item.entryId}`}>
+    <div class="transcript-bash" id={`entry-${item.entryId}`}>
       {/* Collapsed like every other tool call, as pi-web leaves it. */}
       <details
-        class="transcript-details tool-card"
-        style={`border-radius:7px; overflow:hidden; font-size:12px; border:1px solid ${
-          failed ? "rgba(248,113,113,0.45)" : "rgba(34,197,94,0.25)"
-        }; background:${failed ? "rgba(248,113,113,0.05)" : "rgba(34,197,94,0.04)"}`}
+        class={`transcript-details tool-card${failed ? " is-error" : ""}`}
       >
-        <summary style="display:flex; align-items:center; gap:7px; min-width:0; padding:6px 10px; color:var(--text-muted); cursor:pointer; font-size:12px; text-align:left">
-          <span
-            style={`color:var(${failed ? "--danger" : "--success"}); font-family:var(--font-mono); font-weight:600; font-size:11px; flex-shrink:0`}
-          >
-            {name}
-          </span>
-          <span style="color:var(--text-dim); font-family:var(--font-mono); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0">
-            {item.command}
-          </span>
-          <span
-            class="card-chevron"
-            style="display:flex; flex-shrink:0; transition:transform 0.15s"
-          >
+        <summary class="tool-header">
+          <span class="tool-name">{name}</span>
+          <span class="tool-preview">{item.command}</span>
+          <span class="card-chevron">
             <CardChevronIcon />
           </span>
         </summary>
         {item.pending && item.output === "" ? null : (
-          <div
-            style={`border-top:1px solid ${
-              failed ? "rgba(248,113,113,0.3)" : "rgba(34,197,94,0.15)"
-            }; background:${failed ? "rgba(248,113,113,0.04)" : "var(--bg-subtle)"}`}
-          >
-            <pre
-              style={`margin:0; padding:8px 10px; color:var(${failed ? "--danger" : "--text-muted"}); font-size:12px; line-height:1.5; overflow:auto; max-height:400px; background:var(--bg); white-space:pre-wrap; word-break:break-all`}
-            >
-              {item.output}
-            </pre>
+          <div class={`tool-output${failed ? " is-error" : ""}`}>
+            <pre class="tool-output-text">{item.output}</pre>
           </div>
         )}
       </details>
       {outputUrl === undefined ? null : (
-        <div style="padding:4px 10px; font-size:11px; margin-top:-1px">
+        <div class="tool-output-actions">
           <a
             target="_blank"
             rel="noreferrer"
             href={outputUrl}
-            style="color:var(--accent); font-size:11px; text-decoration:underline"
+            class="tool-output-link"
           >
             view full output
           </a>
           <a
             href={`${outputUrl}&download=1`}
-            style="margin-left:10px; color:var(--accent); font-size:11px; text-decoration:underline"
+            class="tool-output-link is-download"
           >
             download full output
           </a>

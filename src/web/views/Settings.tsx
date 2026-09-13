@@ -12,6 +12,7 @@ import {
 } from "@core/skills";
 import { DEFAULT_WARN_TOKENS } from "@core/context-usage";
 import { shortPath } from "@core/workspaces";
+import { ConfigButton, ConfigField, ConfigSwitch } from "./ConfigControls.tsx";
 import {
   AddConfigIcon,
   PiDevLogoIcon,
@@ -58,70 +59,6 @@ function sectionHref(section: SettingsSection, cwd: string): string {
   const query = new URLSearchParams({ section });
   if (cwd !== "") query.set("cwd", cwd);
   return `/settings?${query.toString()}`;
-}
-
-// --- pi-web's shared config primitives (SettingsUi.tsx) --------------------
-
-function ConfigButton({
-  variant = "secondary",
-  small,
-  children,
-  ...rest
-}: {
-  variant?: "primary" | "secondary" | "danger";
-  small?: boolean;
-  children?: unknown;
-  [key: string]: unknown;
-}) {
-  return (
-    <button
-      type="button"
-      {...rest}
-      class={`config-button config-button-${variant} config-button-${small === true ? "small" : "default"}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** pi-web draws a preference toggle as a button, never as a checkbox. */
-function ConfigSwitch({
-  checked,
-  label,
-  ...rest
-}: {
-  checked: boolean;
-  label: string;
-  [key: string]: unknown;
-}) {
-  return (
-    <button
-      type="button"
-      {...rest}
-      class="config-switch"
-      role="switch"
-      aria-checked={checked ? "true" : "false"}
-      aria-label={label}
-      title={label}
-    >
-      <span class="config-switch-knob" />
-    </button>
-  );
-}
-
-function ConfigField({
-  label,
-  children,
-}: {
-  label: string;
-  children: unknown;
-}) {
-  return (
-    <div class="config-field">
-      <span class="config-field-label">{label}</span>
-      {children}
-    </div>
-  );
 }
 
 /**
@@ -389,15 +326,7 @@ export function SkillDetail({
       <div class="skill-detail-heading">
         <div class="config-detail-header">
           <div class="config-detail-header-info">
-            <span
-              class={
-                skill.scope === "project"
-                  ? "config-scope-tag is-project"
-                  : "config-scope-tag"
-              }
-            >
-              {skill.scope}
-            </span>
+            <ScopeTag scope={skill.scope} />
             <span class="config-detail-path" title={skill.filePath}>
               {relative}
             </span>
@@ -418,9 +347,7 @@ export function SkillDetail({
             {manual ? "Manual" : "Model-visible"}
           </span>
           {message === undefined ? null : (
-            <span style="font-size:12px; color:var(--danger); overflow-wrap:anywhere">
-              {message}
-            </span>
+            <span class="skill-detail-error">{message}</span>
           )}
         </div>
       </div>
@@ -520,38 +447,32 @@ export function SkillSearchResults({
   message?: string;
 }) {
   return (
-    <div id="skill-search-results" style="flex:1; overflow-y:auto">
+    <div id="skill-search-results" class="skill-search-results">
       {message === undefined ? null : (
-        <div role="status" style="font-size:12px; color:var(--text-dim)">
+        <div role="status" class="config-message">
           {message}
         </div>
       )}
       {hits.length === 0 && message === undefined ? (
-        <div style="font-size:12px; color:var(--text-dim)">No skills found</div>
+        <div class="config-message">No skills found</div>
       ) : null}
       {hits.map((hit) => {
         const at = hit.package.indexOf("@");
         const repo = at > -1 ? hit.package.slice(0, at) : hit.package;
         const name = at > -1 ? hit.package.slice(at + 1) : repo;
         return (
-          <div style="display:flex; align-items:center; gap:14px; padding:12px 0; border-bottom:1px solid var(--border)">
-            <div style="flex:1; min-width:0">
-              <div style="font-size:13px; font-weight:600; color:var(--text); margin-bottom:3px">
-                {name}
-              </div>
-              <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
-                <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim)">
-                  {repo}
-                </span>
-                <span style="font-size:12px; color:var(--text-muted); font-weight:500">
-                  {hit.installs}
-                </span>
+          <div class="skill-search-result">
+            <div class="skill-search-info">
+              <div class="skill-search-name">{name}</div>
+              <div class="skill-search-meta">
+                <span class="skill-search-repo">{repo}</span>
+                <span class="skill-search-installs">{hit.installs}</span>
                 {hit.url === "" ? null : (
                   <a
                     href={hit.url}
                     target="_blank"
                     rel="noreferrer"
-                    style="font-size:12px; color:var(--accent); text-decoration:none"
+                    class="skill-search-link"
                   >
                     skills.sh ↗
                   </a>
@@ -559,7 +480,7 @@ export function SkillSearchResults({
               </div>
             </div>
             <form
-              style="flex-shrink:0"
+              class="skill-search-install"
               hx-post="/settings/skills/install"
               hx-target="#skill-search-results"
               hx-swap="outerHTML"
@@ -567,13 +488,9 @@ export function SkillSearchResults({
             >
               <input type="hidden" name="cwd" value={cwd} />
               <input type="hidden" name="package" value={hit.package} />
-              <button
-                type="submit"
-                class="config-button config-button-secondary config-button-small"
-                style="background:none; color:var(--text-muted)"
-              >
+              <ConfigButton type="submit" small>
                 Install
-              </button>
+              </ConfigButton>
             </form>
           </div>
         );
@@ -587,31 +504,28 @@ function AddSkillPanel({ view, home }: { view: SkillsView; home?: string }) {
   return (
     <div class="config-detail-stack is-full-height">
       <form
-        style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px"
+        class="skill-search-form"
         hx-post="/settings/skills/search"
         hx-target="#skill-search-results"
         hx-swap="outerHTML"
       >
         <div class="config-detail-title">Add skill</div>
         <input type="hidden" name="cwd" value={view.cwd} />
-        <div style="display:flex; gap:8px">
+        <div class="skill-search-query">
           <input
             name="query"
-            style="flex:1; padding:7px 10px; font-size:12px; background:var(--bg-panel); border:1px solid var(--border); border-radius:6px; color:var(--text); outline:none"
+            class="config-input"
             placeholder="e.g. react, testing, deploy"
             aria-label="Search skills"
           />
-          <button
-            type="submit"
-            class="config-button config-button-primary config-button-default"
-          >
+          <ConfigButton type="submit" variant="primary">
             Search
-          </button>
+          </ConfigButton>
         </div>
-        <div style="display:flex; align-items:center; gap:10px">
+        <div class="skill-search-scope">
           <ScopePicker name="scope" trusted={view.projectResourcesLoaded} />
           <span
-            style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap"
+            class="skill-search-scope-path"
             data-scope-path
             data-scope-path-global="→ ~/.pi/agent/skills/"
             data-scope-path-project={`→ ${shortPath(view.cwd, home)}/.pi/skills/`}
@@ -701,7 +615,7 @@ export function SkillsSection({
             {pending === 0 ? (
               view.diagnostics.map((diagnostic) => <span>{diagnostic}</span>)
             ) : (
-              <span style="font-size:12px; color:var(--warning)">
+              <span class="skill-update-count">
                 {String(pending)} {pending === 1 ? "update" : "updates"}
               </span>
             )}
@@ -726,13 +640,6 @@ export function SkillsSection({
 
 // --- Plugins ---------------------------------------------------------------
 
-const STATUS_COLOUR = {
-  loaded: "var(--accent)",
-  installed: "var(--warning)",
-  disabled: "var(--text-dim)",
-  missing: "var(--danger)",
-} as const;
-
 /**
  * pi-web groups a package's resources by kind, in this order, and drops the
  * kinds it has none of (PluginsConfig.tsx L127-L219).
@@ -751,37 +658,23 @@ function ResourceList({ info }: { info: PackageInfo }) {
   })).filter((group) => group.resources.length > 0);
   if (groups.length === 0) {
     return (
-      <div style="font-size:12px; color:var(--text-dim)">
+      <div class="config-message">
         {info.disabled ? "Package disabled." : "No resolved resources"}
       </div>
     );
   }
   return (
-    <div style="display:flex; flex-direction:column; gap:12px">
-      {groups.map((group, index) => (
-        <div
-          style={
-            index === 0
-              ? ""
-              : "border-top:1px solid var(--border); padding-top:12px"
-          }
-        >
-          <div style="font-size:10px; font-weight:700; color:var(--text-dim); text-transform:uppercase; margin-bottom:6px">
-            {group.label}
-          </div>
-          <div style="display:flex; flex-direction:column; gap:6px">
+    <div class="plugin-resource-groups">
+      {groups.map((group) => (
+        <div class="plugin-resource-group">
+          <div class="plugin-resource-heading">{group.label}</div>
+          <div class="plugin-resource-list">
             {group.resources.map((resource) => (
-              <div style="min-width:0">
-                <div
-                  title={resource.path}
-                  style="font-size:12px; color:var(--text); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap"
-                >
+              <div class="plugin-resource">
+                <div title={resource.path} class="plugin-resource-name">
                   {resource.name}
                 </div>
-                <div
-                  title={resource.path}
-                  style="font-size:10px; color:var(--text-dim); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:1px"
-                >
+                <div title={resource.path} class="plugin-resource-path">
                   {resource.relativePath}
                 </div>
               </div>
@@ -827,13 +720,10 @@ function versionSummary(info: PackageInfo): string {
   return parts.length === 0 ? "Unknown" : parts.join(" · ");
 }
 
-function ScopeTag({ scope }: { scope: PackageScope }) {
-  const project = scope === "project";
+function ScopeTag({ scope }: { scope: PackageScope | SkillInfo["scope"] }) {
   return (
-    <span
-      style={`font-size:10px; padding:1px 5px; border-radius:3px; flex-shrink:0; background:${project ? "rgba(99,102,241,0.12)" : "rgba(120,120,120,0.12)"}; color:${project ? "rgba(99,102,241,0.85)" : "var(--text-dim)"}`}
-    >
-      {project ? "project" : "global"}
+    <span class={`config-scope-tag${scope === "project" ? " is-project" : ""}`}>
+      {scope === "user" ? "global" : scope}
     </span>
   );
 }
@@ -841,16 +731,18 @@ function ScopeTag({ scope }: { scope: PackageScope }) {
 function InfoRow({
   label,
   value,
-  style,
+  class: valueClass,
 }: {
   label: string;
   value: string;
-  style?: string;
+  class?: string;
 }) {
   return (
     <>
-      <div style="color:var(--text-dim)">{label}</div>
-      <div style={style ?? "color:var(--text-muted)"}>{value}</div>
+      <div class="plugin-info-label">{label}</div>
+      <div class={`plugin-info-value${valueClass ? ` ${valueClass}` : ""}`}>
+        {value}
+      </div>
     </>
   );
 }
@@ -882,25 +774,17 @@ export function PluginDetail({
     "hx-target": "#settings-body",
     "hx-swap": "innerHTML",
   };
-  const mono =
-    "color:var(--text-muted); font-family:var(--font-mono); overflow-wrap:anywhere";
   return (
     <div class="config-detail-stack">
       <div class="config-detail-header is-top-aligned">
         <div class="config-detail-header-info">
           <ScopeTag scope={info.scope} />
           {info.disabled ? (
-            <span style="font-size:10px; padding:1px 5px; border-radius:3px; background:rgba(120,120,120,0.12); color:var(--text-dim)">
-              Disabled
-            </span>
+            <span class="config-scope-tag">Disabled</span>
           ) : info.filtered ? (
-            <span style="font-size:10px; padding:1px 5px; border-radius:3px; background:rgba(245,158,11,0.12); color:var(--warning)">
-              filtered
-            </span>
+            <span class="config-scope-tag is-filtered">filtered</span>
           ) : null}
-          <span style="font-family:var(--font-mono); font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-            {info.source}
-          </span>
+          <span class="plugin-source">{info.source}</span>
         </div>
         <div class="config-detail-actions">
           <ConfigButton small {...post} hx-vals={act("update")}>
@@ -933,21 +817,21 @@ export function PluginDetail({
           />
         </div>
       </div>
-      <div style="display:grid; grid-template-columns:minmax(96px, 130px) minmax(0, 1fr); gap:9px 14px; font-size:12px; line-height:1.45">
+      <div class="plugin-info">
         <InfoRow
           label="Status"
           value={info.status}
-          style={`color:${STATUS_COLOUR[info.status]}; text-transform:capitalize`}
+          class={`plugin-status is-${info.status}`}
         />
         <InfoRow
           label="Version"
           value={versionSummary(info)}
-          style="color:var(--text-muted); font-family:var(--font-mono)"
+          class="plugin-info-version"
         />
         <InfoRow
           label="Package"
           value={info.packageName ?? "Unknown"}
-          style={mono}
+          class="plugin-info-path"
         />
         <InfoRow label="Resources" value={resourceSummary(info)} />
         <InfoRow
@@ -957,27 +841,20 @@ export function PluginDetail({
               ? "Not found"
               : shortPath(info.installedPath, home)
           }
-          style={
-            info.installedPath === undefined
-              ? "color:var(--danger); font-family:var(--font-mono); overflow-wrap:anywhere"
-              : mono
-          }
+          class={`plugin-info-path${info.installedPath === undefined ? " is-missing" : ""}`}
         />
         <InfoRow
           label="CWD"
           value={shortPath(cwd, home)}
-          style="color:var(--text-dim); font-family:var(--font-mono); overflow-wrap:anywhere"
+          class="plugin-info-path is-muted"
         />
       </div>
-      <div style="display:flex; flex-direction:column; gap:8px">
+      <div class="plugin-resources">
         <div class="config-section-title">Resolved Resources</div>
         <ResourceList info={info} />
       </div>
       {message === undefined ? null : (
-        <div
-          role="status"
-          style="font-size:12px; color:var(--success); white-space:pre-wrap"
-        >
+        <div role="status" class="plugin-message">
           {message}
         </div>
       )}
@@ -1009,21 +886,21 @@ function AddPluginPanel({
     >
       <input type="hidden" name="cwd" value={cwd} />
       <input type="hidden" name="action" value="install" />
-      <div style="display:flex; flex-direction:column; gap:5px">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap">
+      <div class="plugin-add-heading">
+        <div class="plugin-add-title-row">
           <div class="config-detail-title">Add plugin</div>
           <a
             href="https://pi.dev/packages"
             target="_blank"
             rel="noreferrer"
-            style="display:inline-flex; align-items:center; gap:5px; color:var(--accent); font-size:12px; text-decoration:none; white-space:nowrap"
+            class="plugin-directory-link"
           >
             <PiDevLogoIcon />
             pi.dev/packages
           </a>
         </div>
         <div
-          style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono)"
+          class="plugin-scope-path"
           data-scope-path
           data-scope-path-global="~/.pi/agent/{npm,git}"
           data-scope-path-project={`${shortPath(cwd, home)}/.pi/agent/{npm,git}`}
@@ -1035,30 +912,25 @@ function AddPluginPanel({
         <input
           id="plugin-source"
           name="source"
-          style="width:100%; height:36px; padding:0 11px; border:1px solid var(--border); border-radius:6px; background:var(--bg-panel); color:var(--text); font-family:var(--font-mono); font-size:12px; outline:none"
+          class="config-input plugin-source-input"
           placeholder="npm:@scope/package"
           aria-label="Plugin source"
         />
       </ConfigField>
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+      <div class="plugin-install-actions">
         <ScopePicker name="scope" trusted={view.projectResourcesLoaded} />
-        <button
-          type="submit"
-          class="config-button config-button-primary config-button-default is-pushed-right"
-        >
+        <ConfigButton type="submit" variant="primary">
           Install
-        </button>
+        </ConfigButton>
       </div>
-      <div style="display:flex; flex-direction:column; gap:7px">
-        <div style="font-size:12px; font-weight:600; color:var(--text-muted)">
-          Examples
-        </div>
-        <div style="display:flex; flex-direction:column; gap:6px">
+      <div class="plugin-examples">
+        <div class="plugin-examples-heading">Examples</div>
+        <div class="plugin-example-list">
           {examples.map((example) => (
             <button
               type="button"
               data-plugin-example={example}
-              style="width:100%; min-height:30px; text-align:left; padding:6px 9px; border:1px solid var(--border); border-radius:6px; background:var(--bg-panel); color:var(--text-dim); cursor:pointer; font-family:var(--font-mono); font-size:11px"
+              class="plugin-example"
             >
               {example}
             </button>
@@ -1125,12 +997,7 @@ export function PluginsSection({
                         hx-swap="innerHTML"
                       >
                         <span
-                          class={
-                            entry.disabled
-                              ? "config-status-dot is-inactive"
-                              : "config-status-dot is-active"
-                          }
-                          style={`background:${STATUS_COLOUR[entry.status]}`}
+                          class={`config-status-dot is-${entry.status}${entry.disabled ? " is-inactive" : ""}`}
                           aria-hidden="true"
                         />
                         <span
@@ -1190,13 +1057,7 @@ export function PluginsSection({
               </span>
             ) : (
               <span
-                style={
-                  view.diagnostics.some(
-                    (diagnostic) => diagnostic.type === "error",
-                  )
-                    ? "color:var(--danger)"
-                    : "color:var(--warning)"
-                }
+                class={`plugin-diagnostic-count ${view.diagnostics.some((diagnostic) => diagnostic.type === "error") ? "is-error" : "is-warning"}`}
                 title={view.diagnostics
                   .map(
                     (diagnostic) =>

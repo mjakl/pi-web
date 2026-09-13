@@ -80,10 +80,8 @@ function text(b: Browser) {
 }
 function selected(b: Browser, id: string) {
   return (
-    b.document
-      .querySelector(`#row-${id}`)
-      ?.getAttribute("style")
-      ?.includes("var(--bg-selected)") ?? false
+    b.document.querySelector(`#row-${id}`)?.classList.contains("is-selected") ??
+    false
   );
 }
 

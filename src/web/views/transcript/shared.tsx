@@ -8,16 +8,8 @@ import {
 } from "@web/views/icons";
 import { raw } from "hono/html";
 
-// pi-web's MessageView, SubagentToolCall, TurnWrittenFiles and the process
-// disclosure of ChatWindow, rendered on the server. Every class name and
-// inline style here is pi-web's own (components/MessageView.tsx), so
-// src/web/styles/globals.css applies unchanged. Where pi-web
-// expands a card from React state web-pi uses <details>, and the open-state
-// rules that replaces live in styles/areas/transcript.css.
-//
-// What every item kind reuses: the actions a transcript may offer, Markdown,
-// the copy button, times, images, and the history actions of pi-web's
-// HistoryActionFrame.
+// Shared transcript presentation and actions. Native disclosures and
+// areas/transcript.css own layout and visual state.
 
 /** What the transcript may do to the session it belongs to. */
 export type ItemActions = {
@@ -115,15 +107,10 @@ export function Markdown({
 export function CopyButton({
   text,
   class: className = "message-copy",
-  style = "display:flex; align-items:center; gap:4px; padding:3px 8px;" +
-    " height:22px; background:none; border:none; border-radius:5px;" +
-    " cursor:pointer; font-size:11px; font-weight:400; white-space:nowrap;" +
-    " transition:opacity 0.12s, color 0.12s",
   bare,
 }: {
   text: string;
   class?: string;
-  style?: string;
   /** The extension card's footer copies with a word, not an icon (§4.6). */
   bare?: boolean;
 }) {
@@ -135,8 +122,7 @@ export function CopyButton({
       </span>
       <button
         type="button"
-        class={className}
-        style={style}
+        class={`${className}${bare === true ? " is-bare" : ""}`}
         data-copy
         title="Copy message"
       >
@@ -144,17 +130,11 @@ export function CopyButton({
           "Copy"
         ) : (
           <>
-            <span
-              data-copy-idle
-              style="display:flex; align-items:center; gap:4px"
-            >
+            <span data-copy-idle>
               <CopyIcon size={11} width={1.8} />
               Copy
             </span>
-            <span
-              data-copy-done
-              style="display:none; align-items:center; gap:4px"
-            >
+            <span data-copy-done>
               <CheckIcon size={11} width={1.8} />
               Copied
             </span>
@@ -165,10 +145,10 @@ export function CopyButton({
   );
 }
 
-export function Time({ value, style }: { value: string; style: string }) {
+export function Time({ value }: { value: string }) {
   const text = formatTimestamp(value);
   if (text === "") return <></>;
-  return <span style={style}>{text}</span>;
+  return <span class="transcript-time">{text}</span>;
 }
 
 function imageUrl(
@@ -179,34 +159,23 @@ function imageUrl(
   return `/sessions/${actions.sessionId}/entries/${entryId}/image/${String(index)}`;
 }
 
-const THUMB_IMAGE =
-  "max-width:240px; max-height:240px; border-radius:6px;" +
-  " object-fit:contain; display:block";
-const FULL_IMAGE =
-  "display:block; max-width:min(100%, 720px); max-height:520px;" +
-  " border-radius:6px; object-fit:contain; border:1px solid var(--border)";
-
 export function Images({
   entryId,
   indices,
   actions,
-  size,
-  border = "1px solid rgba(59,130,246,0.15)",
-  gap = 6,
-  marginBottom = 0,
+  variant,
+  separated = false,
 }: {
   entryId: string;
   indices: number[];
   actions?: ItemActions;
-  size: "thumb" | "full";
-  border?: string;
-  gap?: number;
-  marginBottom?: number;
+  variant: "user" | "note" | "assistant" | "tool";
+  separated?: boolean;
 }) {
   if (!actions || indices.length === 0) return <></>;
   return (
     <div
-      style={`display:flex; gap:${String(gap)}px; flex-wrap:wrap; margin-bottom:${String(marginBottom)}px`}
+      class={`transcript-images is-${variant}${separated ? " has-following-text" : ""}`}
     >
       {indices.map((index) => (
         // pi-web opens a transcript image in a modal over the app, never in a
@@ -218,12 +187,10 @@ export function Images({
           aria-expanded="false"
           title="Preview image"
           aria-label="Preview image"
-          style="display:block; padding:0; border:none; background:none; color:inherit; cursor:zoom-in"
+          class="transcript-image-trigger"
         >
           <img
-            style={
-              size === "thumb" ? `${THUMB_IMAGE}; border:${border}` : FULL_IMAGE
-            }
+            class="transcript-image"
             alt=""
             loading="lazy"
             src={imageUrl(actions, entryId, index)}

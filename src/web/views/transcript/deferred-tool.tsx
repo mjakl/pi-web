@@ -25,9 +25,7 @@ export function DeferredToolBody({
       hx-sync="this:drop"
       hx-swap="outerHTML"
     >
-      <pre
-        style={`margin:0; padding:8px 10px; color:var(--text-dim); font-size:12px; line-height:1.5; background:var(--bg-subtle); border-top:1px solid ${failed ? "rgba(248,113,113,0.25)" : "rgba(34,197,94,0.2)"}`}
-      >
+      <pre class={`tool-deferred-output${failed ? " is-error" : ""}`}>
         Loading output…
       </pre>
     </div>

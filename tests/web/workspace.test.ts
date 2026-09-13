@@ -215,7 +215,7 @@ describe("the new-session page", () => {
     expect(html).toContain(FAKE_MODEL.name);
     expect(html).toContain('name="thinking"');
     // The folder is changed from the sidebar's workspace pill now.
-    expect(html).toContain('class="anchor-sidebar-project"');
+    expect(html).toMatch(/class="[^"]*\banchor-sidebar-project\b[^"]*"/);
   });
 
   it("answers the folder's slash menu and file completion", async () => {
@@ -303,7 +303,7 @@ describe("missing-folder read-only mode", () => {
     // htmx swaps nothing on an error status, so the reason is the content.
     expect(res.status).toBe(200);
     expect(await res.text()).toBe(
-      '<div style="padding:2px 4px"><div style="padding:8px 12px; font-size:11px; color:var(--danger)">Not found</div></div>',
+      '<div class="file-tree-body"><div class="file-tree-message is-error">Not found</div></div>',
     );
   });
 
@@ -640,7 +640,7 @@ describe("pi-web's settings and trust chrome", () => {
     // label; the entry's own second line is the relative path alone
     // (PluginsConfig.tsx L127-L219).
     const group = plugins.slice(plugins.indexOf("Resolved Resources"));
-    expect(group).toContain("text-transform:uppercase");
+    expect(group).toContain('class="plugin-resource-heading">Extensions</div>');
     expect(group.indexOf("Extensions")).toBeLessThan(group.indexOf("review"));
     expect(group).toContain(">extensions/review/index.ts<");
     expect(group).not.toContain("extensions · ");

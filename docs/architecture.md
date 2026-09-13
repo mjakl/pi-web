@@ -261,22 +261,23 @@ composition root and the only importer of Pi adapters.
 
 ## Decisions
 
-- **pi-web's stylesheets are the pixel specification, copied verbatim.**
-  `src/web/styles/` holds pi-web's `base.css`, `globals.css` and `settings.css`
-  unchanged, plus `embedded.css` (the three `<style>` blocks pi-web keeps inside
-  components) and `web-pi.css` (only what pi-web gets from Next.js: the
-  self-hosted Noto Sans Mono faces behind `--font-noto-mono`, and htmx's
-  in-flight class). `index.css` imports them in pi-web's own order and esbuild
-  bundles that into `static/app.css`; there is no utility framework, because
-  Tailwind and daisyUI kept re-introducing their own metrics under every
-  component class and re-deriving 4,000 lines of hand-written CSS into utility
-  strings is a lossier copy of the same data. A view therefore carries pi-web's
-  class names and pi-web's inline styles, kebab-cased, and area agents add new
-  rules only to `src/web/styles/areas/<area>.css` — one file per area, so two of
-  them never edit the same stylesheet. The declared web-pi browserslist floor is
-  (chrome/edge ≥125, firefox ≥147, safari ≥26): native popovers, CSS anchor
-  positioning, `@starting-style`, `:has()` and `field-sizing` are load-bearing,
-  not progressive enhancement.
+- **Preserve rendered appearance and behavior with owner-scoped plain CSS.**
+  `archive/nextjs-final` is the historical reference, not an immutable source
+  layout. The styling rules in `AGENTS.md` allow minor normalization to the
+  established Settings controls while preserving meaningful density, hierarchy,
+  accessibility and responsive behavior. Static styles and finite presentation
+  states belong to the component's stylesheet, including generated HTML and
+  HTMX/SSE fragments. Only runtime values such as measured geometry and
+  arbitrary ANSI colors stay inline. Reset, tokens, fonts and browser/HTMX
+  concerns remain global; Settings, shell/dialog actions, sidebar,
+  composer/shelf, files and transcript own their component rules. `index.css`
+  declares the cascade and esbuild bundles it into `static/app.css`, without a
+  utility framework. Decorative entrance, sweep and repeating highlight effects
+  are removed; restrained interaction and functional progress feedback remain.
+  Rendered baseline comparisons, not source or snapshot equality, validate this
+  contract. The declared web-pi browserslist floor is (chrome/edge ≥125, firefox
+  ≥147, safari ≥26): native popovers, CSS anchor positioning, `@starting-style`,
+  `:has()` and `field-sizing` are load-bearing, not progressive enhancement.
 - **One module per area of the screen, on both sides.** `src/web/routes/` holds
   `sidebar`, `shell`, `transcript`, `composer` and `files`; `createWebApp`
   builds one `RouteContext` (the dependencies plus the request helpers that

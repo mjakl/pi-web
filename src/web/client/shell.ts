@@ -63,10 +63,7 @@ function setSidebarOpen(open: boolean): void {
   const backdrop = document.querySelector<HTMLElement>(
     ".sidebar-overlay-backdrop",
   );
-  if (backdrop) {
-    backdrop.style.opacity = open ? "1" : "0";
-    backdrop.style.pointerEvents = open ? "auto" : "none";
-  }
+  backdrop?.classList.toggle("is-open", open);
   const handle = document.querySelector<HTMLElement>(".sidebar-resize-handle");
   if (handle) handle.hidden = !open;
 }
@@ -163,9 +160,6 @@ function mountTopPanels(host: HTMLElement, signal: AbortSignal): void {
     for (const button of buttons) {
       const active = button.dataset["topPanel"] === open;
       button.setAttribute("aria-pressed", String(active));
-      button.style.background = active ? "var(--bg-selected)" : "none";
-      button.style.borderTopColor = active ? "var(--accent)" : "transparent";
-      button.style.color = active ? "var(--text)" : "var(--text-muted)";
     }
   };
   const close = (): void => {
@@ -288,12 +282,12 @@ function setUpSessionCopy(): void {
           if (signal.aborted) return;
           if (idle) idle.hidden = true;
           if (done) done.hidden = false;
-          button.style.color = "var(--accent)";
+          button.classList.add("is-copied");
           clearTimeout(timer);
           timer = setTimeout(() => {
             if (idle) idle.hidden = false;
             if (done) done.hidden = true;
-            button.style.color = "var(--text-dim)";
+            button.classList.remove("is-copied");
           }, COPIED_MS);
         }, noop);
       },

@@ -6,7 +6,7 @@ import { CheckIcon, CopyIcon } from "./icons.tsx";
 
 // The session info panel, one of the three surfaces the top bar opens. pi-web
 // draws it as a three-column mono grid inside a menu surface
-// (components/AppShell.tsx L2134-L2624); the inline styles here are its own.
+// (components/AppShell.tsx L2134-L2624).
 
 function duration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -19,13 +19,6 @@ function duration(ms: number): string {
   return `${String(seconds)}s`;
 }
 
-const SECTION_TITLE =
-  "font-size:11px; font-weight:700; color:var(--text); margin-bottom:6px";
-const LABEL = "color:var(--text-dim); white-space:nowrap";
-const VALUE =
-  "color:var(--text-muted); min-width:0; overflow-wrap:anywhere;" +
-  " word-break:break-word; white-space:normal";
-
 /**
  * A copyable value. The button holds both icons and the client swaps them for
  * 1400ms after a copy, as pi-web's `copiedSessionField` state does.
@@ -34,7 +27,7 @@ function Copy({ label, value }: { label: string; value: string }) {
   return (
     <button
       type="button"
-      style="align-self:start; display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; margin-top:-2px; color:var(--text-dim); background:transparent; border:1px solid var(--border); border-radius:4px; cursor:pointer; flex:0 0 auto; transition:color 0.12s, border-color 0.12s, background 0.12s"
+      class="session-info-copy"
       data-session-copy={value}
       title={label}
       aria-label={label}
@@ -61,9 +54,9 @@ function InfoRow({
   copy?: string;
 }) {
   return (
-    <div style="display:contents">
-      <div style={LABEL}>{label}</div>
-      <div style={VALUE}>{value}</div>
+    <div class="session-info-row">
+      <div class="session-info-label">{label}</div>
+      <div class="session-info-value">{value}</div>
       <div>
         {copy === undefined ? null : <Copy label={copy} value={value} />}
       </div>
@@ -79,11 +72,9 @@ function InfoSection({
   children: unknown;
 }) {
   return (
-    <div style="min-width:0">
-      <div style={SECTION_TITLE}>{title}</div>
-      <div style="display:grid; grid-template-columns:auto minmax(0, 1fr) auto; column-gap:12px; row-gap:8px; align-items:start">
-        {children}
-      </div>
+    <div class="session-info-section">
+      <div class="session-info-heading">{title}</div>
+      <div class="session-info-fields">{children}</div>
     </div>
   );
 }
@@ -100,27 +91,15 @@ function CountSection({
   compact?: boolean;
 }) {
   return (
-    <div style="min-width:0">
-      <div style={SECTION_TITLE}>{title}</div>
+    <div class="session-info-section">
+      <div class="session-info-heading">{title}</div>
       <div
-        style={
-          compact === true
-            ? "display:grid; grid-template-columns:max-content minmax(0, 1fr); column-gap:14px; row-gap:4px; justify-content:start"
-            : "display:grid; grid-template-columns:auto minmax(0, 1fr); column-gap:12px; row-gap:4px"
-        }
+        class={`session-info-counts${compact === true ? " is-compact" : ""}`}
       >
         {rows.map(([label, value]) => (
-          <div style="display:contents">
-            <div style={LABEL}>{label}</div>
-            <div
-              style={
-                compact === true
-                  ? "color:var(--text-muted); min-width:0; overflow-wrap:normal; text-align:right; white-space:normal"
-                  : VALUE
-              }
-            >
-              {value}
-            </div>
+          <div class="session-info-row">
+            <div class="session-info-label">{label}</div>
+            <div class="session-info-value">{value}</div>
           </div>
         ))}
       </div>
@@ -171,9 +150,9 @@ export function StatsPanel({
         ] as [string, string][])),
   ];
   return (
-    <div class="session-info-popover menu-surface" style="padding:12px 16px">
-      <div style="display:grid; grid-template-columns:minmax(360px, 1.7fr) minmax(140px, 0.55fr) minmax(190px, 0.75fr); gap:24px; font-size:12px; line-height:1.5; font-family:var(--font-mono)">
-        <div style="display:flex; flex-direction:column; gap:20px">
+    <div class="session-info-popover menu-surface">
+      <div class="session-info-grid">
+        <div class="session-info-details">
           <InfoSection title="Session Info">
             {summary.name ? (
               <InfoRow label="Name" value={summary.name} />

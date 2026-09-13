@@ -28,12 +28,12 @@ describe("toasts", () => {
       "status",
       "alert",
     ]);
-    expect(cards()[0]?.firstElementChild?.getAttribute("style")).toContain(
-      "var(--accent)",
-    );
-    expect(cards()[2]?.firstElementChild?.getAttribute("style")).toContain(
-      "var(--danger)",
-    );
+    expect(cards().map((card) => card.className)).toEqual([
+      "notice-shelf-item is-info",
+      "notice-shelf-item is-warning",
+      "notice-shelf-item is-error",
+    ]);
+    expect(cards()[0]?.firstElementChild?.className).toBe("notice-shelf-dot");
     expect(cards()[2]?.textContent).toBe("Broken.");
     vi.advanceTimersByTime(4_999);
     expect(cards()).toHaveLength(3);

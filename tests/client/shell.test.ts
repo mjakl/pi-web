@@ -53,12 +53,16 @@ describe("the sidebar drawer", () => {
     expect(sidebar.classList.contains("sidebar-mobile-pending")).toBe(false);
     expect(byId("sidebar-toggle").getAttribute("aria-expanded")).toBe("true");
     expect(query("[data-sidebar-open-icon]").hidden).toBe(false);
-    expect(query(".sidebar-overlay-backdrop").style.opacity).toBe("1");
+    expect(
+      query(".sidebar-overlay-backdrop").classList.contains("is-open"),
+    ).toBe(true);
     click(byId("sidebar-toggle"));
     expect(sidebar.classList.contains("sidebar-closed")).toBe(true);
     expect(query("[data-sidebar-closed-icon]").hidden).toBe(false);
     expect(query(".sidebar-resize-handle").hidden).toBe(true);
-    expect(query(".sidebar-overlay-backdrop").style.pointerEvents).toBe("none");
+    expect(
+      query(".sidebar-overlay-backdrop").classList.contains("is-open"),
+    ).toBe(false);
     click(byId("sidebar-toggle"));
     expect(sidebar.classList.contains("sidebar-open")).toBe(true);
     click(query(".sidebar-overlay-backdrop"));
@@ -151,7 +155,6 @@ describe("the top bar", () => {
     expect(host.style.left).toBe("260px");
     expect(host.style.width).toBe("700px");
     expect(system.getAttribute("aria-pressed")).toBe("true");
-    expect(system.style.borderTopColor).toBe("var(--accent)");
     click(tools);
     expect(system.getAttribute("aria-pressed")).toBe("false");
     expect(tools.getAttribute("aria-pressed")).toBe("true");
@@ -244,9 +247,14 @@ describe("settings helpers", () => {
     expect(write).toHaveBeenCalledWith("/tmp/s1.jsonl");
     expect(query("[data-copy-done]").hidden).toBe(false);
     expect(query("[data-copy-idle]").hidden).toBe(true);
+    expect(query("[data-session-copy]").classList.contains("is-copied")).toBe(
+      true,
+    );
     vi.advanceTimersByTime(1400);
     expect(query("[data-copy-done]").hidden).toBe(true);
-    expect(query("[data-session-copy]").style.color).toBe("var(--text-dim)");
+    expect(query("[data-session-copy]").classList.contains("is-copied")).toBe(
+      false,
+    );
   });
 
   it("switches a scope picker and the install path beside it", async () => {

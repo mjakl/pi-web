@@ -85,7 +85,7 @@ describe("web app", () => {
     expect(html).toContain("panel-resize-handle sidebar-resize-handle");
     expect(html).toContain("sidebar-overlay-backdrop");
     expect(html).toContain("Pi Web");
-    expect(html).toContain('class="anchor-sidebar-project"');
+    expect(html).toMatch(/class="[^"]*\banchor-sidebar-project\b[^"]*"/);
     expect(html).toContain('id="session-list"');
     expect(html).toContain('id="explorer-section"');
     // Top bar: pi-web's order of controls.
@@ -148,7 +148,7 @@ describe("web app", () => {
       })
     ).text();
     expect(warned).toContain("data-warning");
-    expect(warned).toContain("rgba(234,179,8,0.95)");
+    expect(warned).toContain('class="mobile-session-context is-warn"');
   });
 
   it("tints the System and Tools icons from the attached session", async () => {
@@ -156,22 +156,19 @@ describe("web app", () => {
     // A stored session tells the page nothing about either, so pi-web leaves
     // both icons dim until something attaches.
     const stored = await (await app.request("/sessions/s1")).text();
-    const dim = stored.slice(stored.indexOf('data-top-panel="system"'));
-    expect(dim).toContain(
-      'data-panel-icon="true" style="display:flex; color:var(--text-dim)"',
+    const dim = stored.slice(
+      stored.indexOf('data-top-panel="system"'),
+      stored.indexOf('id="stats-trigger"'),
     );
+    expect(dim).not.toContain("data-panel-loaded");
     await world.runtime.open({ sessionId: "s1" });
     const live = await (await app.request("/sessions/s1")).text();
     const tabs = live.slice(
       live.indexOf('data-top-panel="system"'),
       live.indexOf('id="stats-trigger"'),
     );
-    expect(tabs).toContain(
-      'data-panel-icon="true" style="display:flex; color:var(--accent)"',
-    );
-    // Both of them, and neither left dim.
-    expect(tabs.split("var(--accent)").length - 1).toBe(2);
-    expect(tabs).not.toContain("color:var(--text-dim)");
+    // Both buttons carry the same loaded state before a browser opens them.
+    expect(tabs.match(/data-panel-loaded="true"/g)).toHaveLength(2);
   });
 
   it("renders the top panels with pi-web's menu-panel classes", async () => {
@@ -184,7 +181,9 @@ describe("web app", () => {
     const tools = await (await app.request("/sessions/s1/tools")).text();
     expect(tools).toContain("tool-definitions-panel menu-surface menu-panel");
     expect(tools).toContain("tool-definitions-sidebar");
-    expect(tools).toContain("tool-definitions-item selected");
+    expect(tools).toMatch(
+      /class="tool-definitions-item"[^>]*aria-pressed="true"/,
+    );
     expect(tools).toContain("tool-definition-field-name");
     expect(tools).toContain('hx-target="#top-panel"');
     // Before there is a session both panels are their own empty state, as
@@ -208,12 +207,12 @@ describe("web app", () => {
     ]) {
       expect([title, stats.includes(title)]).toStrictEqual([title, true]);
     }
-    expect(stats).toContain("minmax(360px, 1.7fr)");
+    expect(stats).toContain('class="session-info-grid"');
     expect(stats).toContain('data-session-copy="s1"');
     expect(stats).toContain("Copy session ID");
   });
 
-  it("dresses an extension dialog in pi-web's panel", async () => {
+  it("renders a pending extension request in its dialog panel", async () => {
     const { app } = testApp({
       script: () =>
         [
@@ -229,7 +228,7 @@ describe("web app", () => {
     const page = await (await app.request("/sessions/s1")).text();
     const dialog = page.slice(page.indexOf('class="extension-dialog"'));
     expect(dialog).toContain("extension request");
-    expect(dialog).toContain("width:min(560px, 100%)");
+    expect(dialog).toContain('class="extension-dialog-panel"');
     expect(dialog).toContain("Push it?");
     expect(dialog).toContain("Confirm");
     expect(dialog).toContain("data-dialog-cancel");
@@ -301,13 +300,11 @@ describe("web app", () => {
     // pi-web's streaming header: the model, the running token estimate, and
     // the rate, in its three fixed columns. web-pi gets both from the
     // runtime instead of a meter in the browser.
-    expect(received).toContain("grid-template-columns:minmax(0, 1fr) 9ch 10ch");
+    expect(received).toContain('class="assistant-message-header is-streaming"');
     expect(received).toContain("Estimated token count while streaming");
     // The rate column is there from the start; it stays blank until half a
     // second of the message has arrived, which this turn never reaches.
-    expect(received).toContain(
-      "text-align:right; color:var(--text-dim); font-size:11px",
-    );
+    expect(received).toContain('class="assistant-streaming-speed"');
   });
 
   it("renders metadata and actions in the initial response, including on revisit", async () => {
@@ -361,7 +358,7 @@ describe("web app", () => {
       );
     const page = await (await app.request("/")).text();
     // The unreadable row consumes its slot, without shifting the next offset.
-    expect(page.match(/class="session-row"/g)).toHaveLength(49);
+    expect(page.match(/class="session-row(?: [^"]*)?"/g)).toHaveLength(49);
     expect(page).not.toContain('id="row-p40"');
     expect(metadata).toHaveBeenCalledTimes(50);
     expect(page).toContain("prompt p59");
@@ -374,7 +371,7 @@ describe("web app", () => {
     const next = await (
       await app.request((sentinel ?? "").replaceAll("&amp;", "&"))
     ).text();
-    expect(next.match(/class="session-row"/g)).toHaveLength(11);
+    expect(next.match(/class="session-row(?: [^"]*)?"/g)).toHaveLength(11);
     expect(metadata).toHaveBeenCalledTimes(11);
     expect(next).toContain("prompt p0");
     expect(next).toContain("1 msgs");
@@ -887,7 +884,7 @@ describe("web app", () => {
     // shows the same row selected.
     const page = await (await app.request("/sessions/new-1")).text();
     const row = page.slice(page.indexOf('id="row-new-1"'));
-    expect(row).toContain("background:var(--bg-selected)");
+    expect(row).toContain("session-row is-selected");
     expect(row).toContain('data-status="Agent running…"');
   });
 
@@ -1186,10 +1183,10 @@ describe("the sidebar", () => {
       expect([marker, found > -1]).toStrictEqual([marker, true]);
       at = found;
     }
-    expect(header).toContain('class="anchor-sidebar-project"');
+    expect(header).toMatch(/class="[^"]*\banchor-sidebar-project\b[^"]*"/);
     // The pill names the working folder, shortened against the reader's home.
     expect(header).toContain(">~/one<");
-    expect(header).toContain("direction:rtl");
+    expect(header).toContain('class="sidebar-project-path"');
   });
 
   it("names the branch in Project Info, the worktree only when it is one", async () => {
@@ -1211,19 +1208,14 @@ describe("the sidebar", () => {
     await world.runtime.open({ sessionId: "s2" });
     const row = await (await app.request("/sessions/s2/row")).text();
     expect(row).toContain("Session active");
-    expect(row).toContain('data-colour="var(--success)"');
-    expect(row).toContain("color:var(--success)");
+    expect(row).toContain('class="session-indicator is-active"');
   });
 
   it("renders a 54px session row with pi-web's three columns", async () => {
     const { app } = sidebarApp();
     const html = await (await app.request("/sessions/s2")).text();
     const row = html.slice(html.indexOf('id="row-s2"'));
-    expect(row).toContain('class="session-row"');
-    expect(row).toContain("height:54px");
-    // Selected: pi-web tints the row and puts an accent bar down its left.
-    expect(row).toContain("background:var(--bg-selected)");
-    expect(row).toContain("border-left:2px solid var(--accent)");
+    expect(row).toContain('class="session-row is-selected"');
     const inOrder = (text: string, markers: string[]) => {
       let at = 0;
       for (const marker of markers) {
@@ -1234,7 +1226,7 @@ describe("the sidebar", () => {
     };
     inOrder(row, [
       "In a worktree",
-      'class="session-indicator"',
+      'class="session-indicator is-stopped"',
       "Session stopped",
       " ago",
       "feature/x",
@@ -1244,12 +1236,9 @@ describe("the sidebar", () => {
     const start = html.indexOf('id="row-s1"');
     // s1 is the last row of this project, so the list's end bounds the slice.
     const other = html.slice(start, html.indexOf('id="explorer-section"'));
-    expect(other).toContain("border-left:2px solid transparent");
-    expect(other).not.toContain("background:var(--bg-selected)");
-
-    // The state's own colour rides along: the browser paints the unread tint
-    // over it and has to be able to put it back (client/sidebar.ts).
-    expect(row).toContain('data-colour="var(--text-dim)"');
+    expect(other).not.toContain("session-row is-selected");
+    // The underlying status survives the browser's unread tint.
+    expect(row).toContain('class="session-indicator is-stopped"');
 
     // The right column arrives with the row's own metadata.
     const loaded = await (await app.request("/sessions/s2/row")).text();
@@ -1259,7 +1248,7 @@ describe("the sidebar", () => {
       'class="session-counts"',
       "1 msgs",
     ]);
-    expect(loaded).toContain("min-width:64px");
+    expect(loaded).toContain('class="session-row-actions"');
   });
 
   it("hangs pi-web's 144px action menu off a row that knows its counts", async () => {
@@ -1271,8 +1260,7 @@ describe("the sidebar", () => {
     const menu = html.slice(html.indexOf('id="row-menu-s1"'));
     expect(menu).toContain('popover="auto"');
     expect(menu).toContain('role="group"');
-    expect(menu).toContain("width:min(144px, calc(100vw - 16px))");
-    expect(menu).toContain("position:fixed");
+    expect(menu).toContain('class="session-row-menu menu-surface"');
     const items = [...menu.matchAll(/class="menu-item[^"]*"[^>]*>([^<]+)</g)]
       .map((match) => match[1])
       .slice(0, 3);
@@ -1296,8 +1284,10 @@ describe("the sidebar", () => {
   it("swaps the row for an input when Rename is chosen, and back again", async () => {
     const { app } = sidebarApp();
     const renaming = await (await app.request("/sessions/s1/rename")).text();
-    expect(renaming).toContain('<form id="row-s1" class="session-row"');
-    expect(renaming).toContain("border:1px solid var(--accent)");
+    expect(renaming).toContain(
+      '<form id="row-s1" class="session-row is-renaming"',
+    );
+    expect(renaming).toContain('class="session-rename-input"');
     expect(renaming).toContain('value="Stored one"');
     // Escape asks for the row back.
     expect(renaming).toContain('hx-get="/sessions/s1/row"');
@@ -1421,10 +1411,10 @@ describe("the composer, as pi-web draws it", () => {
     order(composer, [
       'class="chat-input"',
       'id="image-input"',
-      "max-width:820px; margin:0 auto",
+      'class="composer-column"',
       'id="status"',
-      'id="slash-menu" class="menu-surface menu-panel"',
-      'id="at-menu" class="menu-surface menu-panel"',
+      'id="slash-menu" class="menu-surface menu-panel composer-completion-panel"',
+      'id="at-menu" class="menu-surface menu-panel composer-completion-panel"',
       'class="composer-surface"',
       'id="image-previews"',
       'class="composer-textarea"',
@@ -1436,10 +1426,6 @@ describe("the composer, as pi-web draws it", () => {
       'class="composer-action-primary"',
       'class="composer-shell-mode" id="shell-hint"',
     ]);
-    // The surface's own metrics come from globals.css, so the markup only has
-    // to carry the classes; the strips, though, are pi-web's inline styles.
-    expect(composer).toContain("bottom:calc(100% + 8px)");
-    expect(composer).toContain("max-height:min(48vh, 400px)");
     // The stream swaps into the status div, not into the form's toast target.
     expect(composer).toContain('id="status"');
   });
@@ -1451,9 +1437,9 @@ describe("the composer, as pi-web draws it", () => {
       "Slash commands · ",
       " commands",
       "Tab / Enter",
-      'class="menu-section-label"',
+      'class="menu-section-label composer-command-heading"',
       "Built-in",
-      'class="menu-item"',
+      'class="menu-item composer-command"',
       "/clone",
       "Clone the current branch into a new session",
       // pi-web's group order: built-in, extension, prompt, skill.
@@ -1464,7 +1450,7 @@ describe("the composer, as pi-web draws it", () => {
       "Skills",
       "/skill:testing",
     ]);
-    expect(menu).toContain("font-size:12.5px");
+    expect(menu).toContain('class="composer-command-name"');
     expect(menu).toContain('data-index="0"');
   });
 
@@ -1493,7 +1479,9 @@ describe("the composer, as pi-web draws it", () => {
     expect(selector).toContain(
       "anchored-menu menu-surface opens-up menu-model-selector",
     );
-    expect(selector).toContain('class="menu-filter"');
+    expect(selector).toContain(
+      'class="menu-filter composer-model-filter-input"',
+    );
     expect(selector).toContain('placeholder="Filter models…"');
     // Showing a popover focuses the first autofocus element inside it.
     expect(selector).toContain("autofocus");
@@ -1561,11 +1549,11 @@ describe("the composer, as pi-web draws it", () => {
     const page = await (await app.request("/sessions/s1")).text();
     const status = page.slice(page.indexOf('id="status"'));
     order(status, [
-      "text-transform:uppercase",
+      'class="composer-queue-label"',
       "Queued · 1",
       "Remove all queued messages",
       "Recall to input",
-      "border-radius:999px",
+      'class="composer-queued-kind"',
       "follow-up",
       "and then this",
     ]);
@@ -1614,8 +1602,6 @@ describe("conversation rail, shelf, and written files", () => {
     expect(page).toContain('class="minimap-row"');
     expect(page).toContain('class="minimap-message"');
     expect(page).toContain('class="minimap-dot"');
-    // A mark is never taller than pi-web's 32px cap.
-    expect(page).toContain("height:max(1px, min(32px, 100%))");
   });
 
   it("draws the spine between marks on a linear session too", async () => {
@@ -1691,14 +1677,16 @@ describe("conversation rail, shelf, and written files", () => {
       '<span class="extension-status-text"><span style="color:#13703a">main</span> clean · 2 &lt; 3</span>',
     );
     expect(received).toContain('aria-label="main clean · 2 &lt; 3"');
-    expect(received).toContain('<span style="font-weight:600">Open</span>');
+    expect(received).toContain('<span class="terminal-bold">Open</span>');
     // pi-web's shelf: the trigger row, the status line, and the panel of the
     // one widget short enough to open unasked (§4.11).
     expect(received).toContain(
       'class="extension-status-shelf has-widgets has-status"',
     );
     expect(received).toContain('class="extension-widget-triggers"');
-    expect(received).toContain('class="extension-widget-trigger is-expanded"');
+    expect(received).toMatch(
+      /class="extension-widget-trigger"[^>]*aria-expanded="true"/,
+    );
     expect(received).toContain('class="extension-widget-panel-heading"');
     expect(received).toContain('class="extension-status-text"');
     expect(received).not.toContain("\u001B[");
@@ -1832,10 +1820,11 @@ describe("transcript rendering", () => {
     // The user prompt: a full-width band with the 820px column inside it.
     expect(page).toContain('class="user-message-band"');
     expect(page).toContain('class="user-message-band-content"');
-    expect(page).toContain('class="message-row"');
+    expect(page).toContain('class="message-row user-message"');
+    expect(page).toContain('class="message-row assistant-message"');
     // The answer: star toggle, model label, then the shared action row.
     expect(page).toContain('class="answer-star-toggle"');
-    expect(page).toContain("grid-template-columns:auto minmax(0, 1fr)");
+    expect(page).toContain('class="assistant-message-header"');
     expect(page).toContain('class="message-copy"');
     expect(page).toContain('class="history-action-host"');
     expect(page).toContain('class="history-actions"');
@@ -1845,7 +1834,7 @@ describe("transcript rendering", () => {
     expect(page).toContain("markdown-body markdown-user-message");
     // Usage, then the timestamp pushed to the right at 10px.
     expect(page).toContain("39,990 in · 10 out");
-    expect(page).toContain("font-size:10px; color:var(--text-dim)");
+    expect(page).toContain('class="transcript-time"');
   });
 
   it("keeps an extension card's copy button and details toggle on one row", async () => {
@@ -1875,8 +1864,7 @@ describe("transcript rendering", () => {
     );
     // The word alone, with no icon, is what pi-web copies with here.
     expect(page).toContain(
-      '<button type="button" class="message-copy" style="padding:3px 7px;' +
-        ' border:none; background:none; cursor:pointer; font-size:11px"' +
+      '<button type="button" class="message-copy is-bare"' +
         ' data-copy="true" title="Copy message">Copy</button>',
     );
   });
@@ -1928,12 +1916,9 @@ describe("transcript rendering", () => {
       .poll(() => world.runtime.get("s1")?.snapshot().status.running)
       .toBe(false);
     const page = await (await app.request("/sessions/s1")).text();
-    expect(page).toContain("border:1px solid rgba(34,197,94,0.25)");
-    expect(page).toContain("background:rgba(34,197,94,0.04)");
-    // Name in mono green, preview in dim mono, chevron last.
-    expect(page).toContain(
-      "color:var(--success); font-family:var(--font-mono)",
-    );
+    expect(page).toContain('class="transcript-details tool-card"');
+    expect(page).toContain('class="tool-name"');
+    expect(page).toContain('class="tool-preview"');
     expect(page).toContain('class="card-chevron"');
     // The process disclosure keeps its own chevron and count line.
     expect(page).toContain('class="process-chevron"');
@@ -1958,9 +1943,7 @@ describe("transcript rendering", () => {
     const page = await (await app.request("/sessions/s1")).text();
     expect(page).toContain("Loading output…");
     // The rule under the header follows the card, never the green default.
-    expect(page).toContain(
-      "background:var(--bg-subtle); border-top:1px solid rgba(248,113,113,0.25)",
-    );
+    expect(page).toContain('class="tool-deferred-output is-error"');
   });
 
   it("renders a notice as pi-web's shelf card", async () => {
@@ -1980,11 +1963,10 @@ describe("transcript rendering", () => {
       received += decoder.decode(chunk.value);
     }
     await reader.cancel();
-    expect(received).toContain('class="notice-shelf-item"');
-    expect(received).toContain("border-radius:14px");
-    expect(received).toContain("min-height:60px");
-    // The type dot, then the message in its own scrolling span.
-    expect(received).toContain("background:var(--accent)");
+    expect(received).toContain('class="notice-shelf-item is-info"');
+    // Streamed notices use the same presentation hooks as browser notices.
+    expect(received).toContain('class="notice-shelf-dot"');
+    expect(received).toContain('class="notice-shelf-text"');
     expect(received).toContain("Resources reloaded.");
   });
 
@@ -2034,9 +2016,7 @@ describe("transcript rendering", () => {
     const body = await (await app.request(deferredUrl(page))).text();
     expect(body).toContain("const a = 1;");
     expect(body).toContain("const a = 2;");
-    expect(body).toContain(
-      "grid-template-columns:minmax(0, 1fr) minmax(0, 1fr)",
-    );
+    expect(body).toContain('class="tool-diff-lines"');
     // Edit tools show the diff instead of repeating their arguments.
     expect(body).not.toContain("&quot;file_path&quot;");
   });
@@ -2173,7 +2153,7 @@ describe("phase 8 fixes", () => {
     await world.runtime.open({ sessionId: "s1" });
     const plain = await (await app.request("/sessions/s1")).text();
     expect(plain).toContain("data-context-readout");
-    expect(plain).toContain("color:var(--text-muted)");
+    expect(plain).toContain('class="mobile-session-context is-ok"');
     // 40 000 tokens of a 100 000 window is 40 %: below every percent rule,
     // above a threshold the reader set at 30 000.
     const warned = await (
@@ -2181,7 +2161,7 @@ describe("phase 8 fixes", () => {
         headers: { cookie: "web-pi-warn-tokens=30000" },
       })
     ).text();
-    expect(warned).toContain("rgba(234,179,8,0.95)");
+    expect(warned).toContain('class="mobile-session-context is-warn"');
   });
 
   it("refuses to compact while a turn owns the context", async () => {
@@ -2493,7 +2473,7 @@ describe("the shell chrome, on every route", () => {
     expect(bar).not.toContain('id="stats-trigger"');
     // The toggle takes the free space when no stats cluster does.
     expect(bar).toContain(
-      'id="file-panel-toggle" style="display:flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0; background:none; border:none; color:var(--text-muted); cursor:pointer; flex-shrink:0; transition:color 0.12s, background 0.12s; border-left:1px solid var(--border); margin-left:auto"',
+      'id="file-panel-toggle" class="shell-icon-button is-right-control is-sessionless"',
     );
     // The panel itself stays mounted, collapsed, as pi-web keeps it.
     expect(html).toContain('id="file-panel"');
@@ -2536,7 +2516,7 @@ describe("the shell chrome, on every route", () => {
     expect(html).toContain('id="rail-column"');
     expect(html).toContain('data-session-id="s1"');
     // Its complete row is selected before any client request.
-    expect(html).toMatch(/id="row-s1"[^>]*background:var\(--bg-selected\)/);
+    expect(html).toMatch(/id="row-s1"[^>]*class="session-row is-selected/);
     expect(html).not.toContain("/row?active=s1");
   });
 

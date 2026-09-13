@@ -32,12 +32,6 @@ function markHeight(rows: number): string {
   return `min(${String(MAX_MARK)}px, ${gap(rows)})`;
 }
 
-/**
- * The same cap for a mark inside a row: the row is already one gap tall, so
- * its own height is the gap and the percentage resolves against it.
- */
-const ROW_MARK_HEIGHT = `min(${String(MAX_MARK)}px, 100%)`;
-
 function Node({
   mark,
   rows,
@@ -102,7 +96,6 @@ function Node({
           role="separator"
           aria-label="Conversation compacted"
           class="minimap-compaction"
-          style="width:18px; height:2px; border-radius:1px; background:var(--text-muted); box-shadow:0 0 0 2px var(--bg-panel)"
         />
       </div>
     );
@@ -127,7 +120,6 @@ function Node({
             : "Jump to human message"
         }
         title={mark.kind === "star" ? "Jump to starred answer" : undefined}
-        style={`height:max(1px, ${ROW_MARK_HEIGHT})`}
       >
         {mark.kind === "star" ? (
           <StarIcon filled />
