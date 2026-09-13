@@ -197,6 +197,12 @@ it("restores the rewound prompt when SSE replaces history before the action resp
     .poll(() => document.querySelector("#composer") !== oldComposer)
     .toBe(true);
   expect(document.querySelector("textarea")?.value).toBe("Question 51");
+  expect(f.world.runtime.get(f.id)?.snapshot().status.running).toBe(false);
+  expect(
+    document.querySelector(`[hx-post="/sessions/${f.id}/stop"]`),
+  ).not.toBeNull();
+  expect(document.querySelector("#status [data-running]")).toBeNull();
+  expect(document.querySelector("#turn")?.textContent).toBe("");
   expect(window.localStorage.getItem(`web-pi:draft:${f.id}`)).toBe(
     "Question 51",
   );

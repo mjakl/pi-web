@@ -414,7 +414,10 @@ export function sessionUseCases({
     async rewind(id: string, entryId: string): Promise<EditableMessage> {
       await requireFolder(id);
       await stop(id);
-      return deps.sessions.rewind(id, entryId);
+      const draft = await deps.sessions.rewind(id, entryId);
+      // Resume from the rewritten file, without submitting the recalled draft.
+      await deps.runtime.open({ sessionId: id });
+      return draft;
     },
 
     /** Moves the session's leaf, opening a runtime when there is none. */

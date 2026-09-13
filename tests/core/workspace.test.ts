@@ -1,4 +1,8 @@
-import { createFakeWorld, userEntry } from "@adapters/fake/index";
+import {
+  assistantEntry,
+  createFakeWorld,
+  userEntry,
+} from "@adapters/fake/index";
 import { createWorkspace } from "@core/workspace";
 import { describe, expect, it } from "vitest";
 
@@ -134,11 +138,55 @@ describe("workspace over the fake runtime", () => {
     );
     const recalled = await workspace.rewind(id, wordless?.entryId ?? "");
     expect(recalled).toEqual({ text: "", images: forked.images });
-    expect(world.runtime.get(id)).toBeUndefined();
+    expect(world.runtime.get(id)?.snapshot().status.running).toBe(false);
     expect(
       (await workspace.viewSession(id))?.items.map((item) => item.entryId),
     ).not.toContain(wordless?.entryId);
   });
+
+  it.each([false, true])(
+    "rewinds into an active idle session without sending the recalled message (previously active: %s)",
+    async (active) => {
+      const world = createFakeWorld({
+        sessions: [
+          {
+            summary: {
+              id: "rewind",
+              cwd: "/repo",
+              name: "Rewind fixture",
+              createdAt: "2026-09-01T00:00:00Z",
+              modifiedAt: "2026-09-01T00:00:00Z",
+              fileSize: 100,
+            },
+            entries: [
+              userEntry("u1", null, "first"),
+              assistantEntry("a1", "u1", "first answer", 100),
+              userEntry("u2", "a1", "edit this"),
+              assistantEntry("a2", "u2", "second answer", 100),
+            ],
+          },
+        ],
+      });
+      const workspace = createWorkspace(world);
+      if (active) await workspace.activate("rewind");
+      const before = world.runtime.get("rewind");
+
+      expect(await workspace.rewind("rewind", "u2")).toEqual({
+        text: "edit this",
+        images: [],
+      });
+
+      const resumed = world.runtime.get("rewind");
+      expect(resumed).toBeDefined();
+      expect(resumed).not.toBe(before);
+      expect(resumed?.snapshot().status.running).toBe(false);
+      const view = await workspace.viewSession("rewind");
+      expect(view?.summary.live).toBe(true);
+      expect(view?.items.map((item) => item.entryId)).toEqual(["u1", "a1"]);
+      expect(view?.turn).toEqual([]);
+      await resumed?.stop();
+    },
+  );
 
   it("recalls the queue with the images its messages carried", async () => {
     const world = createFakeWorld({ delayMs: 20, reply: () => "slow answer" });
