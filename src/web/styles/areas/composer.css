@@ -27,6 +27,24 @@
 }
 
 @media (max-width: 640px) {
+  /* Let field-sizing start at one line without shrinking the touch controls. */
+  .chat-input {
+    padding-top: 4px;
+  }
+
+  .composer-surface {
+    padding-top: 8px;
+  }
+
+  .composer-textarea {
+    min-height: 0;
+    padding-bottom: 0;
+  }
+
+  .composer-toolbar {
+    margin-top: 4px;
+  }
+
   #composer[data-running] .composer-toolbar > .composer-more,
   .chat-composer:has(.extension-status-line)
     .composer-toolbar
