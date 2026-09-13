@@ -131,14 +131,13 @@ function renderTabs(): void {
     tab.role = "tab";
     tab.dataset["path"] = path;
     tab.setAttribute("aria-selected", selected ? "true" : "false");
-    tab.style.cssText = `display:flex; align-items:center; gap:6px; height:36px; padding-left:12px; padding-right:6px; border-right:1px solid var(--border); background:${selected ? "var(--bg)" : "var(--bg-panel)"}; cursor:pointer; font-size:12px; color:${selected ? "var(--text)" : "var(--text-muted)"}; white-space:nowrap; max-width:180px; min-width:80px; flex-shrink:0; user-select:none; transition:background 0.1s, color 0.1s`;
 
     const icon = document.createElement("span");
-    icon.style.cssText = `flex-shrink:0; opacity:${selected ? "1" : "0.7"}; display:flex; align-items:center`;
+    icon.className = "file-tab-icon";
     icon.append(fileIcon(label, 13));
 
     const name = document.createElement("span");
-    name.style.cssText = `overflow:hidden; text-overflow:ellipsis; flex:1; font-weight:${selected ? "500" : "400"}`;
+    name.className = "file-tab-name";
     name.title = path;
     name.textContent = label;
 
@@ -148,8 +147,6 @@ function renderTabs(): void {
     close.dataset["close"] = "1";
     close.title = "Close";
     close.setAttribute("aria-label", `Close ${label}`);
-    close.style.cssText =
-      "display:flex; align-items:center; justify-content:center; width:24px; height:24px; border:none; border-radius:4px; cursor:pointer; padding:0; flex-shrink:0; transition:background 0.1s, color 0.1s";
     close.innerHTML = CLOSE_ICON;
 
     tab.append(icon, name, close);
@@ -245,8 +242,7 @@ function emptyViewer(): void {
   const host = document.getElementById("file-view");
   if (!host) return;
   const empty = document.createElement("div");
-  empty.style.cssText =
-    "height:100%; display:flex; align-items:center; justify-content:center; color:var(--text-dim); font-size:12px";
+  empty.className = "file-viewer-empty";
   empty.textContent = "No file open";
   host.replaceChildren(empty);
 }
@@ -290,15 +286,14 @@ function showWatching(live: boolean): void {
   if (!element) return;
   const dot = element.querySelector<HTMLElement>(".file-viewer-live-indicator");
   if (dot) {
-    dot.style.background = live ? "var(--success)" : "var(--border)";
-    dot.style.boxShadow = live ? "0 0 4px var(--success)" : "none";
+    dot.classList.toggle("is-live", live);
     const title = live ? "Live sync active" : "Not watching";
     dot.title = title;
     dot.setAttribute("aria-label", title);
   }
   const pill = element.querySelector<HTMLElement>(".file-viewer-live");
   if (pill) {
-    pill.style.color = live ? "var(--success)" : "var(--text-dim)";
+    pill.classList.toggle("is-live", live);
     pill.title = live ? "Live sync active" : "Not watching";
   }
   const word = element.querySelector(".file-viewer-live-label");

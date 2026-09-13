@@ -303,7 +303,7 @@ describe("missing-folder read-only mode", () => {
     // htmx swaps nothing on an error status, so the reason is the content.
     expect(res.status).toBe(200);
     expect(await res.text()).toBe(
-      '<div style="padding:2px 4px"><div style="padding:8px 12px; font-size:11px; color:var(--danger)">Not found</div></div>',
+      '<div class="file-tree-body"><div class="file-tree-message is-error">Not found</div></div>',
     );
   });
 

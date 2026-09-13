@@ -108,9 +108,9 @@ describe("explorer", () => {
     expect(html).toContain('role="tree"');
     expect(html).toContain('data-name="src"');
     expect(html).toContain('data-name="notes.md"');
-    // 24px rows indented 8 + depth * 14, and the Catppuccin icon masks.
+    // Runtime indentation is 8 + depth * 14; icons retain both theme masks.
     expect(html).toContain("padding-left:8px");
-    expect(html).toContain("height:24px");
+    expect(html).toContain('class="file-tree-row"');
     expect(html).toContain("/static/icons/catppuccin/latte/markdown.svg");
     expect(html).toContain("/static/icons/catppuccin/mocha/_folder.svg");
     // The hover actions: a mention button and a download link per row.
@@ -311,8 +311,10 @@ describe("viewer", () => {
     expect(html).toContain('data-mode="source"');
     expect(html).toContain('class="file-source-line" data-line-number="1"');
     expect(html).toContain("hljs-keyword");
-    // The 48px gutter, and the trailing newline counted as pi-web counts it.
-    expect(html).toContain("width:48px");
+    // The gutter is separate from selectable source text.
+    expect(html).toContain(
+      'aria-hidden="true" class="file-line-number">1</span>',
+    );
     expect(html).toContain("3 lines");
     expect(html).toContain("Enable word wrap");
   });
@@ -334,8 +336,8 @@ describe("viewer", () => {
     const html = await (await app.request(url)).text();
     expect(html).toContain('data-mode="diff"');
     expect(html).toContain("file-diff-view");
-    expect(html).toContain("rgba(240,60,60,0.14)");
-    expect(html).toContain("rgba(0,200,80,0.12)");
+    expect(html).toContain('class="file-diff-line is-removed"');
+    expect(html).toContain('class="file-diff-line is-added"');
     expect(html).toContain("const a = 2;");
     // pi-web renders no @@ headers; the collapsed spans say what was skipped.
     expect(html).not.toContain("@@");
@@ -381,7 +383,7 @@ describe("viewer", () => {
     const url = `/files/view?session=s1&path=${encodeURIComponent(join(repo, "logo.png"))}`;
     const html = await (await app.request(url)).text();
     expect(html).toContain("file-viewer-media-body");
-    expect(html).toContain("background-size:16px 16px");
+    expect(html).toContain('class="file-viewer-image"');
     expect(html).toContain("/files/raw?path=");
     expect(html).toContain(">png<");
     expect(html).toContain(">static<");
