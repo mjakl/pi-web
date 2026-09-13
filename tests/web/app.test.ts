@@ -213,7 +213,7 @@ describe("web app", () => {
     expect(stats).toContain("Copy session ID");
   });
 
-  it("dresses an extension dialog in pi-web's panel", async () => {
+  it("renders a pending extension request in its dialog panel", async () => {
     const { app } = testApp({
       script: () =>
         [
@@ -229,7 +229,7 @@ describe("web app", () => {
     const page = await (await app.request("/sessions/s1")).text();
     const dialog = page.slice(page.indexOf('class="extension-dialog"'));
     expect(dialog).toContain("extension request");
-    expect(dialog).toContain("width:min(560px, 100%)");
+    expect(dialog).toContain('class="extension-dialog-panel"');
     expect(dialog).toContain("Push it?");
     expect(dialog).toContain("Confirm");
     expect(dialog).toContain("data-dialog-cancel");

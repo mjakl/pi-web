@@ -640,7 +640,7 @@ describe("pi-web's settings and trust chrome", () => {
     // label; the entry's own second line is the relative path alone
     // (PluginsConfig.tsx L127-L219).
     const group = plugins.slice(plugins.indexOf("Resolved Resources"));
-    expect(group).toContain("text-transform:uppercase");
+    expect(group).toContain('class="plugin-resource-heading">Extensions</div>');
     expect(group.indexOf("Extensions")).toBeLessThan(group.indexOf("review"));
     expect(group).toContain(">extensions/review/index.ts<");
     expect(group).not.toContain("extensions · ");

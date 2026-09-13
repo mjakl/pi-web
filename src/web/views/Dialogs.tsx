@@ -1,4 +1,5 @@
 import { TrustDialogShieldIcon, TrustShieldIcon } from "./icons.tsx";
+import { ConfigButton } from "./ConfigControls.tsx";
 
 // The dialogs the shell owns: the modal shell every one of them is built from,
 // the host they are swapped into, and the trust flow. The workspace picker
@@ -52,39 +53,31 @@ export function TrustDialog({ cwd }: { cwd: string }) {
       open
     >
       <div class="project-trust-panel">
-        <div style="display:flex; gap:12px; padding:18px 18px 14px">
+        <div class="project-trust-body">
           <TrustDialogShieldIcon />
-          <div style="min-width:0">
-            <div
-              id="project-trust-title"
-              style="font-size:15px; font-weight:700; color:var(--text)"
-            >
+          <div class="project-trust-content">
+            <div id="project-trust-title" class="project-trust-title">
               Trust this project?
             </div>
-            <div style="margin-top:7px; font-size:12px; line-height:1.6; color:var(--text-muted)">
+            <div class="project-trust-message">
               Project resources can run local code. Trust only projects whose
               contents you know.
             </div>
-            <code style="display:block; margin-top:10px; padding:8px 10px; border:1px solid var(--border); border-radius:5px; background:var(--bg); color:var(--text); font-family:var(--font-mono); font-size:11px; overflow-wrap:anywhere">
-              {cwd}
-            </code>
+            <code class="project-trust-path">{cwd}</code>
           </div>
         </div>
-        <div style="display:flex; justify-content:flex-end; gap:8px; padding:10px 18px; border-top:1px solid var(--border)">
+        <div class="dialog-actions project-trust-actions">
           <form method="dialog">
-            <button style="height:32px; padding:0 12px; border:1px solid var(--border); border-radius:5px; background:transparent; color:var(--text-muted); cursor:pointer; font-size:12px">
-              Cancel
-            </button>
+            <ConfigButton type="submit">Cancel</ConfigButton>
           </form>
-          <button
-            type="button"
-            style="height:32px; padding:0 12px; border:1px solid var(--accent); border-radius:5px; background:var(--accent); color:var(--on-accent); cursor:pointer; font-size:12px; font-weight:600"
+          <ConfigButton
+            variant="primary"
             hx-post="/workspaces/trust"
             hx-vals={JSON.stringify({ cwd })}
             hx-swap="none"
           >
             Trust project
-          </button>
+          </ConfigButton>
         </div>
       </div>
     </dialog>
@@ -106,21 +99,12 @@ export function TrustBadge({
   banner?: boolean;
 }) {
   if (!status.requiresTrust || status.trusted) return <></>;
-  const shape =
-    banner === true
-      ? "justify-content:flex-start; width:100%; min-height:32px;" +
-        " padding:6px 12px;" +
-        " background:color-mix(in srgb, var(--warning) 8%, var(--bg-panel));" +
-        " border:none; border-bottom:1px solid var(--border)"
-      : "justify-content:center; height:100%; padding:0 12px;" +
-        " background:none; border:none;" +
-        " border-right:1px solid var(--border)";
   return (
     <button
       type="button"
       data-trust-warning
       {...(banner === true ? { "data-mobile-trust-banner": "true" } : {})}
-      style={`display:flex; align-items:center; gap:6px; ${shape}; color:var(--warning); cursor:pointer; flex-shrink:0; font-size:11px; line-height:1.35; text-align:left`}
+      class={`project-trust-badge${banner === true ? " is-banner" : ""}`}
       title="Restricted mode"
       aria-label="Restricted mode"
       hx-get={`/workspaces/trust?cwd=${encodeURIComponent(cwd)}`}

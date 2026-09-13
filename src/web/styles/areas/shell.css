@@ -1,8 +1,343 @@
-/* Shell area.
+/* Shell, modal surfaces and shared Settings/dialog actions. */
 
-   pi-web's stylesheets in ../ are the pixel spec; this file is the only
-   CSS this area may edit. Add a rule only when pi-web's own CSS cannot
-   express it, and say why. */
+.config-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background-color 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+.config-button-default {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 12px;
+}
+
+.config-button-small {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.config-button-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.config-button-secondary {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.config-button-danger {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+  color: var(--danger);
+}
+
+.config-button-primary:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent) 88%, #000);
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+}
+
+.config-button-secondary:not(:disabled):hover {
+  border-color: var(--border);
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.config-button-danger:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.config-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.config-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Native dialogs supply focus trapping, top layer and restoration. */
+.project-trust-dialog {
+  margin: auto;
+  padding: 16px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.project-trust-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.project-trust-panel {
+  width: 440px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.24);
+  overflow: hidden;
+}
+
+.project-trust-body {
+  display: flex;
+  gap: 12px;
+  padding: 18px 18px 14px;
+}
+
+.project-trust-content {
+  min-width: 0;
+}
+
+.project-trust-title {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.project-trust-message {
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.project-trust-path {
+  display: block;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.project-trust-actions {
+  padding: 10px 18px;
+}
+
+.project-trust-badge {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 12px;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: none;
+  color: var(--warning);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.project-trust-badge.is-banner {
+  display: none;
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-right: none;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--warning) 8%, var(--bg-panel));
+}
+
+.extension-dialog {
+  margin: auto;
+  padding: 20px;
+  border: 0;
+  max-width: 100%;
+  max-height: 100%;
+  background: transparent;
+  color: var(--text);
+}
+
+.extension-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.extension-dialog-panel,
+.extension-custom-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.extension-dialog-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: min(760px, 100%);
+}
+
+.extension-dialog-heading {
+  flex-shrink: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.extension-dialog-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.extension-dialog-timeout {
+  margin-top: 3px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.extension-dialog-body {
+  padding: 14px;
+}
+
+.extension-dialog-body.is-scrollable {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.extension-dialog-options {
+  display: grid;
+  gap: 8px;
+}
+
+.extension-dialog-option,
+.extension-dialog-input,
+.extension-dialog-editor {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-panel);
+  color: var(--text);
+}
+
+.extension-dialog-input {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+/* Options are multiline choices, not compact action buttons. */
+.extension-dialog-option {
+  padding: 9px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.extension-dialog-option:hover {
+  background: var(--bg-hover);
+}
+
+.extension-dialog-input:focus-visible,
+.extension-dialog-editor:focus-visible,
+.extension-dialog-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.extension-dialog-message {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.extension-dialog-editor {
+  min-height: 220px;
+  padding: 10px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.extension-dialog-actions {
+  padding: 10px 14px;
+  background: var(--bg-panel);
+}
+
+.extension-dialog-cancel {
+  order: -1;
+}
+
+.extension-custom-panel {
+  position: relative;
+  width: min(920px, 100%);
+  max-height: min(760px, calc(100vh - 40px));
+  outline: none;
+}
+
+.extension-custom-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.extension-custom-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.extension-custom-frame {
+  margin: 0;
+  padding: 14px;
+  /* 32px action + 20px header padding + its border. */
+  max-height: calc(min(760px, 100vh - 40px) - 53px);
+  overflow: auto;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre;
+}
 
 /* Keep compaction progress legible while disabled. CSS animation, rather
    than SMIL, respects the shared reduced-motion rule in globals.css. */
@@ -12,14 +347,6 @@
 
 .context-compact-button[aria-busy="true"] svg {
   animation: spin 0.9s linear infinite;
-}
-
-/* Settings is a page in web-pi and a React modal in pi-web, so its surface
-   takes the initial focus: without that, `showModal()` focuses the first
-   section tab and rings it, which pi-web never shows. The surface is only a
-   focus holder, never a control, so it draws no ring of its own. */
-.settings-dialog-surface:focus {
-  outline: none;
 }
 
 /* pi-web puts `mobile-session-stats` and its two children's classes on the
@@ -51,19 +378,13 @@
    the stats cluster, and the cluster takes the free space
    (AppShell.tsx, `mobile ? 36 : undefined`). The server cannot see the
    viewport, so the same shape comes from a media query here. */
-/* Both warnings carry pi-web's own inline styles, so the variant this
-   viewport does not use has to be hidden with more weight than they have. */
-[data-mobile-trust-banner] {
-  display: none !important;
-}
-
 @media (max-width: 640px) {
-  [data-trust-warning]:not([data-mobile-trust-banner]) {
-    display: none !important;
+  .project-trust-badge:not(.is-banner) {
+    display: none;
   }
 
-  [data-mobile-trust-banner] {
-    display: flex !important;
+  .project-trust-badge.is-banner {
+    display: flex;
   }
 
   /* Both carry pi-web's inline styles, which outrank a plain rule. */
