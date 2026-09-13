@@ -37,7 +37,7 @@ describe("ansi to html", () => {
 });
 
 describe("status line", () => {
-  it("sorts by key, collapses each status, and joins with one space", () => {
+  it("sorts by key, collapses each status, and separates items with middle dots", () => {
     expect(
       statusLine({
         zebra: "last",
@@ -45,11 +45,19 @@ describe("status line", () => {
         empty: "   ",
         tabs: "a\tb",
       }),
-    ).toBe("first second part a b last");
+    ).toBe("first second part · a b · last");
+  });
+
+  it("adds no divider for empty or single-item status lines", () => {
+    expect(statusLine({})).toBe("");
+    expect(statusLine({ empty: " \t\r\n " })).toBe("");
+    expect(statusLine({ before: " ", git: "main", after: "\n" })).toBe("main");
   });
 
   it("keeps the escapes for the converter", () => {
-    expect(statusLine({ git: `${ESC}[32mmain${ESC}[0m` })).toContain(ESC);
+    expect(statusLine({ git: `${ESC}[32mmain${ESC}[0m` })).toBe(
+      `${ESC}[32mmain${ESC}[0m`,
+    );
   });
 });
 

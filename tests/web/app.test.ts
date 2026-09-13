@@ -1622,6 +1622,7 @@ describe("conversation rail, shelf, and written files", () => {
     const { app } = testApp({
       script: () => [
         { status: "git", statusText: "\u001B[32mmain\u001B[0m  clean" },
+        { status: "lint", statusText: "2 < 3" },
         { widget: "todo", lines: ["\u001B[1mOpen\u001B[0m", "one", "two"] },
         { text: "done" },
       ],
@@ -1643,7 +1644,10 @@ describe("conversation rail, shelf, and written files", () => {
     expect(received).toContain(
       '<hx-partial hx-target="#shelf" hx-swap="outerHTML">',
     );
-    expect(received).toContain('<span style="color:#13703a">main</span>');
+    expect(received).toContain(
+      '<span class="extension-status-text"><span style="color:#13703a">main</span> clean · 2 &lt; 3</span>',
+    );
+    expect(received).toContain('aria-label="main clean · 2 &lt; 3"');
     expect(received).toContain('<span style="font-weight:600">Open</span>');
     // pi-web's shelf: the trigger row, the status line, and the panel of the
     // one widget short enough to open unasked (§4.11).
