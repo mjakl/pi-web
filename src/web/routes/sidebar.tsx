@@ -52,6 +52,22 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
     const project = c.req.query("project");
     const cwd = c.req.query("cwd");
     const inApp = c.req.header("HX-Request") === "true";
+    const activeId = currentSessionId(c);
+    if (project === undefined && cwd === undefined) {
+      // Refresh reads the displayed owners, not a new project choice. Keep
+      // that folder on the replacement stream without navigating a draft.
+      const shown = c.req.header("X-Web-Pi-Project");
+      const sidebar = shown
+        ? await deps.workspace.sidebar({ remembered: shown })
+        : await sidebarOf(c, activeId);
+      return c.html(
+        <ProjectNav
+          view={sidebar}
+          cwd={currentCwd(c, sidebar)}
+          {...(activeId === undefined ? {} : { activeId })}
+        />,
+      );
+    }
     if (!inApp && project !== undefined && project !== "") {
       setCookie(c, PROJECT_COOKIE, project, {
         path: "/",
@@ -67,7 +83,6 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
       folder = chosen?.cwd ?? cwd;
       if (!inApp) remember(c, CWD_COOKIE, folder);
     }
-    const activeId = currentSessionId(c);
     const open =
       activeId === undefined ? undefined : await deps.workspace.row(activeId);
     const sidebar = await deps.workspace.sidebar(
