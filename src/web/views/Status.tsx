@@ -1,11 +1,10 @@
 import { Partial } from "@web/views/Partial";
-import { formatCompactCount, formatContextUsage } from "@core/context-usage";
+import { formatContextUsage } from "@core/context-usage";
 import type { ContextUsage } from "@core/context-usage";
 import type { LiveStatus } from "@core/ports";
 import type { SessionView } from "@core/workspace";
 import { ModelSelector, ModelScopeWarning, modelPick } from "./Composer.tsx";
 import {
-  CheckIcon,
   CompactIcon,
   ContextGaugeIcon,
   RecallQueueIcon,
@@ -199,18 +198,6 @@ function QueuePanel({
   );
 }
 
-/** "Compacted 40k -> 12k tokens (28k saved)", as pi-web words it. */
-function compactionText(compaction: NonNullable<LiveStatus["compaction"]>) {
-  const { reason, tokensBefore, tokensAfter } = compaction;
-  const label =
-    reason === "manual"
-      ? "Compacted"
-      : `${reason.charAt(0).toUpperCase()}${reason.slice(1)}`;
-  const after = tokensAfter ?? tokensBefore;
-  const saved = Math.max(0, tokensBefore - after);
-  return `${label} ${formatCompactCount(tokensBefore)} -> ${formatCompactCount(after)} tokens (${formatCompactCount(saved)} saved)`;
-}
-
 /**
  * Everything that changes while a session runs. `model` asks for the toolbar's
  * selector out of band, which the stream sends only when the model or the
@@ -245,12 +232,6 @@ export function Status({
               — {status.retry.message}
             </span>
           ) : null}
-        </div>
-      ) : null}
-      {status?.compaction ? (
-        <div style="margin-bottom:8px; padding:5px 10px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.24); border-radius:6px; font-size:12px; color:rgba(5,150,105,0.95); display:flex; align-items:center; gap:6px">
-          <CheckIcon size={11} width={2} />
-          {compactionText(status.compaction)}
         </div>
       ) : null}
       {status?.compactionError ? (
