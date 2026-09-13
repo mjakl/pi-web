@@ -215,7 +215,7 @@ describe("the new-session page", () => {
     expect(html).toContain(FAKE_MODEL.name);
     expect(html).toContain('name="thinking"');
     // The folder is changed from the sidebar's workspace pill now.
-    expect(html).toContain('class="anchor-sidebar-project"');
+    expect(html).toMatch(/class="[^"]*\banchor-sidebar-project\b[^"]*"/);
   });
 
   it("answers the folder's slash menu and file completion", async () => {

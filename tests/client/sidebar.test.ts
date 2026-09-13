@@ -60,8 +60,8 @@ function page(
   mount(
     `<main data-session-id="${options.current ?? ""}"></main>` +
       `<aside id="sidebar">` +
-      `<button type="button" class="new-session-shortcut" style="display:none"></button>` +
-      `<span class="new-session-plus" style="display:flex">+</span>` +
+      `<button type="button" class="new-session-shortcut" hidden></button>` +
+      `<span class="new-session-plus">+</span>` +
       `<button type="button" id="project-select" data-project-key="${options.project ?? "/repo/one"}">` +
       `<span id="project-activity" hidden></span></button>` +
       `<div id="sidebar-project-menu"></div>` +
@@ -236,7 +236,6 @@ describe("unread sessions", () => {
       true,
     );
     expect(indicator("s2").title).toBe("Session stopped · New activity");
-    expect(indicator("s2").style.color).toBe("var(--info)");
     expect(indicator("s1").classList.contains("session-indicator-unread")).toBe(
       false,
     );
@@ -262,7 +261,7 @@ describe("unread sessions", () => {
     expect(indicator("s1").classList.contains("session-indicator-unread")).toBe(
       false,
     );
-    expect(indicator("s1").style.color).toBe("var(--text-dim)");
+    expect(indicator("s1").classList.contains("is-stopped")).toBe(true);
   });
 
   it("reads the old array shape and paints rows that arrive later", async () => {
@@ -297,27 +296,27 @@ describe("unread sessions", () => {
     page({ project: "/repo/one" });
     byId("sidebar-project-menu").innerHTML =
       '<div class="project-folder-group" data-project-key="/repo/two">' +
-      '<span class="project-activity" style="display:none"><span class="project-unread" style="display:none"><span class="project-unread-count"></span></span></span></div>' +
+      '<span class="project-activity" hidden><span class="project-unread" hidden><span class="project-unread-count"></span></span></span></div>' +
       '<div class="project-folder-group" data-project-key="/repo/three">' +
-      '<span class="project-activity" style="display:none"><span class="project-unread" style="display:none"><span class="project-unread-count"></span></span></span></div>';
+      '<span class="project-activity" hidden><span class="project-unread" hidden><span class="project-unread-count"></span></span></span></div>';
     const { setUpSidebar } = await load();
     setUpSidebar();
     const two = query('[data-project-key="/repo/two"]');
     expect(
       two.querySelector<HTMLElement>(".project-unread-count")?.textContent,
     ).toBe("2");
-    expect(
-      two.querySelector<HTMLElement>(".project-unread")?.style.display,
-    ).toBe("inline-flex");
+    expect(two.querySelector<HTMLElement>(".project-unread")?.hidden).toBe(
+      false,
+    );
     expect(
       two
         .querySelector<HTMLElement>(".project-unread")
         ?.getAttribute("aria-label"),
     ).toBe("New session activity (2)");
     const three = query('[data-project-key="/repo/three"]');
-    expect(
-      three.querySelector<HTMLElement>(".project-activity")?.style.display,
-    ).toBe("none");
+    expect(three.querySelector<HTMLElement>(".project-activity")?.hidden).toBe(
+      true,
+    );
   });
 });
 
@@ -432,17 +431,17 @@ describe("shortcuts", () => {
     keydown(document.body, "Meta", { metaKey: true });
     expect(query("#row-s1 .session-shortcut").textContent).toBe("⌘1");
     expect(query("#row-s2 .session-shortcut").textContent).toBe("⌘2");
-    expect(query("#row-s1 .session-shortcut").style.display).toBe("flex");
-    expect(query("#row-s1 .session-menu-trigger").style.display).toBe("none");
+    expect(query("#row-s1 .session-shortcut").hidden).toBe(false);
+    expect(query("#row-s1 .session-menu-trigger").hidden).toBe(true);
     expect(query(".new-session-shortcut").textContent).toBe("⌘K");
-    expect(query(".new-session-plus").style.display).toBe("none");
+    expect(query(".new-session-plus").hidden).toBe(true);
     keyup(document.body, "Meta");
-    expect(query("#row-s1 .session-shortcut").style.display).toBe("none");
-    expect(query("#row-s1 .session-menu-trigger").style.display).toBe("flex");
+    expect(query("#row-s1 .session-shortcut").hidden).toBe(true);
+    expect(query("#row-s1 .session-menu-trigger").hidden).toBe(false);
     keydown(document.body, "Control", { ctrlKey: true });
     expect(query("#row-s1 .session-shortcut").textContent).toBe("Ctrl+1");
     window.dispatchEvent(new Event("blur"));
-    expect(query("#row-s1 .session-shortcut").style.display).toBe("none");
+    expect(query("#row-s1 .session-shortcut").hidden).toBe(true);
   });
 
   it("numbers a row swapped in while the modifier is held", async () => {

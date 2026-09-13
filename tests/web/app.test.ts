@@ -85,7 +85,7 @@ describe("web app", () => {
     expect(html).toContain("panel-resize-handle sidebar-resize-handle");
     expect(html).toContain("sidebar-overlay-backdrop");
     expect(html).toContain("Pi Web");
-    expect(html).toContain('class="anchor-sidebar-project"');
+    expect(html).toMatch(/class="[^"]*\banchor-sidebar-project\b[^"]*"/);
     expect(html).toContain('id="session-list"');
     expect(html).toContain('id="explorer-section"');
     // Top bar: pi-web's order of controls.
@@ -360,7 +360,7 @@ describe("web app", () => {
       );
     const page = await (await app.request("/")).text();
     // The unreadable row consumes its slot, without shifting the next offset.
-    expect(page.match(/class="session-row"/g)).toHaveLength(49);
+    expect(page.match(/class="session-row(?: [^"]*)?"/g)).toHaveLength(49);
     expect(page).not.toContain('id="row-p40"');
     expect(metadata).toHaveBeenCalledTimes(50);
     expect(page).toContain("prompt p59");
@@ -373,7 +373,7 @@ describe("web app", () => {
     const next = await (
       await app.request((sentinel ?? "").replaceAll("&amp;", "&"))
     ).text();
-    expect(next.match(/class="session-row"/g)).toHaveLength(11);
+    expect(next.match(/class="session-row(?: [^"]*)?"/g)).toHaveLength(11);
     expect(metadata).toHaveBeenCalledTimes(11);
     expect(next).toContain("prompt p0");
     expect(next).toContain("1 msgs");
@@ -886,7 +886,7 @@ describe("web app", () => {
     // shows the same row selected.
     const page = await (await app.request("/sessions/new-1")).text();
     const row = page.slice(page.indexOf('id="row-new-1"'));
-    expect(row).toContain("background:var(--bg-selected)");
+    expect(row).toContain("session-row is-selected");
     expect(row).toContain('data-status="Agent running…"');
   });
 
@@ -1185,10 +1185,10 @@ describe("the sidebar", () => {
       expect([marker, found > -1]).toStrictEqual([marker, true]);
       at = found;
     }
-    expect(header).toContain('class="anchor-sidebar-project"');
+    expect(header).toMatch(/class="[^"]*\banchor-sidebar-project\b[^"]*"/);
     // The pill names the working folder, shortened against the reader's home.
     expect(header).toContain(">~/one<");
-    expect(header).toContain("direction:rtl");
+    expect(header).toContain('class="sidebar-project-path"');
   });
 
   it("names the branch in Project Info, the worktree only when it is one", async () => {
@@ -1210,19 +1210,14 @@ describe("the sidebar", () => {
     await world.runtime.open({ sessionId: "s2" });
     const row = await (await app.request("/sessions/s2/row")).text();
     expect(row).toContain("Session active");
-    expect(row).toContain('data-colour="var(--success)"');
-    expect(row).toContain("color:var(--success)");
+    expect(row).toContain('class="session-indicator is-active"');
   });
 
   it("renders a 54px session row with pi-web's three columns", async () => {
     const { app } = sidebarApp();
     const html = await (await app.request("/sessions/s2")).text();
     const row = html.slice(html.indexOf('id="row-s2"'));
-    expect(row).toContain('class="session-row"');
-    expect(row).toContain("height:54px");
-    // Selected: pi-web tints the row and puts an accent bar down its left.
-    expect(row).toContain("background:var(--bg-selected)");
-    expect(row).toContain("border-left:2px solid var(--accent)");
+    expect(row).toContain('class="session-row is-selected"');
     const inOrder = (text: string, markers: string[]) => {
       let at = 0;
       for (const marker of markers) {
@@ -1233,7 +1228,7 @@ describe("the sidebar", () => {
     };
     inOrder(row, [
       "In a worktree",
-      'class="session-indicator"',
+      'class="session-indicator is-stopped"',
       "Session stopped",
       " ago",
       "feature/x",
@@ -1243,12 +1238,9 @@ describe("the sidebar", () => {
     const start = html.indexOf('id="row-s1"');
     // s1 is the last row of this project, so the list's end bounds the slice.
     const other = html.slice(start, html.indexOf('id="explorer-section"'));
-    expect(other).toContain("border-left:2px solid transparent");
-    expect(other).not.toContain("background:var(--bg-selected)");
-
-    // The state's own colour rides along: the browser paints the unread tint
-    // over it and has to be able to put it back (client/sidebar.ts).
-    expect(row).toContain('data-colour="var(--text-dim)"');
+    expect(other).not.toContain("session-row is-selected");
+    // The underlying status survives the browser's unread tint.
+    expect(row).toContain('class="session-indicator is-stopped"');
 
     // The right column arrives with the row's own metadata.
     const loaded = await (await app.request("/sessions/s2/row")).text();
@@ -1258,7 +1250,7 @@ describe("the sidebar", () => {
       'class="session-counts"',
       "1 msgs",
     ]);
-    expect(loaded).toContain("min-width:64px");
+    expect(loaded).toContain('class="session-row-actions"');
   });
 
   it("hangs pi-web's 144px action menu off a row that knows its counts", async () => {
@@ -1270,8 +1262,7 @@ describe("the sidebar", () => {
     const menu = html.slice(html.indexOf('id="row-menu-s1"'));
     expect(menu).toContain('popover="auto"');
     expect(menu).toContain('role="group"');
-    expect(menu).toContain("width:min(144px, calc(100vw - 16px))");
-    expect(menu).toContain("position:fixed");
+    expect(menu).toContain('class="session-row-menu menu-surface"');
     const items = [...menu.matchAll(/class="menu-item[^"]*"[^>]*>([^<]+)</g)]
       .map((match) => match[1])
       .slice(0, 3);
@@ -1295,8 +1286,10 @@ describe("the sidebar", () => {
   it("swaps the row for an input when Rename is chosen, and back again", async () => {
     const { app } = sidebarApp();
     const renaming = await (await app.request("/sessions/s1/rename")).text();
-    expect(renaming).toContain('<form id="row-s1" class="session-row"');
-    expect(renaming).toContain("border:1px solid var(--accent)");
+    expect(renaming).toContain(
+      '<form id="row-s1" class="session-row is-renaming"',
+    );
+    expect(renaming).toContain('class="session-rename-input"');
     expect(renaming).toContain('value="Stored one"');
     // Escape asks for the row back.
     expect(renaming).toContain('hx-get="/sessions/s1/row"');
@@ -2535,7 +2528,7 @@ describe("the shell chrome, on every route", () => {
     expect(html).toContain('id="rail-column"');
     expect(html).toContain('data-session-id="s1"');
     // Its complete row is selected before any client request.
-    expect(html).toMatch(/id="row-s1"[^>]*background:var\(--bg-selected\)/);
+    expect(html).toMatch(/id="row-s1"[^>]*class="session-row is-selected/);
     expect(html).not.toContain("/row?active=s1");
   });
 
