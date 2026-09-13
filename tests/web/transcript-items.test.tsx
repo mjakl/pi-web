@@ -246,6 +246,74 @@ describe("transcript items", () => {
     },
   );
 
+  it.each(["", " \n\t"])(
+    "shows blank thinking %j only as non-clickable activity while streaming",
+    (text) => {
+      const item: AssistantItem = {
+        ...answerItem,
+        entryId: "partial",
+        blocks: [{ kind: "thinking", text, index: 0, deferred: false }],
+      };
+      const streaming = html(
+        <TurnFragment items={[item]} actions={actions} status={status} />,
+      );
+      expect(streaming).toContain("Thinking");
+      expect(streaming).not.toContain("<details");
+      expect(streaming).not.toContain("<summary");
+      expect(streaming).not.toContain("card-chevron");
+      for (const running of [true, false]) {
+        const finished = html(
+          <TurnFragment
+            items={[{ ...item, entryId: "finished" }]}
+            actions={actions}
+            status={{ ...status, running, streaming: null }}
+          />,
+        );
+        expect(finished).not.toContain("Thinking");
+        expect(finished).not.toContain("<details");
+      }
+    },
+  );
+
+  it.each([false, true])(
+    "keeps substantive and deferred thinking controls with live=%s",
+    (live) => {
+      for (const deferred of [false, true]) {
+        const rendered = html(
+          <Items
+            items={[
+              {
+                ...answerItem,
+                entryId: "partial",
+                blocks: [
+                  {
+                    kind: "thinking",
+                    text: deferred ? "" : "Real reasoning",
+                    index: 0,
+                    deferred,
+                  },
+                ],
+              },
+            ]}
+            actions={{
+              ...actions,
+              live,
+              streaming: status.streaming ?? undefined,
+            }}
+          />,
+        );
+        expect(rendered).toContain("<details");
+        expect(rendered).toContain("<summary");
+        expect(rendered).toContain("card-chevron");
+        expect(rendered).toContain(
+          deferred
+            ? 'hx-get="/sessions/s1/entries/partial/thinking/0"'
+            : "Real reasoning",
+        );
+      }
+    },
+  );
+
   it("hides history actions on user, shell, and metadata entries", () => {
     for (const item of settledItems.filter(
       (item) => item.kind !== "assistant",
