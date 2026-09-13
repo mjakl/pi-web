@@ -181,6 +181,11 @@
   background: var(--bg);
   color: var(--text);
 }
+.file-tab-icon .catppuccin-file-icon,
+.file-tree-icon.is-change .catppuccin-file-icon {
+  width: 13px;
+  height: 13px;
+}
 .file-tab-icon {
   flex-shrink: 0;
   opacity: 0.7;

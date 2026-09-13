@@ -177,9 +177,9 @@ function TreeNode({
         )}
         <span class="file-tree-icon">
           {isDir ? (
-            <FolderIcon size={14} open={open === true} />
+            <FolderIcon open={open === true} />
           ) : (
-            <FileIcon name={name} size={14} />
+            <FileIcon name={name} />
           )}
         </span>
         <span class="file-tree-name" title={path}>
@@ -295,7 +295,7 @@ function ChangeRow({
     >
       <GitStatusBadge status={file.status} />
       <span class="file-tree-icon is-change">
-        <FileIcon name={baseName(file.path)} size={13} />
+        <FileIcon name={baseName(file.path)} />
       </span>
       <span class="file-tree-name">{relativeTo(context.cwd, file.path)}</span>
     </div>

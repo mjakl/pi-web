@@ -267,7 +267,7 @@ export function WrittenFiles({
             title={path}
             aria-label={`Open ${name}`}
           >
-            <FileIcon name={name} size={12} />
+            <FileIcon name={name} />
             <span>{name}</span>
           </button>
         );

@@ -5,6 +5,7 @@ import { catppuccinIcon } from "@core/file-types";
 import { replaceRange, textarea } from "./editor.ts";
 import { setUpRegion } from "./lifecycle.ts";
 import { setUpResize } from "./resize.ts";
+import { TAB_CLOSE_ICON } from "@web/views/icons";
 
 // The files area's browser half: how wide it is, which tabs are open, where
 // each was scrolled, and the stream that tells the viewer its file moved.
@@ -97,13 +98,11 @@ function baseName(path: string): string {
 }
 
 /** The masked Catppuccin span the views render, built without JSX. */
-function fileIcon(name: string, size: number): HTMLSpanElement {
+function fileIcon(name: string): HTMLSpanElement {
   const icon = document.createElement("span");
   const file = catppuccinIcon(name);
   icon.className = "catppuccin-file-icon";
   icon.ariaHidden = "true";
-  icon.style.width = `${String(size)}px`;
-  icon.style.height = `${String(size)}px`;
   icon.style.setProperty(
     "--catppuccin-icon-light",
     `url(${CATPPUCCIN_ROOT}/latte/${file}.svg)`,
@@ -114,8 +113,6 @@ function fileIcon(name: string, size: number): HTMLSpanElement {
   );
   return icon;
 }
-
-const CLOSE_ICON = `<svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="2" x2="8" y2="8"></line><line x1="8" y1="2" x2="2" y2="8"></line></svg>`;
 
 /** pi-web's TabBar (components/TabBar.tsx), built in the browser. */
 function renderTabs(): void {
@@ -134,7 +131,7 @@ function renderTabs(): void {
 
     const icon = document.createElement("span");
     icon.className = "file-tab-icon";
-    icon.append(fileIcon(label, 13));
+    icon.append(fileIcon(label));
 
     const name = document.createElement("span");
     name.className = "file-tab-name";
@@ -147,7 +144,7 @@ function renderTabs(): void {
     close.dataset["close"] = "1";
     close.title = "Close";
     close.setAttribute("aria-label", `Close ${label}`);
-    close.innerHTML = CLOSE_ICON;
+    close.innerHTML = TAB_CLOSE_ICON;
 
     tab.append(icon, name, close);
     bar.append(tab);

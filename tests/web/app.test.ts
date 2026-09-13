@@ -1677,7 +1677,7 @@ describe("conversation rail, shelf, and written files", () => {
       '<span class="extension-status-text"><span style="color:#13703a">main</span> clean · 2 &lt; 3</span>',
     );
     expect(received).toContain('aria-label="main clean · 2 &lt; 3"');
-    expect(received).toContain('<span style="font-weight:600">Open</span>');
+    expect(received).toContain('<span class="terminal-bold">Open</span>');
     // pi-web's shelf: the trigger row, the status line, and the panel of the
     // one widget short enough to open unasked (§4.11).
     expect(received).toContain(

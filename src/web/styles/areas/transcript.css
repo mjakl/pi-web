@@ -457,6 +457,9 @@
   overflow-x: auto;
   background: color-mix(in srgb, var(--bg) 92%, var(--bg-panel));
 }
+.mermaid-block.is-rendered {
+  cursor: zoom-in;
+}
 .mermaid-block-loading {
   min-height: 120px;
 }
@@ -1984,6 +1987,10 @@ button.tool-output-link {
 }
 .markdown-file-ref:hover {
   text-decoration-color: currentColor;
+}
+.written-file .catppuccin-file-icon {
+  width: 12px;
+  height: 12px;
 }
 .written-file:hover {
   background: var(--bg-hover);

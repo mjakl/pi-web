@@ -64,13 +64,12 @@ function offerNotifications(): void {
   const shelf = document.getElementById("toasts");
   if (!shelf) return;
   const box = document.createElement("div");
-  box.className = "notice-shelf-item";
-  box.style.color = "var(--info)";
+  box.className = "notice-shelf-item notification-offer";
   const text = document.createElement("span");
   text.textContent = "Notify you when a run finishes?";
   const yes = document.createElement("button");
   yes.type = "button";
-  yes.className = "history-action";
+  yes.className = "notification-offer-action";
   yes.textContent = "Allow";
   yes.addEventListener("click", () => {
     box.remove();
@@ -78,7 +77,7 @@ function offerNotifications(): void {
   });
   const no = document.createElement("button");
   no.type = "button";
-  no.className = "history-action";
+  no.className = "notification-offer-action";
   no.textContent = "No thanks";
   no.addEventListener("click", () => {
     box.remove();

@@ -19,10 +19,8 @@ import {
   settledItems,
 } from "./fixtures/transcript-items.ts";
 
-// The transcript is a pixel port of pi-web, so its markup is pinned: every
-// public view renders the fixture items and the result has to match
-// fixtures/transcript-items.html byte for byte. A change to the markup
-// updates the fixture on purpose (`vitest -u`), never by accident.
+// Pin the full rendered item inventory alongside focused behavior tests.
+// Update markup deliberately with `vitest -u`; browser comparisons verify CSS.
 
 const actions: ItemActions = {
   sessionId: "s1",
@@ -407,13 +405,13 @@ describe("transcript items", () => {
     );
     // 210 rows in the first file: 200 kept, and the second file is dropped
     // rather than shown as a torso.
-    expect(cut.match(/display:contents/g)).toHaveLength(200);
+    expect(cut.match(/class="tool-diff-row"/g)).toHaveLength(200);
     expect(cut).not.toContain("src/tail.ts");
     expect(cut).toContain("view full output");
     const full = html(
       <ToolBody call={fixtureCalls.longDiffCall} actions={actions} full />,
     );
-    expect(full.match(/display:contents/g)).toHaveLength(211);
+    expect(full.match(/class="tool-diff-row"/g)).toHaveLength(211);
     expect(full).toContain("src/tail.ts");
     expect(full).not.toContain("view full output");
   });

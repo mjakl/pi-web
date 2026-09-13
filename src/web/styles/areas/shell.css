@@ -1170,8 +1170,37 @@ a.shell-top-bar-tab:hover {
   }
 }
 
+/* Shared icon shapes and terminal typography. Sizes belong to their owners. */
+/* Use the SVG alpha channel as a mask so file icons follow the app's
+   restrained text palette instead of Catppuccin's language-specific colors. */
+.catppuccin-file-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+  flex-shrink: 0;
+  background: var(--text-dim);
+  mask: center / contain no-repeat var(--catppuccin-icon-light);
+}
+html.dark .catppuccin-file-icon {
+  mask-image: var(--catppuccin-icon-dark);
+}
+
+.pi-icon {
+  flex-shrink: 0;
+}
+.pi-spinner {
+  display: block;
+}
+.pi-spinner.is-animated {
+  animation: spin 0.9s linear infinite;
+}
+.terminal-bold {
+  font-weight: 600;
+}
+
 /* chat window */
 .chat-window {
+  --conversation-rail-width: 36px;
   position: relative;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
@@ -1187,9 +1216,6 @@ a.shell-top-bar-tab:hover {
   overflow-y: auto;
 }
 
-.chat-window {
-  --conversation-rail-width: 36px;
-}
 .chat-window:has(.chat-minimap.is-expanded) {
   --conversation-rail-width: min(
     var(--expanded-conversation-rail-width, 36px),
@@ -1249,4 +1275,324 @@ a.shell-top-bar-tab:hover {
 
 .chat-empty h1 span:first-child {
   font-size: 28px;
+}
+
+/* Directory picker uses <dialog>, matching the other modals: showModal()
+   supplies the backdrop, focus trap and top layer. Reset the UA dialog box so
+   the panel inside keeps owning its own size. */
+.directory-picker-dialog {
+  margin: auto;
+  padding: 0;
+  border: 0;
+  max-width: none;
+  max-height: none;
+  background: transparent;
+  color: var(--text);
+}
+.directory-picker-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* Anchored dropdowns. popover="auto" hands light dismiss, close-on-Escape and
+   top-layer stacking to the browser; CSS anchor positioning keeps the panel
+   pinned to its trigger, which plain top-layer placement cannot do because a
+   popover's containing block is the viewport. It sets the browser floor,
+   declared once in package.json browserslist.
+ */
+.anchored-menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: visible;
+}
+/* Opens upward, right edges aligned. */
+.anchored-menu.opens-up {
+  bottom: anchor(top);
+  right: anchor(right);
+  margin-bottom: 6px;
+}
+/* Opens downward, matching the trigger's width. */
+.anchored-menu.opens-down {
+  top: anchor(bottom);
+  left: anchor(left);
+  right: anchor(right);
+  /* The UA gives [popover] width: fit-content, which ignores the right inset
+     and lets long paths size the panel. auto lets both insets stretch it to
+     the trigger's width. */
+  width: auto;
+  margin-top: 4px;
+}
+
+/* Shared dropdown appearance; each component owns positioning and interaction. */
+.menu-surface {
+  box-sizing: border-box;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--menu-shadow);
+}
+.menu-panel {
+  padding: 0;
+}
+.menu-item {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item:where(
+  [aria-selected="true"],
+  [aria-pressed="true"],
+  [aria-current="true"],
+  [data-active="true"]
+) {
+  background: var(--bg-selected);
+}
+.menu-item:enabled:hover {
+  background: var(--bg-hover);
+}
+.menu-item-danger {
+  color: var(--danger);
+}
+.menu-item-danger:enabled:hover {
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg));
+}
+.menu-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.menu-filter {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.menu-item:focus-visible,
+.menu-filter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.menu-section-label {
+  padding: 6px 10px 4px;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+@media (pointer: coarse) {
+  .menu-item {
+    min-height: 44px;
+  }
+}
+
+.project-folder-message {
+  padding: 8px 12px 8px 28px;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.directory-picker-panel {
+  width: 520px;
+  max-width: calc(100vw - 16px);
+  height: min(620px, calc(100dvh - 16px));
+  max-height: calc(100dvh - 16px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+.directory-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.directory-picker-heading {
+  min-width: 0;
+  flex: 1;
+}
+.directory-picker-title {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 15px;
+}
+.directory-picker-close-form {
+  display: flex;
+}
+.directory-picker-close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.directory-picker-navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.directory-picker-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.directory-picker-path {
+  min-width: 0;
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.directory-picker-go {
+  min-width: 58px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.directory-picker-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+}
+.directory-picker-empty {
+  padding: 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.directory-picker-entry {
+  width: 100%;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.directory-picker-entry-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.directory-picker-error {
+  padding: 8px;
+  color: var(--danger);
+  font-size: 11px;
+}
+.directory-picker-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+}
+.directory-picker-path:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.directory-picker-back {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.directory-picker-back:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.directory-picker-entry:hover {
+  background: var(--bg-hover);
+}
+.directory-picker-back:focus-visible,
+.directory-picker-entry:focus-visible,
+.directory-picker-go:focus-visible,
+.directory-picker-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .directory-picker-back,
+  .directory-picker-entry,
+  .directory-picker-action {
+    min-height: 44px;
+  }
+  .directory-picker-back {
+    min-width: 44px;
+  }
+  .directory-picker-footer {
+    flex-wrap: wrap;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
 }

@@ -91,15 +91,16 @@ function open(style: Style): string {
   const rules = [
     style.fg === undefined ? "" : `color:${style.fg}`,
     style.bg === undefined ? "" : `background-color:${style.bg}`,
-    style.bold ? "font-weight:600" : "",
   ].filter(Boolean);
-  return rules.length === 0 ? "" : `<span style="${rules.join(";")}">`;
+  if (rules.length === 0 && !style.bold) return "";
+  const weight = style.bold ? ' class="terminal-bold"' : "";
+  const colors = rules.length === 0 ? "" : ` style="${rules.join(";")}"`;
+  return `<span${weight}${colors}>`;
 }
 
 /**
  * Terminal output as HTML. The result is safe to insert as markup: text is
- * escaped, and the only tags produced are `<span style>` with colours this
- * module wrote itself.
+ * escaped, and spans carry only the bold class and colours this module wrote.
  */
 export function ansiToHtml(text: string): string {
   const style: Style = { bold: false };

@@ -1,5 +1,9 @@
 import { imageLimitError, MAX_IMAGES } from "@core/composer";
 import { showToast } from "./toasts.ts";
+import {
+  ATTACHMENT_REMOVE_ICON,
+  IMAGE_PREVIEW_CLOSE_ICON,
+} from "@web/views/icons";
 
 // Attachments live in one hidden file input, so the form posts them without
 // any help from htmx. Anything over a megabyte is downscaled first: a phone
@@ -131,8 +135,7 @@ export function setUpImages(
       remove.className = "composer-image-remove";
       // views/icons.tsx #49, drawn here because the strip is built in the
       // browser: the files never reach the server before they are sent.
-      remove.innerHTML =
-        '<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="1" y1="1" x2="7" y2="7"></line><line x1="7" y1="1" x2="1" y2="7"></line></svg>';
+      remove.innerHTML = ATTACHMENT_REMOVE_ICON;
       remove.setAttribute("aria-label", "Remove image");
       // By identity, never by the index this closure was built with: a
       // downscale finishing in the meantime renumbers the list.
@@ -315,8 +318,7 @@ function openPreview(trigger: HTMLElement, source: string): void {
   close.setAttribute("aria-label", "Close");
   // views/icons.tsx #49 at 16px, drawn here because the dialog is built in
   // the browser.
-  close.innerHTML =
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>';
+  close.innerHTML = IMAGE_PREVIEW_CLOSE_ICON;
   dialog.append(image, close);
   document.body.append(dialog);
   const overflow = document.body.style.overflow;

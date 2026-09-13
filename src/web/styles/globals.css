@@ -60,33 +60,6 @@ html.dark {
   }
 }
 
-/* Use the SVG alpha channel as a mask so file icons follow the app's
-   restrained text palette instead of Catppuccin's language-specific colors. */
-.catppuccin-file-icon {
-  display: block;
-  flex-shrink: 0;
-  background: var(--text-dim);
-  mask: center / contain no-repeat var(--catppuccin-icon-light);
-}
-html.dark .catppuccin-file-icon {
-  mask-image: var(--catppuccin-icon-dark);
-}
-
-/* Theme toggle: circular wipe via View Transitions API.
-   Disable the UA cross-fade; the actual clip-path animation is driven by
-   Element.animate() in hooks/useTheme.ts after transition.ready resolves. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation: none;
-  mix-blend-mode: normal;
-}
-::view-transition-old(root) {
-  z-index: 1;
-}
-::view-transition-new(root) {
-  z-index: 2;
-}
-
 html {
   width: 100%;
   height: var(--app-viewport-height, 100dvh);
@@ -134,11 +107,6 @@ code {
   font-family: var(--font-mono);
 }
 
-.directory-picker-path:focus-visible {
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
-}
-
 .sr-only {
   position: absolute;
   width: 1px;
@@ -170,90 +138,11 @@ code {
 }
 
 @media (max-width: 640px) {
-  .directory-picker-back,
-  .directory-picker-entry,
-  .directory-picker-action {
-    min-height: 44px !important;
-  }
-  .directory-picker-back {
-    min-width: 44px !important;
-  }
-  .directory-picker-footer {
-    flex-wrap: wrap;
-    padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
-  }
   textarea,
   input,
   select {
     font-size: 16px !important;
   }
-}
-
-/* Root error boundary (app/error.tsx). */
-.app-error {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding: 24px;
-  background: var(--bg);
-}
-.app-error-panel {
-  width: 520px;
-  max-width: 100%;
-  padding: 22px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-panel);
-}
-.app-error-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-}
-.app-error-body {
-  margin: 8px 0 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text-muted);
-}
-.app-error-detail {
-  margin: 12px 0 0;
-  padding: 10px;
-  max-height: 180px;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--bg);
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.app-error-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 14px;
-}
-.app-error-button {
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-}
-.app-error-button.is-primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 600;
 }
 
 /* Honour the OS motion preference across functional feedback and scrolling. */
@@ -266,172 +155,4 @@ code {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-}
-
-/* Directory picker uses <dialog>, matching the other modals: showModal()
-   supplies the backdrop, focus trap and top layer. Reset the UA dialog box so
-   the panel inside keeps owning its own size. */
-.directory-picker-dialog {
-  margin: auto;
-  padding: 0;
-  border: 0;
-  max-width: none;
-  max-height: none;
-  background: transparent;
-  color: var(--text);
-}
-.directory-picker-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.35);
-}
-
-/* Anchored dropdowns. popover="auto" hands light dismiss, close-on-Escape and
-   top-layer stacking to the browser; CSS anchor positioning keeps the panel
-   pinned to its trigger, which plain top-layer placement cannot do because a
-   popover's containing block is the viewport. It sets the browser floor,
-   declared once in package.json browserslist.
-   @starting-style with allow-discrete replaces the hand-rolled mount/visible
-   state machine that used to animate these. */
-.anchored-menu {
-  position: fixed;
-  inset: auto;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  overflow: visible;
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease,
-    display 140ms allow-discrete,
-    overlay 140ms allow-discrete;
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-.anchored-menu:not(:popover-open) {
-  opacity: 0;
-  transform: translateY(-8px) scale(0.96);
-}
-@starting-style {
-  .anchored-menu:popover-open {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.96);
-  }
-}
-/* Opens upward, right edges aligned. */
-.anchored-menu.opens-up {
-  bottom: anchor(top);
-  right: anchor(right);
-  margin-bottom: 6px;
-  transform-origin: bottom center;
-}
-.anchored-menu.opens-up:not(:popover-open) {
-  transform: translateY(8px) scale(0.96);
-}
-@starting-style {
-  .anchored-menu.opens-up:popover-open {
-    transform: translateY(8px) scale(0.96);
-  }
-}
-
-/* Opens downward, matching the trigger's width. */
-.anchored-menu.opens-down {
-  top: anchor(bottom);
-  left: anchor(left);
-  right: anchor(right);
-  /* The UA gives [popover] width: fit-content, which ignores the right inset
-     and lets long paths size the panel. auto lets both insets stretch it to
-     the trigger's width. */
-  width: auto;
-  margin-top: 4px;
-  transform-origin: top center;
-}
-
-/* Shared dropdown appearance; each component owns positioning and interaction. */
-.menu-surface {
-  box-sizing: border-box;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--text);
-  box-shadow: var(--menu-shadow);
-}
-.menu-panel {
-  padding: 0;
-}
-.menu-item {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  min-height: 34px;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 20px;
-  text-align: left;
-  cursor: pointer;
-}
-.menu-item:where(
-  [aria-selected="true"],
-  [aria-pressed="true"],
-  [aria-current="true"],
-  [data-active="true"]
-) {
-  background: var(--bg-selected);
-}
-.menu-item:enabled:hover {
-  background: var(--bg-hover);
-}
-.menu-item-danger {
-  color: var(--danger);
-}
-.menu-item-danger:enabled:hover {
-  background: color-mix(in srgb, var(--danger) 10%, var(--bg));
-}
-.menu-item:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.menu-filter {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-.menu-item:focus-visible,
-.menu-filter:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-.menu-section-label {
-  padding: 6px 10px 4px;
-  color: var(--text-dim);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-@media (pointer: coarse) {
-  .menu-item {
-    min-height: 44px;
-  }
-}
-
-.project-folder-message {
-  padding: 8px 12px 8px 28px;
-  font-size: 12px;
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
 }
