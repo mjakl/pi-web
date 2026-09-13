@@ -100,6 +100,17 @@ describe("shell region replacement", () => {
     expect(oldHost.hidden).toBe(false);
   });
 
+  it("does not measure the bar for a hidden panel on scroll", async () => {
+    await load();
+    const measure = vi.spyOn(byId("top-bar"), "getBoundingClientRect");
+    expect(byId("top-panel").hidden).toBe(true);
+    window.dispatchEvent(new Event("scroll"));
+    expect(measure).not.toHaveBeenCalled();
+    click(query("[data-top-panel]"));
+    window.dispatchEvent(new Event("scroll"));
+    expect(measure).toHaveBeenCalled();
+  });
+
   it("releases an in-progress drag when its handle is cleaned up", async () => {
     await load();
     const handle = query(".sidebar-resize-handle");

@@ -259,28 +259,27 @@ export function sessionUseCases({
     else await deps.sessions.setStar(id, targetId, starred);
   }
 
-  /** Disk metadata, or runtime entries for a session Pi has not flushed yet. */
+  /**
+   * Runtime entries for a live session, which owns its file and may be a
+   * flush ahead of it; disk metadata for everything else. Streaming the file
+   * of a running session would re-read the whole thing after every turn.
+   */
   async function row(
     id: string,
   ): Promise<
     { summary: SessionSummary; metadata: SessionRowMetadata } | undefined
   > {
     const snapshot = deps.runtime.get(id)?.snapshot();
-    const found = await deps.sessions.rowMetadata(id);
-    const base = snapshot?.summary ?? found?.summary;
-    if (!base) return undefined;
-    const [summary] = await decorate([base]);
+    const found = snapshot
+      ? {
+          summary: snapshot.summary,
+          metadata: rowMetadata(snapshot.entries, snapshot.summary),
+        }
+      : await deps.sessions.rowMetadata(id);
+    if (!found) return undefined;
+    const [summary] = await decorate([found.summary]);
     if (!summary) return undefined;
-    const metadata =
-      found?.metadata ??
-      (snapshot
-        ? rowMetadata(snapshot.entries, {
-            modifiedAt: base.modifiedAt,
-            fileSize: base.fileSize,
-          })
-        : undefined);
-    if (!metadata) return undefined;
-    return { summary, metadata };
+    return { summary, metadata: found.metadata };
   }
 
   return {

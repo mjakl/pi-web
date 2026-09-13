@@ -195,12 +195,9 @@ export function configUseCases({
       if (!status.requiresTrust) {
         throw new Error("This project has no resources that require trust");
       }
-      const inFolder = (await deps.sessions.list()).filter((session) =>
-        samePath(session.cwd, cwd),
-      );
-      const running = inFolder
-        .map((session) => deps.runtime.get(session.id))
-        .filter((live) => live !== undefined);
+      const running = deps.runtime
+        .live()
+        .filter((live) => samePath(live.snapshot().summary.cwd, cwd));
       if (running.some((live) => live.snapshot().status.running)) {
         throw new Error(
           "Wait for the active session to finish before trusting this project",
@@ -287,12 +284,9 @@ export function configUseCases({
      * it started.
      */
     async reloadFolder(cwd: string): Promise<number> {
-      const inFolder = (await deps.sessions.list()).filter((session) =>
-        samePath(session.cwd, cwd),
-      );
-      const live = inFolder
-        .map((session) => deps.runtime.get(session.id))
-        .filter((session) => session !== undefined);
+      const live = deps.runtime
+        .live()
+        .filter((session) => samePath(session.snapshot().summary.cwd, cwd));
       for (const session of live) await session.reload();
       return live.length;
     },

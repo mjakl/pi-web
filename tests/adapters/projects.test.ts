@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Real git in a temporary checkout: the identity rules only mean anything
 // against the paths git actually prints.
@@ -52,6 +52,24 @@ describe("project identity against a real checkout", () => {
     // The temporary directory may be a symlink (/tmp on macOS), so only the
     // basename is stable.
     expect(project.root.endsWith("/repo")).toBe(true);
+  });
+
+  it("answers an expired entry as it stands and refreshes it behind the reply", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const resolver = createPiProjectResolver({ agentDir });
+      expect((await resolver.resolve(repo)).branch).toBe("main");
+      await git(repo, "checkout", "-b", "feature");
+      expect((await resolver.resolve(repo)).branch).toBe("main");
+      vi.setSystemTime(Date.now() + 61_000);
+      // The stale answer comes back at once; the next one is fresh.
+      expect((await resolver.resolve(repo)).branch).toBe("main");
+      await expect
+        .poll(async () => (await resolver.resolve(repo)).branch)
+        .toBe("feature");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("groups a linked worktree under the main checkout", async () => {
