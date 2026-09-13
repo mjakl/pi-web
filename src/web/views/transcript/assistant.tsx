@@ -101,14 +101,7 @@ function Blocks({
               />
             );
           default:
-            return (
-              <HistoryActionFrame
-                entryId={block.call.result?.entryId ?? item.entryId}
-                actions={actions}
-              >
-                <ToolCard call={block.call} actions={actions} />
-              </HistoryActionFrame>
-            );
+            return <ToolCard call={block.call} actions={actions} />;
         }
       })}
     </div>
@@ -153,8 +146,13 @@ export function AssistantMessage({
     item.errorMessage === undefined &&
     item.stopReason !== "aborted"
   ) {
-    return <HistoryActionFrame entryId={item.entryId} actions={actions} />;
+    return <></>;
   }
+  const userFacing = item.blocks.some(
+    (block) =>
+      block.kind === "image" ||
+      (block.kind === "text" && block.text.trim() !== ""),
+  );
   const editable = actions && !actions.readOnly && !actions.live;
   const usage = usageLine(item);
   // The header row is a grid: pi-web gives the streaming estimate and the
@@ -172,7 +170,7 @@ export function AssistantMessage({
   return (
     <HistoryActionFrame
       entryId={item.entryId}
-      actions={actions}
+      actions={userFacing ? actions : undefined}
       copyText={streaming ? undefined : answerText(item)}
     >
       <div
