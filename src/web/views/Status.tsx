@@ -1,15 +1,15 @@
 import { Partial } from "@web/views/Partial";
-import { formatCompactCount, formatContextUsage } from "@core/context-usage";
+import { formatContextUsage } from "@core/context-usage";
 import type { ContextUsage } from "@core/context-usage";
 import type { LiveStatus } from "@core/ports";
 import type { SessionView } from "@core/workspace";
 import { ModelSelector, ModelScopeWarning, modelPick } from "./Composer.tsx";
 import {
-  CheckIcon,
   CompactIcon,
   ContextGaugeIcon,
   RecallQueueIcon,
   RefreshIcon,
+  SpinnerIcon,
 } from "./icons.tsx";
 
 // Everything about a running session that is not the transcript: the banners
@@ -84,11 +84,13 @@ export function CompactButton({
   usage,
   oob,
   disabled,
+  compacting = false,
 }: {
   sessionId: string;
   usage?: ContextUsage;
   oob?: boolean;
   disabled?: boolean;
+  compacting?: boolean;
 }) {
   const warn =
     usage !== undefined &&
@@ -99,14 +101,15 @@ export function CompactButton({
       id="context-compact"
       class="context-compact-button"
       {...(warn ? { "data-warning": "true" } : {})}
-      {...(disabled === true ? { disabled: true } : {})}
+      {...(disabled === true || compacting ? { disabled: true } : {})}
+      {...(compacting ? { "aria-busy": "true" } : {})}
       {...(oob === true ? { "hx-swap-oob": "true" } : {})}
-      title="Compact context"
-      aria-label="Compact context"
+      title={compacting ? "Compacting context…" : "Compact context"}
+      aria-label={compacting ? "Compacting context…" : "Compact context"}
       hx-post={`/sessions/${sessionId}/compact`}
       hx-swap="none"
     >
-      <CompactIcon />
+      {compacting ? <SpinnerIcon animated={false} /> : <CompactIcon />}
     </button>
   );
 }
@@ -125,14 +128,11 @@ export function turnBusy(status: LiveStatus | null): boolean {
 /**
  * Whether compacting is refused right now, as pi-web decides it
  * (ChatWindow.tsx `compactionControl`): a session whose folder is gone is
- * read-only, and a turn in flight owns the context until it settles, unless
- * the turn is the compaction itself.
+ * read-only, and any running operation owns the context until it settles.
  */
 export function compactDisabled(view: SessionView): boolean {
   if (view.summary.cwdAvailable === false) return true;
-  const { status } = view;
-  if (status === null || status.compacting) return false;
-  return status.running || status.bashRunning;
+  return turnBusy(view.status);
 }
 
 /** One queued message: the kind as a pill, then the text (§6.1). */
@@ -198,18 +198,6 @@ function QueuePanel({
   );
 }
 
-/** "Compacted 40k -> 12k tokens (28k saved)", as pi-web words it. */
-function compactionText(compaction: NonNullable<LiveStatus["compaction"]>) {
-  const { reason, tokensBefore, tokensAfter } = compaction;
-  const label =
-    reason === "manual"
-      ? "Compacted"
-      : `${reason.charAt(0).toUpperCase()}${reason.slice(1)}`;
-  const after = tokensAfter ?? tokensBefore;
-  const saved = Math.max(0, tokensBefore - after);
-  return `${label} ${formatCompactCount(tokensBefore)} -> ${formatCompactCount(after)} tokens (${formatCompactCount(saved)} saved)`;
-}
-
 /**
  * Everything that changes while a session runs. `model` asks for the toolbar's
  * selector out of band, which the stream sends only when the model or the
@@ -246,12 +234,6 @@ export function Status({
           ) : null}
         </div>
       ) : null}
-      {status?.compaction ? (
-        <div style="margin-bottom:8px; padding:5px 10px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.24); border-radius:6px; font-size:12px; color:rgba(5,150,105,0.95); display:flex; align-items:center; gap:6px">
-          <CheckIcon size={11} width={2} />
-          {compactionText(status.compaction)}
-        </div>
-      ) : null}
       {status?.compactionError ? (
         <div
           role="alert"
@@ -285,6 +267,7 @@ export function Status({
             usage={view.usage}
             oob
             disabled={compactDisabled(view)}
+            compacting={status?.compacting ?? false}
           />
         </>
       ) : null}
