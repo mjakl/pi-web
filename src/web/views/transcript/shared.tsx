@@ -266,7 +266,7 @@ export function HistoryActionButtons({
           {...(actions.busy === true ? { disabled: true } : {})}
         >
           <ForkIcon />
-          New branch
+          Branch
         </button>
       </span>
       <button
@@ -276,8 +276,8 @@ export function HistoryActionButtons({
         hx-post={post("fork")}
         {...swap}
       >
-        <PlusIcon size={11} />
-        New session
+        <PlusIcon size={11} width={1.2} />
+        Clone
       </button>
     </>
   );

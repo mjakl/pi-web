@@ -195,16 +195,16 @@ describe("transcript items", () => {
     await expect(html).toMatchFileSnapshot("./fixtures/transcript-items.html");
   });
 
-  it("uses the branch and plus icons for history actions", () => {
+  it("uses concise labels and a light plus for history actions", () => {
     const buttons = html(
       <HistoryActionButtons entryId="a1" actions={actions} />,
     );
 
     expect(buttons).toMatch(
-      /aria-label="New branch"[\s\S]*?<path d="M6 3v12M18 9a9 9 0 0 1-9 9"><\/path>[\s\S]*?New branch/,
+      /aria-label="New branch"[\s\S]*?<path d="M6 3v12M18 9a9 9 0 0 1-9 9"><\/path>[\s\S]*?<\/svg>Branch<\/button>/,
     );
     expect(buttons).toMatch(
-      /title="New session[^>]*>[\s\S]*?<svg width="11" height="11" viewBox="0 0 12 12"[\s\S]*?<line x1="6" y1="1" x2="6" y2="11"><\/line>[\s\S]*?New session/,
+      /title="New session[^>]*>[\s\S]*?<svg width="11" height="11" viewBox="0 0 12 12"[^>]*stroke-width="1.2"[\s\S]*?<line x1="6" y1="1" x2="6" y2="11"><\/line>[\s\S]*?<\/svg>Clone<\/button>/,
     );
   });
 

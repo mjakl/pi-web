@@ -293,9 +293,12 @@ export function GetStartedArrowIcon({ size = 44 }: IconProps) {
 }
 
 /* 17 · new session */
-export function PlusIcon({ size = 12 }: IconProps) {
+export function PlusIcon({
+  size = 12,
+  width = 2.2,
+}: IconProps & { width?: number }) {
   return (
-    <Stroked size={size} box={12} width={2.2}>
+    <Stroked size={size} box={12} width={width}>
       <line x1="6" y1="1" x2="6" y2="11" />
       <line x1="1" y1="6" x2="11" y2="6" />
     </Stroked>
