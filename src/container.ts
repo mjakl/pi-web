@@ -19,6 +19,7 @@ import { createPiProjectResources } from "@adapters/pi/resources";
 import { createPiSessionCatalog } from "@adapters/pi/session-catalog";
 import { createPiSkills } from "@adapters/pi/skills";
 import { createWebPushNotifier } from "@adapters/pi/web-push";
+import { createWebSettingsStore } from "@adapters/fs/web-settings";
 import { createWorkspace, type Workspace } from "@core/workspace";
 import { tmpdir } from "node:os";
 import type { Config } from "./config.ts";
@@ -241,6 +242,7 @@ export function createDeps(config: Config): { workspace: Workspace } {
       git: createGit(),
       watcher: createWatcher(),
       push: createWebPushNotifier({ agentDir: config.agentDir }),
+      webSettings: createWebSettingsStore(config.agentDir),
       tmpdir: tmpdir(),
     }),
   };

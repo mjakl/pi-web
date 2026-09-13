@@ -9,17 +9,16 @@ import {
   removedProject,
   selectableWorktrees,
 } from "@core/workspaces";
-import { randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
 import {
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+  migrateWebState,
+  readWebState,
+  webStatePath,
+  writeWebState,
+} from "@adapters/fs/web-state";
+import { execFile } from "node:child_process";
+import { statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { promisify } from "node:util";
 
 // Which repository a session's working folder belongs to. Sessions of the
@@ -28,7 +27,7 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 const CACHE_MS = 60_000;
-const PROJECTS_FILE = "web-worktree-projects.json";
+const PROJECTS_FILE = "worktree-projects.json";
 
 /** Never a shell, always the C locale: git output is parsed, not read. */
 function git(cwd: string, args: string[]): Promise<string> {
@@ -47,21 +46,22 @@ function isDirectory(path: string): boolean {
   }
 }
 
-/** pi-web's `web-worktree-projects.json`: path identity -> project root. */
-function knownProjects(agentDir: string): Record<string, string> {
-  try {
-    const value: unknown = JSON.parse(
-      readFileSync(join(agentDir, PROJECTS_FILE), "utf8"),
-    );
-    if (typeof value !== "object" || value === null || Array.isArray(value)) {
-      return {};
-    }
-    return Object.fromEntries(
-      Object.entries(value).filter(([, root]) => typeof root === "string"),
-    );
-  } catch {
-    return {};
+function parseProjects(value: unknown): Record<string, string> {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !Object.values(value).every((root) => typeof root === "string")
+  ) {
+    throw new Error("Invalid project map");
   }
+  return value as Record<string, string>;
+}
+
+function knownProjects(agentDir: string): Record<string, string> {
+  return (
+    readWebState(webStatePath(agentDir, PROJECTS_FILE), parseProjects) ?? {}
+  );
 }
 
 /**
@@ -77,14 +77,7 @@ function remember(agentDir: string, folders: string[], root: string): void {
   );
   if (!changed) return;
   try {
-    mkdirSync(agentDir, { recursive: true });
-    const temporary = join(agentDir, `.${PROJECTS_FILE}-${randomUUID()}.tmp`);
-    writeFileSync(temporary, JSON.stringify(next), {
-      flag: "wx",
-      mode: 0o600,
-      flush: true,
-    });
-    renameSync(temporary, join(agentDir, PROJECTS_FILE));
+    writeWebState(webStatePath(agentDir, PROJECTS_FILE), next);
   } catch {
     // Grouping is a convenience; a read-only agent directory must not break
     // the picker.
@@ -98,6 +91,12 @@ function resolveReal(path: string): Promise<string> {
 export function createPiProjectResolver(options: {
   agentDir: string;
 }): ProjectResolver {
+  migrateWebState(
+    options.agentDir,
+    "web-worktree-projects.json",
+    PROJECTS_FILE,
+    parseProjects,
+  );
   const cache = new Map<string, { at: number; project: ProjectInfo }>();
 
   async function look(cwd: string): Promise<ProjectInfo> {

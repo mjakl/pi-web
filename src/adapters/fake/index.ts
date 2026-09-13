@@ -1,4 +1,9 @@
 import { createDirectoryBrowser } from "@adapters/fs/browse";
+import {
+  DEFAULT_WEB_SETTINGS,
+  webSettingsPatch,
+  type WebSettingsStore,
+} from "@core/web-settings";
 import { createFileTree } from "@adapters/fs/file-tree";
 import { createWatcher } from "@adapters/fs/watch";
 import { createGit } from "@adapters/git/git";
@@ -889,6 +894,7 @@ export type FakeWorld = {
   git: Git;
   watcher: Watcher;
   push: PushNotifier & { sent: PushMessage[] };
+  webSettings: WebSettingsStore;
   tmpdir: string;
   store: Map<string, FakeStoredSession>;
 };
@@ -944,7 +950,8 @@ export function createFakeWorld(
   const plugins = (options.packages ?? FAKE_PACKAGES).map((entry) => ({
     ...entry,
   }));
-  const subscriptions: PushSubscription[] = [];
+  let subscriptions: PushSubscription[] = [];
+  let settings = { ...DEFAULT_WEB_SETTINGS };
   const sent: PushMessage[] = [];
   let created = 0;
 
@@ -1308,11 +1315,38 @@ export function createFakeWorld(
     },
     git: createGit(),
     watcher: createWatcher(),
+    webSettings: {
+      get: () => ({ ...settings }),
+      update: (patch) =>
+        (settings = { ...settings, ...webSettingsPatch(patch) }),
+    },
     push: {
       sent,
-      publicKey: () => "fake-vapid-public-key",
+      // A valid public P-256 point, with no private key or external push sender.
+      publicKey: () =>
+        "BMXGy05tVdLOgy_ESb48d-bhyRPewByAhqioc-LnQqJzSlFP_1d0wOfKbjc1eDyY3hFN3xv2X2RMOmLlJIfiI5o",
       subscribe: (subscription) => {
+        subscriptions = subscriptions.filter(
+          (known) => known.endpoint !== subscription.endpoint,
+        );
         subscriptions.push(subscription);
+      },
+      has: (subscription) =>
+        subscriptions.some(
+          (known) =>
+            known.endpoint === subscription.endpoint &&
+            known.keys.auth === subscription.keys.auth &&
+            known.keys.p256dh === subscription.keys.p256dh,
+        ),
+      unsubscribe: (subscription) => {
+        subscriptions = subscriptions.filter(
+          (known) =>
+            !(
+              known.endpoint === subscription.endpoint &&
+              known.keys.auth === subscription.keys.auth &&
+              known.keys.p256dh === subscription.keys.p256dh
+            ),
+        );
       },
       send: (message) => {
         if (subscriptions.length > 0) sent.push(message);

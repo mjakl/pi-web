@@ -61,8 +61,8 @@ export function precacheUrls(assets: StaticAssets): string[] {
  * live: the session pages, the SSE streams, and every route that changes
  * state go straight to the network, and only `/static/*` is served from the
  * cache. A navigation that cannot reach the server falls back to the offline
- * page. Pushes only become a system notification when no window is visible —
- * a visible tab already showed the notice and played the tone itself.
+ * page. Every received push displays a notification, including with a visible
+ * window, as required by Apple's user-visible push contract.
  */
 export function serviceWorker(assets: StaticAssets): string {
   const precache = JSON.stringify(precacheUrls(assets));
@@ -129,29 +129,16 @@ self.addEventListener("push", (event) => {
   try {
     payload = event.data ? event.data.json() : {};
   } catch {
-    // A malformed payload is not worth a notification.
+    // Even malformed pushes must display a visible notification.
   }
-  const title = payload.title;
-  const body = payload.body;
-  if (typeof title !== "string" || !title) return;
-  if (typeof body !== "string" || !body) return;
-
-  event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clients) => {
-        if (clients.some((client) => client.visibilityState === "visible")) {
-          return undefined;
-        }
-        return self.registration.showNotification(title, {
-          body,
-          data: { url: typeof payload.url === "string" ? payload.url : "/" },
-          ...(typeof payload.tag === "string" && payload.tag
-            ? { tag: payload.tag }
-            : {}),
-        });
-      }),
-  );
+  if (!payload || typeof payload !== "object") payload = {};
+  const title = typeof payload.title === "string" && payload.title ? payload.title : "web-pi";
+  const body = typeof payload.body === "string" && payload.body ? payload.body : "A run finished.";
+  event.waitUntil(self.registration.showNotification(title, {
+    body,
+    data: { url: typeof payload.url === "string" ? payload.url : "/" },
+    ...(typeof payload.tag === "string" && payload.tag ? { tag: payload.tag } : {}),
+  }));
 });
 
 self.addEventListener("notificationclick", (event) => {

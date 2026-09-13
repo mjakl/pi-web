@@ -10,7 +10,8 @@ route.
 
 web-pi removes the browser copy. Pi's session JSONL and the live `AgentSession`
 are the conversation state; the browser shows whatever the server last rendered.
-Browser-local drafts, selections, and preferences are separate from that model.
+Browser-local drafts and selections are separate from that model. General's
+appearance, token threshold and completion sound are shared server settings.
 
 ## Boundary and ports
 
@@ -28,7 +29,14 @@ Internal interfaces, all consumers in this repository. Defined in
 | `Files`            | The `@` completion index, directory listings, file bytes and text, shell-output captures                                     | `src/adapters/fs/file-tree.ts`       |
 | `Git`              | `git status` of a folder and the patch for one file                                                                          | `src/adapters/git/git.ts`            |
 | `Watcher`          | One file's changes on disk, deduplicated                                                                                     | `src/adapters/fs/watch.ts`           |
-| `PushNotifier`     | VAPID keys and browser subscriptions in the agent directory; one encrypted message per finished run                          | `src/adapters/pi/web-push.ts`        |
+| `PushNotifier`     | VAPID identity, per-browser enrollment and encrypted completion messages                                                     | `src/adapters/pi/web-push.ts`        |
+
+`WebSettingsStore` in `src/core/web-settings.ts` owns shared General
+preferences; `src/adapters/fs/web-settings.ts` persists them. All standalone
+web-owned state lives in `<agentDir>/web-pi/`: `settings.json`, `push.json` and
+`worktree-projects.json`. Pi configuration and session files stay outside that
+folder. [Deployment](deployment.md#web-state-cutover-and-reset) owns the
+one-time legacy-file cutover, reset procedure and rollback limitations.
 
 `LiveSession` is the deep module: SDK event choreography (partial messages,
 compaction, retries, queue, extension notices) stays inside; callers only read a
@@ -179,14 +187,13 @@ sidebar row summary. The catalog hands the core entries; no rule reads a file.
 ### Context usage
 
 `src/core/context-usage.ts` is the only formula: Pi's context count, the model's
-window, a percent, and the thresholds — warn at 60 %, critical at 80 %, and warn
-again once the count passes the reader's own token threshold (pi-web's "dumb
-zone", 100,000 by default). That last one is a browser preference the server has
-to know, because the server renders the badge, so it travels in the
-`web-pi-warn-tokens` cookie and enters the formula as an argument of
-`contextUsage()`; the settings page renders the current value and the input
-writes the cookie. The badge, the compaction button, the statistics panel, and
-any future warning read this one value.
+window, a percent, and the thresholds. Context is critical at **75%** of the
+model window. Below that, it warns at the shared token threshold (pi-web's "dumb
+zone", **100,000** by default). There is no percentage-based yellow warning;
+critical takes precedence over the token threshold. General saves the positive
+safe integer in `web-pi/settings.json`. Page, statistics and live-stream renders
+read the current shared value, never the old `web-pi-warn-tokens` cookie. The
+badge and compaction button use the same formula.
 
 After compaction, Pi withholds its count until a new assistant reports valid
 usage. The runtime then estimates Pi's current rebuilt messages with the SDK's
@@ -286,12 +293,14 @@ composition root and the only importer of Pi adapters.
   and nothing else: it imports the same five modules. The split exists so five
   agents can port five regions of pi-web at once without touching each other's
   files.
-- **The theme uses web-pi's own preference key.** A pre-paint script in `<head>`
-  reads `web-pi-theme` (`light` / `dark` / `auto`) and adds `dark` to `<html>`
-  before the first paint; `src/web/client/theme.ts` keeps it in step with the
-  system scheme and applies changes without animation. The control lives in
-  Settings → General, as a radio group the client marks on arrival — the server
-  cannot know what the browser stored.
+- **General preferences are shared; auto appearance resolves per device.** The
+  server renders `light`, `dark` or `auto` on `<html>`. A pre-paint script
+  applies it before the stylesheet loads; `src/web/client/theme.ts` follows OS
+  changes for auto. General's controls save through the workspace settings port.
+  The browser applies confirmed writes and refreshes settings when focus or
+  visibility returns. Legacy theme/sound localStorage and threshold cookies are
+  ignored, not imported. Drafts, navigation, panel geometry and notification
+  permission remain device-local.
 
 - **Pi SDK resolved from the host `pi` on `PATH`**, never pinned. web-pi reads
   and writes the same session files as the installed CLI, so a pin would let the
@@ -390,21 +399,26 @@ composition root and the only importer of Pi adapters.
   lone carriage return — which is what Enter sends — does not survive a
   multipart parser. Closing is Ctrl+C: a pi-tui component has no close command
   to receive.
-- **A notification is offered once, at the moment it would have helped.** The
-  browser asks for permission the first time a run finishes while nobody is
-  looking, as a small prompt in the notice shelf with an Allow button — never a
-  bare `requestPermission()` out of nowhere, and never again: the answer, or the
-  decision not to answer, is remembered in `web-pi:notify-asked`. A browser that
-  granted permission is subscribed to Web Push on every load, as pi-web does;
-  there is no toggle, because pi-web has none.
+- **Push enrollment is manual and belongs to this browser.** General prepares
+  worker registration/activation and the public key before enabling Subscribe.
+  The click calls `pushManager.subscribe` directly with `userVisibleOnly: true`,
+  preserving the user gesture. Permission alone or a browser subscription does
+  not establish server enrollment; status checks the matching server record.
+  Unsubscribe removes only that record and browser subscription, not permission,
+  the worker or other browsers. Nothing automatically subscribes on load or
+  completion. Missing capabilities and blocked permission have disabled controls
+  with explanations; failed preparation ends with a reload instruction.
 - **Notifications key off the agent's own idle, not off the turn ending.**
   `src/core/turn-completion.ts` is pi-web's rule: a run has to have started, and
   the session has to be idle when it settles. A stop, an abort before the model
   answered, or a shell command on its own never notifies. The adapter turns that
   into a `completed` runtime event; the server sends one Web Push from it, and
-  the session stream sends `done` to the page, which plays the tone and — only
-  when nobody is looking at the tab — shows a notification. The service worker
-  shows its own only when no window is visible, so a reader never gets both.
+  the session stream sends `done` to the page for the shared completion tone.
+  The service worker alone displays completion notifications, for every received
+  push even if a window is visible, as Apple requires. Extension input requests
+  retain their dialog and tone, not a second system-notification path. This
+  covers completed runs in this web server, not terminal Pi; OS delivery is not
+  guaranteed.
 - **The service worker is generated, not shipped.** Its precache list has to
   name this build's hashed asset URLs, so `src/web/pwa.ts` writes the script and
   `/sw.js` serves it uncached with the asset hash as its version. It caches
@@ -460,10 +474,11 @@ composition root and the only importer of Pi adapters.
   imports them (esbuild resolves `@core` the same way tsconfig does). Slash
   ranking, `@`-token extraction, fuzzy scoring, insert text, history cycling,
   and the attachment limits are one implementation, unit-tested server-side and
-  executed in the browser where a round trip would be felt. Only two JSON
-  endpoints exist, both for the `@` menu: a keystroke cannot wait for a rendered
-  fragment. Everything else the composer opens — the slash menu, the queue
-  panel, the notice shelf — is server-rendered HTML.
+  executed in the browser where a round trip would be felt. The `@` menu uses
+  JSON endpoints because a keystroke cannot wait for a rendered fragment. Shared
+  web settings and push enrollment also use JSON. Everything else the composer
+  opens — the slash menu, the queue panel, the notice shelf — is server-rendered
+  HTML.
 - **One containment policy, in one function.** `authorize` in
   `src/core/workspace/deps.ts` answers every file request the same way, and
   `src/core/path-access.ts` holds the rules it applies: a lexical check before
@@ -509,12 +524,11 @@ composition root and the only importer of Pi adapters.
 - **The chosen folder is a cookie, and validating it is what grants access.**
   `web-pi-cwd` holds the folder new sessions start in, `web-pi-project` the
   sidebar's project, `web-pi-settings` the open settings section, `web-pi-skill`
-  the skill that folder was last reading, and `web-pi-warn-tokens` the context
-  threshold the badge is coloured by. A preference the server renders from is a
-  cookie; everything only the browser acts on stays in `localStorage`. The
-  picker commits through `POST /workspaces/validate`, which adds the folder to
-  the in-memory allowed roots — so the new-session composer gets `@` completion,
-  the slash menu and a model picker, and `/new` re-validates its cookie on every
+  the skill that folder was last reading. These navigation cookies are local;
+  General preferences are shared in the server's web settings store. The picker
+  commits through `POST /workspaces/validate`, which adds the folder to the
+  in-memory allowed roots — so the new-session composer gets `@` completion, the
+  slash menu and a model picker, and `/new` re-validates its cookie on every
   load rather than trusting it. Browsing (`GET /workspaces/browse`) is
   deliberately outside that policy: it exposes directory _names_ only, and a
   reader has to be able to see a folder before asking for it. pi-web keeps the
@@ -525,9 +539,9 @@ composition root and the only importer of Pi adapters.
   their own identity) and the parse of `git worktree list --porcelain -z`; the
   adapter runs git, caches for 60 s, checks availability _before_ the cache so a
   deleted folder can never be masked, and writes
-  `<agentDir>/web-worktree-projects.json` atomically at mode 0600 and only when
-  a mapping actually changed. Git forgets a worktree the moment it is deleted;
-  that map is what keeps its sessions grouped under the repository.
+  `<agentDir>/web-pi/worktree-projects.json` atomically at mode 0600 and only
+  when a mapping actually changed. Git forgets a worktree the moment it is
+  deleted; that map is what keeps its sessions grouped under the repository.
 - **A missing working folder is read-only, not an error.** The session still
   reads, exports, shows statistics and stops; sending, branching, forking,
   cloning, compacting, rewinding, switching model and activating all disappear,

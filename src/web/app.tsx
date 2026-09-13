@@ -1,4 +1,3 @@
-import { parseWarnTokens, WARN_TOKENS_COOKIE } from "@core/context-usage";
 import type { ImageAttachment } from "@core/ports";
 import type { SidebarView } from "@core/workspace";
 import { staticAssets } from "@web/assets";
@@ -82,13 +81,8 @@ export function createWebApp(deps: WebDeps) {
     );
   }
 
-  /**
-   * The reader's context-warning threshold. It belongs to the browser, but
-   * the badge is rendered here, so it travels in a cookie rather than in
-   * every request.
-   */
-  function warnTokens(c: Context): { warnTokens: number } {
-    return { warnTokens: parseWarnTokens(getCookie(c, WARN_TOKENS_COOKIE)) };
+  function warnTokens(): { warnTokens: number } {
+    return { warnTokens: deps.workspace.webSettings().warnTokens };
   }
 
   /** The whole session page, swapped into <body> after a history change. */
@@ -100,7 +94,7 @@ export function createWebApp(deps: WebDeps) {
   ): Promise<Response> {
     const [sidebar, view] = await Promise.all([
       sidebarOf(c, id),
-      deps.workspace.viewSession(id, warnTokens(c)),
+      deps.workspace.viewSession(id, warnTokens()),
     ]);
     if (!view) return c.notFound();
     if (!c.req.header("HX-Request")) {

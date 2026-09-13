@@ -103,7 +103,7 @@ describe("project identity against a real checkout", () => {
     await git(repo, "worktree", "add", "-b", "feature", wt);
     const resolver = createPiProjectResolver({ agentDir });
     await resolver.worktrees(repo);
-    const file = join(agentDir, "web-worktree-projects.json");
+    const file = join(agentDir, "web-pi", "worktree-projects.json");
     const written: unknown = JSON.parse(await readFile(file, "utf8"));
     const roots = Object.values(written as Record<string, string>);
     expect(roots.length).toBeGreaterThanOrEqual(2);

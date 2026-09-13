@@ -174,6 +174,10 @@ export function liveUseCases({
     subscribePush(subscription: PushSubscription): void {
       deps.push.subscribe(subscription);
     },
+    hasPush: (subscription: PushSubscription) => deps.push.has(subscription),
+    unsubscribePush: (subscription: PushSubscription) => {
+      deps.push.unsubscribe(subscription);
+    },
 
     /**
      * Empties the queue and hands it back for the composer: the texts as one

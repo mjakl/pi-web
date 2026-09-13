@@ -1,8 +1,4 @@
-import {
-  contextUsage,
-  formatTokens,
-  parseWarnTokens,
-} from "@core/context-usage";
+import { contextUsage, formatTokens } from "@core/context-usage";
 import { describe, expect, it } from "vitest";
 
 describe("contextUsage", () => {
@@ -60,13 +56,5 @@ describe("the reader's own token threshold", () => {
         warnTokens: 200_000,
       }).level,
     ).toBe("critical");
-  });
-
-  it("takes only a positive whole number from the cookie", () => {
-    expect(parseWarnTokens("50000")).toBe(50_000);
-    expect(parseWarnTokens("0")).toBe(100_000);
-    expect(parseWarnTokens("-5")).toBe(100_000);
-    expect(parseWarnTokens("1e40")).toBe(100_000);
-    expect(parseWarnTokens(undefined)).toBe(100_000);
   });
 });

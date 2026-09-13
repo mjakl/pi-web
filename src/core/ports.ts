@@ -508,6 +508,8 @@ export type PushNotifier = {
   publicKey(): string;
   /** Upsert by endpoint: a browser re-subscribing replaces its old record. */
   subscribe(subscription: PushSubscription): void;
+  has(subscription: PushSubscription): boolean;
+  unsubscribe(subscription: PushSubscription): void;
   /** Sends to every subscription, dropping the ones the service rejects. */
   send(message: PushMessage): Promise<void>;
 };

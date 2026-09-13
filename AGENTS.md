@@ -91,8 +91,9 @@ Rules enforced by `.oxlintrc.json`:
 - Anything a page can do without script does: the workspace menu is a native
   `popover` anchored in CSS, and the subagent fold and the extension widget
   panel are `<details>` elements the server fills on demand.
-- Web Push keys and subscriptions live in the agent directory (`web-push.json`).
-  Never let a test or an unattended check reach the real one:
+- Web-owned settings, push state and worktree mappings live under
+  `<agentDir>/web-pi/`. Read `docs/deployment.md` before changing their cutover
+  or reset behavior. Never let a test or unattended check reach the real store:
   `createWebPushNotifier` takes the directory, and its `send` is injectable so
   nothing has to talk to a push service.
 

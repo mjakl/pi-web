@@ -1,6 +1,5 @@
-// What happens when a run finishes: a tone, and a notification when nobody is
-// looking at this tab. The server decides *that* a run finished and says so on
-// the session stream; only the browser knows whether anyone is watching.
+// Completion tones follow server events. System notifications belong solely
+// to the push subscription, so an unsubscribed browser stays unsubscribed.
 
 import { soundEnabled } from "./preferences.ts";
 
@@ -37,93 +36,11 @@ export function playDone(): void {
   }
 }
 
-/** A visible but unfocused tab still counts as unwatched, as in pi-web. */
-function unwatched(): boolean {
-  return document.visibilityState !== "visible" || !document.hasFocus();
-}
-
-/**
- * Asked once, ever, and only when a run has actually finished while nobody
- * was looking: that is the moment a notification would have been useful. A
- * button rather than a bare `requestPermission()`, because a prompt out of
- * nowhere is what makes people click "block".
- */
-const ASKED_KEY = "web-pi:notify-asked";
-
-function offerNotifications(): void {
-  if (!("Notification" in window) || Notification.permission !== "default") {
-    return;
-  }
-  try {
-    if (localStorage.getItem(ASKED_KEY) === "1") return;
-    localStorage.setItem(ASKED_KEY, "1");
-  } catch {
-    // Without storage the offer would come back every time; skip it.
-    return;
-  }
-  const shelf = document.getElementById("toasts");
-  if (!shelf) return;
-  const box = document.createElement("div");
-  box.className = "notice-shelf-item notification-offer";
-  const text = document.createElement("span");
-  text.textContent = "Notify you when a run finishes?";
-  const yes = document.createElement("button");
-  yes.type = "button";
-  yes.className = "notification-offer-action";
-  yes.textContent = "Allow";
-  yes.addEventListener("click", () => {
-    box.remove();
-    void Notification.requestPermission();
-  });
-  const no = document.createElement("button");
-  no.type = "button";
-  no.className = "notification-offer-action";
-  no.textContent = "No thanks";
-  no.addEventListener("click", () => {
-    box.remove();
-  });
-  box.append(text, yes, no);
-  shelf.append(box);
-}
-
-function notify(title: string, body: string, tag: string): void {
-  if (!("Notification" in window)) return;
-  if (Notification.permission !== "granted") {
-    offerNotifications();
-    return;
-  }
-  const options = { body, tag };
-  try {
-    // The service worker owns notifications where one is registered: on
-    // Android and in an installed app the constructor throws outright.
-    void navigator.serviceWorker
-      ?.getRegistration()
-      .then(async (registration) => {
-        if (registration) await registration.showNotification(title, options);
-        // eslint-disable-next-line no-new -- a Notification is its own effect
-        else new Notification(title, options);
-      })
-      .catch(() => undefined);
-  } catch {
-    // A browser that exposes Notification but refuses to show one.
-  }
-}
-
-/** The title this page shows, for the notification body. */
-function pageTitle(): string {
-  return (
-    document
-      .querySelector<HTMLElement>("[data-page-title]")
-      ?.textContent?.trim() ?? "Session complete"
-  );
-}
-
 function setUpCompletion(): void {
   document.body.addEventListener("done", (event) => {
     const id = (event as CustomEvent<{ data?: unknown }>).detail?.data;
     if (typeof id !== "string" || !id.trim()) return;
     playDone();
-    if (unwatched()) notify(pageTitle(), "Task finished.", `web-pi:done:${id}`);
   });
   document.body.addEventListener("htmx:after:settle", (event) => {
     const target = event.target;
@@ -132,12 +49,6 @@ function setUpCompletion(): void {
     // for: the turn is blocked until someone answers it.
     if (target.id === "extension-dialog" && target.querySelector("dialog")) {
       playDone();
-      if (unwatched()) {
-        const title =
-          target.querySelector("h3")?.textContent?.trim() ??
-          "An extension is waiting for your input.";
-        notify("Pi needs your attention", title, "web-pi:extension-ui");
-      }
     }
   });
 }

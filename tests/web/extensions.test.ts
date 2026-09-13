@@ -309,7 +309,7 @@ describe("web push routes", () => {
     const body = (await (await app.request("/push/config")).json()) as {
       publicKey: string;
     };
-    expect(body.publicKey).toBe("fake-vapid-public-key");
+    expect(Buffer.from(body.publicKey, "base64url")).toHaveLength(65);
   });
 
   it("stores a valid subscription", async () => {
@@ -323,6 +323,7 @@ describe("web push routes", () => {
           keys: { p256dh: "p", auth: "a" },
           expirationTime: null,
         },
+        publicKey: world.push.publicKey(),
       }),
     });
     expect(response.status).toBe(200);
@@ -334,6 +335,45 @@ describe("web push routes", () => {
       tag: "tag",
     });
     expect(world.push.sent).toHaveLength(1);
+  });
+
+  it("checks enrollment and deletes only a matching record, not other browsers or keys", async () => {
+    const { app, world } = testApp(() => []);
+    const one = {
+      endpoint: "https://push.example/one",
+      keys: { p256dh: "p", auth: "a" },
+    };
+    const two = { ...one, endpoint: "https://push.example/two" };
+    const request = (
+      action: string,
+      subscription: unknown,
+      publicKey = world.push.publicKey(),
+    ) =>
+      app.request(`/push/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription, publicKey }),
+      });
+    expect(await (await request("status", one)).json()).toEqual({
+      subscribed: false,
+    });
+    expect((await request("subscribe", one, "stale-key")).status).toBe(409);
+    await request("subscribe", one);
+    await request("subscribe", two);
+    expect(await (await request("status", one)).json()).toEqual({
+      subscribed: true,
+    });
+    await request("unsubscribe", {
+      ...one,
+      keys: { p256dh: "wrong", auth: "wrong" },
+    });
+    expect(world.push.has(one)).toBe(true);
+    await request("unsubscribe", one);
+    expect(world.push.has(one)).toBe(false);
+    expect(world.push.has(two)).toBe(true);
+    expect(
+      (await (await app.request("/push/config")).json()) as unknown,
+    ).toEqual({ publicKey: world.push.publicKey() });
   });
 
   it("refuses a subscription without https or keys", async () => {
@@ -367,6 +407,7 @@ describe("web push routes", () => {
           endpoint: "https://push.example/one",
           keys: { p256dh: "p", auth: "a" },
         },
+        publicKey: world.push.publicKey(),
       }),
     });
     await send(app, "again");

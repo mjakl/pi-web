@@ -10,7 +10,7 @@ import {
   type SkillSearchHit,
   type SkillUpdate,
 } from "@core/skills";
-import { DEFAULT_WARN_TOKENS } from "@core/context-usage";
+import { DEFAULT_WEB_SETTINGS, type WebSettings } from "@core/web-settings";
 import { shortPath } from "@core/workspaces";
 import { ConfigButton, ConfigField, ConfigSwitch } from "./ConfigControls.tsx";
 import {
@@ -158,19 +158,24 @@ function SectionNav({ active, cwd }: { active: SettingsSection; cwd: string }) {
   );
 }
 
-/** Preferences the server cannot hold: they belong to this browser. */
-function GeneralSettings({ warnTokens }: { warnTokens: number }) {
+function GeneralSettings({ settings }: { settings: WebSettings }) {
   return (
-    <div class="settings-general">
+    <div class="settings-general" data-web-settings={JSON.stringify(settings)}>
       <h2 class="settings-general-title">General</h2>
+      <p class="settings-general-description">
+        Appearance, token threshold and sound are shared across browsers.
+      </p>
+      <p
+        id="web-settings-status"
+        class="settings-general-description"
+        role="status"
+        aria-live="polite"
+      ></p>
       <section class="settings-general-section">
         <h3 class="settings-general-heading">Appearance</h3>
         <p class="settings-general-description">
           Select a theme or follow your system preference.
         </p>
-        {/* Which option is checked depends on localStorage, so the server
-            renders all three unchecked and src/web/client/theme.ts marks the
-            stored one as soon as the page is up. */}
         <div
           role="radiogroup"
           aria-label="Appearance"
@@ -180,7 +185,7 @@ function GeneralSettings({ warnTokens }: { warnTokens: number }) {
             <button
               type="button"
               role="radio"
-              aria-checked="false"
+              aria-checked={String(settings.theme === option.id)}
               data-theme-option={option.id}
               class="settings-theme-option"
             >
@@ -203,8 +208,9 @@ function GeneralSettings({ warnTokens }: { warnTokens: number }) {
             class="settings-number-input"
             type="number"
             min="1"
-            step="1000"
-            value={String(warnTokens)}
+            step="1"
+            max={String(Number.MAX_SAFE_INTEGER)}
+            value={String(settings.warnTokens)}
           />
         </div>
       </section>
@@ -217,9 +223,29 @@ function GeneralSettings({ warnTokens }: { warnTokens: number }) {
           <span>Completion sound</span>
           <ConfigSwitch
             id="sound-toggle"
-            checked
-            label="Disable completion sound"
+            checked={settings.sound}
+            label="Completion sound"
           />
+        </div>
+      </section>
+      <section class="settings-general-section" id="push-settings">
+        <h3 class="settings-general-heading">Push notifications</h3>
+        <p class="settings-general-description">
+          Notify this browser when a run finishes in this web server. Delivery
+          depends on your browser and operating system. On iPhone or iPad, open
+          web-pi from the Home Screen.
+        </p>
+        <div class="settings-general-option">
+          <span id="push-status" role="status" aria-live="polite">
+            Checking availability…
+          </span>
+          <ConfigButton
+            id="push-toggle"
+            disabled
+            aria-describedby="push-status"
+          >
+            Subscribe
+          </ConfigButton>
         </div>
       </section>
     </div>
@@ -1093,7 +1119,7 @@ export function SettingsBody({
   plugins,
   home,
   error,
-  warnTokens,
+  settings,
 }: {
   section: SettingsSection;
   cwd: string;
@@ -1102,8 +1128,7 @@ export function SettingsBody({
   home?: string;
   /** Loading the section failed; saying so beats a silent empty panel. */
   error?: string;
-  /** The reader's context-warning threshold, from its cookie. */
-  warnTokens?: number;
+  settings?: WebSettings;
 }) {
   if (error !== undefined) {
     return (
@@ -1126,7 +1151,7 @@ export function SettingsBody({
       />
     );
   }
-  return <GeneralSettings warnTokens={warnTokens ?? DEFAULT_WARN_TOKENS} />;
+  return <GeneralSettings settings={settings ?? DEFAULT_WEB_SETTINGS} />;
 }
 
 /**
@@ -1141,7 +1166,7 @@ export function SettingsDialog(props: {
   plugins?: PackagesView;
   home?: string;
   error?: string;
-  warnTokens?: number;
+  settings?: WebSettings;
   back: string;
 }) {
   return (

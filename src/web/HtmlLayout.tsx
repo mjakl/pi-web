@@ -1,5 +1,4 @@
 import { ICONS } from "@web/pwa";
-import { THEME_KEY } from "@web/client/theme";
 import type { AppEnvironment } from "@web/hono";
 import type { Context } from "hono";
 import { raw } from "hono/html";
@@ -8,11 +7,8 @@ import type { PropsWithChildren } from "hono/jsx";
 export const HTMX_SRC = "/static/vendor/htmx.min-4.0.0.js";
 export const HTMX_SSE_SRC = "/static/vendor/hx-sse.min-4.0.0.js";
 
-// pi-web's pre-paint script (app/layout.tsx:L79), verbatim except for the
-// storage key coming from the module both halves share. The class has to be on
-// <html> before the first paint, so this cannot wait for the bundle;
-// src/web/client/theme.ts owns every later change.
-const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem(${JSON.stringify(THEME_KEY)});var dark=t==="dark"||((t==null||t===""||t==="auto")&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(dark)document.documentElement.classList.add("dark")}catch(e){}})();`;
+// The shared preference is rendered before paint; auto resolves on this device.
+const THEME_SCRIPT = `var t=document.documentElement.dataset.theme;if(t==="dark"||(t==="auto"&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark");`;
 
 export function HtmlLayout(
   { children }: PropsWithChildren,
@@ -22,10 +18,17 @@ export function HtmlLayout(
     return <>{children}</>;
   }
   const assets = context.get("assets");
+  const settings = context.get("workspace").webSettings();
   return (
     // `translate=no` on both elements: a page translation would rewrite the
     // transcript under the reader.
-    <html lang="en" translate="no" class="notranslate">
+    <html
+      lang="en"
+      translate="no"
+      class="notranslate"
+      data-theme={settings.theme}
+      data-sound={String(settings.sound)}
+    >
       <head>
         <meta charset="UTF-8" />
         <meta

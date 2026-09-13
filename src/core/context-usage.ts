@@ -19,24 +19,8 @@ export type ContextUsage = {
  */
 export const CONTEXT_CRITICAL_PERCENT = 75;
 
-/**
- * The reader's own warning threshold in tokens, pi-web's "dumb zone": above
- * this many tokens in context a model gets noticeably worse, whatever the
- * window says. Kept in a cookie so the server renders the badge already
- * coloured, with the same default pi-web uses.
- */
+/** Default shared token warning threshold, pi-web's "dumb zone". */
 export const DEFAULT_WARN_TOKENS = 100_000;
-
-/** The cookie the browser writes it to, read by every page that shows usage. */
-export const WARN_TOKENS_COOKIE = "web-pi-warn-tokens";
-
-/** Only a positive whole number is a threshold; anything else is the default. */
-export function parseWarnTokens(value: string | undefined): number {
-  const tokens = Number(value);
-  return Number.isSafeInteger(tokens) && tokens > 0
-    ? tokens
-    : DEFAULT_WARN_TOKENS;
-}
 
 export function contextUsage(input: {
   tokens: number | null | undefined;

@@ -9,7 +9,8 @@ server-rendered browser interface built with Hono, Hono JSX, and HTMX.
 It reads the session files Pi already keeps under `~/.pi/agent` and runs live
 turns in-process through Pi's SDK. History stays with Pi. Pages and fragments
 come from the server, with SSE updates while a turn runs; the browser keeps no
-second conversation model. Drafts and browser preferences still live locally.
+second conversation model. Drafts and navigation stay local; General's theme,
+context-warning threshold and completion sound are shared across browsers.
 
 [Install and run](#install-and-run) ·
 [Explore the interface](#explore-the-interface) ·
@@ -144,6 +145,27 @@ popovers, CSS anchor positioning, `@starting-style`, `:has()`, and
 `field-sizing` are required, not optional enhancements. These are the declared
 support floors, not a claim that every minimum browser was exercised for this
 change.
+
+## Settings and notifications
+
+**Settings → General** holds shared appearance (default **auto**), dumb-zone
+warning threshold (**100000 tokens**), and completion sound (**on**). Auto
+follows each device's OS appearance. These settings, push state and remembered
+worktree mappings live under `<agentDir>/web-pi/`, separate from Pi's own
+configuration. Existing browser preferences are deliberately reset, not
+imported.
+
+Subscribe or unsubscribe **this browser** in General. Push requires HTTPS (or
+localhost) and browser push support; iPhone/iPad users must open a Home Screen
+web app, not a normal browser tab. Permission alone does not enroll a browser,
+and nothing subscribes automatically. Notifications cover completed runs in this
+web server, not terminal Pi, and OS delivery is not guaranteed.
+
+Before an upgrade or reset, read
+[web-state cutover and reset](docs/deployment.md#web-state-cutover-and-reset).
+Stop affected old web runtimes for the one-time file migration. With the server
+stopped after cutover, deleting only `<agentDir>/web-pi/` resets web state
+without touching Pi data. Browsers then need to confirm enrollment again.
 
 ## Security
 

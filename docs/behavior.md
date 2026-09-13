@@ -88,6 +88,15 @@ loading/trust, but web-pi currently displays this location as **path-scoped**,
 without project install/update metadata. Do not relocate or duplicate them
 merely to change that label.
 
+General holds shared appearance, dumb-zone threshold and completion sound, with
+defaults **auto**, **100000 tokens**, and **on**. Auto follows the current
+device's OS appearance. Saves apply across browsers; a returning page refreshes
+on focus/visibility, and live context renders use the current server threshold.
+Legacy browser preferences are ignored, not imported. Drafts, navigation and
+browser notification permission remain device-local. See
+[Deployment](deployment.md#web-state-cutover-and-reset) before upgrading or
+resetting web-owned storage.
+
 ## Extensions and notifications
 
 Extension dialogs are request-ID-keyed pending operations, not transcript
@@ -95,11 +104,30 @@ messages. Only the newest is shown; cancellation returns the SDK default. Custom
 UI uses headless pi-tui frames and terminal-byte keyboard input. ANSI conversion
 applies to the extension shelf and custom UI, not ordinary tool output.
 
-A completion notification requires an agent run to have started and then settled
-idle. Shell-only runs do not notify. Permission is offered once after an
-unwatched completion. The generated service worker caches static assets and the
-offline page, not session history or commands. Web Push state is in the agent
-directory; migration cautions are in [Deployment](deployment.md).
+A completion notification requires an agent run in this web server to have
+started and then settled idle. Stops, aborts before an answer, and shell-only
+runs do not notify. Terminal Pi runs are outside this scope.
+
+Use **Settings → General → Subscribe** for this browser. No permission prompt
+appears automatically and permission alone does not mean subscribed. The control
+prepares an active service worker and the server's public key before the click,
+then confirms both browser and server enrollment. **Unsubscribe** removes only
+this browser's subscription and matching server record; it keeps permission, the
+worker, other browsers and the VAPID identity. It does not silently undo an
+unsubscribe on reload.
+
+Push requires a secure context, Notification, service workers, PushManager and
+the registration's push manager. Missing capabilities show an unavailable
+reason; blocked permission gives browser/system-setting instructions. On iPhone
+and iPad, use an installed Home Screen web app, not an ordinary browser tab.
+Supported desktop tabs need not be installed. Delivery depends on the browser,
+push service and OS; enrollment is not a delivery guarantee.
+
+Every received push displays a system notification, even with a visible window.
+The page plays the completion tone but does not duplicate that notification.
+Extension input requests retain their browser dialog and tone. The generated
+service worker caches static assets and the offline page, not session history or
+commands.
 
 ## Unfinished work retained from the port
 
@@ -118,8 +146,8 @@ These are known gaps, not work authorized by the documentation migration:
   live-session cap.
 
 The old plan's queue-image recall, phone-keyboard handling, streaming tool
-arguments, subagent run details, notification prompt, and streaming token/TPS
-items are implemented and are not outstanding migration requirements.
+arguments, subagent run details, and streaming token/TPS items are implemented
+and are not outstanding migration requirements.
 
 Deliberate limitations remain in [Architecture](architecture.md): attachment
 drafts do not survive reloads, UI strings are English without a locale layer,
