@@ -812,6 +812,43 @@
   font-size: 12px;
 }
 
+.settings-prompt-input {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-prompt-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-prompt-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.settings-prompt-actions .settings-general-description {
+  margin: 0;
+}
+
 .settings-number-input {
   width: 120px;
   padding: 7px 9px;

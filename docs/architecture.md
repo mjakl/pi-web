@@ -11,7 +11,8 @@ route.
 web-pi removes the browser copy. Pi's session JSONL and the live `AgentSession`
 are the conversation state; the browser shows whatever the server last rendered.
 Browser-local drafts and selections are separate from that model. General's
-appearance, token threshold and completion sound are shared server settings.
+appearance, token threshold, completion sound and system prompt addition are
+shared server settings.
 
 ## Boundary and ports
 
@@ -37,6 +38,15 @@ web-owned state lives in `<agentDir>/web-pi/`: `settings.json`, `push.json` and
 `worktree-projects.json`. Pi configuration and session files stay outside that
 folder. [Deployment](deployment.md#web-state-cutover-and-reset) owns the
 one-time legacy-file cutover, reset procedure and rollback limitations.
+
+General's system prompt editor replaces only web-pi's Markdown rendering note.
+An absent or null `systemPromptAddition` uses the unchanged built-in note; a
+string replaces it verbatim, including an empty string to omit the addition.
+Reset to default saves null. The Pi adapter captures the effective addition when
+starting a runtime and preserves the loader's other appended instructions and
+Pi's base prompt. New and stopped-and-reactivated sessions read the saved
+setting; active runtimes retain their captured addition through `/reload` and
+browser refresh. Saving does not interrupt a turn or restart a session.
 
 `LiveSession` is the deep module: SDK event choreography (partial messages,
 compaction, retries, queue, extension notices) stays inside; callers only read a
