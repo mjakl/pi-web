@@ -1,4 +1,5 @@
 import type { LiveStatus } from "@core/ports";
+import type { AssistantItem } from "@core/transcript";
 import {
   EarlierPage,
   Item,
@@ -191,6 +192,131 @@ describe("transcript items", () => {
     ].join("");
     await expect(html).toMatchFileSnapshot("./fixtures/transcript-items.html");
   });
+
+  it.each([
+    ["empty", []],
+    ["whitespace", [{ kind: "text", text: " \n\t " }]],
+    [
+      "thinking",
+      [
+        {
+          kind: "thinking",
+          text: "Private reasoning",
+          index: 0,
+          deferred: false,
+        },
+      ],
+    ],
+    ["tool result", [{ kind: "tool", call: fixtureCalls.editCall }]],
+    [
+      "tool call",
+      [
+        {
+          kind: "tool",
+          call: {
+            id: "pending",
+            name: "process",
+            arguments: {},
+            preview: "Starting",
+          },
+        },
+      ],
+    ],
+  ] satisfies [string, AssistantItem["blocks"]][])(
+    "hides history actions on %s assistant output",
+    (_label, blocks) => {
+      const rendered = html(
+        <Item item={{ ...answerItem, blocks }} actions={actions} />,
+      );
+      expect(rendered).not.toContain('class="history-action"');
+    },
+  );
+
+  it("hides history actions on user, shell, and metadata entries", () => {
+    for (const item of settledItems.filter(
+      (item) => item.kind !== "assistant",
+    )) {
+      expect(html(<Item item={item} actions={actions} />)).not.toContain(
+        'class="history-action"',
+      );
+    }
+  });
+
+  it.each(["history", "earlier", "finished", "running", "read-only", "busy"])(
+    "offers actions only on user-facing assistant content in %s rendering",
+    (mode) => {
+      const items = [
+        ...settledItems.filter((item) => item.kind !== "assistant"),
+        { ...answerItem, entryId: "empty", blocks: [] },
+        {
+          ...answerItem,
+          entryId: "thinking",
+          blocks: [
+            { kind: "thinking", text: "Private", index: 0, deferred: true },
+          ],
+        },
+        {
+          ...answerItem,
+          entryId: "mixed",
+          blocks: [
+            { kind: "thinking", text: "Private", index: 0, deferred: false },
+            { kind: "tool", call: fixtureCalls.editCall },
+            { kind: "text", text: "Here is the result." },
+          ],
+        },
+        {
+          ...answerItem,
+          entryId: "image",
+          blocks: [{ kind: "image", index: 0 }],
+        },
+        answerItem,
+      ] satisfies Parameters<typeof Items>[0]["items"];
+      const context = {
+        ...actions,
+        readOnly: mode === "read-only",
+        busy: mode === "busy",
+      };
+      const rendered = html(
+        mode === "earlier" ? (
+          <EarlierPage items={items} actions={context} hasMore={false} />
+        ) : mode === "finished" || mode === "running" ? (
+          <TurnFragment
+            items={items}
+            actions={context}
+            status={{ ...status, running: mode === "running", streaming: null }}
+          />
+        ) : (
+          <Items items={items} actions={context} />
+        ),
+      );
+      for (const operation of ["navigate", "fork"]) {
+        const buttons =
+          rendered.match(
+            new RegExp(
+              `<button[^>]*hx-post="/sessions/s1/${operation}"[^>]*>`,
+              "g",
+            ),
+          ) ?? [];
+        expect(buttons).toHaveLength(
+          mode === "running" || mode === "read-only" ? 0 : 3,
+        );
+        if (buttons.length > 0) {
+          expect(
+            buttons.map((button) => /hx-vals="([^"]*)"/.exec(button)?.[1]),
+          ).toEqual(
+            ["mixed", "image", "a2"].map(
+              (id) => `{&quot;entryId&quot;:&quot;${id}&quot;}`,
+            ),
+          );
+          for (const button of buttons) {
+            expect(button.includes('disabled=""')).toBe(
+              mode === "busy" && operation === "navigate",
+            );
+          }
+        }
+      }
+    },
+  );
 
   it("cuts a long diff to the row budget, whole files first", () => {
     const cut = html(

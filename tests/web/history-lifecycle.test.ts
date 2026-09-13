@@ -116,13 +116,19 @@ it.each([
       )
       .toBe(1);
     const before = required(browser.document.querySelector("#composer"));
-    const button = required(
-      browser.document.querySelector<HTMLButtonElement>(
-        `#entry-u2 [hx-post$="/${action}"]`,
-      ),
-    );
-    if (action === "fork") button.focus();
-    button.click();
+    if (action === "fork") {
+      // User-entry forks remain supported by the endpoint, but no longer
+      // have a per-message button in the transcript.
+      browser.window.eval(`htmx.ajax('POST', '/sessions/s1/fork', {
+        target: document.body, swap: 'innerHTML', values: {entryId: 'u2'}
+      })`);
+    } else {
+      required(
+        browser.document.querySelector<HTMLButtonElement>(
+          '#entry-u2 [hx-post$="/rewind"]',
+        ),
+      ).click();
+    }
     await expect
       .poll(() => browser.document.querySelector("#composer") !== before)
       .toBe(true);
@@ -215,7 +221,9 @@ it("keeps controls, stream following, and teardown correct through repeated hist
     oldLogs.push(required(browser.document.querySelector("#log")));
     required(
       browser.document.querySelector<HTMLButtonElement>(
-        `#entry-${entry} [hx-post$="/${action}"]`,
+        action === "rewind"
+          ? `#entry-${entry} [hx-post$="/${action}"]`
+          : `.history-action-host:has(> #entry-${entry}) [hx-post$="/${action}"]`,
       ),
     ).click();
     await expect
@@ -235,8 +243,8 @@ it("keeps controls, stream following, and teardown correct through repeated hist
         `htmx.ajax('GET', '/sessions/s1', {target:document.body, swap:'innerHTML'})`,
       );
     }
-    await swap("navigate", "u2");
-    await swap("fork", "u2");
+    await swap("navigate", "a1");
+    await swap("fork", "a1");
     await swap("rewind", "u1");
     const toggle = required(
       browser.document.querySelector<HTMLButtonElement>("#sidebar-toggle"),
