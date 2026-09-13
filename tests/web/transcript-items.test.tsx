@@ -9,6 +9,7 @@ import {
   ToolBody,
   TurnFragment,
 } from "@web/views/Items";
+import { HistoryActionButtons } from "@web/views/transcript/shared";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   answerItem,
@@ -190,6 +191,19 @@ describe("transcript items", () => {
       ),
     ].join("");
     await expect(html).toMatchFileSnapshot("./fixtures/transcript-items.html");
+  });
+
+  it("uses the branch and plus icons for history actions", () => {
+    const buttons = html(
+      <HistoryActionButtons entryId="a1" actions={actions} />,
+    );
+
+    expect(buttons).toMatch(
+      /aria-label="New branch"[\s\S]*?<path d="M6 3v12M18 9a9 9 0 0 1-9 9"><\/path>[\s\S]*?New branch/,
+    );
+    expect(buttons).toMatch(
+      /title="New session[^>]*>[\s\S]*?<svg width="11" height="11" viewBox="0 0 12 12"[\s\S]*?<line x1="6" y1="1" x2="6" y2="11"><\/line>[\s\S]*?New session/,
+    );
   });
 
   it("cuts a long diff to the row budget, whole files first", () => {

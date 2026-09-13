@@ -717,16 +717,6 @@ export function StopCompactionIcon({ size = 14 }: IconProps) {
   );
 }
 
-/* 44 · edit from here */
-export function EditFromHereIcon({ size = 11 }: IconProps) {
-  return (
-    <Stroked size={size} width={1.8} cap="butt">
-      <polyline points="15 10 20 15 15 20" />
-      <path d="M4 4v7a4 4 0 0 0 4 4h12" />
-    </Stroked>
-  );
-}
-
 /* 45 · new session from here (fork) */
 export function ForkIcon({ size = 11 }: IconProps) {
   return (
