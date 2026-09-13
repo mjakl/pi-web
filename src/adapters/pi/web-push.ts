@@ -11,8 +11,8 @@ import webpush from "web-push";
 
 const FILE = "push.json";
 
-/** Who the push service sees as the sender; no mail is ever delivered there. */
-const SUBJECT = "mailto:web-pi@localhost";
+/** Apple rejects localhost VAPID subjects, even with valid keys. */
+const SUBJECT = "https://github.com/mjakl/web-pi";
 
 type Keys = { publicKey: string; privateKey: string };
 
@@ -41,13 +41,18 @@ function parseState(value: unknown): State {
   return state;
 }
 
-/** A subscription the push service has retired; anything else is transient. */
-function gone(error: unknown): boolean {
+/** Never include provider bodies, endpoints, or credentials in diagnostics. */
+function httpStatus(error: unknown): number | undefined {
   const status =
     typeof error === "object" && error !== null && "statusCode" in error
       ? (error as { statusCode?: unknown }).statusCode
       : undefined;
-  return status === 404 || status === 410;
+  return typeof status === "number" &&
+    Number.isInteger(status) &&
+    status >= 100 &&
+    status <= 599
+    ? status
+    : undefined;
 }
 
 export type WebPushOptions = {
@@ -131,7 +136,13 @@ export function createWebPushNotifier(options: WebPushOptions): PushNotifier {
         try {
           await send(subscription, payload, state.vapidKeys);
         } catch (error) {
-          if (!gone(error)) continue;
+          const status = httpStatus(error);
+          if (status !== 404 && status !== 410) {
+            process.stderr.write(
+              `[web-pi] push delivery failed (${status === undefined ? "no HTTP status" : `HTTP ${String(status)}`}); subscription retained\n`,
+            );
+            continue;
+          }
           state.subscriptions = state.subscriptions.filter(
             (known) => known.endpoint !== subscription.endpoint,
           );
