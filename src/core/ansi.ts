@@ -124,7 +124,7 @@ export function ansiToHtml(text: string): string {
 
 /**
  * The one status line an extension set of statuses becomes: sorted by key,
- * each collapsed to a single line, joined with one space. Escapes are kept,
+ * each collapsed to a single line, separated by middle dots. Escapes are kept,
  * so the caller still runs it through `ansiToHtml`.
  */
 export function statusLine(statuses: Record<string, string>): string {
@@ -140,7 +140,7 @@ export function statusLine(statuses: Record<string, string>): string {
         .join(" "),
     )
     .filter(Boolean)
-    .join(" ");
+    .join(" · ");
 }
 
 /** A sticky copy, for walking a line escape by escape. */
