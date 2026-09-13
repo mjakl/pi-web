@@ -317,14 +317,16 @@ export function sidebarRoutes(app: WebApp, ctx: RouteContext): void {
             const found = await deps.workspace.row(event.sessionId);
             const project = found && projectKeyOf(found.summary);
             if (found && project === view.selected) {
-              // A session with no row yet needs the whole list; an existing
-              // row is swapped on its own.
+              // Opening or stopping changes the row's sorting group. Send
+              // the sorted list, not a replacement stuck in the old position.
               const known = view.sessions.some(
                 (row) => row.id === event.sessionId,
               );
               await stream.writeSSE({
                 data: await html(
-                  known && event.type !== "opened" ? (
+                  known &&
+                    event.type !== "opened" &&
+                    event.type !== "stopped" ? (
                     <Partial
                       target={`#row-${event.sessionId}`}
                       swap="outerHTML"

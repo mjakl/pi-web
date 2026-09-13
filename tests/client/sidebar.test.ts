@@ -81,6 +81,101 @@ function finished(id: string, project: string): void {
   });
 }
 
+describe("relative timestamps", () => {
+  it("keeps the existing unit thresholds as time passes", async () => {
+    vi.setSystemTime(new Date("2026-09-02T00:00:59.000Z"));
+    page();
+    const { setUpSidebar } = await load();
+    setUpSidebar();
+    const age = query("#row-s1 [data-session-modified-at]");
+    expect(age.textContent).toBe("59 seconds ago");
+    vi.advanceTimersByTime(1000);
+    expect(age.textContent).toBe("1 minute ago");
+    vi.setSystemTime(new Date("2026-09-02T00:59:59.000Z"));
+    vi.advanceTimersByTime(1000);
+    expect(age.textContent).toBe("1 hour ago");
+    vi.setSystemTime(new Date("2026-09-02T23:59:59.000Z"));
+    vi.advanceTimersByTime(1000);
+    expect(age.textContent).toBe("1 day ago");
+  });
+
+  it("updates replaced and appended rows using their current modification times", async () => {
+    vi.setSystemTime(new Date("2026-09-02T00:00:30.000Z"));
+    page();
+    const { setUpSidebar } = await load();
+    setUpSidebar();
+    byId("row-s1").outerHTML = row("s1", {
+      modifiedAt: "2026-09-02T00:00:25.000Z",
+    });
+    byId("session-list").insertAdjacentHTML("beforeend", row("s3"));
+    htmxEvent(byId("row-s1"), "htmx:after:process");
+    htmxEvent(byId("row-s3"), "htmx:after:process");
+    vi.advanceTimersByTime(1000);
+    expect(query("#row-s1 [data-session-modified-at]").textContent).toBe(
+      "6 seconds ago",
+    );
+    expect(query("#row-s3 [data-session-modified-at]").textContent).toBe(
+      "31 seconds ago",
+    );
+  });
+
+  it("releases the old sidebar clock and updates a replacement body", async () => {
+    vi.setSystemTime(new Date("2026-09-02T00:00:30.000Z"));
+    page();
+    const { setUpSidebar } = await load();
+    setUpSidebar();
+    const oldAge = query("#row-s1 [data-session-modified-at]");
+    const replacement = document.createElement("body");
+    replacement.innerHTML = document.body.innerHTML;
+    document.body.replaceWith(replacement);
+    htmxEvent(document.body, "htmx:after:process");
+    htmxEvent(document.body, "htmx:after:process");
+    vi.advanceTimersByTime(1000);
+    expect(oldAge.textContent).toBe("30 seconds ago");
+    expect(query("#row-s1 [data-session-modified-at]").textContent).toBe(
+      "31 seconds ago",
+    );
+    expect(vi.getTimerCount()).toBe(1);
+    htmxEvent(byId("sidebar"), "htmx:before:cleanup");
+    byId("sidebar").remove();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("catches up immediately on foreground return and page restoration", async () => {
+    vi.setSystemTime(new Date("2026-09-02T00:00:30.000Z"));
+    page();
+    const { setUpSidebar } = await load();
+    setUpSidebar();
+    const age = query("#row-s1 [data-session-modified-at]");
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    document.dispatchEvent(new Event("visibilitychange"));
+    vi.advanceTimersByTime(10_000);
+    expect(age.textContent).toBe("30 seconds ago");
+    vi.setSystemTime(new Date("2026-09-02T00:05:00.000Z"));
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(age.textContent).toBe("5 minutes ago");
+    vi.setSystemTime(new Date("2026-09-02T00:06:00.000Z"));
+    window.dispatchEvent(new Event("pageshow"));
+    expect(age.textContent).toBe("6 minutes ago");
+  });
+
+  it("ages an idle row every second without changing its timestamp or order", async () => {
+    vi.setSystemTime(new Date("2026-09-02T00:00:30.000Z"));
+    page();
+    const { setUpSidebar } = await load();
+    setUpSidebar();
+    const age = query('#row-s1 [title="2026-09-02T00:00:00.000Z"]');
+    expect(age.textContent).toBe("30 seconds ago");
+    vi.advanceTimersByTime(1000);
+    expect(age.textContent).toBe("31 seconds ago");
+    expect(age.title).toBe("2026-09-02T00:00:00.000Z");
+    expect(
+      [...document.querySelectorAll(".session-row")].map((el) => el.id),
+    ).toEqual(["row-s1", "row-s2"]);
+  });
+});
+
 describe("sidebar replacement", () => {
   it("clears the destination unread badge and keeps delegated completion and row selection working", async () => {
     page({ current: "s1" });

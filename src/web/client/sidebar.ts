@@ -3,6 +3,7 @@
 // was elsewhere, where a row's fixed-position menu lands, whether a modifier
 // is held, and which project group is open.
 
+import { relativeTime } from "@core/sessions";
 import { setUpRegion } from "./lifecycle.ts";
 import { setUpFolderMemory } from "./preferences.ts";
 
@@ -387,6 +388,32 @@ function setUpShortcuts(): void {
   });
 }
 
+function mountRelativeTimes(sidebar: HTMLElement, signal: AbortSignal): void {
+  const paint = () => {
+    if (document.hidden) return;
+    const now = Date.now();
+    for (const age of sidebar.querySelectorAll<HTMLElement>(
+      "[data-session-modified-at]",
+    )) {
+      const text = relativeTime(age.dataset["sessionModifiedAt"] ?? "", now);
+      if (age.textContent !== text) age.textContent = text;
+    }
+  };
+  paint();
+  // Query current rows, not a snapshot: pagination and SSE replace them.
+  const timer = setInterval(paint, 1000);
+  signal.addEventListener(
+    "abort",
+    () => {
+      clearInterval(timer);
+    },
+    { once: true },
+  );
+  sidebar.addEventListener("htmx:after:process", paint, { signal });
+  document.addEventListener("visibilitychange", paint, { signal });
+  window.addEventListener("pageshow", paint, { signal });
+}
+
 /** pi-web's whole row is the click target, not just its title (§3.4). */
 function setUpRowSelection(): void {
   document.addEventListener("click", (event) => {
@@ -399,6 +426,7 @@ function setUpRowSelection(): void {
 }
 
 export function setUpSidebar(): void {
+  setUpRegion("#sidebar", mountRelativeTimes);
   setUpFolderMemory();
   setUpUnread();
   setUpProjectFilter();

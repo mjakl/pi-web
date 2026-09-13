@@ -193,6 +193,7 @@ export function SessionRow({
           <span style="display:flex; align-items:center; gap:8px; min-width:0; overflow:hidden">
             <span
               title={summary.modifiedAt}
+              data-session-modified-at={summary.modifiedAt}
               style="white-space:nowrap; flex-shrink:0"
             >
               {relativeTime(summary.modifiedAt)}
