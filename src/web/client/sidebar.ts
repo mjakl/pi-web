@@ -188,8 +188,7 @@ function setUpFolderGroups(): void {
   });
 }
 
-/** pi-web's key, so a reader's choice survives the switch between the two. */
-const EXPLORER_OPEN_KEY = "pi-web:file-explorer:open";
+const EXPLORER_OPEN_KEY = "web-pi:file-explorer:open";
 
 /**
  * The explorer folds to its header row (§3.5). pi-web keeps `explorerOpen`

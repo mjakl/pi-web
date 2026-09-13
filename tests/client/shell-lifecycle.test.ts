@@ -41,7 +41,7 @@ describe("shell region replacement", () => {
     click(byId("sidebar-toggle"));
     click(oldMore);
     replaceBody();
-    expect(document.title).toBe("two - Pi Web");
+    expect(document.title).toBe("two - web-pi");
     expect(byId("session-sidebar").classList.contains("sidebar-open")).toBe(
       true,
     );
@@ -55,9 +55,9 @@ describe("shell region replacement", () => {
       true,
     );
     keydown(oldHandle, "ArrowRight");
-    expect(localStorage.getItem("pi-sidebar-width")).toBeNull();
+    expect(localStorage.getItem("web-pi-sidebar-width")).toBeNull();
     keydown(query(".sidebar-resize-handle"), "ArrowRight");
-    expect(localStorage.getItem("pi-sidebar-width")).toBe("272");
+    expect(localStorage.getItem("web-pi-sidebar-width")).toBe("272");
     click(oldMore);
     expect(oldTabs.hasAttribute("data-open")).toBe(true);
     click(byId("mobile-toolbar-more"));
@@ -113,7 +113,7 @@ describe("shell region replacement", () => {
     expect(
       document.documentElement.style.getPropertyValue("--sidebar-width"),
     ).toBe("260px");
-    expect(localStorage.getItem("pi-sidebar-width")).toBeNull();
+    expect(localStorage.getItem("web-pi-sidebar-width")).toBeNull();
   });
 
   it("keeps replacement drawers closed on phones", async () => {

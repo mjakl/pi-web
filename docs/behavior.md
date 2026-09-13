@@ -9,7 +9,8 @@ and tests are authoritative; this document does not promise full pi-web parity.
 Pi session JSONL and the live runtime own the conversation. The server projects
 settled history and a non-overlapping live tail into the same views for pages,
 HTMX responses, and SSE updates. History pages backwards, while the desktop rail
-covers all prompts and starred answers. Stars use `pi-web:star` custom entries.
+covers all prompts and starred answers. Stars use `web-pi:star` custom entries;
+old `pi-web:star` entries are not recognized or migrated.
 
 Session actions include rename, delete with child reparenting, export, fork,
 clone, rewind, and branch navigation. Fork and rewind restore the selected

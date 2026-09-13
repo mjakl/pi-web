@@ -26,10 +26,8 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
-// Direct edits to Pi's session JSONL. Everything here writes files the Pi CLI
-// also reads, so the formats match pi-web byte for byte where both write:
-// stars are `pi-web:star` custom entries and a rewind leaves a `pi-web-rewind`
-// marker entry. Pi's own SessionManager does every append; only delete and
+// Direct edits to Pi's session JSONL, with web-pi custom entries for stars
+// and rewind markers. Pi's SessionManager does every append; only delete and
 // rewind rewrite a file, because the SDK has no way to remove entries.
 
 function writeAtomic(filePath: string, contents: string): void {
@@ -86,9 +84,8 @@ export function reparentChildren(filePath: string): void {
       if (!header?.parentSession) continue;
       if (pathKey(header.parentSession) !== target) continue;
       const contents = readFileSync(child, "utf8");
-      // Legacy pi-web subagent transcripts are left untouched: they are not
-      // sessions a user browses and rewriting them serves nobody.
-      if (contents.includes('"customType":"pi-web:subagent"')) continue;
+      // Marked subagent transcripts keep their original parent relationship.
+      if (contents.includes('"customType":"web-pi:subagent"')) continue;
       const end = contents.indexOf("\n");
       if (end < 0) continue;
       const rewritten: SessionHeader = { ...header };
@@ -161,7 +158,7 @@ export function rewindSessionFile(
   // message without resurrecting anything that came after it.
   tail.push({
     type: "custom",
-    customType: "pi-web-rewind",
+    customType: "web-pi-rewind",
     data: {},
     id: randomUUID(),
     parentId,

@@ -45,9 +45,9 @@ export function HtmlLayout(
             morphIgnore: ["data-htmx-powered", "open"],
           })}
         />
-        {/* The real one is "<folder> - Pi Web", set by the shell module from
+        {/* The real one is "<folder> - web-pi", set by the shell module from
             the folder on the page: only the browser knows which page won. */}
-        <title>Pi Web</title>
+        <title>web-pi</title>
         <meta
           name="theme-color"
           media="(prefers-color-scheme: light)"
@@ -63,7 +63,7 @@ export function HtmlLayout(
           name="apple-mobile-web-app-status-bar-style"
           content="black-translucent"
         />
-        <meta name="apple-mobile-web-app-title" content="Pi Web" />
+        <meta name="apple-mobile-web-app-title" content="web-pi" />
         <meta name="format-detection" content="telephone=no" />
         <link rel="manifest" href="/manifest.webmanifest" />
         <link

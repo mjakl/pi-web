@@ -148,6 +148,26 @@ function at(entry: SessionEntry, timestamp: string): SessionEntry {
 }
 
 describe("stars", () => {
+  it("only reads web-pi star entries, even when an old unstar comes later", () => {
+    const entries: SessionEntry[] = [
+      assistantEntry("a1", null, "one", 100),
+      assistantEntry("a2", "a1", "two", 200),
+      {
+        ...star("s1", "a2", "a1", true),
+        customType: "web-pi:star",
+      } as SessionEntry,
+      {
+        ...star("s2", "s1", "a1", false),
+        customType: "pi-web:star",
+      } as SessionEntry,
+      {
+        ...star("s3", "s2", "a2", true),
+        customType: "pi-web:star",
+      } as SessionEntry,
+    ];
+    expect(readStars(entries)).toEqual(new Set(["a1"]));
+  });
+
   it("takes the last write per target and only counts answers", () => {
     const entries = [
       userEntry("u1", null, "hi"),

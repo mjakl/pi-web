@@ -535,7 +535,7 @@ export function NewSessionPage({
                 <header class="chat-empty">
                   <h1>
                     <span aria-hidden="true">π</span>
-                    <span>Pi Web</span>
+                    <span>web-pi</span>
                   </h1>
                 </header>
               </div>

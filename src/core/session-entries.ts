@@ -6,8 +6,8 @@ import type { SessionRowMetadata } from "./sessions.ts";
 // the branch leaves of the entry tree, and the sidebar row summary. Pure
 // functions over what the SessionCatalog read; no file or SDK access.
 
-/** Custom-entry type pi-web writes stars as; both apps read each other's. */
-export const STAR_TYPE = "pi-web:star";
+/** Custom-entry type for web-pi's stars. */
+export const STAR_TYPE = "web-pi:star";
 
 type StarData = { targetId: string; starred: boolean };
 
