@@ -964,7 +964,12 @@ export function createFakeWorld(
       live.delete(stored.summary.id);
       announce({ type: "stopped", sessionId: stored.summary.id });
     });
+    let wasBusy = false;
     session.subscribe((event) => {
+      const busy = session.snapshot().status.running;
+      if (busy && !wasBusy)
+        announce({ type: "started", sessionId: stored.summary.id });
+      wasBusy = busy;
       if (event.type === "turn_done") {
         announce({ type: "finished", sessionId: stored.summary.id });
       }

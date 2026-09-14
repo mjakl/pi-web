@@ -77,32 +77,6 @@
   opacity: 0.6;
   cursor: default;
 }
-.anchor-sidebar-project {
-  anchor-name: --sidebar-project;
-}
-.menu-sidebar-project {
-  z-index: var(--layer-project-menu);
-  overflow: hidden;
-  position-anchor: --sidebar-project;
-}
-.project-folder-group + .project-folder-group {
-  border-top: 1px solid var(--border);
-}
-.project-folder-child {
-  padding-left: 28px;
-}
-.project-folder-label {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.project-folder-path {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
-}
 .session-counts,
 .session-star-count {
   display: inline-flex;
@@ -140,7 +114,6 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-5);
 }
 .sidebar-brand {
   font-weight: 700;
@@ -289,7 +262,18 @@
 }
 .session-row-time {
   white-space: nowrap;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-row-folder {
+  min-width: 0;
+  max-width: 45%;
   flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
 }
 .session-row-branch {
   display: flex;
@@ -355,105 +339,7 @@
   padding: 0;
   min-height: 80px;
 }
-.sidebar-project-picker {
-  position: relative;
-}
-.sidebar-project-select {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  padding: var(--space-3) var(--space-5);
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  color: var(--text);
-  text-align: left;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
-}
-.sidebar-project-select.is-chosen {
-  background: var(--bg-hover);
-  border-color: var(--border);
-}
-.sidebar-project-placeholder {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-dim);
-}
-.sidebar-project-activity-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  margin-left: var(--space-3);
-  background: var(--accent);
-}
-.sidebar-project-message {
-  padding: var(--space-4) var(--space-5);
-  font-size: var(--text-xs);
-  color: var(--text-dim);
-}
-.sidebar-project-path {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: block;
-  min-width: 0;
-  line-height: 1.35;
-  direction: rtl;
-  text-align: left;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text);
-}
-.sidebar-project-path > span {
-  unicode-bidi: plaintext;
-}
-.sidebar-project-filter {
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border);
-}
-.sidebar-project-list {
-  max-height: min(50vh, 380px);
-  overflow-y: auto;
-}
-.project-activity {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-shrink: 0;
-  margin-left: var(--space-3);
-}
-.project-running,
-.project-unread {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 10px;
-  font-family: var(--font-mono);
-}
-.project-running {
-  color: var(--accent);
-}
-.project-unread {
-  color: var(--info);
-}
-.project-unread-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentcolor;
-  display: inline-block;
-}
-.sidebar-project-nav {
+.sidebar-session-nav {
   display: flex;
   min-height: 0;
   flex: 1 1 0;
@@ -532,16 +418,6 @@ a.sidebar-icon-button:hover {
   background: var(--bg-selected);
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-}
-
-/* Keep folder icons and chevrons intact beside long paths. */
-.project-folder-row > svg {
-  flex-shrink: 0;
-}
-
-/* The client keeps expansion state on the folder button. */
-.project-folder-row[aria-expanded="true"] > svg:first-child {
-  transform: rotate(90deg);
 }
 
 /* SessionItem.tsx L855: the row's menu trigger takes --bg-selected while its

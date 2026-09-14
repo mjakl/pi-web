@@ -76,60 +76,10 @@ function setUpBackgroundCompletion(): void {
   });
 }
 
-// Which session was last open in which workspace. Switching project reopens
-// the session the reader left there, which is what pi-web's
-// `pi-web:last-open-by-workspace` is for.
-const MEMORY_KEY = "web-pi:last-open-by-workspace";
-
-function readMemory(): Record<string, string> {
-  try {
-    const raw: unknown = JSON.parse(localStorage.getItem(MEMORY_KEY) ?? "{}");
-    return typeof raw === "object" && raw !== null && !Array.isArray(raw)
-      ? (raw as Record<string, string>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function currentProject(): string {
-  return document.getElementById("project-select")?.dataset["projectKey"] ?? "";
-}
-
-function setUpWorkspaceMemory(): void {
-  const session =
-    document.querySelector("main")?.getAttribute("data-session-id") ?? "";
-  const project = currentProject();
-  if (project === "") return;
-  if (session !== "") {
-    const memory = readMemory();
-    if (memory[project] === session) return;
-    memory[project] = session;
-    try {
-      localStorage.setItem(MEMORY_KEY, JSON.stringify(memory));
-    } catch {
-      // Without storage the memory lasts for this page only.
-    }
-    return;
-  }
-  // Landing on the index: reopen what was last read here, but only when the
-  // sidebar still lists it, so a deleted session cannot send the reader to a
-  // page that does not exist.
-  if (location.pathname !== "/") return;
-  const remembered = readMemory()[project];
-  if (
-    remembered !== undefined &&
-    document.querySelector(`#session-list [data-session-id="${remembered}"]`)
-  ) {
-    location.replace(`/sessions/${remembered}`);
-  }
-}
-
 export function setUpNotifications(): void {
   for (const event of ["pointerdown", "keydown"] as const) {
     document.addEventListener(event, unlock, { once: true, passive: true });
   }
   setUpCompletion();
   setUpBackgroundCompletion();
-  setUpWorkspaceMemory();
 }

@@ -18,13 +18,6 @@ function displayedUrl(): string {
     ? `/sessions/${id}`
     : `/new?cwd=${encodeURIComponent(main?.dataset["cwd"] ?? "")}`;
 }
-function chosenCwd(): string {
-  return (
-    document.getElementById("project-select")?.dataset["cwd"] ??
-    document.querySelector<HTMLElement>("main")?.dataset["cwd"] ??
-    ""
-  );
-}
 function sessionTarget(ctx: HtmxRequestCtx): boolean {
   return ctx.target?.id === "session-region";
 }
@@ -99,8 +92,6 @@ export function setUpNavigation(): void {
         history.replaceState(history.state, "", displayedUrl());
       return;
     }
-    if (url.pathname === "/new" && !url.searchParams.has("cwd"))
-      url.searchParams.set("cwd", chosenCwd());
     void htmx().ajax("GET", url.pathname + url.search, {
       source: "#session-region",
       target: "#session-region",
@@ -115,11 +106,7 @@ export function setUpNavigation(): void {
     if (sessionTarget(ctx))
       ctx.request.headers["HX-Target"] = "div#session-region";
     ctx.request.headers["X-Web-Pi-Session"] = main?.dataset["sessionId"] ?? "";
-    ctx.request.headers["X-Web-Pi-Cwd"] = sessionTarget(ctx)
-      ? (main?.dataset["cwd"] ?? "")
-      : chosenCwd();
-    ctx.request.headers["X-Web-Pi-Project"] =
-      document.getElementById("project-select")?.dataset["projectKey"] ?? "";
+    ctx.request.headers["X-Web-Pi-Cwd"] = main?.dataset["cwd"] ?? "";
     const url = new URL(ctx.request.action, location.href);
     if (
       url.pathname.startsWith("/files/") &&
@@ -261,26 +248,12 @@ export function setUpNavigation(): void {
       );
     }
   });
-  setUpRegion("#project-select", (picker) => {
-    const main = document.querySelector<HTMLElement>("main");
-    const cwd = picker.dataset["cwd"];
-    // A worktree choice can change the next new-chat folder without closing
-    // the session. Keep that choice on its picker, not on the session owner.
-    if (
-      cwd &&
-      (cwd !== main?.dataset["cwd"] ||
-        main?.dataset["cwdAvailable"] !== "false")
-    )
-      document.cookie = `web-pi-cwd=${encodeURIComponent(cwd)}; path=/; samesite=lax; max-age=31536000`;
-    if (picker.dataset["projectKey"])
-      document.cookie = `web-pi-project=${encodeURIComponent(picker.dataset["projectKey"])}; path=/; samesite=lax; max-age=31536000`;
-  });
   setUpRegion("main[data-cwd]", (main) => {
     // Commit browser preferences only after a winning response is displayed.
     // A canceled GET therefore cannot change them through Set-Cookie headers.
     const id = main.dataset["sessionId"] ?? "";
     document.cookie = `web-pi-session=${encodeURIComponent(id)}; path=/; samesite=lax; max-age=${id ? "31536000" : "0"}`;
-    if (main.dataset["cwdAvailable"] !== "false" && main.dataset["cwd"])
+    if (!id && main.dataset["cwdAvailable"] !== "false" && main.dataset["cwd"])
       document.cookie = `web-pi-cwd=${encodeURIComponent(main.dataset["cwd"])}; path=/; samesite=lax; max-age=31536000`;
     const panel = document.getElementById("file-panel");
     if (panel) {

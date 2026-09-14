@@ -975,15 +975,6 @@ a.shell-top-bar-tab:hover {
   border-left: 1px solid var(--border);
   background: var(--bg);
 }
-.shell-empty-session {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  font-size: 15px;
-}
-
 .session-info-popover.menu-surface {
   position: relative;
   overflow: hidden;
@@ -1195,7 +1186,7 @@ html.dark .catppuccin-file-icon {
 }
 
 .chat-window.is-empty {
-  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-rows: minmax(min-content, 1fr) auto minmax(0, 1fr);
   overflow-y: auto;
 }
 
@@ -1225,8 +1216,11 @@ html.dark .catppuccin-file-icon {
 
 .chat-empty {
   display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--space-8);
   min-height: 100%;
-  align-items: flex-end;
+  align-items: flex-start;
   padding: 2rem 16px 0;
   font-family: var(--font-mono);
 }
@@ -1246,6 +1240,18 @@ html.dark .catppuccin-file-icon {
 
 .chat-empty h1 span:first-child {
   font-size: 28px;
+}
+
+.new-session-directory {
+  width: min(100%, 420px);
+  min-width: 0;
+}
+
+.new-session-directory-label {
+  display: block;
+  margin-bottom: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 /* Directory picker uses <dialog>, matching the other modals: showModal()
@@ -1566,4 +1572,133 @@ html.dark .catppuccin-file-icon {
     flex-wrap: wrap;
     padding-bottom: max(10px, env(safe-area-inset-bottom));
   }
+}
+
+/* Working-directory selector on the blank new-session screen. */
+.sidebar-project-picker {
+  position: relative;
+}
+.sidebar-project-select {
+  width: 100%;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  padding: var(--space-3) var(--space-5);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--text);
+  text-align: left;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.sidebar-project-select.is-chosen {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+.sidebar-project-placeholder {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+.sidebar-project-message {
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+.sidebar-project-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  min-width: 0;
+  line-height: 1.35;
+  direction: rtl;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text);
+}
+.sidebar-project-path > span {
+  unicode-bidi: plaintext;
+}
+.sidebar-project-filter {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-project-list {
+  min-height: 0;
+  max-height: min(50vh, 380px);
+  overflow-y: auto;
+}
+.project-activity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  margin-left: var(--space-3);
+}
+.project-running {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+.anchor-sidebar-project {
+  anchor-name: --sidebar-project;
+}
+.menu-sidebar-project {
+  z-index: var(--layer-project-menu);
+  overflow: hidden;
+  position-anchor: --sidebar-project;
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  max-height: max-content;
+  bottom: var(--space-4);
+}
+.menu-sidebar-project:not(:popover-open) {
+  display: none;
+}
+.sidebar-project-filter,
+.menu-sidebar-project > .menu-item {
+  flex-shrink: 0;
+}
+.project-folder-group + .project-folder-group {
+  border-top: 1px solid var(--border);
+}
+.project-folder-child {
+  padding-left: 28px;
+}
+.project-folder-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.project-folder-path {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+/* Keep folder icons and chevrons intact beside long paths. */
+.project-folder-row > svg {
+  flex-shrink: 0;
+}
+
+/* The client keeps expansion state on the folder button. */
+.project-folder-row[aria-expanded="true"] > svg:first-child {
+  transform: rotate(90deg);
 }

@@ -52,7 +52,7 @@ describe("workspace over the fake runtime", () => {
     expect(Math.round(after?.usage.percent ?? 0)).toBe(2);
   });
 
-  it("shows one project at a time and marks live sessions", async () => {
+  it("lists sessions globally and derives directory choices separately", async () => {
     const world = createFakeWorld({ delayMs: 2 });
     const workspace = createWorkspace(world);
     await sendFirst(workspace, "/repo/a", "x");
@@ -61,17 +61,17 @@ describe("workspace over the fake runtime", () => {
     await settle(30);
 
     const sidebar = await workspace.sidebar();
-    expect(sidebar.projects.map((project) => project.key)).toEqual([
+    expect(sidebar.rows.map((row) => row.summary.cwd)).toEqual([
       "/repo/b",
       "/repo/a",
     ]);
-    expect(sidebar.selected).toBe("/repo/b");
-    expect(sidebar.sessions).toHaveLength(1);
-    expect(sidebar.sessions[0]?.live).toBe(true);
-
-    const remembered = await workspace.sidebar({ remembered: "/repo/a" });
-    expect(remembered.selected).toBe("/repo/a");
-    expect(remembered.sessions[0]?.cwd).toBe("/repo/a");
+    expect(sidebar.rows.every((row) => row.summary.live)).toBe(true);
+    const metadata = vi.spyOn(world.sessions, "rowMetadata");
+    expect((await workspace.projects()).map((project) => project.key)).toEqual([
+      "/repo/b",
+      "/repo/a",
+    ]);
+    expect(metadata).not.toHaveBeenCalled();
   });
 
   it("builds a live session's row from the runtime, not its file", async () => {

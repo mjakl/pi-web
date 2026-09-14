@@ -69,16 +69,19 @@ _This is browser emulation, not a physical-device test. Read
 
 ## What you can do
 
-- Browse, activate, stop, rename, export, fork, clone, and delete Pi sessions.
-  Rewind to an earlier request or navigate branches within a session.
+- Browse all Pi sessions in one paginated list, with folder labels and live
+  activity. Activate, stop, rename, export, fork, clone, delete, rewind, or
+  navigate branches within a session.
 - Choose a model and reasoning level, attach images, use slash commands, compact
   context, steer running work, or queue a follow-up.
 - Inspect token usage, context, active time, and estimated streaming tokens and
   tokens per second. History pages backwards; tool results load when opened.
 - Browse project files, preview source and document formats, inspect Git diffs,
   and insert file or line references into the composer.
-- Select existing folders and Git worktrees. Sessions remain readable when their
-  original working folder disappears. See [Worktrees](docs/worktrees.md).
+- Open New Session directly in the composer and choose its working directory
+  before sending. The choice is remembered independently of old sessions.
+  Sessions remain readable when their folder disappears. See
+  [Worktrees](docs/worktrees.md).
 - Manage Pi skills and plugin packages globally or for a trusted project.
   Receive completion notifications and extension input requests in the browser.
 

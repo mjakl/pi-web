@@ -14,6 +14,7 @@ import {
   ChangedFilesIcon,
   CheckIcon,
   ChevronRightIcon,
+  ChevronDownIcon,
   MoreDotsIcon,
   PlusIcon,
   ProjectFolderIcon,
@@ -167,6 +168,9 @@ export function SessionRow({
         <div class="session-row-meta">
           <SessionIndicator summary={summary} />
           <span class="session-row-location">
+            <span class="session-row-folder" title={summary.cwd}>
+              {baseName(summary.cwd) || summary.cwd}
+            </span>
             <span
               title={summary.modifiedAt}
               data-session-modified-at={summary.modifiedAt}
@@ -234,11 +238,7 @@ export function SessionRows({
   view: SidebarView;
   activeId?: string;
 }) {
-  const project = view.selected ?? "";
-  const query = new URLSearchParams({
-    project,
-    after: String(view.nextOffset),
-  });
+  const query = new URLSearchParams({ after: String(view.nextOffset) });
   return (
     <>
       {view.rows.map((row) => (
@@ -305,38 +305,17 @@ const FILTER_FROM = 8;
  * CSS anchor positioning (§3.1, §1.9). The list is fetched when the popover
  * opens — a real store holds hundreds of projects.
  */
-export function ProjectSelect({
-  view,
-  cwd,
-  home,
-  oob,
-}: {
-  view: SidebarView;
-  cwd?: string;
-  home?: string;
-  oob?: boolean;
-}) {
-  // The pill names the working folder, and the menu below it the project that
-  // folder belongs to: a remembered folder from a different project would
-  // make the two disagree, so the project wins.
-  const project = view.selected ?? "";
-  const folder =
-    cwd !== undefined && (project === "" || cwd.startsWith(project))
-      ? cwd
-      : project;
+export function ProjectSelect({ cwd, home }: { cwd: string; home?: string }) {
+  const folder = cwd;
   const chosen = folder !== "";
   return (
-    <div
-      id="project-picker"
-      class="sidebar-project-picker"
-      {...(oob === true ? { "hx-swap-oob": "true" } : {})}
-    >
+    <div id="project-picker" class="sidebar-project-picker">
       <button
         type="button"
         id="project-select"
         class={`sidebar-project-select anchor-sidebar-project${chosen ? " is-chosen" : ""}`}
         popovertarget="sidebar-project-menu"
-        data-project-key={view.selected ?? ""}
+        aria-label="Working directory for new session"
         data-cwd={folder}
         title={folder}
       >
@@ -345,13 +324,7 @@ export function ProjectSelect({
         ) : (
           <span class="sidebar-project-placeholder">Select project…</span>
         )}
-        <span
-          id="project-activity"
-          title="New activity"
-          aria-label="New activity"
-          class="sidebar-project-activity-dot"
-          hidden={!view.activityElsewhere}
-        />
+        <ChevronDownIcon />
       </button>
       <div
         id="sidebar-project-menu"
@@ -383,17 +356,17 @@ function PathLabel({ text }: { text: string }) {
 
 /** The menu's contents: every project, with a filter box once there are many. */
 export function ProjectPicker({
-  view,
+  projects,
   cwd,
   home,
 }: {
-  view: SidebarView;
+  projects: ProjectEntry[];
   cwd?: string;
   home?: string;
 }) {
   return (
     <>
-      {view.projects.length > FILTER_FROM ? (
+      {projects.length > FILTER_FROM ? (
         <div class="sidebar-project-filter">
           {/* No autofocus: pi-web renders this field with the sidebar, long
               before the popover opens, so React's autoFocus never fires and
@@ -407,10 +380,10 @@ export function ProjectPicker({
         </div>
       ) : null}
       <div class="sidebar-project-list">
-        {view.projects.map((project) => (
+        {projects.map((project) => (
           <ProjectFolderGroup
             project={project}
-            selected={project.key === view.selected}
+            selected={project.folders.some((folder) => folder.path === cwd)}
             {...(cwd === undefined ? {} : { cwd })}
             {...(home === undefined ? {} : { home })}
           />
@@ -433,11 +406,7 @@ export function ProjectPicker({
   );
 }
 
-/**
- * The badges on a project row (§3.3). The running count is the server's; the
- * unread one is the browser's, so its span starts hidden and
- * `client/sidebar.ts` fills it in.
- */
+/** Running counts when the directory menu is opened. */
 function ProjectActivity({ running }: { running: number }) {
   return (
     <span class="project-activity" hidden={running === 0}>
@@ -451,10 +420,6 @@ function ProjectActivity({ running }: { running: number }) {
           {String(running)}
         </span>
       ) : null}
-      <span class="project-unread" title="New session activity" hidden>
-        <span class="project-unread-dot" />
-        <span class="project-unread-count" />
-      </span>
     </span>
   );
 }
@@ -473,14 +438,7 @@ function ProjectFolderGroup({
 }) {
   const only = project.folders.length === 1 ? project.folders[0] : undefined;
   const foldersId = `folders-${encodeURIComponent(project.key)}`;
-  // Exactly one folder in the whole menu carries the tick: the one the
-  // sidebar is showing. A remembered folder that is not one of this
-  // project's falls back to its newest, which is what the sidebar listed.
-  const chosen = selected
-    ? project.folders.some((folder) => folder.path === cwd)
-      ? cwd
-      : project.entryPath
-    : undefined;
+  const chosen = selected ? cwd : undefined;
   return (
     <div class="project-folder-group" data-project-key={project.key}>
       {only === undefined ? (
@@ -502,7 +460,6 @@ function ProjectFolderGroup({
           <div id={foldersId} hidden={!selected}>
             {project.folders.map((folder) => (
               <ProjectFolderRow
-                project={project}
                 path={folder.path}
                 name={baseName(folder.path)}
                 current={folder.path === chosen}
@@ -514,7 +471,6 @@ function ProjectFolderGroup({
         </>
       ) : (
         <ProjectFolderRow
-          project={project}
           path={only.path}
           name={baseName(project.key)}
           current={only.path === chosen}
@@ -549,7 +505,6 @@ function FolderLabel({
 }
 
 function ProjectFolderRow({
-  project,
   path,
   name,
   current,
@@ -557,7 +512,6 @@ function ProjectFolderRow({
   activity,
   home,
 }: {
-  project: ProjectEntry;
   path: string;
   name: string;
   current: boolean;
@@ -565,7 +519,7 @@ function ProjectFolderRow({
   activity?: unknown;
   home?: string;
 }) {
-  const query = new URLSearchParams({ project: project.key, cwd: path });
+  const query = new URLSearchParams({ cwd: path });
   return (
     <button
       type="button"
@@ -576,9 +530,10 @@ function ProjectFolderRow({
       }
       {...(current ? { "aria-current": "true" } : {})}
       title={path}
-      hx-get={`/sidebar?${query.toString()}`}
-      hx-target="#project-nav"
+      hx-get={`/new?${query.toString()}`}
+      hx-target="#session-region"
       hx-swap="outerHTML"
+      hx-push-url="true"
     >
       <ProjectFolderIcon />
       <FolderLabel
@@ -592,22 +547,17 @@ function ProjectFolderRow({
   );
 }
 
-/**
- * The project list owns its stream. A project switch replaces both; a folder
- * switch can replace just the stream without losing the loaded rows.
- */
-export function ProjectNav({
+/** The global list and its stream survive conversation and folder changes. */
+export function SessionNav({
   view,
   activeId,
-  cwd,
 }: {
   view: SidebarView;
   activeId?: string | undefined;
-  cwd?: string | undefined;
 }) {
   return (
-    <div id="project-nav" class="sidebar-project-nav">
-      <SidebarEvents project={view.selected} cwd={cwd} />
+    <div id="session-nav" class="sidebar-session-nav">
+      <SidebarEvents />
       <SessionList
         view={view}
         {...(activeId === undefined ? {} : { activeId })}
@@ -616,20 +566,11 @@ export function ProjectNav({
   );
 }
 
-export function SidebarEvents({
-  project,
-  cwd,
-}: {
-  project?: string | undefined;
-  cwd?: string | undefined;
-}) {
-  const query = new URLSearchParams();
-  if (project !== undefined) query.set("project", project);
-  if (cwd !== undefined) query.set("cwd", cwd);
+export function SidebarEvents() {
   return (
     <div
       id="sidebar-events"
-      hx-sse:connect={`/events?${query.toString()}`}
+      hx-sse:connect="/events"
       hx-trigger="web-pi:sse-start"
       hx-swap="none"
     />
@@ -743,12 +684,10 @@ export function Sidebar({
   view,
   activeId,
   cwd,
-  home,
 }: {
   view: SidebarView;
   activeId?: string;
   cwd?: string;
-  home?: string;
 }) {
   return (
     <div id="sidebar" class="sidebar">
@@ -785,7 +724,7 @@ export function Sidebar({
               title="Refresh"
               aria-label="Refresh"
               hx-get="/sidebar"
-              hx-target="#project-nav"
+              hx-target="#session-nav"
               hx-swap="outerHTML"
             >
               <span class="sidebar-refresh-done">
@@ -805,15 +744,9 @@ export function Sidebar({
             </a>
           </div>
         </div>
-        <ProjectSelect
-          view={view}
-          {...(cwd === undefined ? {} : { cwd })}
-          {...(home === undefined ? {} : { home })}
-        />
       </div>
-      <ProjectNav
+      <SessionNav
         view={view}
-        cwd={cwd}
         {...(activeId === undefined ? {} : { activeId })}
       />
       {/* pi-web shows the explorer for whichever folder is selected, with or

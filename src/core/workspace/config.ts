@@ -129,10 +129,9 @@ export function configUseCases({
       // Validation is what makes a folder reachable, so it is also what
       // decides whether the composer may complete paths in it.
       let usable = false;
-      let projectKey = cwd;
       if (available) {
         try {
-          projectKey = (await validateFolder(cwd)).projectRoot;
+          await validateFolder(cwd);
           usable = true;
         } catch {
           usable = false;
@@ -151,7 +150,6 @@ export function configUseCases({
         cwd,
         available,
         usable,
-        projectKey,
         models: listing.models,
         modelWarnings: listing.warnings,
         model,

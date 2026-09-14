@@ -1,26 +1,28 @@
 # Worktrees in web-pi
 
-web-pi groups sessions by project and lets you choose existing working folders.
-Create, remove, and prune worktrees with Git or another tool. web-pi does not
-perform those operations or change a worktree's branch.
+web-pi lists sessions globally and lets you choose a working folder for each new
+session. Create, remove, and prune worktrees with Git or another tool. web-pi
+does not perform those operations or change a worktree's branch.
 
 ## Choose a working folder
 
-Open the project picker in the sidebar and expand a repository to see folders
-represented by its known sessions. This list is derived from session history,
-not a fresh Git worktree scan. For a newly created worktree without a session,
-use **Custom path…** and select its folder. Ordinary folders use the same flow.
+Open New Session, then its working-directory dropdown. Expand a repository to
+see folders represented by its known sessions. This list is derived from session
+history, not a fresh Git worktree scan. For a newly created worktree without a
+session, use **Custom path…** and select its folder. Ordinary folders use the
+same flow.
 
-Sessions in the original checkout and linked worktrees can share a project
-group, including worktrees backed by a bare repository. A repository
-subdirectory keeps its own project identity.
+The dropdown groups original checkouts and linked worktrees by repository,
+including worktrees backed by a bare repository. A repository subdirectory keeps
+its own identity. This grouping does not filter the global sidebar.
 
-Choosing another worktree in the same project changes where the **next new
-session** starts. An already displayed session stays open with its original
-working folder, and its file panel stays in that session's context. Choose New
-Session to use the selected folder. Switching projects opens a new-session view;
-selecting a custom path also navigates to that folder's new-session view.
-Opening an existing session restores that session's folder context.
+New Session opens the composer directly, defaulting to the last explicitly
+chosen folder, or the configured server default before any choice. Choosing a
+folder opens its independent draft. The first message creates the session in
+that folder; existing sessions cannot change cwd. Opening an old session changes
+its header, explorer and file context, but never the new-session preference.
+Every sidebar row shows its folder basename with a full-path tooltip and the
+existing optional worktree branch badge.
 
 Validation grants file access to the selected folder for the running server
 process. It does not rewrite an existing session's cwd. The grant is forgotten
@@ -66,8 +68,12 @@ These routes serve the browser workflow, not the old Next.js JSON API:
 
 - `GET /sidebar/projects` renders the project choices. There is no
   `/sidebar/workspaces` route in this implementation.
-- `GET /sidebar?project=<root>&cwd=<folder>` selects a project/folder through
-  HTMX; a same-project worktree choice can retain the open session.
+- `GET /new?cwd=<folder>` opens the blank composer in that folder. The dropdown
+  uses this route directly.
+- `GET /sidebar` refreshes the global list. Existing
+  `/sidebar?project=<root>&cwd=<folder>` links navigate to `/new?cwd=<folder>`;
+  a project query alone no longer filters sessions. Old project cookies are
+  ignored.
 - `GET /workspaces/folders?cwd=<directory>` renders freshly discovered Git
   worktree choices. It is not wired into the current picker UI.
 - `GET /workspaces/picker` opens the custom-folder dialog.
@@ -75,7 +81,8 @@ These routes serve the browser workflow, not the old Next.js JSON API:
   granting file-content access.
 - `POST /workspaces/validate`, with a `cwd` form field, validates a custom
   choice. HTMX receives navigation to `/new?cwd=…`; non-HTMX callers receive
-  JSON and selection cookies. This is not compatible with `/api/worktrees`.
+  JSON and the cwd preference cookie. This is not compatible with
+  `/api/worktrees`.
 
 The route owner is `src/web/routes/sidebar.tsx`; selection behavior is covered
 by `tests/web/session-navigation.test.ts`.

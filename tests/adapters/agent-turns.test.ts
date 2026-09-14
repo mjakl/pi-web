@@ -76,7 +76,7 @@ describe("a turn", () => {
     expect(settled.status.contextTokens).toBe(125);
     expect(events.filter((type) => type === "turn_done")).toHaveLength(1);
     expect(events).toContain("completed");
-    expect(announced).toEqual(["finished", "completed"]);
+    expect(announced).toEqual(["started", "finished", "completed"]);
     expect(existsSync(settled.summary.filePath ?? "")).toBe(true);
   });
 

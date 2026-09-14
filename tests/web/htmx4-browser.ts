@@ -69,6 +69,8 @@ export async function htmxBrowser(
       ...(body === undefined ? {} : { body }),
       signal: controller.signal,
     });
+    if (window.document.cookie)
+      request.headers.set("Cookie", window.document.cookie);
     requests.push(request.clone());
     return (await transport(request)) as unknown as Awaited<
       ReturnType<typeof window.fetch>

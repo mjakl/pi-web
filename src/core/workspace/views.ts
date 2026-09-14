@@ -4,11 +4,7 @@ import type { FileKind } from "@core/file-types";
 import type { GitFileStatus } from "@core/git-status";
 import type { LiveStatus, ModelOption, ThinkingLevel } from "@core/ports";
 import type { BranchLeaf, SessionStats } from "@core/session-entries";
-import type {
-  ProjectEntry,
-  SessionSummary,
-  SessionRowMetadata,
-} from "@core/sessions";
+import type { SessionSummary, SessionRowMetadata } from "@core/sessions";
 import type { TranscriptItem } from "@core/transcript";
 import type { ProjectInfo, WorktreeInfo } from "@core/workspaces";
 
@@ -83,21 +79,12 @@ export type SessionView = {
   branched: boolean;
 };
 
-/**
- * The sidebar shows one project at a time. Listing every session of a real
- * store is what made the page heavy, and a reader works in one repository.
- */
+/** The global session list, bounded to one page of metadata. */
 export type SidebarView = {
-  projects: ProjectEntry[];
-  selected?: string;
-  /** Conversations of the selected project, subagent runs among them. */
-  sessions: SessionSummary[];
   /** This page's readable rows, with metadata ready to render. */
   rows: { summary: SessionSummary; metadata: SessionRowMetadata }[];
   /** Offset in sessions, including any unreadable rows omitted from this page. */
   nextOffset?: number;
-  /** Some other project has a session running: the closed selector says so. */
-  activityElsewhere: boolean;
 };
 
 /** One project row of the folder picker, once its worktrees are known. */
@@ -118,7 +105,6 @@ export type NewSessionView = {
   available: boolean;
   /** The folder passed validation, so completion and models are offered. */
   usable: boolean;
-  projectKey: string;
   models: ModelOption[];
   modelWarnings: string[];
   model: ModelOption | undefined;
