@@ -118,8 +118,9 @@ changes follow the established Settings patterns, not a blanket redesign.
   browser/HTMX concerns. `settings.css` owns Settings/config components;
   `areas/shell.css` owns shell and shared dialog actions; the sidebar, composer
   (including extension shelf), files and transcript each own their area file.
-  Move component rules to their owner rather than adding fallback layers. Keep
-  the explicit cascade in `index.css`.
+  `code-theme.css` owns the syntax highlighting palette that transcript code
+  blocks and the file viewer share. Move component rules to their owner rather
+  than adding fallback layers. Keep the explicit cascade in `index.css`.
 - Remove decorative entrance, sweep and repeating highlight effects. Use a
   static accent tint for widget updates, preserving their update duration. Keep
   restrained hover/focus and functional loading/compaction feedback, with
