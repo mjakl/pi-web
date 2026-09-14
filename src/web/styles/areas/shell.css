@@ -1226,18 +1226,6 @@ html.dark .catppuccin-file-icon {
   content: "";
 }
 
-.chat-status {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-muted);
-}
-
-.chat-status.is-error {
-  color: var(--danger);
-}
-
 .chat-empty {
   display: flex;
   min-height: 100%;

@@ -296,13 +296,6 @@ button.extension-widget-trigger:focus-visible {
   justify-content: center;
   color: var(--text-dim);
 }
-.extension-widget-placement-icon {
-  display: block;
-  width: 8px;
-  height: 6px;
-  flex: 0 0 8px;
-  fill: currentColor;
-}
 .extension-widget-key {
   flex: 1;
   min-width: 0;
