@@ -1304,7 +1304,7 @@
   max-height: 240px;
 }
 .transcript-images.is-user .transcript-image {
-  border-color: rgba(59, 130, 246, 0.15);
+  border-color: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 .user-message {
   display: flex;
@@ -1462,9 +1462,9 @@
 .assistant-error {
   margin-top: 0;
   padding: 7px 10px;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
   border-radius: 6px;
-  background: rgba(239, 68, 68, 0.07);
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
   color: var(--danger);
   font-family: var(--font-mono);
   font-size: 12px;
@@ -1607,12 +1607,12 @@ summary.note-footer {
   border-radius: 7px;
   overflow: hidden;
   font-size: 12px;
-  border: 1px solid rgba(34, 197, 94, 0.25);
-  background: rgba(34, 197, 94, 0.04);
+  border: 1px solid color-mix(in srgb, var(--success) 25%, transparent);
+  background: color-mix(in srgb, var(--success) 4%, transparent);
 }
 .tool-card.is-error {
-  border-color: rgba(248, 113, 113, 0.45);
-  background: rgba(248, 113, 113, 0.05);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 5%, transparent);
 }
 .tool-header {
   display: flex;
@@ -1652,12 +1652,12 @@ summary.note-footer {
   font-variant-numeric: tabular-nums;
 }
 .tool-output {
-  border-top: 1px solid rgba(34, 197, 94, 0.15);
+  border-top: 1px solid color-mix(in srgb, var(--success) 15%, transparent);
   background: var(--bg-subtle);
 }
 .tool-output.is-error {
-  border-top-color: rgba(248, 113, 113, 0.3);
-  background: rgba(248, 113, 113, 0.04);
+  border-top-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  background: color-mix(in srgb, var(--danger) 4%, transparent);
 }
 .tool-input,
 .tool-output-text {
@@ -1672,7 +1672,7 @@ summary.note-footer {
 }
 .tool-input {
   background: var(--bg-subtle);
-  border-top: 1px solid rgba(34, 197, 94, 0.2);
+  border-top: 1px solid color-mix(in srgb, var(--success) 20%, transparent);
 }
 .tool-deferred-output {
   margin: 0;
@@ -1681,11 +1681,11 @@ summary.note-footer {
   font-size: 12px;
   line-height: 1.5;
   background: var(--bg-subtle);
-  border-top: 1px solid rgba(34, 197, 94, 0.2);
+  border-top: 1px solid color-mix(in srgb, var(--success) 20%, transparent);
 }
 .tool-input.is-error,
 .tool-deferred-output.is-error {
-  border-top-color: rgba(248, 113, 113, 0.25);
+  border-top-color: color-mix(in srgb, var(--danger) 25%, transparent);
 }
 .tool-output-text {
   max-height: 400px;
@@ -1728,7 +1728,7 @@ button.tool-output-link {
   background: var(--bg);
 }
 .tool-patch-output {
-  border-top: 1px solid rgba(34, 197, 94, 0.15);
+  border-top: 1px solid color-mix(in srgb, var(--success) 15%, transparent);
   background: var(--bg);
 }
 .tool-split-diff {
@@ -1778,10 +1778,10 @@ button.tool-output-link {
   background: transparent;
 }
 .tool-diff-cell.is-added {
-  background: rgba(34, 197, 94, 0.12);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
 }
 .tool-diff-cell.is-removed {
-  background: rgba(248, 113, 113, 0.13);
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
 }
 .tool-diff-cell.is-empty {
   background: var(--bg-subtle);
@@ -1839,15 +1839,15 @@ button.tool-output-link {
 }
 .tool-patch-line.is-added {
   border-left-color: var(--success);
-  background: rgba(34, 197, 94, 0.12);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
 }
 .tool-patch-line.is-removed {
   border-left-color: var(--danger);
-  background: rgba(248, 113, 113, 0.13);
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
 }
 .tool-patch-line.is-hunk {
   border-left-color: var(--accent);
-  background: rgba(96, 165, 250, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .tool-patch-number {
   width: 48px;

@@ -280,14 +280,14 @@
   flex-shrink: 0;
   padding: 1px 5px;
   border-radius: 3px;
-  background: rgba(120, 120, 120, 0.12);
+  background: color-mix(in srgb, var(--text-dim) 12%, transparent);
   color: var(--text-dim);
   font-size: 10px;
 }
 
 .config-scope-tag.is-project {
-  background: rgba(99, 102, 241, 0.12);
-  color: rgba(99, 102, 241, 0.8);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
 }
 
 .config-trust-notice {

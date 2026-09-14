@@ -923,7 +923,7 @@
   color: var(--danger);
 }
 .mobile-session-context.is-warn {
-  color: rgba(234, 179, 8, 0.95);
+  color: var(--warning);
 }
 .shell-context-empty {
   overflow: hidden;

@@ -361,8 +361,8 @@
   display: flex;
   align-items: center;
   padding: 6px 10px;
-  background: rgba(37, 99, 235, 0.06);
-  border: 1px solid rgba(37, 99, 235, 0.4);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   border-radius: 7px;
   cursor: pointer;
   font-size: 12px;
@@ -557,11 +557,11 @@ a.sidebar-icon-button:hover {
 .sidebar-refresh-button:hover:not([data-done]) {
   background: var(--bg-selected);
   color: var(--accent);
-  border-color: rgba(37, 99, 235, 0.35);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .sidebar-refresh-button[data-done] {
-  background: rgba(74, 222, 128, 0.18);
-  border-color: rgba(74, 222, 128, 0.4);
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
   color: var(--success);
 }
 .sidebar-refresh-button[data-done] .sidebar-refresh-idle {

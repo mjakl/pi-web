@@ -92,7 +92,7 @@
   color: var(--danger);
 }
 .file-tree-badge.is-R {
-  color: #60a5fa;
+  color: var(--accent);
 }
 .file-tree-action {
   position: absolute;
@@ -282,11 +282,11 @@
   border-left: 3px solid transparent;
 }
 .file-diff-line.is-added {
-  background: rgba(0, 200, 80, 0.12);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
   border-left-color: var(--success);
 }
 .file-diff-line.is-removed {
-  background: rgba(240, 60, 60, 0.14);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
   border-left-color: var(--danger);
 }
 .file-diff-sign {
