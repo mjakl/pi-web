@@ -467,9 +467,11 @@ it("uses the selected worktree for New Session while keeping the current session
   );
   expect(text(b)).toBe("");
   expect(b.window.location.search).toBe("?cwd=%2Ffixture.wt");
-  expect(
-    b.document.querySelector("#file-explorer")?.getAttribute("data-cwd"),
-  ).toBe("/fixture.wt");
+  await expect
+    .poll(() =>
+      b.document.querySelector("#file-explorer")?.getAttribute("data-cwd"),
+    )
+    .toBe("/fixture.wt");
   expect(
     b.document.querySelector("#file-explorer")?.getAttribute("hx-get"),
   ).toBe("/files/explorer?cwd=%2Ffixture.wt");
