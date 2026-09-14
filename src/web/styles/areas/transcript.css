@@ -179,8 +179,7 @@
 .markdown-table-wrap {
   width: 100%;
   margin: 8px 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto hidden;
   border: 1px solid var(--border);
   border-radius: 7px;
 }
@@ -491,10 +490,9 @@
   height: 100dvh;
   max-height: none;
   margin: 0;
-  padding-top: max(16px, env(safe-area-inset-top));
-  padding-right: max(16px, env(safe-area-inset-right));
-  padding-bottom: max(16px, env(safe-area-inset-bottom));
-  padding-left: max(16px, env(safe-area-inset-left));
+  padding: max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
   overflow: hidden;
   border: 0;
   background: transparent;
@@ -508,7 +506,7 @@
 }
 
 .image-preview-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.72);
+  background: rgb(0 0 0 / 72%);
 }
 
 .image-preview-image {
@@ -517,7 +515,7 @@
   max-height: 100%;
   object-fit: contain;
   border-radius: 8px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 40%);
 }
 
 .image-preview-close {
@@ -535,7 +533,7 @@
   border-radius: 6px;
   background: var(--bg-panel);
   color: var(--text-muted);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 28%);
   cursor: pointer;
   touch-action: manipulation;
   transition:
@@ -572,7 +570,7 @@
   color: var(--text);
 }
 .mermaid-zoom-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.35);
+  background: rgb(0 0 0 / 35%);
 }
 .mermaid-zoom-layout {
   display: grid;
@@ -717,8 +715,7 @@
   container-type: inline-size;
   min-width: 0;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden auto;
   padding-top: 1rem;
   scrollbar-width: none;
 }
@@ -794,7 +791,7 @@
   background: var(--bg);
   color: var(--text-muted);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
   transition:
     background 0.12s,
     color 0.12s,
@@ -1050,8 +1047,8 @@
   position: absolute;
   width: 8px;
   height: 8px;
-  border: 1.5px solid rgba(128, 128, 128, 0.58);
-  background: rgba(128, 128, 128, 0.58);
+  border: 1.5px solid rgb(128 128 128 / 58%);
+  background: rgb(128 128 128 / 58%);
   border-radius: 2px;
   transform: translate(-50%, -50%);
   pointer-events: none;
@@ -1071,7 +1068,7 @@
 .minimap-branch > span {
   width: 8px;
   height: 8px;
-  border: 1.5px solid currentColor;
+  border: 1.5px solid currentcolor;
   border-radius: 2px;
   background: var(--bg-panel);
 }
@@ -1318,7 +1315,7 @@
   font-size: 14px;
   line-height: 1.6;
   color: var(--text);
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .user-message-text {
   margin-right: 4px;
@@ -1359,7 +1356,7 @@
   font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   min-width: 0;
   flex: 1;
 }
@@ -1593,7 +1590,7 @@ summary.note-footer {
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   max-height: 360px;
   overflow: auto;
   font-family: var(--font-mono);
@@ -1731,8 +1728,7 @@ button.tool-output-link {
 }
 .tool-split-diff {
   max-height: 560px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden auto;
   background: var(--bg);
 }
 .tool-diff-file {
@@ -1824,8 +1820,7 @@ button.tool-output-link {
 }
 .tool-patch {
   max-height: 520px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden auto;
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.55;
@@ -1983,7 +1978,7 @@ button.tool-output-link {
   cursor: pointer;
 }
 .markdown-file-ref:hover {
-  text-decoration-color: currentColor;
+  text-decoration-color: currentcolor;
 }
 .written-file .catppuccin-file-icon {
   width: 12px;
@@ -2059,7 +2054,7 @@ button.tool-output-link {
   margin: 0;
   padding: 8px 10px;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
   color: var(--text-muted);
 }
@@ -2116,16 +2111,16 @@ button.tool-output-link {
 .minimap-dot {
   width: 8px;
   height: 8px;
-  border: 1.5px solid rgba(128, 128, 128, 0.58);
+  border: 1.5px solid rgb(128 128 128 / 58%);
   border-radius: 2px;
-  background: rgba(128, 128, 128, 0.58);
+  background: rgb(128 128 128 / 58%);
   transition:
     transform 0.1s,
     background 0.1s;
 }
 .minimap-row.is-active .minimap-dot {
-  border-color: rgba(128, 128, 128, 0.95);
-  background: rgba(128, 128, 128, 0.95);
+  border-color: rgb(128 128 128 / 95%);
+  background: rgb(128 128 128 / 95%);
   box-shadow: 0 0 0 2px var(--bg-panel);
 }
 .minimap-row.is-near .minimap-dot {

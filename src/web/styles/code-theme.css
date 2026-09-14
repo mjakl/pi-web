@@ -28,7 +28,7 @@ html.dark .markdown-code-body {
 .hljs-type,
 .hljs-doctag,
 .hljs-meta .hljs-keyword {
-  color: #0000ff;
+  color: #00f;
 }
 /* `literal` is Prism's `boolean`, which `vs` paints with the numbers, not with
    the keywords (its `.language-json .token.boolean` override is a descendant
@@ -62,7 +62,7 @@ html.dark .markdown-code-body {
 .hljs-regexp,
 .hljs-variable,
 .hljs-template-variable {
-  color: #ff0000;
+  color: #f00;
 }
 .hljs-deletion {
   color: #9a050f;

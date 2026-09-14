@@ -450,7 +450,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: currentColor;
+  background: currentcolor;
   display: inline-block;
 }
 .sidebar-project-nav {
@@ -496,8 +496,7 @@
 }
 .sidebar-explorer-body {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden auto;
 }
 .sidebar-file-search {
   padding: 6px 8px;

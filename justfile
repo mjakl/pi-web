@@ -59,11 +59,13 @@ screenshots: build
 lint: link-pi typecheck
     pnpm exec oxfmt --check .
     pnpm exec oxlint .
+    pnpm exec stylelint "src/web/styles/**/*.css"
     node --import tsx scripts/check-doc-path-references.ts
 
 # LINT: Apply lint and format fixes
 fix:
     pnpm exec oxlint --fix .
+    pnpm exec stylelint --fix "src/web/styles/**/*.css"
     pnpm exec oxfmt --write .
 
 # LINT: TypeScript only
