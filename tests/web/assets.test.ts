@@ -1,3 +1,6 @@
+import { createFakeWorld } from "@adapters/fake/index";
+import { createWorkspace } from "@core/workspace";
+import { createWebApp } from "@web/app";
 import { staticAssets } from "@web/assets";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,5 +36,34 @@ describe("static asset URLs", () => {
       js: "/static/client.js?v=dev",
       mermaid: "/static/mermaid.js?v=dev",
     });
+  });
+});
+
+describe("static asset caching", () => {
+  function serve(path: string) {
+    const app = createWebApp({
+      workspace: createWorkspace(createFakeWorld()),
+      staticRoot: staticRoot("a{}", "let a"),
+      defaultCwd: "/repo",
+      renderIntervalMs: 1,
+    });
+    return app.request(path);
+  }
+
+  it("lets the browser keep hashed assets forever", async () => {
+    const res = await serve("/static/app.css?v=0123abcd");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+  });
+
+  it("caches unhashed and unbuilt assets for a day only", async () => {
+    expect(
+      (await serve("/static/client.js")).headers.get("cache-control"),
+    ).toBe("public, max-age=86400");
+    expect(
+      (await serve("/static/client.js?v=dev")).headers.get("cache-control"),
+    ).toBe("public, max-age=86400");
   });
 });
