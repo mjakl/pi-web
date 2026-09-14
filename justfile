@@ -55,6 +55,10 @@ start: build
 screenshots: build
     node --import tsx scripts/screenshot-fixture.ts
 
+# TEST: Real-browser settings layout against the isolated screenshot fixture
+settings-scroll url:
+    node --import tsx scripts/check-settings-scroll.ts '{{url}}'
+
 # LINT: Formatting, lint, and types
 lint: link-pi typecheck
     pnpm exec oxfmt --check .
