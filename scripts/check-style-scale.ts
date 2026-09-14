@@ -1,0 +1,144 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
+
+// Like settings-scroll, this exercises the real app against fictional state.
+const url = new URL(process.argv[2] ?? "http://invalid");
+if (url.hostname !== "127.0.0.1" || !url.port || url.port === "30141") {
+  throw new Error(
+    "Pass the ephemeral loopback URL printed by just screenshots",
+  );
+}
+const output = resolve(process.argv[3] ?? "dist/style-scale");
+mkdirSync(output, { recursive: true });
+const session = `style-scale-${String(process.pid)}`;
+function browser(...args: string[]) {
+  return execFileSync("agent-browser", ["--session", session, ...args], {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+}
+function evaluate(code: string) {
+  return browser("eval", code);
+}
+function settle() {
+  evaluate(
+    "Promise.all(document.getAnimations().map(a => a.finished.catch(() => {}))).then(() => document.fonts.ready).then(() => true)",
+  );
+}
+function capture(name: string) {
+  settle();
+  evaluate(`(() => {
+    if (document.documentElement.scrollWidth > innerWidth) throw new Error('Page overflows horizontally');
+    return true;
+  })()`);
+  browser("screenshot", resolve(output, `${name}.png`));
+  process.stdout.write(`PASS ${name}\n`);
+}
+function reachable(selector: string) {
+  evaluate(`(() => {
+    const element = document.querySelector(${JSON.stringify(selector)});
+    if (!element) throw new Error('Missing control: ' + ${JSON.stringify(selector)});
+    const rect = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    if (rect.top < 0 || rect.bottom > innerHeight || rect.left < 0 || rect.right > innerWidth || !element.contains(hit)) {
+      throw new Error('Clipped or covered control: ' + ${JSON.stringify(selector)});
+    }
+    return true;
+  })()`);
+}
+function open(path: string, theme: string, width: number, height = 844) {
+  // Each surface starts independently, without drafts, panel state or streams
+  // from an earlier capture. Resize checks within a surface reuse its page.
+  browser("close");
+  browser("open", "about:blank");
+  browser("set", "viewport", String(width), String(height));
+  browser("open", new URL(path, url).href);
+  browser("wait", "#composer-text");
+  browser("wait", "--fn", "!document.querySelector('.sidebar-mobile-pending')");
+  evaluate(
+    `document.documentElement.classList.toggle('dark', ${String(theme === "dark")})`,
+  );
+  settle();
+}
+
+try {
+  for (const theme of ["light", "dark"]) {
+    for (const width of [390, 1440]) {
+      open("/sessions/release", theme, width, width === 1440 ? 1000 : 844);
+      browser("focus", "#composer-text");
+      reachable("#composer-text");
+      evaluate(`(() => {
+        if (!document.querySelector('[data-action="send"]').disabled) throw new Error('Empty composer send must be disabled');
+        if (innerWidth <= 640 && getComputedStyle(document.querySelector('#composer-text')).fontSize !== '16px') throw new Error('Mobile input must remain 16px');
+        return true;
+      })()`);
+      capture(`${theme}-${String(width)}-conversation`);
+      browser("click", "#model-trigger");
+      browser("wait", "#model-menu:popover-open");
+      reachable("#model-menu");
+      capture(`${theme}-${String(width)}-model-menu`);
+      browser("press", "Escape");
+    }
+    // Compact toolbar and structural panel boundaries, including the old edges.
+    open("/sessions/release", theme, 1440, 1000);
+    browser("click", "#explorer-changes-toggle");
+    browser("wait", '[data-file-path$="/src/release.ts"]');
+    browser("click", '[data-file-path$="/src/release.ts"]');
+    browser("wait", ".file-viewer-toolbar");
+    for (const width of [320, 380, 381, 480, 481, 640, 641, 959, 960, 1440]) {
+      browser("set", "viewport", String(width), "844");
+      settle();
+      reachable(".file-viewer-mode-button");
+      reachable('[aria-label="Download file"]');
+      capture(`${theme}-${String(width)}-file-panel`);
+    }
+    browser("click", ".right-panel-container [aria-label='Hide file panel']");
+    for (const width of [320, 480, 481, 520, 521, 640, 641]) {
+      open("/sessions/scale", theme, width);
+      browser("wait", ".compaction-header");
+      browser("scrollintoview", ".compaction-header");
+      reachable(".compaction-header");
+      capture(`${theme}-${String(width)}-compaction`);
+    }
+    open("/sessions/release", theme, 390);
+    browser("click", "#sidebar-toggle");
+    settle();
+    browser("click", '[aria-label="Session actions for Release checklist"]');
+    browser("wait", "#row-menu-release:popover-open");
+    reachable("#row-menu-release button");
+    capture(`${theme}-390-sidebar-menu`);
+    browser("press", "Escape");
+    evaluate(`(() => {
+      if (!document.elementFromPoint(380, 400)?.classList.contains('sidebar-overlay-backdrop')) throw new Error('Sidebar backdrop is not reachable');
+      return true;
+    })()`);
+    browser("mouse", "move", "380", "400");
+    browser("mouse", "down");
+    browser("mouse", "up");
+    settle();
+    browser("click", "#mobile-toolbar-more");
+    settle();
+    reachable("#mobile-toolbar-more");
+    capture(`${theme}-390-toolbar`);
+    open("/sessions/tools", theme, 1440, 1000);
+    browser("click", ".process-details > summary");
+    browser("click", ".subagent-card > summary");
+    browser("wait", ".subagent-body");
+    settle();
+    capture(`${theme}-1440-subagent`);
+  }
+  // One fictional turn exercises the SSE-rendered transcript and composer.
+  open("/sessions/scale", "dark", 390);
+  browser("fill", "#composer-text", "Style scale streaming check.");
+  browser("click", '[data-action="send"]');
+  browser("wait", "--text", "You said: Style scale streaming check.");
+  browser(
+    "wait",
+    "--fn",
+    "document.querySelector('[data-action=send]').disabled",
+  );
+  capture("dark-390-streamed");
+} finally {
+  browser("close");
+}

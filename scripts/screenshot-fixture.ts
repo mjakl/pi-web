@@ -199,7 +199,22 @@ const light = session(
   "Show a small release plan with the path from draft to shipped.",
   "## A release in three steps\n\n| Step | Result |\n| --- | --- |\n| Prepare | A short checklist |\n| Review | A tested change |\n| Ship | A tagged release |\n\n```mermaid\nflowchart LR\n  Draft --> Review --> Shipped\n```\n\nKeep the checklist beside the change so the release decision is easy to revisit.",
 );
-const sessions = [release, navigation, tools, light];
+const scale = session(
+  "scale",
+  "Style scale checks",
+  "Keep the release summary readable on a narrow screen.",
+  '## Release summary\n\nUse `releaseLabel(version)` for the displayed version.\n\n```ts\nconst label = releaseLabel("a-long-release-name-that-should-scroll-inside-the-code-block-not-the-page");\n```',
+);
+scale.entries.push({
+  type: "compaction",
+  id: "scale-compaction",
+  parentId: "scale-a",
+  timestamp,
+  summary: "Keep the release label and the explicit maintainer review step.",
+  tokensBefore: 40_000,
+  firstKeptEntryId: "scale-u",
+});
+const sessions = [release, navigation, tools, light, scale];
 for (const stored of sessions) {
   for (const [index, entry] of stored.entries.entries()) {
     const time = Date.parse(timestamp) + index * 15_000;
