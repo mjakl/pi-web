@@ -878,6 +878,7 @@
   min-width: 0;
 }
 .subagent-chevron {
+  display: flex;
   flex-shrink: 0;
   margin-top: calc((1lh - 10px) / 2);
   color: var(--text-dim);
@@ -1232,9 +1233,6 @@
   display: flex;
   flex-shrink: 0;
   transition: transform 0.15s;
-}
-.subagent-chevron {
-  display: flex;
 }
 .message-copy:not(.is-bare) {
   display: flex;

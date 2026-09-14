@@ -81,6 +81,8 @@
   anchor-name: --sidebar-project;
 }
 .menu-sidebar-project {
+  z-index: 100;
+  overflow: hidden;
   position-anchor: --sidebar-project;
 }
 .project-folder-group + .project-folder-group {
@@ -392,10 +394,6 @@
   flex-shrink: 0;
   margin-left: 6px;
   background: var(--accent);
-}
-.menu-sidebar-project {
-  z-index: 100;
-  overflow: hidden;
 }
 .sidebar-project-message {
   padding: 8px 10px;
