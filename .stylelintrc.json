@@ -1,0 +1,29 @@
+{
+  "extends": "stylelint-config-standard",
+  "rules": {
+    "at-rule-empty-line-before": null,
+    "comment-empty-line-before": null,
+    "custom-property-empty-line-before": null,
+    "declaration-empty-line-before": null,
+    "rule-empty-line-before": null,
+    "media-feature-range-notation": "prefix",
+    "no-descending-specificity": null,
+    "selector-class-pattern": null,
+    "value-keyword-case": [
+      "lower",
+      {
+        "ignoreProperties": ["font-family", "/^--/"]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/web/styles/base.css"],
+      "rules": {
+        "declaration-block-no-duplicate-properties": null,
+        "declaration-property-value-keyword-no-deprecated": null,
+        "property-no-vendor-prefix": null
+      }
+    }
+  ]
+}

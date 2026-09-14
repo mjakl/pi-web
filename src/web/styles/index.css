@@ -1,13 +1,14 @@
 /* Shared foundations precede component owners. esbuild bundles this cascade
    into static/app.css. */
-@import "./base.css";
-@import "./globals.css";
-@import "./settings.css";
-@import "./web-pi.css";
+@import url("./base.css");
+@import url("./globals.css");
+@import url("./settings.css");
+@import url("./web-pi.css");
 
 /* Component owners. */
-@import "./areas/shell.css";
-@import "./areas/sidebar.css";
-@import "./areas/transcript.css";
-@import "./areas/composer.css";
-@import "./areas/files.css";
+@import url("./areas/shell.css");
+@import url("./areas/sidebar.css");
+@import url("./areas/transcript.css");
+@import url("./areas/composer.css");
+@import url("./areas/files.css");
+@import url("./code-theme.css");

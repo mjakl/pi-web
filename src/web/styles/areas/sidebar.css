@@ -81,6 +81,8 @@
   anchor-name: --sidebar-project;
 }
 .menu-sidebar-project {
+  z-index: 100;
+  overflow: hidden;
   position-anchor: --sidebar-project;
 }
 .project-folder-group + .project-folder-group {
@@ -361,8 +363,8 @@
   display: flex;
   align-items: center;
   padding: 6px 10px;
-  background: rgba(37, 99, 235, 0.06);
-  border: 1px solid rgba(37, 99, 235, 0.4);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   border-radius: 7px;
   cursor: pointer;
   font-size: 12px;
@@ -392,10 +394,6 @@
   flex-shrink: 0;
   margin-left: 6px;
   background: var(--accent);
-}
-.menu-sidebar-project {
-  z-index: 100;
-  overflow: hidden;
 }
 .sidebar-project-message {
   padding: 8px 10px;
@@ -452,7 +450,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: currentColor;
+  background: currentcolor;
   display: inline-block;
 }
 .sidebar-project-nav {
@@ -498,8 +496,7 @@
 }
 .sidebar-explorer-body {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden auto;
 }
 .sidebar-file-search {
   padding: 6px 8px;
@@ -557,11 +554,11 @@ a.sidebar-icon-button:hover {
 .sidebar-refresh-button:hover:not([data-done]) {
   background: var(--bg-selected);
   color: var(--accent);
-  border-color: rgba(37, 99, 235, 0.35);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .sidebar-refresh-button[data-done] {
-  background: rgba(74, 222, 128, 0.18);
-  border-color: rgba(74, 222, 128, 0.4);
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
   color: var(--success);
 }
 .sidebar-refresh-button[data-done] .sidebar-refresh-idle {

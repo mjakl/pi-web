@@ -280,14 +280,14 @@
   flex-shrink: 0;
   padding: 1px 5px;
   border-radius: 3px;
-  background: rgba(120, 120, 120, 0.12);
+  background: color-mix(in srgb, var(--text-dim) 12%, transparent);
   color: var(--text-dim);
   font-size: 10px;
 }
 
 .config-scope-tag.is-project {
-  background: rgba(99, 102, 241, 0.12);
-  color: rgba(99, 102, 241, 0.8);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
 }
 
 .config-trust-notice {
@@ -473,7 +473,7 @@
   height: 16px;
   border-radius: 50%;
   background: var(--bg);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 22%);
   transition: left 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -536,7 +536,7 @@
   height: 7px;
   border-radius: 50%;
   color: var(--text-dim);
-  background: currentColor;
+  background: currentcolor;
 }
 
 .config-status-dot.is-inactive {
@@ -558,7 +558,7 @@
 }
 
 .settings-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.38);
+  background: rgb(0 0 0 / 38%);
 }
 
 .settings-dialog-surface {
@@ -572,7 +572,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 22%);
 }
 
 /* The surface holds initial focus without selecting a section tab. */
@@ -604,8 +604,7 @@
   min-width: 0;
   height: 50px;
   margin-left: 22px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto hidden;
 }
 
 .settings-section-tab {
@@ -775,8 +774,8 @@
   font-weight: 600;
 }
 
-.settings-theme-option:not(:disabled):not([aria-checked="true"]):hover,
-.settings-theme-option:not(:disabled):not([aria-checked="true"]):focus-visible {
+.settings-theme-option:not(:disabled, [aria-checked="true"]):hover,
+.settings-theme-option:not(:disabled, [aria-checked="true"]):focus-visible {
   background: var(--bg-hover);
 }
 
@@ -911,10 +910,10 @@
 @supports (-webkit-touch-callout: none) {
   @media (display-mode: standalone) {
     .settings-dialog {
-      padding-top: max(59px, env(safe-area-inset-top));
-      padding-right: max(8px, env(safe-area-inset-right));
-      padding-bottom: max(24px, env(safe-area-inset-bottom));
-      padding-left: max(8px, env(safe-area-inset-left));
+      padding: max(59px, env(safe-area-inset-top))
+        max(8px, env(safe-area-inset-right))
+        max(24px, env(safe-area-inset-bottom))
+        max(8px, env(safe-area-inset-left));
     }
 
     .settings-dialog-surface {
@@ -925,10 +924,10 @@
 
   @media (display-mode: standalone) and (orientation: landscape) {
     .settings-dialog {
-      padding-top: max(8px, env(safe-area-inset-top));
-      padding-right: max(59px, env(safe-area-inset-right));
-      padding-bottom: max(8px, env(safe-area-inset-bottom));
-      padding-left: max(59px, env(safe-area-inset-left));
+      padding: max(8px, env(safe-area-inset-top))
+        max(59px, env(safe-area-inset-right))
+        max(8px, env(safe-area-inset-bottom))
+        max(59px, env(safe-area-inset-left));
     }
   }
 }

@@ -150,6 +150,19 @@ export function createWebApp(deps: WebDeps) {
     c.set("assets", assets);
     return next();
   });
+  // Built assets carry their content hash in ?v=, so the browser may keep
+  // them for good; the rest (fonts, icons, versioned vendor files) for a day.
+  app.use("/static/*", async (c, next) => {
+    await next();
+    if (!c.res.ok) return;
+    const version = c.req.query("v");
+    c.res.headers.set(
+      "Cache-Control",
+      version !== undefined && version !== "dev"
+        ? "public, max-age=31536000, immutable"
+        : "public, max-age=86400",
+    );
+  });
   app.use(
     "/static/*",
     serveStatic({

@@ -118,23 +118,25 @@
   font-size: 0.92em;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent);
 }
-.markdown-body .contains-task-list {
+/* marked emits task items as a bare disabled checkbox at the start of the
+   `li` (or of its first paragraph in a loose list), with no class. */
+.markdown-body ul:has(> li > input[type="checkbox"]),
+.markdown-body ul:has(> li > p:first-child > input[type="checkbox"]) {
   padding-left: 0;
   list-style: none;
 }
-.markdown-body .task-list-item {
+.markdown-body li:has(> input[type="checkbox"]),
+.markdown-body li:has(> p:first-child > input[type="checkbox"]) {
   display: block;
   position: relative;
   padding-left: 25px;
 }
-.markdown-body .task-list-item::marker {
+.markdown-body li:has(> input[type="checkbox"])::marker,
+.markdown-body li:has(> p:first-child > input[type="checkbox"])::marker {
   content: "";
 }
-.markdown-body .task-list-item > input[type="checkbox"],
-.markdown-body
-  .task-list-item
-  > p:first-child
-  > input[type="checkbox"]:first-child {
+.markdown-body li > input[type="checkbox"],
+.markdown-body li > p:first-child > input[type="checkbox"]:first-child {
   appearance: none;
   position: absolute;
   left: 0;
@@ -148,17 +150,14 @@
   display: inline-grid;
   place-content: center;
 }
-.markdown-body .task-list-item > input[type="checkbox"]:checked,
-.markdown-body
-  .task-list-item
-  > p:first-child
-  > input[type="checkbox"]:first-child:checked {
+.markdown-body li > input[type="checkbox"]:checked,
+.markdown-body li > p:first-child > input[type="checkbox"]:first-child:checked {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   background: color-mix(in srgb, var(--accent) 10%, var(--bg));
 }
-.markdown-body .task-list-item > input[type="checkbox"]:checked::before,
+.markdown-body li > input[type="checkbox"]:checked::before,
 .markdown-body
-  .task-list-item
+  li
   > p:first-child
   > input[type="checkbox"]:first-child:checked::before {
   content: "";
@@ -180,8 +179,7 @@
 .markdown-table-wrap {
   width: 100%;
   margin: 8px 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto hidden;
   border: 1px solid var(--border);
   border-radius: 7px;
 }
@@ -492,10 +490,9 @@
   height: 100dvh;
   max-height: none;
   margin: 0;
-  padding-top: max(16px, env(safe-area-inset-top));
-  padding-right: max(16px, env(safe-area-inset-right));
-  padding-bottom: max(16px, env(safe-area-inset-bottom));
-  padding-left: max(16px, env(safe-area-inset-left));
+  padding: max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
   overflow: hidden;
   border: 0;
   background: transparent;
@@ -509,7 +506,7 @@
 }
 
 .image-preview-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.72);
+  background: rgb(0 0 0 / 72%);
 }
 
 .image-preview-image {
@@ -518,7 +515,7 @@
   max-height: 100%;
   object-fit: contain;
   border-radius: 8px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 40%);
 }
 
 .image-preview-close {
@@ -536,7 +533,7 @@
   border-radius: 6px;
   background: var(--bg-panel);
   color: var(--text-muted);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 28%);
   cursor: pointer;
   touch-action: manipulation;
   transition:
@@ -573,7 +570,7 @@
   color: var(--text);
 }
 .mermaid-zoom-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.35);
+  background: rgb(0 0 0 / 35%);
 }
 .mermaid-zoom-layout {
   display: grid;
@@ -718,8 +715,7 @@
   container-type: inline-size;
   min-width: 0;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden auto;
   padding-top: 1rem;
   scrollbar-width: none;
 }
@@ -795,7 +791,7 @@
   background: var(--bg);
   color: var(--text-muted);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
   transition:
     background 0.12s,
     color 0.12s,
@@ -879,6 +875,7 @@
   min-width: 0;
 }
 .subagent-chevron {
+  display: flex;
   flex-shrink: 0;
   margin-top: calc((1lh - 10px) / 2);
   color: var(--text-dim);
@@ -1050,8 +1047,8 @@
   position: absolute;
   width: 8px;
   height: 8px;
-  border: 1.5px solid rgba(128, 128, 128, 0.58);
-  background: rgba(128, 128, 128, 0.58);
+  border: 1.5px solid rgb(128 128 128 / 58%);
+  background: rgb(128 128 128 / 58%);
   border-radius: 2px;
   transform: translate(-50%, -50%);
   pointer-events: none;
@@ -1071,7 +1068,7 @@
 .minimap-branch > span {
   width: 8px;
   height: 8px;
-  border: 1.5px solid currentColor;
+  border: 1.5px solid currentcolor;
   border-radius: 2px;
   background: var(--bg-panel);
 }
@@ -1234,9 +1231,6 @@
   flex-shrink: 0;
   transition: transform 0.15s;
 }
-.subagent-chevron {
-  display: flex;
-}
 .message-copy:not(.is-bare) {
   display: flex;
   align-items: center;
@@ -1305,7 +1299,7 @@
   max-height: 240px;
 }
 .transcript-images.is-user .transcript-image {
-  border-color: rgba(59, 130, 246, 0.15);
+  border-color: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 .user-message {
   display: flex;
@@ -1321,7 +1315,7 @@
   font-size: 14px;
   line-height: 1.6;
   color: var(--text);
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .user-message-text {
   margin-right: 4px;
@@ -1362,7 +1356,7 @@
   font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   min-width: 0;
   flex: 1;
 }
@@ -1463,9 +1457,9 @@
 .assistant-error {
   margin-top: 0;
   padding: 7px 10px;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
   border-radius: 6px;
-  background: rgba(239, 68, 68, 0.07);
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
   color: var(--danger);
   font-family: var(--font-mono);
   font-size: 12px;
@@ -1596,7 +1590,7 @@ summary.note-footer {
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   max-height: 360px;
   overflow: auto;
   font-family: var(--font-mono);
@@ -1608,12 +1602,12 @@ summary.note-footer {
   border-radius: 7px;
   overflow: hidden;
   font-size: 12px;
-  border: 1px solid rgba(34, 197, 94, 0.25);
-  background: rgba(34, 197, 94, 0.04);
+  border: 1px solid color-mix(in srgb, var(--success) 25%, transparent);
+  background: color-mix(in srgb, var(--success) 4%, transparent);
 }
 .tool-card.is-error {
-  border-color: rgba(248, 113, 113, 0.45);
-  background: rgba(248, 113, 113, 0.05);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 5%, transparent);
 }
 .tool-header {
   display: flex;
@@ -1653,12 +1647,12 @@ summary.note-footer {
   font-variant-numeric: tabular-nums;
 }
 .tool-output {
-  border-top: 1px solid rgba(34, 197, 94, 0.15);
+  border-top: 1px solid color-mix(in srgb, var(--success) 15%, transparent);
   background: var(--bg-subtle);
 }
 .tool-output.is-error {
-  border-top-color: rgba(248, 113, 113, 0.3);
-  background: rgba(248, 113, 113, 0.04);
+  border-top-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  background: color-mix(in srgb, var(--danger) 4%, transparent);
 }
 .tool-input,
 .tool-output-text {
@@ -1673,7 +1667,7 @@ summary.note-footer {
 }
 .tool-input {
   background: var(--bg-subtle);
-  border-top: 1px solid rgba(34, 197, 94, 0.2);
+  border-top: 1px solid color-mix(in srgb, var(--success) 20%, transparent);
 }
 .tool-deferred-output {
   margin: 0;
@@ -1682,11 +1676,11 @@ summary.note-footer {
   font-size: 12px;
   line-height: 1.5;
   background: var(--bg-subtle);
-  border-top: 1px solid rgba(34, 197, 94, 0.2);
+  border-top: 1px solid color-mix(in srgb, var(--success) 20%, transparent);
 }
 .tool-input.is-error,
 .tool-deferred-output.is-error {
-  border-top-color: rgba(248, 113, 113, 0.25);
+  border-top-color: color-mix(in srgb, var(--danger) 25%, transparent);
 }
 .tool-output-text {
   max-height: 400px;
@@ -1729,13 +1723,12 @@ button.tool-output-link {
   background: var(--bg);
 }
 .tool-patch-output {
-  border-top: 1px solid rgba(34, 197, 94, 0.15);
+  border-top: 1px solid color-mix(in srgb, var(--success) 15%, transparent);
   background: var(--bg);
 }
 .tool-split-diff {
   max-height: 560px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden auto;
   background: var(--bg);
 }
 .tool-diff-file {
@@ -1779,10 +1772,10 @@ button.tool-output-link {
   background: transparent;
 }
 .tool-diff-cell.is-added {
-  background: rgba(34, 197, 94, 0.12);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
 }
 .tool-diff-cell.is-removed {
-  background: rgba(248, 113, 113, 0.13);
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
 }
 .tool-diff-cell.is-empty {
   background: var(--bg-subtle);
@@ -1827,8 +1820,7 @@ button.tool-output-link {
 }
 .tool-patch {
   max-height: 520px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden auto;
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.55;
@@ -1840,15 +1832,15 @@ button.tool-output-link {
 }
 .tool-patch-line.is-added {
   border-left-color: var(--success);
-  background: rgba(34, 197, 94, 0.12);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
 }
 .tool-patch-line.is-removed {
   border-left-color: var(--danger);
-  background: rgba(248, 113, 113, 0.13);
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
 }
 .tool-patch-line.is-hunk {
   border-left-color: var(--accent);
-  background: rgba(96, 165, 250, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .tool-patch-number {
   width: 48px;
@@ -1986,7 +1978,7 @@ button.tool-output-link {
   cursor: pointer;
 }
 .markdown-file-ref:hover {
-  text-decoration-color: currentColor;
+  text-decoration-color: currentcolor;
 }
 .written-file .catppuccin-file-icon {
   width: 12px;
@@ -2062,152 +2054,10 @@ button.tool-output-link {
   margin: 0;
   padding: 8px 10px;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
   color: var(--text-muted);
 }
-.markdown-code-body {
-  --code-theme-font:
-    Consolas, "Bitstream Vera Sans Mono", "Courier New", Courier, monospace;
-}
-html.dark .markdown-code-body {
-  --code-theme-font:
-    Menlo, Monaco, Consolas, "Andale Mono", "Ubuntu Mono", "Courier New",
-    monospace;
-}
-
-/* Prism's `vs` (light) and `vscDarkPlus` (dark) palettes, which pi-web loads
-   as themes, mapped onto the class names highlight.js emits. */
-.hljs-comment,
-.hljs-quote {
-  color: #008000;
-}
-.hljs-string,
-.hljs-addition,
-.hljs-attribute {
-  color: #a31515;
-}
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-type,
-.hljs-doctag,
-.hljs-meta .hljs-keyword {
-  color: #0000ff;
-}
-/* `literal` is Prism's `boolean`, which `vs` paints with the numbers, not with
-   the keywords (its `.language-json .token.boolean` override is a descendant
-   selector react-syntax-highlighter never matches). highlight.js nests the
-   word itself in a `keyword` span, so the inner span needs the colour too. */
-.hljs-number,
-.hljs-symbol,
-.hljs-literal,
-.hljs-literal .hljs-keyword,
-.hljs-bullet,
-.hljs-link {
-  color: #36acaa;
-}
-.hljs-title,
-.hljs-title.function_,
-.hljs-section {
-  color: #393a34;
-}
-.hljs-title.class_,
-.hljs-class .hljs-title {
-  color: #2b91af;
-}
-.hljs-tag,
-.hljs-name,
-.hljs-selector-id,
-.hljs-selector-class {
-  color: #800000;
-}
-.hljs-attr,
-.hljs-property,
-.hljs-regexp,
-.hljs-variable,
-.hljs-template-variable {
-  color: #ff0000;
-}
-.hljs-deletion {
-  color: #9a050f;
-}
-.hljs-meta {
-  color: #808080;
-}
-.hljs-emphasis {
-  font-style: italic;
-}
-.hljs-strong {
-  font-weight: 700;
-}
-
-/* The theme's own base colour: react-syntax-highlighter writes it onto the
-   `code[class*="language-"]` element it renders, so every token Prism does not
-   classify takes it. highlight.js leaves those spans bare, which would inherit
-   the page's foreground instead, so the coloured surfaces carry it. A block in
-   the running turn is not tokenised yet, and pi-web's plain `<pre>` for that
-   frame inherits the message colour, so it is left out. */
-.markdown-code-body code[data-highlighted="1"],
-.file-source-view {
-  color: #393a34;
-}
-
-html.dark .hljs-comment,
-html.dark .hljs-quote {
-  color: #6a9955;
-}
-html.dark .hljs-string,
-html.dark .hljs-addition,
-html.dark .hljs-attribute {
-  color: #ce9178;
-}
-html.dark .hljs-keyword,
-html.dark .hljs-selector-tag,
-html.dark .hljs-literal,
-html.dark .hljs-type,
-html.dark .hljs-doctag,
-html.dark .hljs-tag,
-html.dark .hljs-name,
-html.dark .hljs-meta .hljs-keyword {
-  color: #569cd6;
-}
-html.dark .hljs-number,
-html.dark .hljs-symbol,
-html.dark .hljs-bullet,
-html.dark .hljs-link {
-  color: #b5cea8;
-}
-html.dark .hljs-title,
-html.dark .hljs-title.function_,
-html.dark .hljs-section {
-  color: #dcdcaa;
-}
-html.dark .hljs-title.class_,
-html.dark .hljs-class .hljs-title {
-  color: #4ec9b0;
-}
-html.dark .hljs-attr,
-html.dark .hljs-property,
-html.dark .hljs-variable,
-html.dark .hljs-template-variable,
-html.dark .hljs-selector-id,
-html.dark .hljs-selector-class {
-  color: #9cdcfe;
-}
-html.dark .hljs-regexp {
-  color: #d16969;
-}
-html.dark .hljs-deletion {
-  color: #ce9178;
-}
-html.dark .hljs-meta {
-  color: #9b9b9b;
-}
-html.dark .markdown-code-body code[data-highlighted="1"],
-html.dark .file-source-view {
-  color: #d4d4d4;
-}
-
 /* ── Conversation rail ──────────────────────────────────────────────────
    pi-web measures the rail and writes every mark's pixel top; web-pi hands
    the browser the same expression, so only the states React held are left. */
@@ -2261,16 +2111,16 @@ html.dark .file-source-view {
 .minimap-dot {
   width: 8px;
   height: 8px;
-  border: 1.5px solid rgba(128, 128, 128, 0.58);
+  border: 1.5px solid rgb(128 128 128 / 58%);
   border-radius: 2px;
-  background: rgba(128, 128, 128, 0.58);
+  background: rgb(128 128 128 / 58%);
   transition:
     transform 0.1s,
     background 0.1s;
 }
 .minimap-row.is-active .minimap-dot {
-  border-color: rgba(128, 128, 128, 0.95);
-  background: rgba(128, 128, 128, 0.95);
+  border-color: rgb(128 128 128 / 95%);
+  background: rgb(128 128 128 / 95%);
   box-shadow: 0 0 0 2px var(--bg-panel);
 }
 .minimap-row.is-near .minimap-dot {

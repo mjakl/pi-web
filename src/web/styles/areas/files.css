@@ -73,6 +73,9 @@
   background: var(--warning);
 }
 .file-tree-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 14px;
   height: 14px;
   flex-shrink: 0;
@@ -92,9 +95,12 @@
   color: var(--danger);
 }
 .file-tree-badge.is-R {
-  color: #60a5fa;
+  color: var(--accent);
 }
 .file-tree-action {
+  display: none;
+  align-items: center;
+  justify-content: center;
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
@@ -251,8 +257,10 @@
   line-height: 1.6;
 }
 .file-source-view {
+  width: max-content;
   min-height: 100%;
   background: var(--bg);
+  color: var(--code-theme-fg);
 }
 .file-source-line {
   display: flex;
@@ -282,11 +290,11 @@
   border-left: 3px solid transparent;
 }
 .file-diff-line.is-added {
-  background: rgba(0, 200, 80, 0.12);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
   border-left-color: var(--success);
 }
 .file-diff-line.is-removed {
-  background: rgba(240, 60, 60, 0.14);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
   border-left-color: var(--danger);
 }
 .file-diff-sign {
@@ -334,6 +342,8 @@
   font-size: 13px;
 }
 .file-viewer-toolbar {
+  min-width: 0;
+  min-height: 35px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -349,6 +359,11 @@
   padding: 4px 16px;
 }
 .file-viewer-path {
+  flex: 1 1 auto;
+  min-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
 }
 .file-viewer-media-label {
@@ -365,6 +380,10 @@
   color: var(--success);
 }
 .file-viewer-live-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 7px;
   background: var(--border);
   box-shadow: none;
 }
@@ -399,7 +418,7 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
 }
 .file-viewer-audio-body {
   flex: 1;
@@ -442,20 +461,8 @@
   background: var(--bg-hover);
 }
 
-.file-tree-action {
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-
 .file-tree-row:hover .file-tree-action {
   display: flex;
-}
-
-.file-tree-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .file-tree-row:hover .file-tree-badge {
@@ -511,12 +518,6 @@
   display: none;
 }
 
-/* FileViewer re-renders the whole source with different inline styles when
-   word wrap is toggled; the class carries the same four values. */
-.file-source-view {
-  width: max-content;
-}
-
 .file-source-view.is-wrapped {
   width: 100%;
 }
@@ -533,29 +534,12 @@
   white-space: pre-wrap;
 }
 
-.file-viewer-toolbar {
-  min-width: 0;
-  min-height: 35px;
-}
-.file-viewer-path {
-  flex: 1 1 auto;
-  min-width: 48px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .file-viewer-meta {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.file-viewer-live-indicator {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex: 0 0 7px;
 }
 .file-viewer-controls {
   display: flex;
@@ -738,7 +722,7 @@
   margin: 0;
   color: var(--text);
   min-width: 0;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .markdown-frontmatter-row dd a {
   color: var(--accent);

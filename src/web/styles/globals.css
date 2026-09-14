@@ -1,9 +1,12 @@
 :root {
+  --font-mono:
+    var(--font-noto-mono), "JetBrains Mono", "Fira Code", "Consolas",
+    ui-monospace, "PingFang SC", "Microsoft YaHei", monospace;
   --footer-row-height: 35px;
-  --menu-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
-  --bg: #ffffff;
+  --menu-shadow: 0 6px 20px rgb(0 0 0 / 14%);
+  --bg: #fff;
   --bg-panel: #f5f5f5;
-  --bg-hover: #eeeeee;
+  --bg-hover: #eee;
   --bg-selected: #e8e8e8;
   --border: #e0e0e0;
   --text: #1a1a1a;
@@ -13,7 +16,7 @@
   --user-bg: #eff6ff;
   --user-band-bg: #edf3fc;
   --user-band-border: #c6d7ee;
-  --bg-subtle: rgba(0, 0, 0, 0.03);
+  --bg-subtle: rgb(0 0 0 / 3%);
   /* Status colours. Values are chosen against --bg-selected, the lowest
      contrast surface any of them lands on, so every one clears WCAG AA. */
   --danger: #b91c1c;
@@ -22,11 +25,11 @@
   --info: #0b6c85;
   --compaction-text: #a33e50;
   --compaction-border: #e4b6bf;
-  --on-accent: #ffffff;
+  --on-accent: #fff;
 }
 
 html.dark {
-  --menu-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  --menu-shadow: 0 6px 20px rgb(0 0 0 / 40%);
   --bg: #1a1a1a;
   --bg-panel: #242424;
   --bg-hover: #2e2e2e;
@@ -39,7 +42,7 @@ html.dark {
   --user-bg: #1e293b;
   --user-band-bg: #202c3d;
   --user-band-border: #334b69;
-  --bg-subtle: rgba(255, 255, 255, 0.04);
+  --bg-subtle: rgb(255 255 255 / 4%);
   --danger: #fb8a8a;
   --success: #4ade80;
   --warning: #e5b163;
@@ -94,12 +97,6 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-dim);
-}
-
-:root {
-  --font-mono:
-    var(--font-noto-mono), "JetBrains Mono", "Fira Code", "Consolas",
-    ui-monospace, "PingFang SC", "Microsoft YaHei", monospace;
 }
 
 pre,
