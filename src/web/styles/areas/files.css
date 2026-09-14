@@ -260,6 +260,7 @@
   width: max-content;
   min-height: 100%;
   background: var(--bg);
+  color: var(--code-theme-fg);
 }
 .file-source-line {
   display: flex;

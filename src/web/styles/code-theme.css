@@ -1,0 +1,146 @@
+/* Syntax highlighting palette shared by transcript code blocks and the file
+   viewer: Prism's `vs` (light) and `vscDarkPlus` (dark) themes, which pi-web
+   loads, mapped onto the class names highlight.js emits. The hex values are
+   the theme itself and stay out of the app tokens on purpose. */
+.markdown-code-body {
+  --code-theme-font:
+    Consolas, "Bitstream Vera Sans Mono", "Courier New", Courier, monospace;
+}
+html.dark .markdown-code-body {
+  --code-theme-font:
+    Menlo, Monaco, Consolas, "Andale Mono", "Ubuntu Mono", "Courier New",
+    monospace;
+}
+
+/* Prism's `vs` (light) and `vscDarkPlus` (dark) palettes, which pi-web loads
+   as themes, mapped onto the class names highlight.js emits. */
+.hljs-comment,
+.hljs-quote {
+  color: #008000;
+}
+.hljs-string,
+.hljs-addition,
+.hljs-attribute {
+  color: #a31515;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-type,
+.hljs-doctag,
+.hljs-meta .hljs-keyword {
+  color: #0000ff;
+}
+/* `literal` is Prism's `boolean`, which `vs` paints with the numbers, not with
+   the keywords (its `.language-json .token.boolean` override is a descendant
+   selector react-syntax-highlighter never matches). highlight.js nests the
+   word itself in a `keyword` span, so the inner span needs the colour too. */
+.hljs-number,
+.hljs-symbol,
+.hljs-literal,
+.hljs-literal .hljs-keyword,
+.hljs-bullet,
+.hljs-link {
+  color: #36acaa;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section {
+  color: #393a34;
+}
+.hljs-title.class_,
+.hljs-class .hljs-title {
+  color: #2b91af;
+}
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: #800000;
+}
+.hljs-attr,
+.hljs-property,
+.hljs-regexp,
+.hljs-variable,
+.hljs-template-variable {
+  color: #ff0000;
+}
+.hljs-deletion {
+  color: #9a050f;
+}
+.hljs-meta {
+  color: #808080;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}
+
+/* The theme's own base colour: react-syntax-highlighter writes it onto the
+   `code[class*="language-"]` element it renders, so every token Prism does not
+   classify takes it. highlight.js leaves those spans bare, which would inherit
+   the page's foreground instead, so the coloured surfaces carry it. A block in
+   the running turn is not tokenised yet, and pi-web's plain `<pre>` for that
+   frame inherits the message colour, so it is left out. */
+:root {
+  --code-theme-fg: #393a34;
+}
+.markdown-code-body code[data-highlighted="1"] {
+  color: var(--code-theme-fg);
+}
+
+html.dark .hljs-comment,
+html.dark .hljs-quote {
+  color: #6a9955;
+}
+html.dark .hljs-string,
+html.dark .hljs-addition,
+html.dark .hljs-attribute {
+  color: #ce9178;
+}
+html.dark .hljs-keyword,
+html.dark .hljs-selector-tag,
+html.dark .hljs-literal,
+html.dark .hljs-type,
+html.dark .hljs-doctag,
+html.dark .hljs-tag,
+html.dark .hljs-name,
+html.dark .hljs-meta .hljs-keyword {
+  color: #569cd6;
+}
+html.dark .hljs-number,
+html.dark .hljs-symbol,
+html.dark .hljs-bullet,
+html.dark .hljs-link {
+  color: #b5cea8;
+}
+html.dark .hljs-title,
+html.dark .hljs-title.function_,
+html.dark .hljs-section {
+  color: #dcdcaa;
+}
+html.dark .hljs-title.class_,
+html.dark .hljs-class .hljs-title {
+  color: #4ec9b0;
+}
+html.dark .hljs-attr,
+html.dark .hljs-property,
+html.dark .hljs-variable,
+html.dark .hljs-template-variable,
+html.dark .hljs-selector-id,
+html.dark .hljs-selector-class {
+  color: #9cdcfe;
+}
+html.dark .hljs-regexp {
+  color: #d16969;
+}
+html.dark .hljs-deletion {
+  color: #ce9178;
+}
+html.dark .hljs-meta {
+  color: #9b9b9b;
+}
+html.dark {
+  --code-theme-fg: #d4d4d4;
+}
