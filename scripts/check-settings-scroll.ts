@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 
 // Run against the isolated screenshot fixture, never a real settings store.
 const url = new URL(process.argv[2] ?? "http://invalid");
@@ -7,6 +9,8 @@ if (url.hostname !== "127.0.0.1" || !url.port || url.port === "30141") {
     "Pass the ephemeral loopback URL printed by just screenshots",
   );
 }
+const output = resolve("dist/settings-scroll");
+mkdirSync(output, { recursive: true });
 const session = `settings-scroll-${String(process.pid)}`;
 function browser(...args: string[]) {
   return execFileSync("agent-browser", ["--session", session, ...args], {
@@ -68,6 +72,10 @@ try {
         }
         return true;
       })()`);
+      browser(
+        "screenshot",
+        resolve(output, `${theme}-${String(width)}x${String(height)}.png`),
+      );
       process.stdout.write(
         `PASS ${theme} ${String(width)}x${String(height)}: bottom controls reachable by scroll and focus\n`,
       );

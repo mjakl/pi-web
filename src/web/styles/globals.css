@@ -1,4 +1,50 @@
+/* Viewport scale: compact <=480px, mobile <=640px, intermediate 641–959px,
+   desktop >=960px. Keep literal queries in owners: custom properties cannot
+   be used in media conditions. Client mobile behavior also uses 640px.
+   Pointer, reduced-motion, standalone and container queries are independent. */
 :root {
+  /* Spacing for gaps and insets, not control sizes or measured geometry.
+     Optical offsets and document-relative spacing stay with their owners. */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-8: 16px;
+  --space-10: 20px;
+  --space-12: 24px;
+  --space-16: 32px;
+
+  /* Settings establishes badges, controls and surfaces at 3/5/8px.
+     Circles, pills and tiny rail/indicator geometry keep their own shape. */
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+
+  /* Small interface text only; document typography remains relative. */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+
+  /* Preserve ordering within existing stacking contexts. Native popovers and
+     dialogs use the browser top layer, which outranks this document scale. */
+  --layer-raised: 1;
+  --layer-rail: 2;
+  --layer-toolbar: 20;
+  --layer-toolbar-toggle: 21;
+  --layer-chat-notice: 40;
+  --layer-drop-zone: 50;
+  --layer-project-menu: 100;
+  --layer-completion: 120;
+  --layer-sidebar-backdrop: 199;
+  --layer-sidebar: 200;
+  --layer-resize-handle: 220;
+  --layer-panel-backdrop: 240;
+  --layer-panel: 250;
+  --layer-session-info: 500;
+  --layer-popover: 1000;
+
   --font-mono:
     var(--font-noto-mono), "JetBrains Mono", "Fira Code", "Consolas",
     ui-monospace, "PingFang SC", "Microsoft YaHei", monospace;

@@ -59,6 +59,10 @@ screenshots: build
 settings-scroll url:
     node --import tsx scripts/check-settings-scroll.ts '{{url}}'
 
+# TEST: Real-browser style scale checks and captures against the isolated fixture
+style-scale url output="dist/style-scale":
+    node --import tsx scripts/check-style-scale.ts '{{url}}' '{{output}}'
+
 # LINT: Formatting, lint, and types
 lint: link-pi typecheck
     pnpm exec oxfmt --check .

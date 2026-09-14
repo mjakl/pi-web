@@ -20,10 +20,11 @@ not use the normal server or port 30141. Stop with Ctrl+C; the fixture removes
 its temporary project. A forced kill may leave a `web-pi-screenshots-*`
 directory in the system temporary directory, containing only fictional files.
 
-The fixture has four sessions: `/sessions/release`, `/sessions/navigation`,
-`/sessions/tools`, and `/sessions/light`. Use sidebar links to move between
-them. All controls are the application's own controls, not screenshot-only
-markup.
+The README scenarios are `/sessions/release`, `/sessions/navigation`,
+`/sessions/tools`, and `/sessions/light`. A fifth session, `/sessions/scale`,
+covers long code and compaction for the [style-scale checks](style-scale.md).
+Use sidebar links to move between them. All controls are the application's own
+controls, not screenshot-only markup.
 
 ## Capture
 
@@ -91,8 +92,9 @@ themes, asserting that controls are not clipped or covered and the close button
 stays reachable. It uses a dedicated browser session and closes it on
 completion. It does not save preferences or request notification permission.
 
-This opt-in check needs browser layout, which happy-dom does not provide. It is
-not part of `just qa` or CI and does not replace screenshot inspection.
+The check saves the focused state at each size to `dist/settings-scroll/`. This
+opt-in check needs browser layout, which happy-dom does not provide. It is not
+part of `just qa` or CI and does not replace screenshot inspection.
 
 ## Verification record
 
