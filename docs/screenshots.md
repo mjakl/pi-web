@@ -76,6 +76,24 @@ browser profiles, cookies, HAR files, or temporary session data. Relative
 timestamps and font rendering can vary by capture date and browser; this is a
 reproducible scenario fixture, not a pixel-comparison test suite.
 
+## Settings scroll regression
+
+With the fixture running and agent-browser plus a local Chromium installed, run:
+
+```bash
+just settings-scroll http://127.0.0.1:<printed-port>
+```
+
+This checks the real rendered layout after switching away from General and back
+through HTMX. It scrolls to the notification control and focuses the reset
+control at 1440×1000, 1024×480, 641×360, 640×360, 390×480 and 320×320 in both
+themes, asserting that controls are not clipped or covered and the close button
+stays reachable. It uses a dedicated browser session and closes it on
+completion. It does not save preferences or request notification permission.
+
+This opt-in check needs browser layout, which happy-dom does not provide. It is
+not part of `just qa` or CI and does not replace screenshot inspection.
+
 ## Verification record
 
 The committed images were visually inspected after capture with local headless
