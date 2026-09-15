@@ -28,7 +28,7 @@ import {
   StoppedRingIcon,
 } from "./icons.tsx";
 
-// The sidebar: pi-web's header block, workspace pill, 54px session rows and
+// The sidebar: pi-web's header block, workspace pill, session rows and
 // explorer section (components/SessionSidebar.tsx §3.1, SessionItem.tsx §3.4,
 // ProjectFolderGroup.tsx §3.3). Presentation lives in areas/sidebar.css.
 
@@ -162,32 +162,58 @@ export function SessionRow({
       {...(oob === true ? { "hx-swap-oob": "true" } : {})}
     >
       <a href={`/sessions/${id}`} class="session-row-link">
+        <SessionIndicator summary={summary} />
+        <div
+          class={`session-row-location${summary.cwdAvailable === false ? " is-unavailable" : ""}`}
+        >
+          <span
+            class="session-row-folder"
+            title={
+              summary.cwdAvailable === false
+                ? `${summary.cwd} (Working directory unavailable)`
+                : summary.cwd
+            }
+          >
+            {baseName(summary.cwd) || summary.cwd}
+          </span>
+          {summary.branch === undefined ? null : (
+            <span
+              title={`${summary.isWorktree === true ? "Worktree" : "Branch"}: ${summary.branch}`}
+              class="session-row-branch"
+            >
+              <BranchBadgeIcon />
+              <span class="session-branch-name">{summary.branch}</span>
+            </span>
+          )}
+        </div>
         <div title={title} data-session-title class="session-row-title">
           <span class="session-title-text">{title}</span>
         </div>
         <div class="session-row-meta">
-          <SessionIndicator summary={summary} />
-          <span class="session-row-location">
-            <span class="session-row-folder" title={summary.cwd}>
-              {baseName(summary.cwd) || summary.cwd}
-            </span>
-            <span
-              title={summary.modifiedAt}
-              data-session-modified-at={summary.modifiedAt}
-              class="session-row-time"
-            >
-              {relativeTime(summary.modifiedAt)}
-            </span>
-            {summary.isWorktree !== true ||
-            summary.branch === undefined ? null : (
+          <span
+            title={summary.modifiedAt}
+            data-session-modified-at={summary.modifiedAt}
+            class="session-row-time"
+          >
+            {relativeTime(summary.modifiedAt)}
+          </span>
+          <span class="session-counts">
+            {metadata.starCount > 0 ? (
               <span
-                title={`Worktree: ${summary.cwd}`}
-                class="session-row-branch"
+                class="session-star-count"
+                title={`${String(metadata.starCount)} starred answers`}
+                aria-label={`${String(metadata.starCount)} starred answers`}
               >
-                <BranchBadgeIcon />
-                <span class="session-branch-name">{summary.branch}</span>
+                <span>{metadata.starCount.toLocaleString("en")}</span>
+                <StarIcon size={11} filled />
               </span>
-            )}
+            ) : null}
+            <span
+              class="session-message-count"
+              title={`${String(metadata.messageCount)} msgs`}
+            >
+              {String(metadata.messageCount)} msgs
+            </span>
           </span>
         </div>
       </a>
@@ -206,24 +232,6 @@ export function SessionRow({
         >
           <MoreDotsIcon size={16} radius={1.8} />
         </button>
-        <span class="session-counts">
-          {metadata.starCount > 0 ? (
-            <span
-              class="session-star-count"
-              title={`${String(metadata.starCount)} starred answers`}
-              aria-label={`${String(metadata.starCount)} starred answers`}
-            >
-              <span>{metadata.starCount.toLocaleString("en")}</span>
-              <StarIcon size={11} filled />
-            </span>
-          ) : null}
-          <span
-            class="session-message-count"
-            title={`${String(metadata.messageCount)} msgs`}
-          >
-            {String(metadata.messageCount)} msgs
-          </span>
-        </span>
       </div>
       <RowMenu summary={summary} metadata={metadata} />
     </div>

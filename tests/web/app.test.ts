@@ -1185,7 +1185,7 @@ describe("the sidebar", () => {
     expect(row).toContain('class="session-indicator is-active"');
   });
 
-  it("renders a 54px session row with pi-web's three columns", async () => {
+  it("renders the activity marker and project before the prompt and session details", async () => {
     const { app } = sidebarApp();
     const html = await (await app.request("/sessions/s2")).text();
     const row = html.slice(html.indexOf('id="row-s2"'));
@@ -1199,14 +1199,15 @@ describe("the sidebar", () => {
       }
     };
     inOrder(row, [
-      "In a worktree",
       'class="session-indicator is-stopped"',
       "Session stopped",
-      " ago",
       "feature/x",
+      'class="session-row-title"',
+      "In a worktree",
+      " ago",
       'class="session-shortcut"',
     ]);
-    // An unselected row keeps the transparent bar and no tint.
+    // An unselected row has no selection tint.
     const start = html.indexOf('id="row-s1"');
     // s1 is the last row of this project, so the list's end bounds the slice.
     const other = html.slice(start, html.indexOf('id="explorer-section"'));
@@ -1214,13 +1215,19 @@ describe("the sidebar", () => {
     // The underlying status survives the browser's unread tint.
     expect(row).toContain('class="session-indicator is-stopped"');
 
-    // The right column arrives with the row's own metadata.
+    // A separately refreshed row uses the same order as the initial page.
     const loaded = await (await app.request("/sessions/s2/row")).text();
     inOrder(loaded, [
-      'class="session-shortcut"',
-      'class="session-menu-trigger"',
+      'class="session-indicator is-stopped"',
+      'class="session-row-location"',
+      'class="session-row-folder"',
+      "feature/x",
+      'class="session-row-title"',
+      'class="session-row-meta"',
       'class="session-counts"',
       "1 msgs",
+      'class="session-shortcut"',
+      'class="session-menu-trigger"',
     ]);
     expect(loaded).toContain('class="session-row-actions"');
   });

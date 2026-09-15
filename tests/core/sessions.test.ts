@@ -42,7 +42,10 @@ describe("session titles", () => {
     ).toBe("abcdefghijkl");
     expect(
       sessionTitle(summary("x"), { ...meta, firstMessage: "y".repeat(80) }),
-    ).toHaveLength(50);
+    ).toBe("y".repeat(80));
+    expect(
+      sessionTitle(summary("x"), { ...meta, firstMessage: "z".repeat(500) }),
+    ).toBe("z".repeat(300));
   });
 });
 

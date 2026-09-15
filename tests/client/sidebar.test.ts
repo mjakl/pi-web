@@ -77,6 +77,49 @@ function finished(id: string, project: string): void {
   });
 }
 
+describe("session card locations", () => {
+  it.each([false, true])(
+    "shows the branch for a checkout with isWorktree=%s",
+    (isWorktree) => {
+      mount(
+        row("s1", {
+          branch: "feature/session-cards",
+          isWorktree,
+          cwdAvailable: true,
+        }),
+      );
+      const location = query(".session-row-location");
+      expect(location.textContent).toContain("one");
+      expect(location.textContent).toContain("feature/session-cards");
+      expect(location.classList.contains("is-unavailable")).toBe(false);
+      expect(query(".session-row-folder").title).toBe("/repo/one");
+      expect(query(".session-row-meta").textContent).toContain("2 msgs");
+      expect(location.querySelector("[data-session-modified-at]")).toBeNull();
+    },
+  );
+
+  it("marks a missing directory as unavailable while keeping its session link", () => {
+    mount(
+      row("s1", {
+        cwd: "/repo/deleted-worktree",
+        cwdAvailable: false,
+        branch: "old-branch",
+        isWorktree: true,
+      }),
+    );
+    expect(
+      query(".session-row-location").classList.contains("is-unavailable"),
+    ).toBe(true);
+    expect(query(".session-row-folder").title).toBe(
+      "/repo/deleted-worktree (Working directory unavailable)",
+    );
+    expect(query(".session-row-link").getAttribute("href")).toBe(
+      "/sessions/s1",
+    );
+    expect(query(".session-branch-name").textContent).toBe("old-branch");
+  });
+});
+
 describe("relative timestamps", () => {
   it("keeps the existing unit thresholds as time passes", async () => {
     vi.setSystemTime(new Date("2026-09-02T00:00:59.000Z"));
