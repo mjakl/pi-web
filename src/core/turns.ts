@@ -258,7 +258,8 @@ export function groupTurns(items: readonly TranscriptItem[], cwd = ""): Turn[] {
   let started = false;
   for (const item of items) {
     if (isTurnBoundary(item)) {
-      if (started) turns.push(buildTurn(boundary, rest, cwd));
+      if (started || rest.length > 0)
+        turns.push(buildTurn(boundary, rest, cwd));
       boundary = item;
       rest = [];
       started = true;
