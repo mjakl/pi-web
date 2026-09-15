@@ -102,7 +102,7 @@ export function recentProjects(
   );
 }
 
-/** Row title: the name, else the start of the first message, else the id. */
+/** Row title: the name, else a bounded preview of the first message, else the id. */
 export function sessionTitle(
   summary: SessionSummary,
   metadata?: SessionRowMetadata,
@@ -110,7 +110,7 @@ export function sessionTitle(
   const name = (metadata?.name ?? summary.name ?? "").trim();
   if (name) return name;
   const first = (metadata?.firstMessage ?? "").replaceAll(/\s+/g, " ").trim();
-  if (first) return first.slice(0, 50);
+  if (first) return first.slice(0, 300);
   return summary.id.slice(0, 12);
 }
 

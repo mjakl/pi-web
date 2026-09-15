@@ -162,11 +162,34 @@ export function SessionRow({
       {...(oob === true ? { "hx-swap-oob": "true" } : {})}
     >
       <a href={`/sessions/${id}`} class="session-row-link">
+        <SessionIndicator summary={summary} />
+        <div
+          class={`session-row-location${summary.cwdAvailable === false ? " is-unavailable" : ""}`}
+        >
+          <span
+            class="session-row-folder"
+            title={
+              summary.cwdAvailable === false
+                ? `${summary.cwd} (Working directory unavailable)`
+                : summary.cwd
+            }
+          >
+            {baseName(summary.cwd) || summary.cwd}
+          </span>
+          {summary.branch === undefined ? null : (
+            <span
+              title={`${summary.isWorktree === true ? "Worktree" : "Branch"}: ${summary.branch}`}
+              class="session-row-branch"
+            >
+              <BranchBadgeIcon />
+              <span class="session-branch-name">{summary.branch}</span>
+            </span>
+          )}
+        </div>
         <div title={title} data-session-title class="session-row-title">
           <span class="session-title-text">{title}</span>
         </div>
         <div class="session-row-meta">
-          <SessionIndicator summary={summary} />
           <span
             title={summary.modifiedAt}
             data-session-modified-at={summary.modifiedAt}
@@ -192,29 +215,6 @@ export function SessionRow({
               {String(metadata.messageCount)} msgs
             </span>
           </span>
-        </div>
-        <div
-          class={`session-row-location${summary.cwdAvailable === false ? " is-unavailable" : ""}`}
-        >
-          <span
-            class="session-row-folder"
-            title={
-              summary.cwdAvailable === false
-                ? `${summary.cwd} (Working directory unavailable)`
-                : summary.cwd
-            }
-          >
-            {baseName(summary.cwd) || summary.cwd}
-          </span>
-          {summary.branch === undefined ? null : (
-            <span
-              title={`${summary.isWorktree === true ? "Worktree" : "Branch"}: ${summary.branch}`}
-              class="session-row-branch"
-            >
-              <BranchBadgeIcon />
-              <span class="session-branch-name">{summary.branch}</span>
-            </span>
-          )}
         </div>
       </a>
       <div class="session-row-actions">

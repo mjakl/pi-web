@@ -189,20 +189,19 @@
 }
 .session-row {
   position: relative;
-  min-height: 76px;
+  min-height: 80px;
   display: flex;
   align-items: center;
-  padding-left: 14px;
+  padding-left: 16px;
   padding-right: var(--space-4);
   cursor: pointer;
-  border-left: 2px solid transparent;
+  border-bottom: 1px solid var(--border);
   transition: background 0.1s;
   gap: var(--space-3);
   overflow: hidden;
 }
 .session-row.is-selected {
   background: var(--bg-selected);
-  border-left-color: var(--accent);
 }
 .session-row.is-renaming {
   cursor: default;
@@ -221,10 +220,21 @@
 .session-row-link {
   flex: 1;
   min-width: 0;
-  display: block;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
   color: inherit;
   text-decoration: none;
-  padding: var(--space-4) 0;
+  padding: 10px 0;
+}
+.session-row-link > .session-indicator {
+  grid-column: 1;
+  grid-row: 1 / 4;
+  align-self: start;
+  margin-top: 2px;
+}
+.session-row-link > div {
+  grid-column: 2;
 }
 .session-row-title {
   display: flex;
@@ -234,23 +244,17 @@
   font-size: var(--text-sm);
   font-weight: 400;
   line-height: 1.4;
-  color: var(--text-muted);
-  padding-right: 32px;
-}
-.session-row.is-selected .session-row-title {
-  font-weight: 500;
-}
-.session-row.is-live .session-row-title {
   color: var(--text);
 }
 .session-title-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   min-width: 0;
 }
 .session-row-meta {
-  margin-top: var(--space-1);
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -264,7 +268,7 @@
   gap: var(--space-4);
   min-width: 0;
   overflow: hidden;
-  margin-top: var(--space-1);
+  padding-right: 32px;
   font-size: var(--text-xs);
   color: var(--text);
 }
@@ -278,6 +282,7 @@
   text-overflow: ellipsis;
 }
 .session-row-folder {
+  font-weight: 500;
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
@@ -302,7 +307,7 @@
 }
 .session-row-actions {
   position: absolute;
-  top: var(--space-2);
+  top: 5px;
   right: var(--space-4);
   display: flex;
   color: var(--text-dim);
