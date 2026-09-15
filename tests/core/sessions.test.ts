@@ -3,10 +3,8 @@ import {
   isSubagentSession,
   recentProjects,
   relativeTime,
-  selectedProject,
   sessionTitle,
   type SessionSummary,
-  sessionsForProject,
 } from "@core/sessions";
 import { describe, expect, it } from "vitest";
 
@@ -87,10 +85,6 @@ describe("sidebar order and grouping", () => {
       "/repo/main",
       "/other",
     ]);
-    expect(projects[0]?.label).toBe("repo/main");
-    expect(
-      sessionsForProject(sessions, "/repo/main").map((row) => row.id),
-    ).toEqual(["b", "a"]);
   });
 
   it("lists the working folders a project's sessions were started in", () => {
@@ -122,33 +116,6 @@ describe("sidebar order and grouping", () => {
     ]);
     expect(projects.find((p) => p.key === "/repo/one")?.running).toBe(1);
     expect(projects.find((p) => p.key === "/repo/two")?.running).toBe(0);
-  });
-
-  it("prefers the open session's project, then the remembered one", () => {
-    const projects = recentProjects([
-      summary("a", {
-        projectRoot: "/repo/one",
-        modifiedAt: "2026-03-02T00:00:00.000Z",
-      }),
-      summary("b", {
-        projectRoot: "/repo/two",
-        modifiedAt: "2026-03-01T00:00:00.000Z",
-      }),
-    ]);
-    expect(selectedProject(projects)).toBe("/repo/one");
-    expect(selectedProject(projects, { remembered: "/repo/two" })).toBe(
-      "/repo/two",
-    );
-    expect(selectedProject(projects, { remembered: "/gone" })).toBe(
-      "/repo/one",
-    );
-    expect(
-      selectedProject(projects, {
-        remembered: "/repo/two",
-        active: "/repo/one",
-      }),
-    ).toBe("/repo/one");
-    expect(selectedProject([])).toBeUndefined();
   });
 
   it("recognises a pi-subagent run by its id", () => {

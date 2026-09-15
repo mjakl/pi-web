@@ -164,18 +164,14 @@ bundled extension alone handles reconnection. Ordinary requests retain the
 previous unlimited timeout for compaction and package actions. Inherited 4xx/5xx
 no-swap rules preserve error toasts without replacing the requested region.
 
-A second stream, `GET /events`, belongs to the sidebar rather than to one
-session. It pushes a re-rendered row (`hx-partial`) whenever a session of the
-project on screen finishes, the whole sorted list when a session opens or stops
-(or has no row in the current page), the project selector whenever the running
-counts change, and a named `finished` event carrying JSON with the session id
-and its project. The browser turns that into an unread dot in `localStorage` —
-on the row when the session is listed, on the project when it is not; it
-replaces pi-web's 2.5 s polling. The stream reads the project cookie at connect
-time, and the list and its small `#sidebar-events` owner live in `#project-nav`.
-Switching project replaces the nav and reconnects; switching working folder
-within that project replaces only the stream owner and folder controls. The
-stream URL names both project and folder, never a captured selected session. Row
+A second stream, `GET /events`, belongs to the global sidebar rather than one
+session or project. Opening, starting a turn, finishing and stopping replace the
+sorted first 50 rows through `hx-partial`; only that page loads row metadata.
+The runtime announces `started` only when it becomes busy, not for every token.
+A named `finished` event carries the session id, which the browser records as an
+unread dot in `localStorage`, including for rows that have not loaded yet. The
+list and its small `#sidebar-events` owner live in `#session-nav` and survive
+conversation and directory navigation. No cookie or query scopes the stream. Row
 selection is projected from the displayed `main` on processing and settlement,
 including paginated rows, star responses and stream updates.
 
@@ -223,25 +219,28 @@ contains the top bar, session stream owner and composer. The same page views
 render that region for HTMX and the whole shell for direct loads. Same-session
 clicks only close the mobile drawer; modified clicks retain native link
 behavior. A different session replaces the region when ready, retaining the
-sidebar and file panel. Folder changes refresh sidebar/explorer context; normal
-same-folder switches keep their loaded rows, tree and file tabs.
+sidebar and file panel. Directory changes refresh the explorer context, never
+the session list or its stream; same-folder switches also keep the expanded
+tree. File requests derive their authorization context from the displayed
+session.
 
-HTMX owns URL pushes, `HX-Location` after creation or a project change, and
-`hx-history-elt` restores. A same-project worktree choice leaves the session
-open and changes the next new-chat folder on `#project-select`; New Session uses
-that explicit folder. Before a session starts, a folder switch opens that
-folder's draft. Clone, custom-folder selection and deletion of the displayed
-session use the same region navigation.
+HTMX owns URL pushes, `HX-Location` after creation or custom-folder selection,
+and `hx-history-elt` restores. New Session opens the composer directly, using
+`web-pi-cwd` or the configured server default. Its directory selector reuses the
+session-derived project/worktree options and custom-folder picker. Selecting a
+directory opens that folder's draft; the first message creates a session with
+fixed cwd. Opening old sessions never overwrites this preference. Clone and
+deletion of the displayed session use the same region navigation.
 
 Navigation cancellation covers normal and history request shapes. A pending
 request identity rejects reversed responses; admission epochs also reject an old
 command's navigation/notice effects while a newer choice is still loading. The
 guard clears parsed HX headers because HTMX fires `HX-Trigger` even after
 response cancellation, including a canceled response body read. Displayed
-session identity lives on `main`, and the chosen folder lives on the picker.
-Request headers and committed preference cookies derive from those owners, not a
-second current-session store. The notice shelf uses native `hx-preserve` across
-region replacements.
+session identity and contextual cwd live on `main`. Request headers derive from
+that owner; only a mounted blank new-session view commits the directory
+preference, so canceled responses and old-session navigation cannot change it.
+The notice shelf uses native `hx-preserve` across region replacements.
 
 Text drafts remain keyed by session or `new:<cwd>`, debounced for 300 ms and
 flushed on owner departure and `pagehide`. File drafts stay in per-key memory;
@@ -353,24 +352,25 @@ composition root and the only importer of Pi adapters.
   would take the server with it.
 - **Raw HTML in Markdown is escaped**, not sanitised. No allowlist to maintain,
   no script can pass.
-- **The sidebar shows one project, in pages.** A real store holds ~2,750
-  sessions across ~256 projects, and shipping all of them made a session page
-  3.0 MB. `src/core/sessions.ts` owns the rules — project key, recent projects,
-  which one is selected, the order within it — and the workspace returns one
-  `SidebarView`. The selected project is the open session's, else the
-  `web-pi-project` cookie, else the most recent. The project list is fetched
-  when the selector opens; rows past the first 50 arrive through an
-  `hx-trigger="intersect once"` sentinel.
+- **The sidebar is global, in pages.** A real store holds ~2,750 sessions across
+  ~256 projects; shipping every row made a session page 3.0 MB.
+  `src/core/sessions.ts` orders running sessions first, then live, then newest
+  modified. The workspace returns one 50-row `SidebarView`, and an
+  `hx-trigger="intersect once"` sentinel loads subsequent pages. Every row shows
+  its folder basename with a full-path tooltip and an optional worktree branch.
+  The blank new-session screen fetches existing project/worktree choices only
+  when its selector opens, without loading transcript metadata. The old
+  `web-pi-project` cookie and project query no longer filter anything.
 - **Sidebar pages arrive with complete row metadata.** Catalog listing reads one
   header per file. Before rendering a page, the workspace loads titles, message
-  counts and star counts for its 50 rows. Initial documents, project switches
-  and refreshes, pagination and SSE list replacements use this same path, with
-  no per-row metadata-loading request. The adapter streams each file line by
-  line and retains its size/mtime cache. Unreadable files are omitted; readable
-  untitled or empty sessions keep their normal fallback labels. Page offsets
-  still count omitted files, so pagination does not repeat rows. Cold pages can
-  take longer because metadata must be ready before the response. The row
-  endpoint remains for actions and live updates.
+  counts and star counts for its 50 rows. Initial documents, refreshes,
+  pagination and SSE list replacements use this same path, with no per-row
+  metadata-loading request. The adapter streams each file line by line and
+  retains its size/mtime cache. Unreadable files are omitted; readable untitled
+  or empty sessions keep their normal fallback labels. Page offsets still count
+  omitted files, so pagination does not repeat rows. Cold pages can take longer
+  because metadata must be ready before the response. The row endpoint remains
+  for actions and live updates.
 - **pi-subagent runs are ordinary rows.** Half the files in a real store are
   `subagent.<hex>` sessions: transcripts of one tool call. pi-web lists them
   with everything else, so web-pi does too; the list pages fifty rows at a time,
@@ -534,18 +534,19 @@ composition root and the only importer of Pi adapters.
 - **Project commands run in the project's environment.** See
   [ADR 0001](adr/0001-project-command-environment.md).
 - **The chosen folder is a cookie, and validating it is what grants access.**
-  `web-pi-cwd` holds the folder new sessions start in, `web-pi-project` the
-  sidebar's project, `web-pi-settings` the open settings section, `web-pi-skill`
-  the skill that folder was last reading. These navigation cookies are local;
-  General preferences are shared in the server's web settings store. The picker
-  commits through `POST /workspaces/validate`, which adds the folder to the
-  in-memory allowed roots — so the new-session composer gets `@` completion, the
-  slash menu and a model picker, and `/new` re-validates its cookie on every
-  load rather than trusting it. Browsing (`GET /workspaces/browse`) is
-  deliberately outside that policy: it exposes directory _names_ only, and a
-  reader has to be able to see a folder before asking for it. pi-web keeps the
-  last custom path in `localStorage`; here the cookie is the memory and
-  `web-pi:last-cwd` only pre-fills the browse box.
+  `web-pi-cwd` holds the folder new sessions start in, `web-pi-settings` the
+  open settings section, and `web-pi-skill` the skill that folder was last
+  reading. Existing session navigation updates only `web-pi-session`, not cwd.
+  These navigation cookies are local; General preferences are shared in the
+  server's web settings store. The picker commits through
+  `POST /workspaces/validate`, which adds the folder to the in-memory allowed
+  roots — so the new-session composer gets `@` completion, the slash menu and a
+  model picker, and `/new` re-validates its cookie on every load rather than
+  trusting it. Browsing (`GET /workspaces/browse`) is deliberately outside that
+  policy: it exposes directory _names_ only, and a reader has to be able to see
+  a folder before asking for it. pi-web keeps the last custom path in
+  `localStorage`; here the cookie is the memory and `web-pi:last-cwd` only
+  pre-fills the browse box.
 - **Worktree discovery is a rule plus a map.** `src/core/workspaces.ts` holds
   the identity rules (bare repositories, linked worktrees, subdirectories keep
   their own identity) and the parse of `git worktree list --porcelain -z`; the

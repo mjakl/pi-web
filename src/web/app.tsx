@@ -1,5 +1,4 @@
 import type { ImageAttachment } from "@core/ports";
-import type { SidebarView } from "@core/workspace";
 import { staticAssets } from "@web/assets";
 import { honoFactory } from "@web/hono";
 import { HtmlLayout } from "@web/HtmlLayout";
@@ -9,7 +8,6 @@ import {
   currentSessionId,
   CWD_COOKIE,
   errorText,
-  PROJECT_COOKIE,
   type RouteContext,
   SESSION_COOKIE,
   toastHeader,
@@ -38,14 +36,7 @@ export function createWebApp(deps: WebDeps) {
   const renderIntervalMs = deps.renderIntervalMs ?? 100;
   const assets = staticAssets(deps.staticRoot);
 
-  /** The remembered project, and the sidebar the current request shows. */
-  function sidebarOf(c: Context, activeId?: string) {
-    const remembered = getCookie(c, PROJECT_COOKIE);
-    return deps.workspace.sidebar({
-      ...(remembered === undefined ? {} : { remembered }),
-      ...(activeId === undefined ? {} : { activeId }),
-    });
-  }
+  const sidebarOf = () => deps.workspace.sidebar();
 
   function remember(c: Context, name: string, value: string): void {
     if (getCookie(c, name) === value) return;
@@ -56,28 +47,18 @@ export function createWebApp(deps: WebDeps) {
     });
   }
 
-  /** Opening a session selects its project, for this and every later page. */
-  function rememberProject(c: Context, sidebar: SidebarView): void {
-    if (sidebar.selected === undefined) return;
-    remember(c, PROJECT_COOKIE, sidebar.selected);
+  /** New-session preference is independent of the displayed session. */
+  function newCwd(c: Context): string {
+    return c.req.query("cwd") ?? getCookie(c, CWD_COOKIE) ?? deps.defaultCwd;
   }
 
-  /**
-   * The folder new sessions start in: the picker's choice, else the folder of
-   * the project the sidebar shows, else the default. The workspace chip, the
-   * explorer tree and the document title all read this one value, so a
-   * missing cookie cannot leave them naming different folders.
-   */
-  function currentCwd(c: Context, sidebar?: SidebarView): string {
-    const project = sidebar?.projects.find(
-      (entry) => entry.key === sidebar.selected,
-    );
+  /** Contextual controls follow the displayed conversation, not its preference. */
+  async function currentCwd(c: Context): Promise<string> {
+    const explicit = c.req.query("cwd") ?? c.req.header("X-Web-Pi-Cwd");
+    if (explicit !== undefined) return explicit;
+    const id = currentSessionId(c);
     return (
-      c.req.query("cwd") ??
-      c.req.header("X-Web-Pi-Cwd") ??
-      getCookie(c, CWD_COOKIE) ??
-      project?.entryPath ??
-      deps.defaultCwd
+      (id ? await deps.workspace.sessionFolder(id) : undefined) ?? newCwd(c)
     );
   }
 
@@ -93,12 +74,11 @@ export function createWebApp(deps: WebDeps) {
     images: ImageAttachment[] = [],
   ): Promise<Response> {
     const [sidebar, view] = await Promise.all([
-      sidebarOf(c, id),
+      sidebarOf(),
       deps.workspace.viewSession(id, warnTokens()),
     ]);
     if (!view) return c.notFound();
     if (!c.req.header("HX-Request")) {
-      rememberProject(c, sidebar);
       remember(c, SESSION_COOKIE, id);
     }
     c.header("HX-Push-Url", `/sessions/${id}`);
@@ -178,7 +158,7 @@ export function createWebApp(deps: WebDeps) {
     renderIntervalMs,
     sidebarOf,
     remember,
-    rememberProject,
+    newCwd,
     currentCwd,
     warnTokens,
     page,

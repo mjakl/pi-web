@@ -36,10 +36,10 @@ export type RouteContext = {
   deps: WebDeps;
   assets: StaticAssets;
   renderIntervalMs: number;
-  sidebarOf: (c: Context, activeId?: string) => Promise<SidebarView>;
+  sidebarOf: () => Promise<SidebarView>;
   remember: (c: Context, name: string, value: string) => void;
-  rememberProject: (c: Context, sidebar: SidebarView) => void;
-  currentCwd: (c: Context, sidebar?: SidebarView) => string;
+  newCwd: (c: Context) => string;
+  currentCwd: (c: Context) => Promise<string>;
   warnTokens: (c: Context) => { warnTokens: number };
   page: (
     c: Context,
@@ -65,13 +65,6 @@ export const sleep = (ms: number) =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms);
   });
-
-/**
- * Which project the sidebar shows, across page loads and the shared stream.
- * A cookie name is an RFC 6265 token, so the `web-pi:` prefix the browser
- * storage keys use is spelled with a dash here.
- */
-export const PROJECT_COOKIE = "web-pi-project";
 
 /** The working folder the picker last committed: where `/new` starts. */
 export const CWD_COOKIE = "web-pi-cwd";

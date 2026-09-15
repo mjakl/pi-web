@@ -5,14 +5,9 @@ import { webSettingsPatch } from "@core/web-settings";
 
 import { type DialogAnswer } from "@core/extension-ui";
 import { type PackageScope, isPackageAction } from "@core/packages";
-import { isSessionId, projectKeyOf } from "@core/sessions";
+import { isSessionId } from "@core/sessions";
 import { Partial } from "@web/views/Partial";
-import {
-  ExplorerSection,
-  ProjectNav,
-  ProjectSelect,
-  SidebarEvents,
-} from "@web/views/Sidebar";
+import { ExplorerSection } from "@web/views/Sidebar";
 import {
   type SkillScope,
   type SkillUpdate,
@@ -20,7 +15,7 @@ import {
 } from "@core/skills";
 import { OFFLINE_URL, manifest, offlinePage, serviceWorker } from "@web/pwa";
 import { SystemPromptPanel, ToolsPanel } from "@web/views/Panels";
-import { IndexPage, NewSessionPage, SessionPage } from "@web/views/SessionPage";
+import { NewSessionPage, SessionPage } from "@web/views/SessionPage";
 import {
   PluginsSection,
   SettingsDialog,
@@ -54,79 +49,38 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
     assets,
     sidebarOf,
     remember,
-    rememberProject,
+    newCwd,
     currentCwd,
     warnTokens,
     guard,
   } = ctx;
 
-  // Only a folder/project change needs fresh sidebar and explorer context.
-  // A same-folder switch preserves their existing owners and loaded pages.
-  async function navigationContext(
-    c: Context,
-    cwd: string,
-    project: string,
-    activeId?: string,
-  ) {
-    if (
-      c.req.header("X-Web-Pi-Cwd") === cwd &&
-      c.req.header("X-Web-Pi-Project") === project
-    )
-      return null;
-    const sidebar = await deps.workspace.sidebar({ remembered: project });
+  // Same-folder navigation retains the expanded tree. File requests use the
+  // displayed session header, so its authorization context still changes.
+  function navigationContext(c: Context, cwd: string, activeId?: string) {
+    if (c.req.header("X-Web-Pi-Cwd") === cwd) return null;
     return (
-      <>
-        {c.req.header("X-Web-Pi-Project") === project ? (
-          <Partial target="#sidebar-events" swap="outerHTML">
-            <SidebarEvents project={project} cwd={cwd} />
-          </Partial>
-        ) : (
-          <Partial target="#project-nav" swap="outerHTML">
-            <ProjectNav view={sidebar} activeId={activeId} cwd={cwd} />
-          </Partial>
-        )}
-        <Partial target="#project-picker" swap="outerHTML">
-          <ProjectSelect
-            view={sidebar}
-            cwd={cwd}
-            {...(deps.home === undefined ? {} : { home: deps.home })}
-          />
-        </Partial>
-        <Partial target="#explorer-section" swap="outerHTML">
-          <ExplorerSection
-            cwd={cwd}
-            {...(activeId === undefined ? {} : { sessionId: activeId })}
-          />
-        </Partial>
-      </>
+      <Partial target="#explorer-section" swap="outerHTML">
+        <ExplorerSection
+          cwd={cwd}
+          {...(activeId === undefined ? {} : { sessionId: activeId })}
+        />
+      </Partial>
     );
   }
 
-  /**
-   * The landing page. pi-web shows the chat area whenever a folder is
-   * picked, so with one to start in this is the new-session view; only
-   * without a folder does the placeholder show (AppShell.tsx L1034).
-   */
+  /** The landing page always offers a new session, including folder recovery. */
   app.get("/", async (c) => {
-    const sidebar = await sidebarOf(c);
-    const cwd = currentCwd(c, sidebar);
+    const sidebar = await sidebarOf();
+    const cwd = newCwd(c);
     const view = await deps.workspace.newSession(cwd);
     // The index is no session, so the panels and settings opened from here
     // are no session either.
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
-    if (view.available) {
-      return c.render(
-        <NewSessionPage
-          sidebar={sidebar}
-          view={view}
-          {...(deps.home === undefined ? {} : { home: deps.home })}
-        />,
-      );
-    }
     return c.render(
-      <IndexPage
+      <NewSessionPage
         sidebar={sidebar}
-        cwd={cwd}
+        view={view}
         {...(deps.home === undefined ? {} : { home: deps.home })}
       />,
     );
@@ -134,13 +88,15 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
 
   app.get("/new", async (c) => {
     const fragment = c.req.header("HX-Target") === "div#session-region";
-    const sidebar = fragment ? undefined : await sidebarOf(c);
-    const cwd = currentCwd(c, sidebar);
+    const sidebar = fragment ? undefined : await sidebarOf();
+    const cwd = newCwd(c);
     const view = await deps.workspace.newSession(cwd);
     if (!fragment) {
       if (view.available) remember(c, CWD_COOKIE, cwd);
       deleteCookie(c, SESSION_COOKIE, { path: "/" });
     }
+    if (fragment && c.req.header("HX-History-Restore-Request") !== "true")
+      c.header("HX-Push-Url", `/new?cwd=${encodeURIComponent(cwd)}`);
     const page = (
       <NewSessionPage
         sidebar={sidebar}
@@ -154,7 +110,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
       ? c.html(
           <>
             {page}
-            {await navigationContext(c, view.cwd, view.projectKey)}
+            {navigationContext(c, view.cwd)}
           </>,
         )
       : c.render(page);
@@ -167,7 +123,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
 
   /**
    * The workspace as the reader left it, optionally under an overlay: the
-   * open session, else the new-session view, else the placeholder. Settings
+   * open session, else the new-session view. Settings
    * renders through this because pi-web opens it over the live workspace
    * rather than on a page of its own (SettingsPanel.tsx).
    */
@@ -184,7 +140,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
         : await deps.workspace
             .viewSession(id, warnTokens(c))
             .catch(() => undefined);
-    const sidebar = resolved ?? (await sidebarOf(c, view?.summary.id));
+    const sidebar = resolved ?? (await sidebarOf());
     if (view) {
       const trust = await deps.workspace
         .trustStatus(view.summary.cwd)
@@ -199,22 +155,11 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
         />,
       );
     }
-    const cwd = currentCwd(c, sidebar);
-    const start = await deps.workspace.newSession(cwd);
-    if (start.available) {
-      return c.render(
-        <NewSessionPage
-          sidebar={sidebar}
-          view={start}
-          {...(deps.home === undefined ? {} : { home: deps.home })}
-          {...(overlay === undefined ? {} : { overlay })}
-        />,
-      );
-    }
+    const start = await deps.workspace.newSession(await currentCwd(c));
     return c.render(
-      <IndexPage
+      <NewSessionPage
         sidebar={sidebar}
-        cwd={cwd}
+        view={start}
         {...(deps.home === undefined ? {} : { home: deps.home })}
         {...(overlay === undefined ? {} : { overlay })}
       />,
@@ -234,16 +179,10 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
     };
     const fragment = c.req.header("HX-Target") === "div#session-region";
     const [sidebar, view] = await Promise.all([
-      fragment ? undefined : sidebarOf(c, id),
+      fragment ? undefined : sidebarOf(),
       deps.workspace.viewSession(id, options).catch(() => undefined),
     ]);
     if (!view) return c.notFound();
-    if (sidebar) rememberProject(c, sidebar);
-    // Opening a session also selects its folder, so `/new` and the settings
-    // page follow the reader from session to session.
-    if (!fragment && view.summary.cwdAvailable !== false) {
-      remember(c, CWD_COOKIE, view.summary.cwd);
-    }
     if (!fragment) remember(c, SESSION_COOKIE, id);
     const trust = await deps.workspace
       .trustStatus(view.summary.cwd)
@@ -261,12 +200,7 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
       ? c.html(
           <>
             {page}
-            {await navigationContext(
-              c,
-              view.summary.cwd,
-              projectKeyOf(view.summary),
-              id,
-            )}
+            {navigationContext(c, view.summary.cwd, id)}
           </>,
         )
       : c.render(page);
@@ -353,8 +287,8 @@ export function shellRoutes(app: WebApp, ctx: RouteContext): void {
   });
 
   app.get("/settings", async (c) => {
-    const sidebar = await sidebarOf(c, currentSessionId(c));
-    const cwd = currentCwd(c, sidebar);
+    const sidebar = await sidebarOf();
+    const cwd = await currentCwd(c);
     const available = await deps.workspace.newSession(cwd);
     const usable = available.available ? cwd : "";
     const section = resolveSection(

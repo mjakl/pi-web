@@ -65,13 +65,16 @@ fixture.
 
 The style check captures both themes, desktop/mobile conversations, the model
 popover, a subagent result, file panels, compaction, the mobile sidebar menu and
-toolbar, and a completed fake SSE turn. The existing Settings scroll check owns
-Settings capture and verifies its HTMX section swap before measuring layout. The
-style check checks for page overflow and verifies mobile input size, disabled
-Send, and hit-tested control reachability. File-panel widths are
-320/380/381/480/481/640/641/959/960/1440px; compaction widths are
-320/480/481/520/521/640/641px. Settings scroll separately checks 1440×1000,
-1024×480, 641×360, 640×360, 390×480 and 320×320 in both themes.
+toolbar, the new-session directory menu, and a completed fake SSE turn. The
+existing Settings scroll check owns Settings capture and verifies its HTMX
+section swap before measuring layout. The style check checks for page overflow
+and verifies mobile input size, disabled Send, and hit-tested control
+reachability. File-panel widths are 320/380/381/480/481/640/641/959/960/1440px;
+compaction widths are 320/480/481/520/521/640/641px. Settings scroll separately
+checks 1440×1000, 1024×480, 641×360, 640×360, 390×480 and 320×320 in both
+themes. The directory-menu check repeats the fixture's rendered folder group to
+fill the list and checks that Custom path stays reachable at 1440×1000, 390×844
+and 320×320, without inventing a separate rendering of the menu.
 
 Each surface starts in a fresh browser to avoid carrying drafts, panel state or
 streams into the next scenario. Resize checks reuse the page within a surface.

@@ -121,6 +121,44 @@ try {
     settle();
     reachable("#mobile-toolbar-more");
     capture(`${theme}-390-toolbar`);
+    // The moved directory picker must leave Custom path reachable even when
+    // its session-derived menu is long. The fixture has only one repository;
+    // repeat that rendered group to exercise overflow, not a second menu view.
+    for (const [width, height] of [
+      [1440, 1000],
+      [390, 844],
+      [320, 320],
+    ] as const) {
+      open("/new", theme, width, height);
+      browser("focus", "#project-select");
+      reachable("#project-select");
+      evaluate(`(() => {
+        if (document.querySelector('#sidebar #project-select')) throw new Error('Directory picker still in sidebar');
+        if (!document.querySelector('[data-action="send"]').disabled) throw new Error('Empty new session must not send');
+        return true;
+      })()`);
+      browser("click", "#project-select");
+      browser("wait", ".project-folder-group");
+      evaluate(`(() => {
+        const list = document.querySelector('.sidebar-project-list');
+        const group = list.querySelector('.project-folder-group');
+        for (let i = 0; i < 25; i++) {
+          const copy = group.cloneNode(true);
+          copy.querySelector('.project-folder-label').textContent = 'A-long-working-directory-name-' + i;
+          list.append(copy);
+        }
+        const filter = document.createElement('div');
+        filter.className = 'sidebar-project-filter';
+        filter.innerHTML = '<input class="menu-filter" placeholder="Filter projects…">';
+        list.before(filter);
+        return true;
+      })()`);
+      settle();
+      reachable("#sidebar-project-menu");
+      reachable('[hx-get="/workspaces/picker"]');
+      browser("focus", '[hx-get="/workspaces/picker"]');
+      capture(`${theme}-${String(width)}-directory-menu`);
+    }
     open("/sessions/tools", theme, 1440, 1000);
     browser("click", ".process-details > summary");
     browser("click", ".subagent-card > summary");

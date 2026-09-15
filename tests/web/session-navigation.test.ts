@@ -1,4 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type {
   HTMLElement,
   HTMLInputElement,
@@ -11,8 +14,11 @@ import { createWebApp } from "@web/app";
 import { htmxBrowser, type Transport } from "#/web/htmx4-browser";
 
 const browsers: Awaited<ReturnType<typeof htmxBrowser>>[] = [];
+const directories: string[] = [];
 afterEach(async () => {
   for (const browser of browsers.splice(0)) await browser.close();
+  for (const directory of directories.splice(0))
+    await rm(directory, { recursive: true, force: true });
 });
 
 async function fixture(wrap: (transport: Transport) => Transport = (t) => t) {
@@ -441,7 +447,7 @@ it("keeps the displayed URL and owner when a navigation or Back target is missin
   ).toBe("s3");
 });
 
-it("uses the selected worktree for New Session while keeping the current session open", async () => {
+it("selects a worktree on the blank composer and retains it after opening old sessions", async () => {
   const b = await fixture();
   b.world.projects.resolve = (cwd) =>
     Promise.resolve({
@@ -450,16 +456,20 @@ it("uses the selected worktree for New Session while keeping the current session
       isWorktree: cwd === "/fixture.wt",
       isTopLevel: cwd !== "/fixture.wt",
     });
-  const main = b.document.querySelector("main");
   draft(b, "session draft");
+  b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
+  await displayed(b, "");
   await b.window.eval(
-    `htmx.ajax('GET','/sidebar?project=%2Ffixture&cwd=%2Ffixture.wt',{source:'#project-select',target:'#project-nav',swap:'outerHTML'})`,
+    `htmx.ajax('GET','/new?cwd=%2Ffixture.wt',{source:'#project-select',target:'#session-region',swap:'outerHTML'})`,
   );
-  expect(b.document.querySelector("main")).toBe(main);
-  expect(text(b)).toBe("session draft");
   expect(
     b.document.querySelector("#project-select")?.getAttribute("data-cwd"),
   ).toBe("/fixture.wt");
+  click(b, "s1");
+  await displayed(b, "s1");
+  expect(text(b)).toBe("session draft");
+  expect(b.document.querySelector("#project-select")).toBeNull();
+  expect(b.document.cookie).toContain("web-pi-cwd=%2Ffixture.wt");
   b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
   await displayed(b, "");
   expect(b.document.querySelector("main")?.getAttribute("data-cwd")).toBe(
@@ -482,24 +492,26 @@ it("rejects a late folder-picker response without committing preference cookies"
   let started = false;
   let cookie: string | null | undefined;
   const b = await fixture((transport) => async (request) => {
-    if (new URL(request.url).pathname !== "/sidebar") return transport(request);
+    if (new URL(request.url).search !== "?cwd=%2Fstale")
+      return transport(request);
     started = true;
     await release.promise;
     const response = await transport(request);
     cookie = response.headers.get("Set-Cookie");
     return response;
   });
+  b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
+  await displayed(b, "");
   void b.window.eval(
-    `htmx.ajax('GET','/sidebar?project=%2Ffixture&cwd=%2Fstale',{source:'#project-select',target:'#project-nav',swap:'outerHTML'})`,
+    `htmx.ajax('GET','/new?cwd=%2Fstale',{source:'#project-select',target:'#session-region',swap:'outerHTML'})`,
   );
   await expect.poll(() => started).toBe(true);
   click(b, "s2");
   await displayed(b, "s2");
   release.resolve(undefined);
   await expect.poll(() => cookie).toBeNull();
-  expect(
-    b.document.querySelector("#project-select")?.getAttribute("data-cwd"),
-  ).toBe("/fixture");
+  expect(b.document.querySelector("#project-select")).toBeNull();
+  expect(b.document.cookie).toContain("web-pi-cwd=%2Ffixture");
   expect(
     b.document.querySelector("main")?.getAttribute("data-session-id"),
   ).toBe("s2");
@@ -588,7 +600,7 @@ it("restores folder-scoped new drafts and refreshes sidebar context on native Ba
   await displayed(b, "");
   draft(b, "new in fixture", "fixture image");
   await b.window.eval(
-    `htmx.ajax('GET','/sidebar?project=%2Fother&cwd=%2Fother',{source:'#project-select',target:'#project-nav',swap:'outerHTML'})`,
+    `htmx.ajax('GET','/new?cwd=%2Fother',{source:'#project-select',target:'#session-region',swap:'outerHTML',push:'/new?cwd=%2Fother'})`,
   );
   await expect
     .poll(() => b.document.querySelector("main")?.getAttribute("data-cwd"))
@@ -624,6 +636,111 @@ it("restores folder-scoped new drafts and refreshes sidebar context on native Ba
   expect(text(b)).toBe("new in other");
   expect(b.document.querySelector("#session-sidebar")).toBe(shell);
   expect(b.document.querySelector("#file-panel")).toBe(files);
+});
+
+it("uses the existing directory menu and custom-folder picker before creating a session", async () => {
+  const unknown = await mkdtemp(join(tmpdir(), "web-pi-new-directory-"));
+  directories.push(unknown);
+  const b = await fixture();
+  const other = b.world.store.get("s3");
+  if (!other) throw new Error("missing fixture");
+  other.summary.cwd = "/other";
+  b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
+  await displayed(b, "");
+  // happy-dom has no native popover actions; deliver the platform toggle.
+  b.window.eval(
+    `document.querySelector('#sidebar-project-menu').dispatchEvent(new Event('toggle'))`,
+  );
+  await expect
+    .poll(() => b.document.querySelector('.project-folder-row[title="/other"]'))
+    .not.toBeNull();
+  b.document
+    .querySelector<HTMLElement>('.project-folder-row[title="/other"]')
+    ?.click();
+  await expect
+    .poll(() => b.document.querySelector("main")?.getAttribute("data-cwd"))
+    .toBe("/other");
+  await displayed(b, "");
+  await expect.poll(() => b.document.cookie).toContain("web-pi-cwd=%2Fother");
+  expect(b.world.runtime.live()).toHaveLength(0);
+  b.window.eval(
+    `document.querySelector('#sidebar-project-menu').dispatchEvent(new Event('toggle'))`,
+  );
+  await expect
+    .poll(() => b.document.querySelector('[hx-get="/workspaces/picker"]'))
+    .not.toBeNull();
+  b.document
+    .querySelector<HTMLElement>('[hx-get="/workspaces/picker"]')
+    ?.click();
+  await expect
+    .poll(() => b.document.querySelector("#directory-picker"))
+    .not.toBeNull();
+  await b.window.eval(
+    `htmx.ajax('POST','/workspaces/validate',{source:'#directory-picker',values:{cwd:${JSON.stringify(unknown)}},swap:'none'})`,
+  );
+  await expect
+    .poll(() => b.document.querySelector("main")?.getAttribute("data-cwd"))
+    .toBe(unknown);
+  await displayed(b, "");
+  expect(b.document.querySelector("#directory-picker")).toBeNull();
+  expect(
+    b.document.querySelector("#project-select")?.getAttribute("title"),
+  ).toBe(unknown);
+  await expect
+    .poll(() =>
+      b.document.querySelector("#composer")?.hasAttribute("data-htmx-powered"),
+    )
+    .toBe(true);
+  draft(b, "create in the chosen folder");
+  b.document.querySelector<HTMLFormElement>("#composer")?.requestSubmit();
+  await displayed(b, "new-1");
+  expect((await b.workspace.row("new-1"))?.summary.cwd).toBe(unknown);
+});
+
+it("retains progressively loaded global rows across cross-directory navigation", async () => {
+  const b = await fixture();
+  for (let i = 0; i < 65; i += 1) {
+    const id = `page-${String(i)}`;
+    b.world.store.set(id, {
+      summary: {
+        id,
+        cwd: `/folder-${String(i % 4)}`,
+        name: id,
+        createdAt: "2020-01-01",
+        modifiedAt: `2020-01-${String(i + 1).padStart(2, "0")}`,
+        fileSize: 0,
+      },
+      entries: [],
+    });
+  }
+  await b.window.eval(
+    `htmx.ajax('GET','/sidebar',{source:'#sidebar-refresh',target:'#session-nav',swap:'outerHTML'})`,
+  );
+  expect(
+    b.document.querySelectorAll("#session-list .session-row"),
+  ).toHaveLength(50);
+  const sentinel = b.document.querySelector(".session-rows-loading");
+  const url = sentinel?.getAttribute("hx-get");
+  expect(url).toBe("/sidebar/rows?after=50");
+  await b.window.eval(
+    `htmx.ajax('GET',${JSON.stringify(url)},{source:'.session-rows-loading',target:'.session-rows-loading',swap:'outerHTML'})`,
+  );
+  expect(
+    b.document.querySelectorAll("#session-list .session-row"),
+  ).toHaveLength(68);
+  const list = b.document.querySelector("#session-list");
+  const stream = b.document.querySelector("#sidebar-events");
+  click(b, "page-0");
+  await displayed(b, "page-0");
+  expect(
+    b.document.querySelectorAll("#session-list .session-row"),
+  ).toHaveLength(68);
+  expect(b.document.querySelector("#session-list")).toBe(list);
+  expect(b.document.querySelector("#sidebar-events")).toBe(stream);
+  expect(selected(b, "page-0")).toBe(true);
+  expect(
+    b.document.querySelector("#file-explorer")?.getAttribute("data-cwd"),
+  ).toBe("/folder-0");
 });
 
 it("does not let an old submit navigate while the reader's newer choice is loading", async () => {

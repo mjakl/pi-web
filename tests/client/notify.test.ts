@@ -73,16 +73,12 @@ describe("completion feedback", () => {
 });
 
 describe("workspace memory", () => {
-  it("remembers the open session per project", async () => {
-    await load(
-      '<button id="project-select" data-project-key="/repo/one"></button>',
-    );
-    expect(
-      JSON.parse(localStorage.getItem("web-pi:last-open-by-workspace") ?? ""),
-    ).toEqual({ "/repo/one": "s1" });
+  it("does not record the open session as a project preference", async () => {
+    await load();
+    expect(localStorage.getItem("web-pi:last-open-by-workspace")).toBeNull();
   });
 
-  it("reopens the remembered session from the index while the sidebar lists it", async () => {
+  it("leaves the blank composer open despite old per-project session memory", async () => {
     localStorage.setItem(
       "web-pi:last-open-by-workspace",
       JSON.stringify({ "/repo/one": "s9" }),
@@ -92,7 +88,7 @@ describe("workspace memory", () => {
     );
     const { setUpNotifications } = await import("@web/client/notify");
     setUpNotifications();
-    expect(location.pathname).toBe("/sessions/s9");
+    expect(location.pathname).toBe("/");
   });
 
   it("leaves a deleted session alone", async () => {

@@ -20,7 +20,7 @@ async function fixture() {
       (id, index) => ({
         summary: {
           id,
-          cwd: "/fixture",
+          cwd: `/${id}`,
           name: id,
           createdAt: "2026-09-01T00:00:00.000Z",
           modifiedAt: `2026-09-0${String(6 - index)}T00:00:00.000Z`,
@@ -35,7 +35,7 @@ async function fixture() {
   for (const id of ["first", "middle", "last"]) await workspace.activate(id);
   const app = createWebApp({
     workspace,
-    defaultCwd: "/fixture",
+    defaultCwd: "/default",
     staticRoot: "static",
   });
   const browser = await htmxBrowser(
@@ -64,132 +64,94 @@ async function fixture() {
   return { ...browser, workspace, world, app, order };
 }
 
-it.each(["session", "draft", "worktree"])(
-  "preserves sidebar context through refresh, stream updates and New Session from a %s",
-  async (mode) => {
-    const world = createFakeWorld({
-      sessions: [
-        { id: "alpha", cwd: "/alpha", day: "01" },
-        { id: "sibling", cwd: "/alpha.wt", day: "02" },
-        { id: "beta", cwd: "/beta", day: "03" },
-      ].map(({ id, cwd, day }) => ({
-        summary: {
-          id,
-          cwd,
-          name: id,
-          fileSize: 0,
-          createdAt: "2026-09-01T00:00:00.000Z",
-          modifiedAt: `2026-09-${day}T00:00:00.000Z`,
-        },
-        entries: [],
-      })),
-      reply: () => "Answer",
-    });
-    world.projects.resolve = (cwd) =>
-      Promise.resolve({
-        root: cwd === "/alpha.wt" ? "/alpha" : cwd,
-        branch: null,
-        isWorktree: cwd === "/alpha.wt",
-        isTopLevel: cwd !== "/alpha.wt",
-      });
-    const workspace = createWorkspace(world);
-    const app = createWebApp({
-      workspace,
-      defaultCwd: "/beta",
-      staticRoot: "static",
-    });
-    const b = await htmxBrowser(
-      await (await app.request("/sessions/alpha")).text(),
-      (request) => {
-        // The harness does not forward cookies. Model another tab's saved
-        // preferences explicitly, so displayed-owner headers must win.
-        request.headers.set(
-          "Cookie",
-          "web-pi-project=%2Fbeta; web-pi-cwd=%2Fbeta",
-        );
-        return app.request(request);
-      },
-    );
-    browsers.push(b);
-    if (mode === "draft") {
-      b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
-      await expect.poll(() => b.window.location.pathname).toBe("/new");
-    }
-    if (mode === "worktree") {
-      await b.window.eval(
-        `htmx.ajax('GET','/sidebar?project=%2Falpha&cwd=%2Falpha.wt',{source:'#project-select',target:'#project-nav',swap:'outerHTML'})`,
-      );
-    }
-    const cwd = mode === "worktree" ? "/alpha.wt" : "/alpha";
-    const main = b.document.querySelector("main");
-    const nav = b.document.querySelector("#project-nav");
-    b.window.eval(
-      `document.querySelector('#composer-text').value='keep draft';document.querySelector('#composer-text').dispatchEvent(new Event('input',{bubbles:true}))`,
-    );
-    b.document.querySelector<HTMLButtonElement>("#sidebar-refresh")?.click();
-    await expect
-      .poll(() => b.document.querySelector("#project-nav") !== nav)
-      .toBe(true);
-    expect(b.document.querySelector("#row-alpha")).not.toBeNull();
-    expect(b.document.querySelector("#row-sibling")).not.toBeNull();
-    expect(b.document.querySelector("#row-beta")).toBeNull();
-    const stream = b.document
-      .querySelector("#sidebar-events")
-      ?.getAttribute("hx-sse:connect");
-    expect(stream).toContain("project=%2Falpha");
-    expect(stream).toContain(`cwd=${encodeURIComponent(cwd)}`);
-    await expect
-      .poll(
-        () =>
-          b.requests.filter((r) => new URL(r.url).pathname === "/events")
-            .length,
-      )
-      .toBeGreaterThan(1);
-    const picker = b.document.querySelector("#project-select");
-    await workspace.activate("beta");
-    await expect
-      .poll(() => b.document.querySelector("#project-select") !== picker)
-      .toBe(true);
-    expect(
-      b.document.querySelector("#project-select")?.getAttribute("data-cwd"),
-    ).toBe(cwd);
-    expect(b.document.querySelector("main")).toBe(main);
-    expect(
-      b.window.eval(`document.querySelector('#composer-text').value`),
-    ).toBe("keep draft");
-    b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
-    await expect
-      .poll(() => b.document.querySelector("main")?.getAttribute("data-cwd"))
-      .toBe(cwd);
-    await expect.poll(() => b.window.location.pathname).toBe("/new");
-    await expect
-      .poll(() =>
-        b.document
-          .querySelector("#composer")
-          ?.hasAttribute("data-htmx-powered"),
-      )
-      .toBe(true);
-    b.window.eval(
-      `document.querySelector('#composer-text').value='start here';document.querySelector('#composer-text').dispatchEvent(new Event('input',{bubbles:true}))`,
-    );
-    b.document.querySelector<HTMLFormElement>("#composer")?.requestSubmit();
-    await expect
-      .poll(
-        () =>
-          b.document.querySelector("main")?.getAttribute("data-session-id") ??
-          "",
-      )
-      .not.toBe("");
-    const id = b.document
-      .querySelector("main")
-      ?.getAttribute("data-session-id");
-    if (!id) throw new Error("New session did not open");
-    expect((await workspace.row(id))?.summary.cwd).toBe(cwd);
-  },
-);
+it("keeps the global list and stream across directories while explorer and new-session preference stay independent", async () => {
+  const b = await fixture();
+  b.document.cookie = "web-pi-cwd=%2Fchosen";
+  const nav = b.document.querySelector("#session-nav");
+  const stream = b.document.querySelector("#sidebar-events");
+  b.document.querySelector<HTMLElement>("#row-middle a")?.click();
+  await expect
+    .poll(() =>
+      b.document.querySelector("main")?.getAttribute("data-session-id"),
+    )
+    .toBe("middle");
+  await expect
+    .poll(() =>
+      b.document.querySelector("#file-explorer")?.getAttribute("data-cwd"),
+    )
+    .toBe("/middle");
+  expect(b.document.querySelector("#session-nav")).toBe(nav);
+  expect(b.document.querySelector("#sidebar-events")).toBe(stream);
+  expect(b.document.querySelector("#project-select")).toBeNull();
+  expect(b.document.cookie).toContain("web-pi-cwd=%2Fchosen");
+  expect(
+    b.document.querySelector("#file-panel")?.getAttribute("data-cwd"),
+  ).toBe("/middle");
+  expect(
+    b.document.querySelector("#file-explorer")?.getAttribute("hx-get"),
+  ).toBe("/files/explorer?session=middle");
+
+  b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
+  await expect.poll(() => b.window.location.pathname).toBe("/new");
+  expect(b.document.querySelector("main")?.getAttribute("data-cwd")).toBe(
+    "/chosen",
+  );
+  expect(
+    b.document.querySelector("#project-select")?.getAttribute("data-cwd"),
+  ).toBe("/chosen");
+  expect(b.document.querySelector("#session-nav")).toBe(nav);
+  expect(b.document.querySelector("#sidebar-events")).toBe(stream);
+  expect(b.world.runtime.live()).toHaveLength(3);
+  await expect
+    .poll(() =>
+      b.document.querySelector("#composer")?.hasAttribute("data-htmx-powered"),
+    )
+    .toBe(true);
+  b.window.eval(
+    `document.querySelector('#composer-text').value='first message';document.querySelector('#composer-text').dispatchEvent(new Event('input',{bubbles:true}))`,
+  );
+  b.document.querySelector<HTMLFormElement>("#composer")?.requestSubmit();
+  await expect
+    .poll(() =>
+      b.document.querySelector("main")?.getAttribute("data-session-id"),
+    )
+    .toBe("new-1");
+  expect((await b.workspace.row("new-1"))?.summary.cwd).toBe("/chosen");
+  expect(b.document.querySelector("#project-select")).toBeNull();
+  // An existing session's form cannot move it, even if a caller supplies cwd.
+  await b.app.request("/sessions/middle/prompt", {
+    method: "POST",
+    body: new URLSearchParams({ cwd: "/wrong", text: "stay here" }),
+  });
+  expect((await b.workspace.row("middle"))?.summary.cwd).toBe("/middle");
+});
+
+it("reorders already-live sessions on turn start in another directory and after abort", async () => {
+  const b = await fixture();
+  const main = b.document.querySelector("main");
+  await b.workspace.send("last", "wait for confirmation");
+  await expect.poll(() => b.order()[0]).toBe("last");
+  expect(
+    b.document
+      .querySelector("#row-last .session-indicator")
+      ?.getAttribute("data-status"),
+  ).toBe("Agent running…");
+  await b.workspace.abort("last");
+  await expect
+    .poll(() =>
+      b.document
+        .querySelector("#row-last .session-indicator")
+        ?.getAttribute("data-status"),
+    )
+    .toBe("Session active");
+  expect(b.document.querySelector("main")).toBe(main);
+  expect(b.order().indexOf("last")).toBeLessThan(
+    b.order().indexOf("newer-stopped"),
+  );
+});
 
 it.each(["row action", "runtime stop"])(
-  "moves a stopped session below live sessions after %s",
+  "moves a stopped session below all directories' live sessions after %s",
   async (source) => {
     const b = await fixture();
     if (source === "row action") {
@@ -198,16 +160,7 @@ it.each(["row action", "runtime stop"])(
       );
       if (!stop) throw new Error("missing stop action");
       stop.click();
-    } else {
-      await b.workspace.stop("middle");
-    }
-    await expect
-      .poll(() =>
-        b.document
-          .querySelector("#row-middle .session-indicator")
-          ?.getAttribute("data-status"),
-      )
-      .toBe("Session stopped");
+    } else await b.workspace.stop("middle");
     await expect
       .poll(b.order)
       .toEqual(["first", "last", "newer-stopped", "middle", "older-stopped"]);
@@ -218,22 +171,39 @@ it.each(["row action", "runtime stop"])(
   },
 );
 
-it("keeps an aborted turn's session live rather than moving it into the stopped group", async () => {
+it("refreshes the global list without changing the blank draft or selected directory", async () => {
   const b = await fixture();
-  await b.app.request("/sessions/middle/prompt", {
-    method: "POST",
-    body: new URLSearchParams({ text: "wait for confirmation" }),
-  });
-  await b.app.request("/sessions/middle/abort", { method: "POST" });
-  await expect
-    .poll(() =>
-      b.document
-        .querySelector("#row-middle .session-indicator")
-        ?.getAttribute("data-status"),
-    )
-    .toBe("Session active");
-  expect(b.world.runtime.get("middle")).toBeDefined();
-  expect(b.order().indexOf("middle")).toBeLessThan(
-    b.order().indexOf("newer-stopped"),
+  b.document.querySelector<HTMLElement>("a[data-session-link]")?.click();
+  await expect.poll(() => b.window.location.pathname).toBe("/new");
+  const main = b.document.querySelector("main");
+  const picker = b.document.querySelector("#project-select");
+  const nav = b.document.querySelector("#session-nav");
+  b.window.eval(
+    `document.querySelector('#composer-text').value='keep draft';document.querySelector('#composer-text').dispatchEvent(new Event('input',{bubbles:true}))`,
   );
+  b.document.querySelector<HTMLButtonElement>("#sidebar-refresh")?.click();
+  await expect
+    .poll(() => b.document.querySelector("#session-nav") !== nav)
+    .toBe(true);
+  await expect
+    .poll(
+      () =>
+        b.requests.filter((r) => new URL(r.url).pathname === "/events").length,
+    )
+    .toBeGreaterThan(1);
+  await b.workspace.activate("older-stopped");
+  await expect
+    .poll(
+      () =>
+        b.order().indexOf("older-stopped") < b.order().indexOf("newer-stopped"),
+    )
+    .toBe(true);
+  expect(b.document.querySelector("main")).toBe(main);
+  expect(b.document.querySelector("#project-select")).toBe(picker);
+  expect(b.window.eval(`document.querySelector('#composer-text').value`)).toBe(
+    "keep draft",
+  );
+  expect(
+    b.document.querySelector("#sidebar-events")?.getAttribute("hx-sse:connect"),
+  ).toBe("/events");
 });

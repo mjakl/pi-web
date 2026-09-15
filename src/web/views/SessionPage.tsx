@@ -26,7 +26,7 @@ import {
   WrenchIcon,
 } from "./icons.tsx";
 import { Transcript } from "./Transcript.tsx";
-import { Sidebar } from "./Sidebar.tsx";
+import { Sidebar, ProjectSelect } from "./Sidebar.tsx";
 import {
   compactDisabled,
   CompactButton,
@@ -322,7 +322,6 @@ export function Shell({
   settledCursor,
   cwd,
   cwdAvailable,
-  home,
   usage,
   tokens,
   trust,
@@ -402,7 +401,6 @@ export function Shell({
             view={sidebar}
             {...(activeId === undefined ? {} : { activeId })}
             {...(cwd === undefined ? {} : { cwd })}
-            {...(home === undefined ? {} : { home })}
           />
         )}
       </div>
@@ -475,32 +473,6 @@ function FilePanel({ sessionId, cwd }: { sessionId?: string; cwd?: string }) {
   );
 }
 
-export function IndexPage({
-  sidebar,
-  cwd,
-  home,
-  overlay,
-}: {
-  sidebar: SidebarView;
-  cwd?: string;
-  home?: string;
-  overlay?: unknown;
-}) {
-  return (
-    <Shell
-      sidebar={sidebar}
-      {...(cwd === undefined ? {} : { cwd })}
-      {...(home === undefined ? {} : { home })}
-      {...(overlay === undefined ? {} : { overlay })}
-    >
-      {/* §2.5: nothing selected yet — the arrow points at the sidebar. */}
-      <div class="shell-empty-session">
-        Select a session to view the conversation
-      </div>
-    </Shell>
-  );
-}
-
 export function NewSessionPage({
   sidebar,
   fragment,
@@ -537,6 +509,15 @@ export function NewSessionPage({
                     <span aria-hidden="true">π</span>
                     <span>web-pi</span>
                   </h1>
+                  <div class="new-session-directory">
+                    <span class="new-session-directory-label">
+                      Working directory
+                    </span>
+                    <ProjectSelect
+                      cwd={view.cwd}
+                      {...(home === undefined ? {} : { home })}
+                    />
+                  </div>
                 </header>
               </div>
             </div>

@@ -53,17 +53,13 @@ function row(id: string, extra: Partial<SessionSummary> = {}): string {
   );
 }
 
-function page(
-  options: { current?: string; rows?: string[]; project?: string } = {},
-): void {
+function page(options: { current?: string; rows?: string[] } = {}): void {
   const rows = (options.rows ?? ["s1", "s2"]).map((id) => row(id)).join("");
   mount(
     `<main data-session-id="${options.current ?? ""}"></main>` +
       `<aside id="sidebar">` +
       `<button type="button" class="new-session-shortcut" hidden></button>` +
       `<span class="new-session-plus">+</span>` +
-      `<button type="button" id="project-select" data-project-key="${options.project ?? "/repo/one"}">` +
-      `<span id="project-activity" hidden></span></button>` +
       `<div id="sidebar-project-menu"></div>` +
       `<div id="session-list">${rows}</div>` +
       `<div id="sidebar-stream"></div>` +
@@ -240,7 +236,7 @@ describe("unread sessions", () => {
       false,
     );
     expect(JSON.parse(localStorage.getItem("web-pi:unread") ?? "{}")).toEqual({
-      s2: "/repo/one",
+      s2: "",
     });
   });
 
@@ -280,43 +276,20 @@ describe("unread sessions", () => {
     );
   });
 
-  it("lights the project dot for activity in another project", async () => {
-    page({ project: "/repo/one" });
+  it("marks a completion from an unloaded directory when its row arrives", async () => {
+    page({ current: "s1" });
     const { setUpSidebar } = await load();
     setUpSidebar();
     finished("elsewhere", "/repo/two");
-    expect(byId("project-activity").hidden).toBe(false);
-  });
-
-  it("counts unread sessions on the project rows", async () => {
-    localStorage.setItem(
-      "web-pi:unread",
-      JSON.stringify({ a: "/repo/two", b: "/repo/two", c: "/repo/one" }),
+    byId("session-list").insertAdjacentHTML(
+      "beforeend",
+      row("elsewhere", { cwd: "/repo/two" }),
     );
-    page({ project: "/repo/one" });
-    byId("sidebar-project-menu").innerHTML =
-      '<div class="project-folder-group" data-project-key="/repo/two">' +
-      '<span class="project-activity" hidden><span class="project-unread" hidden><span class="project-unread-count"></span></span></span></div>' +
-      '<div class="project-folder-group" data-project-key="/repo/three">' +
-      '<span class="project-activity" hidden><span class="project-unread" hidden><span class="project-unread-count"></span></span></span></div>';
-    const { setUpSidebar } = await load();
-    setUpSidebar();
-    const two = query('[data-project-key="/repo/two"]');
+    htmxEvent(byId("row-elsewhere"), "htmx:after:settle");
     expect(
-      two.querySelector<HTMLElement>(".project-unread-count")?.textContent,
-    ).toBe("2");
-    expect(two.querySelector<HTMLElement>(".project-unread")?.hidden).toBe(
-      false,
-    );
-    expect(
-      two
-        .querySelector<HTMLElement>(".project-unread")
-        ?.getAttribute("aria-label"),
-    ).toBe("New session activity (2)");
-    const three = query('[data-project-key="/repo/three"]');
-    expect(three.querySelector<HTMLElement>(".project-activity")?.hidden).toBe(
-      true,
-    );
+      indicator("elsewhere").classList.contains("session-indicator-unread"),
+    ).toBe(true);
+    expect(query("#row-elsewhere .session-row-folder").title).toBe("/repo/two");
   });
 });
 

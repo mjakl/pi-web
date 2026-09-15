@@ -353,7 +353,7 @@ export type LiveSession = {
  * that notifications key off, and never fires for a stop or a shell command.
  */
 export type RuntimeEvent = {
-  type: "opened" | "finished" | "completed" | "stopped";
+  type: "opened" | "started" | "finished" | "completed" | "stopped";
   sessionId: string;
 };
 

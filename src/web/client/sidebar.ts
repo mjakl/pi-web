@@ -7,9 +7,7 @@ import { relativeTime } from "@core/sessions";
 import { setUpRegion } from "./lifecycle.ts";
 import { setUpFolderMemory } from "./preferences.ts";
 
-// Which sessions finished a turn while the reader was looking elsewhere, and
-// the project each belongs to: the sidebar shows one project at a time, so a
-// completion elsewhere can only show up as a badge on that project.
+// Keep the existing stored map readable; project values no longer affect dots.
 const UNREAD_KEY = "web-pi:unread";
 
 function unreadIds(): Map<string, string> {
@@ -64,36 +62,6 @@ function paintUnread(): void {
     indicator.title = label;
     indicator.setAttribute("aria-label", label);
   }
-  const shown =
-    document.getElementById("project-select")?.dataset["projectKey"] ?? "";
-  // The project rows are only in the DOM once the menu has been opened, so
-  // the dot on the closed pill comes from the unread map itself.
-  const dot = document.getElementById("project-activity");
-  if (dot && [...ids.values()].some((key) => key !== "" && key !== shown)) {
-    dot.hidden = false;
-  }
-  for (const group of document.querySelectorAll<HTMLElement>(
-    ".project-folder-group[data-project-key]",
-  )) {
-    const key = group.dataset["projectKey"] ?? "";
-    const count = [...ids.values()].filter((project) => project === key).length;
-    const wrapper = group.querySelector<HTMLElement>(".project-activity");
-    const badge = group.querySelector<HTMLElement>(".project-unread");
-    const number = group.querySelector<HTMLElement>(".project-unread-count");
-    if (!wrapper || !badge || !number) continue;
-    // The wrapper is what the label's flex space is measured against, so it
-    // stays out of the layout entirely while a project is quiet.
-    const running = group.querySelector(".project-running") !== null;
-    wrapper.hidden = !running && count === 0;
-    badge.hidden = count === 0;
-    if (count === 0) {
-      number.textContent = "";
-      badge.removeAttribute("aria-label");
-      continue;
-    }
-    number.textContent = String(count);
-    badge.setAttribute("aria-label", `New session activity (${String(count)})`);
-  }
 }
 
 function setUpUnread(): void {
@@ -102,11 +70,11 @@ function setUpUnread(): void {
     if (ids.delete(currentSessionId())) storeUnread(ids);
     paintUnread();
   });
-  // The global stream announces the id and project of each finished session.
+  // The global stream announces every finished session, including unloaded rows.
   document.addEventListener("finished", (event) => {
     const text = (event as CustomEvent<{ data?: unknown }>).detail?.data;
     if (typeof text !== "string") return;
-    let finished: { id?: string; project?: string } = {};
+    let finished: { id?: string } = {};
     try {
       finished = JSON.parse(text) as typeof finished;
     } catch {
@@ -116,7 +84,7 @@ function setUpUnread(): void {
     const id = finished.id;
     if (!id || id === currentSessionId()) return;
     const pending = unreadIds();
-    pending.set(id, finished.project ?? "");
+    pending.set(id, "");
     storeUnread(pending);
     paintUnread();
   });

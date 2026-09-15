@@ -18,12 +18,10 @@ import {
   type SessionStats,
 } from "@core/session-entries";
 import {
-  projectKeyOf,
+  compareSessions,
   recentProjects,
-  selectedProject,
   type SessionRowMetadata,
   type SessionSummary,
-  sessionsForProject,
 } from "@core/sessions";
 import {
   assistantItem,
@@ -282,6 +280,17 @@ export function sessionUseCases({
     return { summary, metadata: found.metadata };
   }
 
+  async function listedSessions(): Promise<SessionSummary[]> {
+    const stored = await deps.sessions.list();
+    const known = new Set(stored.map((session) => session.id));
+    // Pi may not have flushed a new runtime's first reply yet.
+    const unflushed = deps.runtime
+      .live()
+      .filter((live) => !known.has(live.id))
+      .map((live) => live.snapshot().summary);
+    return decorate([...stored, ...unflushed]);
+  }
+
   return {
     viewSession,
     row,
@@ -294,35 +303,14 @@ export function sessionUseCases({
       return read && lastAssistantText(read.branch);
     },
 
-    /**
-     * The whole sidebar: the projects to choose from, and the sessions of the
-     * chosen one. `activeId` wins over the remembered choice, so opening a
-     * session always shows the project it belongs to.
-     */
-    async sidebar(
-      options: { remembered?: string; activeId?: string; offset?: number } = {},
-    ): Promise<SidebarView> {
-      const stored = await deps.sessions.list();
-      const known = new Set(stored.map((session) => session.id));
-      // A session Pi has not flushed yet has no file to list; its row comes
-      // from the runtime, or the list would miss it until the turn ends.
-      const unflushed = deps.runtime
-        .live()
-        .filter((live) => !known.has(live.id))
-        .map((live) => live.snapshot().summary);
-      const all = await decorate([...stored, ...unflushed]);
-      const projects = recentProjects(all);
-      const open =
-        options.activeId === undefined
-          ? undefined
-          : all.find((session) => session.id === options.activeId);
-      const selected = selectedProject(projects, {
-        ...(open ? { active: projectKeyOf(open) } : {}),
-        ...(options.remembered === undefined
-          ? {}
-          : { remembered: options.remembered }),
-      });
-      const sessions = sessionsForProject(all, selected);
+    /** Existing session-derived directory choices, fetched only on opening. */
+    async projects() {
+      return recentProjects(await listedSessions());
+    },
+
+    /** One global page; only these rows load transcript metadata. */
+    async sidebar(options: { offset?: number } = {}): Promise<SidebarView> {
+      const sessions = (await listedSessions()).sort(compareSessions);
       const offset = options.offset ?? 0;
       const next = offset + 50;
       const page = await Promise.all(
@@ -334,14 +322,8 @@ export function sessionUseCases({
         }),
       );
       return {
-        projects,
         rows: page.filter((found) => found !== undefined),
         ...(next < sessions.length ? { nextOffset: next } : {}),
-        ...(selected === undefined ? {} : { selected }),
-        sessions,
-        activityElsewhere: projects.some(
-          (project) => project.key !== selected && project.running > 0,
-        ),
       };
     },
 

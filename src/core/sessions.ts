@@ -36,30 +36,15 @@ export type SessionRowMetadata = {
 /** One project in the workspace selector, with the activity it holds. */
 export type ProjectEntry = {
   key: string;
-  label: string;
   /** Newest session of the project: the selector's order. */
   modifiedAt: string;
   running: number;
   /**
-   * The folder to probe for worktrees: the newest session's own, which is a
-   * checkout that still exists more often than the repository root is.
-   */
-  entryPath: string;
-  /**
-   * The working folders of this project, newest first. Taken from the
-   * sessions themselves rather than from `git worktree list`: the selector
-   * opens with every project expanded at once, and a git call per project is
-   * hundreds of processes for a list the store already knows.
+   * Working folders in path order, derived from session headers rather than
+   * a Git scan for each repository.
    */
   folders: { path: string; branch: string | null }[];
 };
-
-function projectLabel(root: string): string {
-  const parts = root.split(/[\\/]/).filter(Boolean);
-  return parts.length >= 2
-    ? `${parts.at(-2) ?? ""}/${parts.at(-1) ?? ""}`
-    : (parts.at(-1) ?? root);
-}
 
 /** Sessions group by the git top level of their folder, else by the folder. */
 export function projectKeyOf(session: SessionSummary): string {
@@ -93,15 +78,12 @@ export function recentProjects(
     const key = projectKeyOf(session);
     const entry = byKey.get(key) ?? {
       key,
-      label: projectLabel(key),
       modifiedAt: session.modifiedAt,
       running: 0,
-      entryPath: session.cwd,
       folders: [],
     };
     if (session.modifiedAt >= entry.modifiedAt) {
       entry.modifiedAt = session.modifiedAt;
-      entry.entryPath = session.cwd;
     }
     if (session.running) entry.running += 1;
     if (!entry.folders.some((folder) => folder.path === session.cwd)) {
@@ -118,32 +100,6 @@ export function recentProjects(
   return [...byKey.values()].sort((a, b) =>
     b.modifiedAt.localeCompare(a.modifiedAt),
   );
-}
-
-/**
- * Which project the sidebar shows: the one the open session belongs to, else
- * the remembered choice while it still exists, else the most recent.
- */
-export function selectedProject(
-  projects: readonly ProjectEntry[],
-  options: { active?: string; remembered?: string } = {},
-): string | undefined {
-  if (options.active !== undefined) return options.active;
-  const remembered = options.remembered;
-  if (remembered !== undefined && projects.some((p) => p.key === remembered)) {
-    return remembered;
-  }
-  return projects[0]?.key;
-}
-
-/** The visible list: one project's own sessions, in sidebar order. */
-export function sessionsForProject(
-  sessions: readonly SessionSummary[],
-  key: string | undefined,
-): SessionSummary[] {
-  return sessions
-    .filter((session) => key === undefined || projectKeyOf(session) === key)
-    .sort(compareSessions);
 }
 
 /** Row title: the name, else the start of the first message, else the id. */

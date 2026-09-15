@@ -912,7 +912,11 @@ export function createPiAgentRuntime(options: {
         else resetIdle();
       }, draftIdleMs).unref();
     };
+    let wasBusy = wrapper.busy;
     wrapper.subscribe((event) => {
+      const busy = wrapper.busy;
+      if (busy && !wasBusy) announce({ type: "started", sessionId: id });
+      wasBusy = busy;
       if (event.type === "turn_done") {
         announce({ type: "finished", sessionId: id });
       }

@@ -46,7 +46,7 @@ function deferredUrl(page: string): string {
 }
 
 describe("web app", () => {
-  it("lists stored sessions grouped by project", async () => {
+  it("lists stored sessions with their working folders", async () => {
     const { app } = testApp();
     const res = await app.request("/");
     const html = await res.text();
@@ -90,7 +90,7 @@ describe("web app", () => {
     expect(html).toContain("panel-resize-handle sidebar-resize-handle");
     expect(html).toContain("sidebar-overlay-backdrop");
     expect(html).toContain('class="sidebar-brand">web-pi</span>');
-    expect(html).toMatch(/class="[^"]*\banchor-sidebar-project\b[^"]*"/);
+    expect(html).not.toContain('id="project-select"');
     expect(html).toContain('id="session-list"');
     expect(html).toContain('id="explorer-section"');
     // Top bar: pi-web's order of controls.
@@ -344,7 +344,7 @@ describe("web app", () => {
       world.store.set(id, {
         summary: {
           id,
-          cwd: "/repo/one",
+          cwd: `/repo/folder-${String(index % 7)}`,
           createdAt: "2026-08-01T00:00:00.000Z",
           modifiedAt: `2026-08-01T00:${String(index).padStart(2, "0")}:00.000Z`,
           fileSize: 1,
@@ -368,6 +368,7 @@ describe("web app", () => {
     metadata.mockClear();
     const sentinel = /hx-get="([^"]*\/sidebar\/rows[^"]*)"/.exec(page)?.[1];
     expect(sentinel).toContain("after=50");
+    expect(sentinel).not.toContain("project=");
     expect(page).toContain("Loading more sessions…");
     // Only the sentinel fetches more; each returned row is complete.
     const next = await (
@@ -376,6 +377,9 @@ describe("web app", () => {
     expect(next.match(/class="session-row(?: [^"]*)?"/g)).toHaveLength(11);
     expect(metadata).toHaveBeenCalledTimes(11);
     expect(next).toContain("prompt p0");
+    expect(next).toContain(
+      'class="session-row-folder" title="/repo/folder-0">folder-0<',
+    );
     expect(next).toContain("1 msgs");
     expect(next).not.toContain('hx-get="/sessions/p0/row"');
     expect(next).not.toContain('hx-trigger="intersect once"');
@@ -560,7 +564,7 @@ describe("web app", () => {
       method: "POST",
       headers: { "HX-Current-URL": "http://localhost/sessions/s1" },
     });
-    expect(res.headers.get("hx-redirect")).toBe("/");
+    expect(res.headers.get("hx-redirect")).toBe("/new");
     expect(world.store.has("s1")).toBe(false);
   });
 
@@ -827,17 +831,14 @@ describe("web app", () => {
       received += decoder.decode(chunk.value);
     }
     await reader.cancel();
-    // Opening the session re-renders the list; finishing swaps just its row.
+    // Lifecycle changes re-sort the global page, without replacing the picker.
     expect(received).toContain(
-      'data: <hx-partial hx-target="#row-s1" hx-swap="outerHTML">',
+      'data: <hx-partial hx-target="#session-list" hx-swap="innerHTML">',
     );
-    expect(received).toContain(
-      '<hx-partial hx-target="#project-picker" hx-swap="outerHTML">',
-    );
+    expect(received).not.toContain('hx-target="#project-picker"');
     expect(received).not.toContain("event: rows");
     expect(received).toContain('id="row-s1"');
-    // The finished marker names the project, so the selector can badge it.
-    expect(received).toContain('data: {"id":"s1","project":"/repo/one"}');
+    expect(received).toContain('data: {"id":"s1"}');
   });
 
   it("lists a session Pi has not written to disk yet", async () => {
@@ -890,7 +891,7 @@ describe("web app", () => {
     expect(row).toContain('data-status="Agent running…"');
   });
 
-  it("keeps the stream on the project the page shows", async () => {
+  it("streams activity from every directory even with old project queries and cookies", async () => {
     // A dialog never answered here: the session in the other project stays
     // running while the stream is read.
     const { app, world } = testApp({
@@ -908,16 +909,13 @@ describe("web app", () => {
       entries: [userEntry("v1", null, "second project")],
     });
 
-    // The page names its project in the stream URL, so a newer project
-    // elsewhere cannot pull the stream away from what is on screen.
+    // Old project cookies and stream URLs cannot scope the global list.
     const page = await (
       await app.request("/", {
         headers: { cookie: "web-pi-project=/repo/one" },
       })
     ).text();
-    expect(page).toContain(
-      'hx-sse:connect="/events?project=%2Frepo%2Fone&amp;cwd=%2Frepo%2Fone"',
-    );
+    expect(page).toContain('hx-sse:connect="/events"');
     expect(page).not.toContain("sse-swap=");
     expect(page).not.toContain('hx-ext="sse"');
     expect(page).not.toContain("hx-params=");
@@ -931,18 +929,18 @@ describe("web app", () => {
 
     let received = "";
     const decoder = new TextDecoder();
-    while (!received.includes('id="project-picker"')) {
+    while (!received.includes('data-status="Agent running…"')) {
       const chunk = await reader.read();
       if (chunk.done) break;
       received += decoder.decode(chunk.value);
     }
     await reader.cancel();
-    // A session running in the other project lights the dot on the closed
-    // selector; hidden would mean the stream followed the newest project.
-    expect(received).toMatch(/id="project-activity"(?![^>]*hidden)/);
+    expect(received).toContain('id="row-s2"');
+    expect(received).toContain('id="row-s1"');
+    expect(received).not.toContain('id="project-picker"');
   });
 
-  it("scopes the sidebar to one project and remembers the choice", async () => {
+  it("keeps the sidebar global on pages, refreshes and old project URLs", async () => {
     const { app, world } = testApp();
     world.store.set("s2", {
       summary: {
@@ -956,83 +954,58 @@ describe("web app", () => {
       entries: [userEntry("v1", null, "second project")],
     });
 
-    // The newest project wins with nothing remembered.
     const first = await (await app.request("/")).text();
     expect(first).toContain('href="/sessions/s2"');
-    expect(first).not.toContain('href="/sessions/s1"');
+    expect(first).toContain('href="/sessions/s1"');
 
-    // Choosing a project sets the cookie and answers with the whole nav.
     const chosen = await app.request("/sidebar?project=%2Frepo%2Fone");
-    expect(chosen.headers.get("set-cookie")).toContain("web-pi-project=");
+    expect(chosen.headers.get("set-cookie")).toBeNull();
     const nav = await chosen.text();
-    expect(nav).toContain('id="project-nav"');
+    expect(nav).toContain('id="session-nav"');
     expect(nav).toContain('href="/sessions/s1"');
-    expect(nav).not.toContain('href="/sessions/s2"');
+    expect(nav).toContain('href="/sessions/s2"');
     expect(nav).toContain("Stored one");
     expect(nav).toContain("2 msgs");
     expect(nav).not.toContain('hx-get="/sessions/s1/row"');
 
-    // Opening a session of the other project selects that project again.
+    // Opening a different directory changes context, not list visibility.
     const page = await (
       await app.request("/sessions/s2", {
         headers: { cookie: "web-pi-project=/repo/one" },
       })
     ).text();
     expect(page).toContain('href="/sessions/s2"');
-    expect(page).not.toContain('href="/sessions/s1"');
+    expect(page).toContain('href="/sessions/s1"');
   });
 
-  it("closes the open session when the selector moves to another project", async () => {
-    const { app, world } = testApp();
-    world.store.set("s2", {
-      summary: {
-        id: "s2",
-        cwd: "/repo/two",
-        name: "Other project",
-        createdAt: "2026-09-03T00:00:00.000Z",
-        modifiedAt: "2026-09-03T00:00:00.000Z",
-        fileSize: 2,
-      },
-      entries: [userEntry("v1", null, "second project")],
-    });
-    // Opening a session selects its project and remembers the session.
-    const opened = await app.request("/sessions/s1");
-    const remembered = opened.headers.getSetCookie().join(" ");
-    expect(remembered).toContain("web-pi-project=%2Frepo%2Fone");
-    expect(remembered).toContain("web-pi-session=s1");
-
-    // Another project's folder: the session closes, as it does in pi-web,
-    // and the reader lands on the new-session view under that project.
-    const onSession = {
-      "HX-Current-URL": "http://x/sessions/s1",
-      cookie: "web-pi-session=s1; web-pi-project=/repo/one",
+  it("keeps new-session preference separate from direct session and settings context", async () => {
+    const { app } = testApp();
+    const headers = {
+      cookie: "web-pi-cwd=%2Frepo%2Ftwo; web-pi-project=%2Fobsolete",
     };
-    const switched = await app.request("/sidebar?project=%2Frepo%2Ftwo", {
-      headers: onSession,
-    });
-    expect(switched.headers.get("hx-redirect")).toBe("/");
-    const cookies = switched.headers.getSetCookie().join(" ");
-    expect(cookies).toContain("web-pi-session=;");
-    expect(cookies).toContain("web-pi-project=%2Frepo%2Ftwo");
-
-    // Settings opened from there shows that project and closes back to it,
-    // rather than to the session that was open before the switch.
+    const opened = await app.request("/sessions/s1", { headers });
+    expect(opened.headers.getSetCookie().join(" ")).toContain(
+      "web-pi-session=s1",
+    );
+    expect(opened.headers.getSetCookie().join(" ")).not.toContain(
+      "web-pi-cwd=",
+    );
+    expect(opened.headers.getSetCookie().join(" ")).not.toContain(
+      "web-pi-project=",
+    );
+    const page = await opened.text();
+    expect(page).toContain('data-cwd="/repo/one"');
+    expect(page).not.toContain('id="project-select"');
     const settings = await (
-      await app.request("/settings?section=general", {
-        headers: { cookie: "web-pi-project=/repo/two" },
+      await app.request("/settings?section=skills", {
+        headers: { cookie: `${headers.cookie}; web-pi-session=s1` },
       })
     ).text();
-    expect(settings).toContain('href="/sessions/s2"');
-    expect(settings).not.toContain('href="/sessions/s1"');
-    expect(settings).toContain('data-close-href="/"');
-
-    // Another folder of the session's own project keeps it open.
-    const worktree = await app.request(
-      "/sidebar?project=%2Frepo%2Fone&cwd=%2Frepo%2Fone.wt",
-      { headers: onSession },
-    );
-    expect(worktree.headers.get("hx-redirect")).toBeNull();
-    expect(await worktree.text()).toContain('id="project-nav"');
+    expect(settings).toContain('data-close-href="/sessions/s1"');
+    expect(settings).toContain('value="/repo/one"');
+    const blank = await (await app.request("/new", { headers })).text();
+    expect(blank).toContain('name="cwd" value="/repo/two"');
+    expect(blank).toContain('id="project-select"');
   });
 
   it("lists subagent runs inline, as pi-web does", async () => {
@@ -1166,7 +1139,7 @@ function sidebarApp() {
 }
 
 describe("the sidebar", () => {
-  it("renders pi-web's header block above the workspace pill", async () => {
+  it("renders the sidebar header directly above the global session list", async () => {
     const { app } = sidebarApp();
     const html = await (await app.request("/sessions/s1")).text();
     const header = html.slice(html.indexOf('id="sidebar"'));
@@ -1175,8 +1148,6 @@ describe("the sidebar", () => {
       'aria-label="New session"',
       'id="sidebar-refresh"',
       'aria-label="Settings"',
-      'id="project-select"',
-      'id="sidebar-project-menu"',
       'id="session-list"',
     ];
     let at = 0;
@@ -1185,10 +1156,11 @@ describe("the sidebar", () => {
       expect([marker, found > -1]).toStrictEqual([marker, true]);
       at = found;
     }
-    expect(header).toMatch(/class="[^"]*\banchor-sidebar-project\b[^"]*"/);
-    // The pill names the working folder, shortened against the reader's home.
-    expect(header).toContain(">~/one<");
-    expect(header).toContain('class="sidebar-project-path"');
+    expect(header).not.toContain('id="project-select"');
+    const blank = await (await app.request("/new?cwd=%2Frepo%2Fone.wt")).text();
+    expect(blank).toContain('class="new-session-directory"');
+    expect(blank).toContain('id="project-select"');
+    expect(blank).toContain(">~/one.wt<");
   });
 
   it("names the branch in Project Info, the worktree only when it is one", async () => {
@@ -1332,7 +1304,7 @@ describe("the sidebar", () => {
     expect(group).toContain(">~/one.wt<");
     // Exactly one row carries the tick, on the folder the sidebar is showing.
     expect([...menu.matchAll(/aria-current="true"/g)]).toHaveLength(1);
-    expect(menu).toContain("/sidebar?project=%2Frepo%2Fone&amp;cwd=");
+    expect(menu).toContain("/new?cwd=%2Frepo%2Fone");
     // "Custom path…" sits outside the scrolling list, as pi-web has it.
     expect(menu.indexOf("Custom path…")).toBeGreaterThan(
       menu.indexOf("project-folder-child"),
@@ -1378,20 +1350,21 @@ describe("the sidebar", () => {
     expect(menu).toContain("Custom path…");
   });
 
-  it("switches folder and project together, and re-titles the pill", async () => {
+  it("redirects existing folder-selection URLs to the new-session composer", async () => {
     const { app } = sidebarApp();
-    const res = await app.request(
-      "/sidebar?project=%2Frepo%2Fone&cwd=%2Frepo%2Fone.wt",
-    );
-    const html = await res.text();
-    expect(html).toContain('id="project-nav"');
-    // The pill rides along out of band so it names the folder just chosen.
-    expect(html).toContain('id="project-picker"');
-    expect(html).toContain('hx-swap-oob="true"');
-    expect(html).toContain(">~/one.wt<");
-    const cookies = res.headers.getSetCookie().join(" ");
-    expect(cookies).toContain("web-pi-project=");
-    expect(cookies).toContain("web-pi-cwd=");
+    const url = "/sidebar?project=%2Frepo%2Fone&cwd=%2Frepo%2Fone.wt";
+    const res = await app.request(url);
+    expect(res.headers.get("location")).toBe("/new?cwd=%2Frepo%2Fone.wt");
+    const fragment = await app.request(url, {
+      headers: { "HX-Request": "true" },
+    });
+    expect(
+      JSON.parse(fragment.headers.get("HX-Location") ?? "{}"),
+    ).toMatchObject({
+      path: "/new?cwd=%2Frepo%2Fone.wt",
+      target: "#session-region",
+    });
+    expect(fragment.headers.get("set-cookie")).toBeNull();
   });
 });
 
@@ -1973,7 +1946,7 @@ describe("transcript rendering", () => {
   });
 
   it("groups a turn into process details and the answer", async () => {
-    const { app } = testApp({
+    const { app, world } = testApp({
       script: (): ScriptedStep[] => [
         { thinking: "checking the file" },
         { tool: "read", arguments: { path: "/repo/one/a.ts" }, result: "ok" },
@@ -1983,7 +1956,9 @@ describe("transcript rendering", () => {
     const form = new FormData();
     form.set("text", "look");
     await app.request("/sessions/s1/prompt", { method: "POST", body: form });
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await vi.waitFor(() => {
+      expect(world.runtime.get("s1")?.snapshot().status.running).toBe(false);
+    });
 
     const page = await (await app.request("/sessions/s1")).text();
     expect(page).toContain("Process details · 1 message · 1 tool call");
@@ -2292,54 +2267,60 @@ describe("phase 8 fixes", () => {
   });
 
   it("lists what a subagent run was given, and its progress while it runs", async () => {
-    const { app } = testApp({
-      delayMs: 40,
-      script: (): ScriptedStep[] => [
-        {
-          tool: "subagent",
-          arguments: {
-            calls: [
-              { agent: "explorer", prompt: "look around", model: "fake-1" },
-            ],
+    vi.useFakeTimers();
+    try {
+      const { app } = testApp({
+        delayMs: 40,
+        script: (): ScriptedStep[] => [
+          {
+            tool: "subagent",
+            arguments: {
+              calls: [
+                { agent: "explorer", prompt: "look around", model: "fake-1" },
+              ],
+            },
+            progress: ["reading src/"],
+            details: {
+              kind: "pi-subagent",
+              results: [
+                {
+                  agent: "explorer",
+                  exitCode: 0,
+                  model: "fake-1",
+                  messages: [
+                    {
+                      role: "assistant",
+                      content: [{ type: "text", text: "ok" }],
+                    },
+                  ],
+                },
+              ],
+            },
           },
-          progress: ["reading src/"],
-          details: {
-            kind: "pi-subagent",
-            results: [
-              {
-                agent: "explorer",
-                exitCode: 0,
-                model: "fake-1",
-                messages: [
-                  {
-                    role: "assistant",
-                    content: [{ type: "text", text: "ok" }],
-                  },
-                ],
-              },
-            ],
-          },
-        },
-        { text: "done" },
-      ],
-    });
-    const form = new FormData();
-    form.set("text", "explore");
-    await app.request("/sessions/s1/prompt", { method: "POST", body: form });
+          { text: "done" },
+        ],
+      });
+      const form = new FormData();
+      form.set("text", "explore");
+      await app.request("/sessions/s1/prompt", { method: "POST", body: form });
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const running = await (await app.request("/sessions/s1")).text();
-    expect(running).toContain("reading src/");
+      // The progress window is only 80–120ms; wall-clock rendering can miss it.
+      await vi.advanceTimersByTimeAsync(100);
+      const running = await (await app.request("/sessions/s1")).text();
+      expect(running).toContain("reading src/");
 
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    const page = await (await app.request("/sessions/s1")).text();
-    expect(page).not.toContain("<dt>Agent</dt>");
-    expect(page).toContain("explorer");
-    const body = await (await app.request(deferredUrl(page))).text();
-    expect(body).toContain("<dl");
-    expect(body).toContain("<dt>Agent</dt>");
-    expect(body).toContain("look around");
-    expect(body).toContain("fake-1");
+      await vi.advanceTimersByTimeAsync(150);
+      const page = await (await app.request("/sessions/s1")).text();
+      expect(page).not.toContain("<dt>Agent</dt>");
+      expect(page).toContain("explorer");
+      const body = await (await app.request(deferredUrl(page))).text();
+      expect(body).toContain("<dl");
+      expect(body).toContain("<dt>Agent</dt>");
+      expect(body).toContain("look around");
+      expect(body).toContain("fake-1");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows the post-compaction estimate on the card", async () => {
@@ -2496,7 +2477,7 @@ describe("the shell chrome, on every route", () => {
     const { app } = testApp();
     const html = await (await app.request("/new")).text();
     const explorer = html.slice(html.indexOf('id="explorer-section"'));
-    expect(explorer).toContain("/files/explorer?cwd=%2Frepo%2Fone");
+    expect(explorer).toContain("/files/explorer?cwd=%2Frepo");
     expect(explorer).toContain('id="explorer-search-toggle"');
     // pi-web keeps the field behind the magnifier until it is asked for.
     expect(explorer).toContain('id="file-search-field"');
@@ -2523,15 +2504,13 @@ describe("the shell chrome, on every route", () => {
 
   it("names one folder in the pill, the tree and the title", async () => {
     const { app } = testApp();
-    // Nothing is remembered yet, so the folder is the project the sidebar
-    // shows — never the folder the server happens to have started in, which
-    // would leave the pill and the tree naming different places.
+    // With no explicit choice yet, the server's configured default wins.
     const html = await (await app.request("/")).text();
-    expect(html).toContain('data-cwd="/repo/one"');
-    expect(html).toContain("/files/explorer?cwd=%2Frepo%2Fone");
+    expect(html).toContain('data-cwd="/repo"');
+    expect(html).toContain("/files/explorer?cwd=%2Frepo");
     expect(html).toContain('id="project-select"');
-    expect(html).toContain('title="/repo/one"');
-    // A folder the reader picked still wins over the project's own.
+    expect(html).toContain('title="/repo"');
+    // A folder the reader picked wins over the server default.
     const picked = await (
       await app.request("/new", {
         headers: { cookie: "web-pi-cwd=/repo/two" },
