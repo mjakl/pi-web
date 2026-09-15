@@ -2026,6 +2026,40 @@ describe("transcript rendering", () => {
     }
   });
 
+  it("keeps a starred answer when the default page opens mid-turn before a later prompt", async () => {
+    const { app, world } = testApp();
+    await world.sessions.setStar("s1", "a1", true);
+    const stored = world.store.get("s1");
+    if (!stored) throw new Error("missing session");
+    let parent = stored.entries.at(-1)?.id ?? "a1";
+    stored.entries.push(userEntry("u2", parent, "Later question"));
+    parent = "u2";
+    // Including the star entry, the last 50 entries start at a1, not u1.
+    for (let index = 0; index < 47; index++) {
+      const id = `later-${String(index)}`;
+      stored.entries.push(
+        assistantEntry(id, parent, `Later answer ${String(index)}`, 4),
+      );
+      parent = id;
+    }
+    stored.leafId = parent;
+
+    const response = await app.request("/sessions/s1");
+    expect(response.status).toBe(200);
+    const page = await response.text();
+    expect(page).not.toContain('id="entry-u1"');
+    expect(page).toContain("before=a1");
+    expect(page).toContain('id="entry-a1"');
+    const answer = page.slice(
+      page.indexOf('id="entry-a1"'),
+      page.indexOf('id="entry-u2"'),
+    );
+    expect(answer).toContain("<strong>bold</strong>");
+    expect(answer).toContain('aria-label="Unstar answer"');
+    expect(answer).toContain('aria-pressed="true"');
+    expect(page).toContain('id="entry-later-46"');
+  });
+
   it("pages a long transcript and prepends the page before it", async () => {
     const { app } = longApp();
     const page = await (await app.request("/sessions/s1")).text();

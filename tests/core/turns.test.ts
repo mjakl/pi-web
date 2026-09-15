@@ -210,6 +210,42 @@ describe("groupTurns", () => {
     expect(turn?.processMessages).toBe(0);
   });
 
+  it.each<TranscriptItem>([
+    user("u1"),
+    {
+      kind: "compaction",
+      entryId: "c1",
+      summary: "Earlier context",
+      readFiles: [],
+      modifiedFiles: [],
+      tokensBefore: 10,
+      timestamp: "",
+    },
+    {
+      kind: "branch_summary",
+      entryId: "b1",
+      summary: "Earlier branch",
+      timestamp: "",
+    },
+  ])("preserves a mid-turn prefix before a $kind boundary", (boundary) => {
+    const prefix = [
+      assistant("a1", [thinking, tool("c1")]),
+      assistant("a2", [text("Earlier answer")]),
+    ];
+    const answer = assistant("a3", [text("Later answer")]);
+    const turns = groupTurns([...prefix, boundary, answer]);
+
+    expect(turns).toHaveLength(2);
+    expect(turns[0]).toMatchObject({
+      trailing: prefix,
+      process: [],
+      expanded: true,
+      loneAnswerId: "a2",
+    });
+    expect(turns[0]?.boundary).toBeUndefined();
+    expect(turns[1]).toMatchObject({ boundary, answer });
+  });
+
   it("opens the disclosure when prose is hidden inside it", () => {
     const [turn] = groupTurns([
       user("u1"),
