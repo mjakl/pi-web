@@ -1185,7 +1185,7 @@ describe("the sidebar", () => {
     expect(row).toContain('class="session-indicator is-active"');
   });
 
-  it("renders a 54px session row with pi-web's three columns", async () => {
+  it("renders session details before the working directory and branch", async () => {
     const { app } = sidebarApp();
     const html = await (await app.request("/sessions/s2")).text();
     const row = html.slice(html.indexOf('id="row-s2"'));
@@ -1214,13 +1214,17 @@ describe("the sidebar", () => {
     // The underlying status survives the browser's unread tint.
     expect(row).toContain('class="session-indicator is-stopped"');
 
-    // The right column arrives with the row's own metadata.
+    // A separately refreshed row uses the same order as the initial page.
     const loaded = await (await app.request("/sessions/s2/row")).text();
     inOrder(loaded, [
-      'class="session-shortcut"',
-      'class="session-menu-trigger"',
+      'class="session-row-meta"',
       'class="session-counts"',
       "1 msgs",
+      'class="session-row-location"',
+      'class="session-row-folder"',
+      "feature/x",
+      'class="session-shortcut"',
+      'class="session-menu-trigger"',
     ]);
     expect(loaded).toContain('class="session-row-actions"');
   });
